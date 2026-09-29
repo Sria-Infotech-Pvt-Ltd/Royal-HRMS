@@ -5899,6 +5899,20 @@ class MyProfileView(APIView):
 
 # ─── HR & Manager dropdown lists ─────────────────────────────────────────────
 
+# Both views below are dropdown-picker sources (frontend: EmployeePickerInline
+# in apps/dashboard/employees/[id]/_components/ReportingManagerCard.tsx, plus
+# AssignPunchModal/OtEntryTab/AddEmployeeModal/ApprovalMatrixTab) — every
+# consumer expects a plain array and has no page-turning UI at all. Real
+# pagination (the shared core.pagination helper every other list view uses)
+# would need that UI built first, or a branch/department past page 1 would
+# silently vanish from the picker — a user-visible behavior change, not just
+# a performance fix. A generous hard cap bounds worst-case query/response
+# cost instead, with no response-shape or frontend change: normal branch/
+# department HR-and-manager headcounts are nowhere near this limit, so it
+# only ever engages as a safety net.
+_HR_MANAGER_LIST_CAP = 200
+
+
 class HRListView(APIView):
     """GET list of active HR users for a given branch — for the HR assignment dropdown.
     Query param: branch (required) — e.g. ?branch=Mumbai HQ
@@ -5927,7 +5941,7 @@ class HRListView(APIView):
             .filter(Q(branch__iexact=branch) | Q(managed_branches__branch_name__iexact=branch))
             .select_related('role')
             .distinct()
-            .order_by('full_name')
+            .order_by('full_name')[:_HR_MANAGER_LIST_CAP]
         )
         data = [
             {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
@@ -5960,7 +5974,7 @@ class ManagerListView(APIView):
             managers = managers.filter(department__iexact=department)
         if branch:
             managers = managers.filter(branch__iexact=branch)
-        managers = managers.order_by('full_name')
+        managers = managers.order_by('full_name')[:_HR_MANAGER_LIST_CAP]
         data = [
             {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
              'department': u.department, 'branch': u.branch}

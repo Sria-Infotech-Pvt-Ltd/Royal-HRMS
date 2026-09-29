@@ -1,6 +1,7 @@
 import { LeaveRequest, fmtDate as fmtDateOnly } from "../leave/_data";
 import type { SeparationRequest } from "@/types/separation";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
+import type { PayslipQuery } from "@/types/payroll";
 
 // ─── Kind-specific request shapes (as returned by their own list endpoints) ───
 
@@ -66,10 +67,13 @@ export type ExpenseListResponse    = PaginatedResponse<ExpenseRequest>;
 export type CorrectionListResponse = PaginatedResponse<CorrectionRequest>;
 export type SeparationListResponse = PaginatedResponse<SeparationRequest>;
 export type WfhListResponse        = PaginatedResponse<WorkFromHomeRequest>;
+// GET /payroll/queries/ returns a flat array (not the paginated envelope the
+// other kinds use) — see PayslipQueryListView.get in apps/payroll/views/payslips.py.
+export type PayslipListResponse    = PayslipQuery[];
 
 // ─── Unified shape the table / drawer / toolbar actually work with ────────────
 
-export type ApprovalKind = "leave" | "expense" | "attendance_correction" | "separation" | "wfh";
+export type ApprovalKind = "leave" | "expense" | "attendance_correction" | "payslip" | "separation" | "wfh";
 export type DisplayStatus = "pending" | "approved" | "rejected" | "cancelled";
 
 export interface ApprovalItem {
@@ -87,7 +91,7 @@ export interface ApprovalItem {
   detailSecondary: string;
   detailTertiary?: string;
   canAction:      boolean;
-  raw:            LeaveRequest | ExpenseRequest | CorrectionRequest | SeparationRequest | WorkFromHomeRequest;
+  raw:            LeaveRequest | ExpenseRequest | CorrectionRequest | SeparationRequest | WorkFromHomeRequest | PayslipQuery;
 }
 
 // ─── Tabs / badges / chips config ──────────────────────────────────────────────
@@ -98,6 +102,7 @@ export const TYPE_TABS: { key: "all" | ApprovalKind; label: string; icon: string
   { key: "wfh",                    label: "Work From Home",        icon: "ti-home-2"           },
   { key: "expense",                label: "Expense",                icon: "ti-receipt"          },
   { key: "attendance_correction",  label: "Attendance Correction",  icon: "ti-calendar-time"    },
+  { key: "payslip",                label: "Payslip Requests",       icon: "ti-message-circle"   },
   { key: "separation",             label: "Separation",             icon: "ti-logout"           },
 ];
 
@@ -106,6 +111,7 @@ export const TYPE_BADGE: Record<ApprovalKind, { label: string; cls: string }> = 
   wfh:                    { label: "Work From Home",        cls: "ta-type-wfh"                    },
   expense:                { label: "Expense",               cls: "ta-type-expense"               },
   attendance_correction:  { label: "Attendance Correction", cls: "ta-type-attendance_correction"  },
+  payslip:                { label: "Payslip Request",       cls: "ta-type-payslip"               },
   separation:             { label: "Separation",            cls: "ta-type-separation"            },
 };
 
@@ -262,6 +268,34 @@ export function correctionToItem(r: CorrectionRequest): ApprovalItem {
     detailSecondary: arrows.join("  ·  "),
     detailTertiary: fmtDateOnly(r.date),
     canAction:      r.can_action,
+    raw:            r,
+  };
+}
+
+// PayslipQuery.status is "open" | "resolved" (not the pending/approved/rejected
+// vocabulary the other kinds use) — GET /payroll/queries/ only ever returns
+// "open" rows, but map "resolved" defensively too rather than assume.
+function payslipDisplayStatus(status: PayslipQuery["status"]): DisplayStatus {
+  return status === "resolved" ? "approved" : "pending";
+}
+
+// `canResolve` gates the Approve/Reject (resolve) buttons by the viewer's own
+// payroll.edit permission — the list itself only ever reaches this normalizer
+// when the viewer has payroll.view (see TeamApprovalsSection), matching the
+// same view/edit split PayslipQueryListView/PayslipQueryResolveView enforce.
+export function payslipToItem(r: PayslipQuery, canResolve: boolean): ApprovalItem {
+  return {
+    key:            `payslip:${r.id}`,
+    kind:           "payslip",
+    id:             r.id,
+    employeeName:   r.raised_by_name,
+    employeeCode:   "—", // not returned by PayslipQuerySerializer — see investigation notes
+    status:         r.status,
+    displayStatus:  payslipDisplayStatus(r.status),
+    submittedAt:    r.created_at,
+    detailPrimary:  "Payslip Query",
+    detailSecondary: r.description,
+    canAction:      r.status === "open" && canResolve,
     raw:            r,
   };
 }

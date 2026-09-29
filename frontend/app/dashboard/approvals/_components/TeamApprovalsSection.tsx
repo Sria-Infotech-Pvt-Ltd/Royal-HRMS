@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
+import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
@@ -10,14 +11,16 @@ import { ApprovalModal } from "../ApprovalModal";
 import { LeaveRequest } from "../../leave/_data";
 import {
   ApprovalItem, ApprovalKind, CorrectionListResponse,
-  DisplayStatus, ExpenseListResponse, ExpenseRequest, LeaveListResponse, SeparationListResponse, WfhListResponse,
-  TYPE_TABS, correctionToItem, expenseToItem, leaveAutoVars, leaveToItem, separationToItem, toSortableTime, wfhToItem,
+  DisplayStatus, ExpenseListResponse, ExpenseRequest, LeaveListResponse, PayslipListResponse, SeparationListResponse, WfhListResponse,
+  TYPE_TABS, correctionToItem, expenseToItem, leaveAutoVars, leaveToItem, payslipToItem, separationToItem, toSortableTime, wfhToItem,
 } from "../_data";
+import type { PayslipQuery } from "@/types/payroll";
 import SummaryCards from "./SummaryCards";
 import ApprovalsToolbar from "./ApprovalsToolbar";
 import ApprovalsTable from "./ApprovalsTable";
 import RequestDetailDrawer from "./RequestDetailDrawer";
 import BulkConfirmModal from "./BulkConfirmModal";
+import ResolveQueryModal from "@/app/dashboard/payroll/_components/ResolveQueryModal";
 
 interface ModalState {
   id:            string;
@@ -32,6 +35,12 @@ interface ModalState {
 export default function TeamApprovalsSection() {
   const router = useRouter();
   const { showToast } = useToast();
+  // GET /payroll/queries/ falls back to "queries I personally raised" for a
+  // user without payroll.view (see PayslipQueryListView.get) — that's an
+  // employee's own request, not something to show in a team approval queue,
+  // so we only fetch it at all for viewers who can see the team-wide list.
+  const canViewPayslipQueries = usePermission("payroll.view");
+  const canResolvePayslip     = usePermission("payroll.edit");
 
   // ── Data: fetch every kind up front (page_size capped at 100 server-side) —
   // the summary cards and the "All Requests" tab both need the full picture,
@@ -46,6 +55,8 @@ export default function TeamApprovalsSection() {
     useFetch<SeparationListResponse>(`${API.separation.list}?scope=team&page_size=100`);
   const { data: wfhRaw,        loading: wfhLoading,        error: wfhError,        refetch: refetchWfh } =
     useFetch<WfhListResponse>(`${API.approvals.wfhRequests}?scope=team&page_size=100`);
+  const { data: payslipRaw,    loading: payslipLoading,    error: payslipError,    refetch: refetchPayslip } =
+    useFetch<PayslipListResponse>(canViewPayslipQueries ? API.payroll.queries : null);
 
   useEffect(() => {
     function handleLeaveUpdate() { refetchLeave(); }
@@ -53,7 +64,7 @@ export default function TeamApprovalsSection() {
     return () => window.removeEventListener("leave:updated", handleLeaveUpdate);
   }, [refetchLeave]);
 
-  function refetchAll() { refetchLeave(); refetchExpense(); refetchCorrections(); refetchSeparation(); refetchWfh(); }
+  function refetchAll() { refetchLeave(); refetchExpense(); refetchCorrections(); refetchSeparation(); refetchWfh(); refetchPayslip(); }
 
   const allItems: ApprovalItem[] = useMemo(() => [
     ...(leaveRaw?.results ?? []).map(leaveToItem),
@@ -61,7 +72,8 @@ export default function TeamApprovalsSection() {
     ...(correctionRaw?.results ?? []).map(correctionToItem),
     ...(separationRaw?.results ?? []).map(separationToItem),
     ...(wfhRaw?.results ?? []).map(wfhToItem),
-  ], [leaveRaw, expenseRaw, correctionRaw, separationRaw, wfhRaw]);
+    ...(payslipRaw ?? []).map(r => payslipToItem(r, canResolvePayslip)),
+  ], [leaveRaw, expenseRaw, correctionRaw, separationRaw, wfhRaw, payslipRaw, canResolvePayslip]);
 
   const counts = useMemo(() => {
     const pendingOf = (kind: ApprovalKind) => allItems.filter(i => i.kind === kind && i.displayStatus === "pending").length;
@@ -70,7 +82,8 @@ export default function TeamApprovalsSection() {
     const correction = pendingOf("attendance_correction");
     const separation = pendingOf("separation");
     const wfh = pendingOf("wfh");
-    return { leave, expense, correction, separation, wfh, pending: leave + expense + correction + separation + wfh };
+    const payslip = pendingOf("payslip");
+    return { leave, expense, correction, separation, wfh, payslip, pending: leave + expense + correction + separation + wfh + payslip };
   }, [allItems]);
 
   const tabCounts = useMemo(() => ({
@@ -78,6 +91,7 @@ export default function TeamApprovalsSection() {
     leave: counts.leave,
     expense: counts.expense,
     attendance_correction: counts.correction,
+    payslip: counts.payslip,
     separation: counts.separation,
     wfh: counts.wfh,
   }), [counts]);
@@ -114,8 +128,12 @@ export default function TeamApprovalsSection() {
   // acting on one specific pending stage, not the request as a whole), so it
   // doesn't fit the single-decision bulk approve/reject below — excluded from
   // selection entirely; its rows are actioned individually via the detail page.
+  // Payslip requests are excluded too — resolving requires a per-query
+  // resolution note, which doesn't fit a single shared bulk remarks field.
+  const UNSELECTABLE_KINDS: ApprovalKind[] = ["separation", "payslip"];
   function toggleSelect(key: string) {
-    if (allItems.find(i => i.key === key)?.kind === "separation") return;
+    const kind = allItems.find(i => i.key === key)?.kind;
+    if (kind && UNSELECTABLE_KINDS.includes(kind)) return;
     setSelected(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
@@ -123,7 +141,10 @@ export default function TeamApprovalsSection() {
     });
   }
   function toggleSelectMany(keys: string[], select: boolean) {
-    const selectable = keys.filter(k => allItems.find(i => i.key === k)?.kind !== "separation");
+    const selectable = keys.filter(k => {
+      const kind = allItems.find(i => i.key === k)?.kind;
+      return !(kind && UNSELECTABLE_KINDS.includes(kind));
+    });
     setSelected(prev => {
       const next = new Set(prev);
       selectable.forEach(k => { if (select) next.add(k); else next.delete(k); });
@@ -143,6 +164,7 @@ export default function TeamApprovalsSection() {
   const [modal,  setModal]  = useState<ModalState | null>(null);
   const [saving, setSaving] = useState(false);
   const [apiErr, setApiErr] = useState("");
+  const [resolveTarget, setResolveTarget] = useState<PayslipQuery | null>(null);
 
   function handleApproveClick(item: ApprovalItem) { dispatchAction(item, "approve"); }
   function handleRejectClick(item: ApprovalItem)  { dispatchAction(item, "reject"); }
@@ -154,6 +176,13 @@ export default function TeamApprovalsSection() {
     // (which already has the full stage/clearance UI) instead of this modal.
     if (item.kind === "separation") {
       router.push(`/dashboard/separation/${item.id}`);
+      return;
+    }
+    // A payslip query has one real action — resolve — not a separate
+    // approve/reject, so both icons open the same existing resolve flow
+    // (reused from Payroll → Payslip Queries, not duplicated).
+    if (item.kind === "payslip") {
+      setResolveTarget(item.raw as PayslipQuery);
       return;
     }
     if (item.kind === "attendance_correction") {
@@ -272,9 +301,9 @@ export default function TeamApprovalsSection() {
     refetchAll();
   }
 
-  const initialLoading = (leaveLoading || expenseLoading || correctionLoading || separationLoading || wfhLoading) && allItems.length === 0;
-  const refreshing     = leaveLoading || expenseLoading || correctionLoading || separationLoading || wfhLoading;
-  const loadError      = leaveError || expenseError || correctionError || separationError || wfhError;
+  const initialLoading = (leaveLoading || expenseLoading || correctionLoading || separationLoading || wfhLoading || payslipLoading) && allItems.length === 0;
+  const refreshing     = leaveLoading || expenseLoading || correctionLoading || separationLoading || wfhLoading || payslipLoading;
+  const loadError      = leaveError || expenseError || correctionError || separationError || wfhError || payslipError;
 
   return (
     <div className="ta-root">
@@ -360,6 +389,18 @@ export default function TeamApprovalsSection() {
           saving={bulkSaving}
           onConfirm={handleBulkConfirm}
           onClose={() => setBulkAction(null)}
+        />
+      )}
+
+      {resolveTarget && (
+        <ResolveQueryModal
+          query={resolveTarget}
+          onClose={() => setResolveTarget(null)}
+          onResolved={() => {
+            setResolveTarget(null);
+            showToast("Payslip query resolved.", "success");
+            refetchPayslip();
+          }}
         />
       )}
     </div>

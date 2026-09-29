@@ -10,13 +10,15 @@ import PayrollReports     from "./_components/PayrollReports";
 import PayrollAnalytics   from "./_components/PayrollAnalytics";
 import SalarySetupTab     from "./_components/SalarySetupTab";
 import PayrollAdjustments from "./_components/PayrollAdjustments";
+import PayslipQueriesTab  from "./_components/PayslipQueriesTab";
 
-type TabId = "dashboard" | "salary_setup" | "adjustments" | "reports" | "analytics";
+type TabId = "dashboard" | "salary_setup" | "adjustments" | "queries" | "reports" | "analytics";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "dashboard",    label: "Dashboard",    icon: "ti-layout-dashboard" },
   { id: "salary_setup", label: "Salary Setup", icon: "ti-currency-rupee"   },
   { id: "adjustments",  label: "Adjustments",  icon: "ti-adjustments-alt"  },
+  { id: "queries",      label: "Payslip Queries", icon: "ti-message-circle" },
   { id: "reports",      label: "Reports",      icon: "ti-report"            },
   { id: "analytics",    label: "Analytics",    icon: "ti-chart-bar"         },
 ];
@@ -165,6 +167,7 @@ export default function PayrollPage() {
           )}
           {active === "salary_setup" && <SalarySetupTab />}
           {active === "adjustments"  && <PayrollAdjustments />}
+          {active === "queries"      && <PayslipQueriesTab />}
           {active === "reports"      && <PayrollReports />}
           {active === "analytics"    && <PayrollAnalytics />}
         </>

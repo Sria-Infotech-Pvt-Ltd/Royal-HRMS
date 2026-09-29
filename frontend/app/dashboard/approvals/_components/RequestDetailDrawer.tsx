@@ -5,6 +5,7 @@ import DocPreviewModal from "@/components/DocPreviewModal";
 import { LeaveRequest } from "../../leave/_data";
 import { ApprovalItem, CorrectionRequest, ExpenseRequest, fmtAmount, fmtSubmitted, initials } from "../_data";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
+import type { PayslipQuery } from "@/types/payroll";
 import { TypeBadge, StatusChip } from "./Badges";
 
 interface Props {
@@ -37,6 +38,9 @@ function isCorrection(item: ApprovalItem): item is ApprovalItem & { raw: Correct
 }
 function isWfh(item: ApprovalItem): item is ApprovalItem & { raw: WorkFromHomeRequest } {
   return item.kind === "wfh";
+}
+function isPayslip(item: ApprovalItem): item is ApprovalItem & { raw: PayslipQuery } {
+  return item.kind === "payslip";
 }
 
 type StageStatus = "approved" | "rejected" | null;
@@ -159,6 +163,22 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
                         <span style={{ fontWeight: 600, fontSize: 13, fontVariantNumeric: "tabular-nums" }}>{line}</span>
                       </div>
                     ))}
+                  </>
+                )}
+
+                {isPayslip(item) && (
+                  <>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Raised By</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.raised_by_name}</span></div>
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ color: "var(--ta-text-muted)", fontSize: 13, marginBottom: 4 }}>Query</div>
+                      <p style={{ fontSize: 13, color: "var(--ta-text)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{item.raw.description}</p>
+                    </div>
+                    {item.raw.resolution_note && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ color: "var(--ta-text-muted)", fontSize: 13, marginBottom: 4 }}>Resolution Note</div>
+                        <p style={{ fontSize: 13, color: "var(--ta-text)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{item.raw.resolution_note}</p>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

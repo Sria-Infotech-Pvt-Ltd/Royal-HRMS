@@ -139,6 +139,17 @@ export interface PayrollCycle {
   updated_at: string;
 }
 
+// GET /payroll/cycles/<id>/salary-transfer/status/ — dual-confirmation
+// readiness for Mark as Paid (see backend SalaryTransferStatusView).
+export interface SalaryTransferStatus {
+  employee_side_ready: boolean;
+  reason: string;
+  batch_status: "pending" | "confirmed" | "cancelled" | null;
+  confirmed_at: string | null;
+  confirmed_by: string | null;
+  item_count: number;
+}
+
 export interface ManagerApproval {
   id: string;
   cycle: string;

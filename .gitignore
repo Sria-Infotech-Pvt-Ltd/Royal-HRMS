@@ -10,6 +10,11 @@ desktop.ini
 
 # ── Server setup notes (contains internal IPs / credentials) ─────────────────
 vps_server_setup.md
+server-deployment-context.md
+
+# ── Generated manuals (not source, not for version control) ──────────────────
+ROYAL_HRMS_USER_AND_TECHNICAL_MANUAL.docx
+ROYAL_HRMS_USER_MANUAL.docx
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # BACKEND (Django)

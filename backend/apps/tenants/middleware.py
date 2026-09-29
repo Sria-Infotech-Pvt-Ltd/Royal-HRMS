@@ -19,7 +19,8 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.tenants.feature_gate import resolve_module_for_path
-from apps.tenants.models import MODULE_LABELS, Client
+from apps.tenants.models import MODULE_LABELS
+from core.cache_service import TenantClientCacheService
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +67,12 @@ class TenantSchemaMiddleware(MiddlewareMixin):
         if not schema_name:
             return
 
-        try:
-            tenant = Client.objects.get(schema_name=schema_name, is_active=True)
-        except Client.DoesNotExist:
+        # Cached (see TenantClientCacheService) — this is a DB round-trip on
+        # every single authenticated request otherwise. None covers both the
+        # unknown-schema and inactive-schema cases identically to the direct
+        # Client.objects.get(schema_name=..., is_active=True) this replaces.
+        tenant = TenantClientCacheService.get(schema_name)
+        if tenant is None:
             logger.warning('Access token referenced unknown/inactive schema %s', schema_name)
             return
 
