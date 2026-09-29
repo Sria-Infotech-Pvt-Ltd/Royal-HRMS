@@ -459,18 +459,47 @@ class EmployeeBulkImportSampleView(APIView):
         'Role', 'Org Unit', 'Position', 'Company Code', 'Employee Type',
         'Date of Joining', 'Gender', 'Date of Birth', 'Blood Group', 'Address',
     ]
-    _SAMPLE_ROWS = [
-        [
+
+    def _sample_rows(self):
+        """
+        Sample rows must reference real Company Code / Org Unit / Position /
+        Role values that already exist in THIS install — hardcoded example
+        names ("Mumbai HQ", "Engineering" / "Software Engineer") looked
+        plausible but failed on any real deployment that doesn't happen to
+        have those exact records, which is exactly what QA report #57
+        found: the sample template itself could never be imported as-is.
+        """
+        from apps.branch.models import Branch as _Branch
+
+        branch = _Branch.objects.order_by('id').first()
+        position = (
+            Position.objects.filter(is_active=True)
+            .select_related('org_unit')
+            .order_by('id')
+            .first()
+        )
+        role = (
+            Role.objects.filter(is_active=True)
+            .exclude(role_permissions__permission__codename='settings.edit')
+            .order_by('id')
+            .first()
+        )
+
+        if not (branch and position and position.org_unit and role):
+            # Nothing to build a guaranteed-importable row from yet (a
+            # brand-new install with no org structure configured) — say so
+            # plainly instead of shipping example values that will fail.
+            return [[
+                'Set up at least one Branch, Org Unit + Position, and Role first',
+                '', '', '', '', '', '', '', '', '', '', '', '', '',
+            ]]
+
+        return [[
             'John', 'Doe', 'john.doe@company.com', '9876543210',
-            'Employee', 'Engineering', 'Software Engineer', 'Mumbai HQ', 'Permanent',
-            '2026-01-15', 'Male', '1995-06-20', 'B+', '123 Main Street, Mumbai',
-        ],
-        [
-            'Jane', 'Smith', 'jane.smith@company.com', '9123456789',
-            'HR Admin', 'Human Resources', 'HR Manager', 'Delhi Branch', 'Permanent',
-            '2026-02-01', 'Female', '1990-03-15', 'A+', '456 Park Avenue, Delhi',
-        ],
-    ]
+            role.display_name, position.org_unit.name, position.title,
+            branch.branch_code or branch.branch_name, 'Permanent',
+            date.today().isoformat(), 'Male', '1995-06-20', 'B+', '123 Main Street',
+        ]]
 
     def get(self, request):
         if not _has_perm(request.user, 'employees.create'):
@@ -481,13 +510,15 @@ class EmployeeBulkImportSampleView(APIView):
 
         from core.file_utils import build_sample_csv, build_sample_xlsx, _CSV_MIME, _XLSX_MIME
 
+        sample_rows = self._sample_rows()
+
         fmt = request.query_params.get('format', 'csv').lower().strip()
         if fmt == 'xlsx':
-            content  = build_sample_xlsx(self._HEADERS, self._SAMPLE_ROWS, 'Employee Import')
+            content  = build_sample_xlsx(self._HEADERS, sample_rows, 'Employee Import')
             filename = 'employee_import_sample.xlsx'
             mime     = _XLSX_MIME
         else:
-            content  = build_sample_csv(self._HEADERS, self._SAMPLE_ROWS)
+            content  = build_sample_csv(self._HEADERS, sample_rows)
             filename = 'employee_import_sample.csv'
             mime     = _CSV_MIME
 
