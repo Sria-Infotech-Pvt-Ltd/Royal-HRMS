@@ -20,10 +20,105 @@ class CacheTTL:
     FINANCIAL_YEAR      = 24 * 3600
     COMPANY             = 600
     ONBOARDING_FIELDS   = 6  * 3600
+    TENANT_CLIENT       = 300
 
 
 def _slug(s: str) -> str:
     return s.strip().lower().replace(' ', '_') if s else 'company'
+
+
+# ── Tenant Client (schema resolution) ────────────────────────────────────────
+
+class TenantClientCacheService:
+    """
+    Client row resolved by apps.tenants.middleware.TenantSchemaMiddleware on
+    every authenticated request (public schema, before any tenant schema is
+    activated) — the highest-traffic cache in this file, unlike the others
+    below which are all tenant-scoped and only read on specific pages.
+
+    Caches only {id, schema_name, is_active, enabled_modules} — deliberately
+    NOT the full row. Grepped for every reader of `connection.tenant`/
+    `request.tenant` project-wide: only apps.voice_commands.executor reads
+    anything off it beyond the middleware itself, and only .has_module()
+    (-> enabled_modules). Nothing reads company_name/contact info/gstin/
+    pending_admin_password/provisioning_status/timestamps off the active
+    tenant object anywhere, so those are left as field defaults on a
+    cache-hit reconstruction rather than duplicated into Redis. If a future
+    caller needs another Client field off connection.tenant, extend the
+    cached field list here first — don't assume it's populated.
+
+    Invalidated by apps.tenants.signals (post_save/post_delete on Client) —
+    TTL below is a bounded backstop, not the correctness mechanism.
+
+    Every method below explicitly runs inside schema_context(public). Client
+    only ever lives in the public schema, and this cache's key namespace
+    (CACHES['default']['KEY_FUNCTION'] = tenant_aware_key_func, see
+    config/settings.py) prepends whichever schema is active ON THE
+    CONNECTION at call time — not a fixed namespace. get() is only ever
+    called from production code (the middleware, always right after its own
+    set_schema_to_public()) so its writes were already reliably public-
+    scoped, but invalidate() has no such guarantee: it fires from
+    Client.save()/.delete() wherever those happen to be called from, and a
+    signal handler has no control over what schema was active when its
+    sender's .save() was called. Confirmed via real Postgres-backed tests
+    (not by inspection) that without this, invalidate() computes a
+    different, tenant-scoped key than the one get() actually wrote,
+    silently leaving the stale entry in place. Wrapping every method here
+    removes the need for any caller — middleware, signal, or a future one —
+    to know or guarantee which schema is active.
+    """
+
+    @staticmethod
+    def _key(schema_name: str) -> str:
+        return f'tenant_client:{schema_name}'
+
+    @classmethod
+    def get(cls, schema_name: str):
+        """Returns an unsaved Client instance for an ACTIVE schema_name, or
+        None — mirrors Client.objects.get(schema_name=..., is_active=True)
+        exactly (DoesNotExist -> None), just cached. Never caches a miss."""
+        from django_tenants.utils import get_public_schema_name, schema_context
+
+        key = cls._key(schema_name)
+        with schema_context(get_public_schema_name()):
+            try:
+                cached = cache.get(key)
+                if cached is not None:
+                    # Defense in depth: only ever written below for a row
+                    # that was active at write time, but re-checked here too
+                    # so a cache hit can never grant access to a tenant the
+                    # direct is_active=True query would have rejected — this
+                    # must never become an authorization bypass.
+                    if not cached.get('is_active'):
+                        return None
+                    from apps.tenants.models import Client
+                    return Client(**cached)
+            except Exception:
+                logger.warning('Cache read failed for %s', key)
+
+            from apps.tenants.models import Client
+            client = Client.objects.filter(schema_name=schema_name, is_active=True).first()
+            if client is not None:
+                try:
+                    cache.set(key, {
+                        'id':              client.id,
+                        'schema_name':     client.schema_name,
+                        'is_active':       client.is_active,
+                        'enabled_modules': client.enabled_modules,
+                    }, CacheTTL.TENANT_CLIENT)
+                except Exception:
+                    logger.warning('Cache write failed for %s', key)
+            return client
+
+    @classmethod
+    def invalidate(cls, schema_name: str) -> None:
+        from django_tenants.utils import get_public_schema_name, schema_context
+
+        with schema_context(get_public_schema_name()):
+            try:
+                cache.delete(cls._key(schema_name))
+            except Exception:
+                logger.warning('Cache delete failed for tenant_client:%s', schema_name)
 
 
 # ── Leave Policy ──────────────────────────────────────────────────────────────

@@ -460,6 +460,18 @@ EMAIL_BACKEND      = (
 )
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Royal Staffing HRMS <noreply@hrms.com>')
 
+# Every real outbound email in this codebase builds its own SMTP connection
+# via get_connection(backend='...backends.smtp.EmailBackend', ...) with no
+# explicit timeout= kwarg (apps.accounts.utils._get_smtp_connection /
+# send_test_email, apps.tenants.utils._get_platform_smtp_connection — all
+# called synchronously in request paths like login/forgot-password). Django's
+# EmailBackend.__init__ falls back to this setting whenever timeout= isn't
+# passed explicitly (self.timeout = settings.EMAIL_TIMEOUT if timeout is None
+# else timeout), so this one value bounds all three without touching any of
+# them — Django's own default is EMAIL_TIMEOUT=None, i.e. no timeout, which
+# is the "blocks indefinitely on a hung mail server" problem this fixes.
+EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT', default=10)
+
 OTP_EXPIRY_MINUTES = 10
 OTP_MAX_ATTEMPTS = 5
 LOGIN_MAX_ATTEMPTS = 5

@@ -156,7 +156,7 @@ export default function ApprovalsTable({
                     pageItems.map(item => (
                       <tr key={item.key} className={selected.has(item.key) ? "selected" : ""} style={{ cursor: "pointer" }} onClick={() => onView(item)}>
                         <td onClick={e => e.stopPropagation()}>
-                          {item.kind !== "separation" && (
+                          {item.kind !== "separation" && item.kind !== "payslip" && (
                             <input
                               type="checkbox"
                               className="ta-checkbox"
