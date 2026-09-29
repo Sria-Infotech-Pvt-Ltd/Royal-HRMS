@@ -43,7 +43,14 @@ function SuggestButton({ onClick, disabled, loading }: { onClick: () => void; di
   return (
     <button type="button" onClick={onClick} disabled={disabled}
       title={disabled ? "Enter a 6-digit PIN code first" : "Suggest from PIN code"} className="sugbtn"
-      style={{ opacity: disabled ? 0.5 : 1, cursor: disabled ? "not-allowed" : "pointer" }}>
+      // Set directly (not left to the .sugbtn class + CSS variables) so
+      // the fill/text color is exactly purple/white regardless of theme
+      // variable resolution — solid #7c3aed background, solid white text,
+      // fading only via opacity when disabled.
+      style={{
+        opacity: disabled ? 0.5 : 1, cursor: disabled ? "not-allowed" : "pointer",
+        background: "#7c3aed", color: "#ffffff", borderColor: "#7c3aed",
+      }}>
       {loading ? "…" : "+ Suggest"}
     </button>
   );
