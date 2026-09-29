@@ -151,7 +151,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
                 which the browser vertically centers natively — a plain
                 <div> doesn't get that for free, so "Hire" sat at the top
                 of the box instead of centered like every sibling field. */}
-            <div className="finput" style={{ cursor: "not-allowed", display: "flex", alignItems: "center" }}>Hire</div>
+            <div className="finput" style={{ cursor: "not-allowed", display: "flex", alignItems: "center", justifyContent: "center" }}>Hire</div>
           </div>
           <div className="f">
             <label>Reason <span className="req">*</span></label>
