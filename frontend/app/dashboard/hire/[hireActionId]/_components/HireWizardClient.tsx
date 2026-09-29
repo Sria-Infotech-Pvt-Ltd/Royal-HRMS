@@ -229,7 +229,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   }
 
   async function setEmploymentType(type: string) {
-    if (action?.employment_type) return; // locked once set
+    if (action?.employment_type === type) return;
     try {
       await patchAction({ employment_type: type });
       setEmployment(e => ({ ...e, employment_type: type }));
@@ -299,6 +299,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         if (!employment.employment_type) return "Select an employment type.";
         if (!employment.role) return "Select a role.";
         if (!employment.branch) return "Select a company code.";
+        if (employment.work_email.trim() && !EMAIL_RE.test(employment.work_email.trim())) {
+          return "Enter a valid work email address.";
+        }
         if (employment.annual_ctc.trim() && Number(employment.annual_ctc) <= 0) {
           return "Annual fixed CTC must be greater than zero, or left blank.";
         }
@@ -751,7 +754,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
           {tab === 1 && (
             <EmploymentStep
               value={employment} onChange={setEmployment} onSetEmploymentType={setEmploymentType}
-              employmentTypeLocked={!!action.employment_type}
+              reservedEmployeeId={action.reserved_employee_id}
               positionTitle={action.position_title} orgUnitName={action.org_unit_name} grade={action.grade}
               costCenter=""
               defaultRoleId={action.default_role_id} defaultRoleName={action.default_role_name}

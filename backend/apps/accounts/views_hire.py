@@ -11,6 +11,8 @@ import hashlib
 import logging
 from datetime import datetime
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -165,26 +167,36 @@ class HireActionDetailView(APIView):
             action.position = position
             update_fields.append('position')
 
-        # The employee number is reserved exactly once, the moment
-        # employment_type is first set — matches the wizard's own copy
-        # ("Employee number is reserved once employment type is set.").
-        # Changing employment_type afterwards would either orphan the
-        # already-reserved number or require un-reserving it, neither of
-        # which this simple per-type sequence supports — so it's locked
-        # once set, same spirit as Position.default_role never re-syncing
-        # Role after creation.
+        # The employee number is reserved the moment employment_type is set,
+        # and re-reserved (against the new type's own series) if HR corrects
+        # the selection before completing the hire — this used to be locked
+        # permanently after the first selection, which was QA report #32:
+        # a genuine typo/misclick on this field had no way to fix itself
+        # short of discarding the whole draft. The previously-reserved
+        # number for the old type is simply left unused (this per-type
+        # sequence has no "release" concept, so it becomes a gap) rather
+        # than reused — matches how real HRMS/payroll number series already
+        # tolerate voided/skipped numbers rather than risk ever reusing one.
         employment_type = data.pop('employment_type', None)
-        if employment_type is not None and not action.employment_type:
+        if employment_type is not None and employment_type != action.employment_type:
             if employment_type not in dict(User.EMPLOYMENT_TYPE_CHOICES):
                 return error('Select a valid employment type.')
             action.employment_type = employment_type
             action.reserved_employee_id = EmployeeCodeSeries.generate_employee_id_for_type(employment_type)
             update_fields += ['employment_type', 'reserved_employee_id']
-        elif employment_type is not None and employment_type != action.employment_type:
-            return error(
-                f'Employment type is locked to "{action.employment_type}" — the employee number '
-                f'{action.reserved_employee_id} has already been reserved against it.',
-            )
+
+        # Client-side <input type="email"> and the wizard's own EMAIL_RE
+        # check are both bypassable (direct API call, e.g. this PATCH) — the
+        # QA report's "bad-email accepted and saved" bug was exactly that,
+        # so the same format check is enforced again here server-side for
+        # every email-shaped field the wizard's draft_data ever carries.
+        for email_field in ('email', 'work_email'):
+            value = data.get(email_field)
+            if value:
+                try:
+                    validate_email(value.strip())
+                except DjangoValidationError:
+                    return error(f'Enter a valid {"work " if email_field == "work_email" else ""}email address.')
 
         if data:
             action.draft_data = {**action.draft_data, **data}

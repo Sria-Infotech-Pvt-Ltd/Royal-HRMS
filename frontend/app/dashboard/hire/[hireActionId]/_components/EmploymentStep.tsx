@@ -41,7 +41,7 @@ interface Props {
   value: EmploymentDraft;
   onChange: (next: EmploymentDraft) => void;
   onSetEmploymentType: (type: string) => void;
-  employmentTypeLocked: boolean;
+  reservedEmployeeId: string;
   positionTitle: string;
   orgUnitName: string;
   grade: string;
@@ -51,7 +51,7 @@ interface Props {
 }
 
 export default function EmploymentStep({
-  value, onChange, onSetEmploymentType, employmentTypeLocked,
+  value, onChange, onSetEmploymentType, reservedEmployeeId,
   positionTitle, orgUnitName, grade, costCenter, defaultRoleId, defaultRoleName,
 }: Props) {
   const [roles, setRoles] = useState<{ id: number; display_name: string }[]>([]);
@@ -97,13 +97,17 @@ export default function EmploymentStep({
         </div>
         <div className="f">
           <label>Employment type <span className="req">*</span></label>
-          <select value={value.employment_type} disabled={employmentTypeLocked}
+          <select value={value.employment_type}
             onChange={e => onSetEmploymentType(e.target.value)}
-            className={`finput${employmentTypeLocked ? " auto" : ""}`} style={{ cursor: employmentTypeLocked ? "not-allowed" : "pointer" }}>
+            className="finput" style={{ cursor: "pointer" }}>
             <option value="">Select</option>
             {EMP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          {employmentTypeLocked && <div className="hint">Locked — the employee number has been reserved.</div>}
+          {reservedEmployeeId && (
+            <div className="hint">
+              Employee number reserved: {reservedEmployeeId}. Changing this reserves a new number for the new type.
+            </div>
+          )}
         </div>
         <div className="f">
           <label>Probation period</label>

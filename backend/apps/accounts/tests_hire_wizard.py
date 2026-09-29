@@ -21,7 +21,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
 from apps.accounts.models import (
-    DocumentTypeConfig, HireAction, HireActionDocument, OrgUnit, Position,
+    DocumentTypeConfig, EmployeeCodeSeries, HireAction, HireActionDocument, OrgUnit, Position,
 )
 
 # A real, minimal, valid PNG — used everywhere a file upload needs to pass
@@ -149,17 +149,31 @@ class EmploymentTypeReservationTests(HireWizardTestCase):
         action = self._set_employment_type(action, 'Permanent')
         self.assertTrue(action.reserved_employee_id)
 
-    def test_employment_type_is_locked_once_set(self):
+    def test_employment_type_can_be_corrected_before_completion(self):
+        # QA report #32 — employment type used to lock permanently after
+        # the first selection, with no way to fix a typo/misclick short of
+        # discarding the whole draft. Re-selecting now re-reserves a number
+        # against the new type's own series (the old number is simply left
+        # unused, not reused — see the PATCH handler's own comment).
         action = self._create_draft()
         action = self._set_employment_type(action, 'Permanent')
         first_id = action.reserved_employee_id
+
         resp = self._patch(action, {'employment_type': 'Contract'})
+        self.assertEqual(resp.status_code, 200, resp.data)
         action.refresh_from_db()
-        # Whether the endpoint errors or silently ignores it, the
-        # already-reserved number must never change underneath a hire in
-        # progress.
-        self.assertEqual(action.reserved_employee_id, first_id)
-        self.assertEqual(action.employment_type, 'Permanent')
+        self.assertEqual(action.employment_type, 'Contract')
+        self.assertTrue(action.reserved_employee_id)
+        # Each employment type has its own independent number series, so a
+        # freshly-reserved Contract number can coincidentally format the
+        # same as the first Permanent number (both start their own
+        # sequence at 1) — what actually matters is that it came from the
+        # Contract series, not that the Permanent series was rolled back.
+        contract_series = EmployeeCodeSeries.objects.get(employment_type='Contract')
+        self.assertEqual(contract_series.next_sequence, 2)
+        permanent_series = EmployeeCodeSeries.objects.get(employment_type='Permanent')
+        self.assertEqual(permanent_series.next_sequence, 2)
+        self.assertTrue(first_id)
 
 
 class DocumentUploadTests(HireWizardTestCase):
@@ -447,3 +461,29 @@ class HireCompletionSideEffectTests(HireWizardTestCase):
         self.assertEqual(resp.status_code, 201, resp.data)
         self.action.refresh_from_db()
         self.assertEqual(self.action.created_employee.employee_id, self.action.reserved_employee_id)
+
+
+class HireActionEmailValidationTests(HireWizardTestCase):
+    """QA report #31 — 'bad-email' was accepted and saved via a direct PATCH
+    to the draft, bypassing the wizard's own client-side EMAIL_RE check.
+    Server-side format validation on every email-shaped draft_data field."""
+
+    def setUp(self):
+        super().setUp()
+        self.action = self._create_draft()
+
+    def test_invalid_work_email_rejected(self):
+        resp = self._patch(self.action, {'work_email': 'bad-email'})
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.action.refresh_from_db()
+        self.assertNotIn('work_email', self.action.draft_data)
+
+    def test_invalid_personal_email_rejected(self):
+        resp = self._patch(self.action, {'email': 'not-an-email'})
+        self.assertEqual(resp.status_code, 400, resp.data)
+
+    def test_valid_work_email_accepted(self):
+        resp = self._patch(self.action, {'work_email': 'new.hire@company.example'})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.action.refresh_from_db()
+        self.assertEqual(self.action.draft_data['work_email'], 'new.hire@company.example')
