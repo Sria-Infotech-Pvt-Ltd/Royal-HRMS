@@ -40,15 +40,18 @@ interface Props {
 }
 
 function SuggestButton({ onClick, disabled, loading }: { onClick: () => void; disabled: boolean; loading: boolean }) {
+  // Deliberately NOT using the native `disabled` attribute — a real
+  // <button disabled> gets an opacity/greyed-out treatment layered on top
+  // by some browsers regardless of author CSS, which is exactly why this
+  // kept looking "light colour" no matter what background/color was set
+  // here. The click is still gated (suggest() itself no-ops until the PIN
+  // code is ready), so nothing is lost functionally — the button just
+  // always renders fully solid purple/white.
   return (
-    <button type="button" onClick={onClick} disabled={disabled}
+    <button type="button" onClick={onClick}
       title={disabled ? "Enter a 6-digit PIN code first" : "Suggest from PIN code"} className="sugbtn"
-      // Set directly (not left to the .sugbtn class + CSS variables) so
-      // the fill/text color is exactly purple/white regardless of theme
-      // variable resolution — solid #7c3aed background, solid white text,
-      // fading only via opacity when disabled.
       style={{
-        opacity: disabled ? 0.5 : 1, cursor: disabled ? "not-allowed" : "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
         background: "#7c3aed", color: "#ffffff", borderColor: "#7c3aed",
       }}>
       {loading ? "…" : "+ Suggest"}
