@@ -242,10 +242,24 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       // simply fail to match anything further rather than pointing at the
       // wrong person; there's no way to recover which nominee meant which
       // duplicate short of asking HR to re-pick it on this step.
-      setFamilyEntries(repairTempIds((d.family_entries as FamilyEntry[]) ?? []));
+      const repairedFamily = repairTempIds((d.family_entries as FamilyEntry[]) ?? []);
+      // Same "one blank card already there" convention Emergency Contacts
+      // already uses — an empty list showing only an explanatory line and
+      // an Add button read as broken/incomplete; a blank starter card
+      // makes the step look ready to fill in immediately, with the Add
+      // button only needed for a SECOND (or later) entry.
+      setFamilyEntries(repairedFamily.length > 0 ? repairedFamily : [
+        { id: nextTempId(), name: "", relationship: "child", date_of_birth: "", gender: "", blood_group: "", is_dependent: false },
+      ]);
       setNomineeEntries(repairTempIds((d.nominee_entries as NomineeEntry[]) ?? []));
-      setEducationEntries(repairTempIds((d.education_entries as EducationEntry[]) ?? []));
-      setExperienceEntries(repairTempIds((d.experience_entries as ExperienceEntry[]) ?? []));
+      const repairedEducation = repairTempIds((d.education_entries as EducationEntry[]) ?? []);
+      setEducationEntries(repairedEducation.length > 0 ? repairedEducation : [
+        { id: nextTempId(), level: "", custom_level_label: "", institution: "", specialization: "", percentage: "", start_date: "", end_date: "", is_highest: false },
+      ]);
+      const repairedExperience = repairTempIds((d.experience_entries as ExperienceEntry[]) ?? []);
+      setExperienceEntries(repairedExperience.length > 0 ? repairedExperience : [
+        { id: nextTempId(), employer_name: "", designation: "", employment_type: "full_time", start_date: "", end_date: "", is_current: false, responsibilities: "", reason_for_leaving: "" },
+      ]);
       setAssetEntries(repairTempIds((d.asset_entries as AssetEntry[]) ?? []));
       setCoreSkills(String(d.core_skills ?? ""));
       setCertifications(String(d.certifications ?? ""));
