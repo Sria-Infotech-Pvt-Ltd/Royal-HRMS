@@ -176,7 +176,14 @@ def continue_voice_clock_punch(
             'Voice clock punch face verification exhausted: user=%s intent=%s attempt=%s blocked=%s',
             request.user.pk, intent, attempt, outcome.blocked,
         )
-        return _payload(intent, None, None, message, success=False)
+        # retry_after_seconds (only ever set alongside blocked=True from the
+        # attempt-cap gate) lets useVoiceCommand.ts disable the voice
+        # Clock In/Out trigger with a countdown instead of just letting the
+        # employee start a brand-new "clock me in" conversation immediately,
+        # which would hit this same block again — see ClockInButton's web
+        # equivalent (useClockWidget.ts) for the same lockout shape.
+        result = {'blocked': True, 'retry_after_seconds': outcome.retry_after_seconds} if outcome.blocked else None
+        return _payload(intent, None, result, message, success=False)
 
     slots['attempt'] = attempt
     set_pending(request.user.id, intent, slots)

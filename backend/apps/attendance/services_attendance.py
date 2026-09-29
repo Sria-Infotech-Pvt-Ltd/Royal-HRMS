@@ -109,7 +109,7 @@ class PunchService:
         face-verification failure.
         """
         from apps.attendance.services_geofencing import GeofencingService
-        from apps.attendance.services_face_matching import FaceVerificationService
+        from apps.attendance.services_face_matching import FaceVerificationBlockedError, FaceVerificationService
 
         now        = timezone.now()
         today      = timezone.localdate()   # IST calendar date — not now.date() (UTC)
@@ -157,6 +157,8 @@ class PunchService:
         if face.required and not face.embedding_provided:
             raise ValueError(face.rejection_message)
         if face.required and face.embedding_provided and not face.is_match:
+            if face.blocked:
+                raise FaceVerificationBlockedError(face.rejection_message, face.retry_after_seconds)
             raise PermissionError(face.rejection_message)
 
         # ── Persist punch with full audit trail ───────────────────────────────

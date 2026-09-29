@@ -1,14 +1,26 @@
 // Liveness detection: proves the camera is looking at a live person, not a
-// static photo held up to it, by tracking real movement across frames —
-// either a natural blink or a slight head turn. A single still frame can
-// never pass this; it requires landmark positions to actually change over
-// a short window of time.
+// static photo held up to it, by tracking real movement across frames — a
+// natural blink AND a slight head turn both have to be observed. A single
+// still frame can never pass this; it requires landmark positions to
+// actually change over a short window of time.
 //
-// Two independent signals are tracked; either one passing is enough:
+// Two independent signals are tracked, and BOTH are required (see
+// getResult()):
 //   1. Blink  — Eye Aspect Ratio (Soukupová & Čech) dipping and recovering.
 //   2. Head turn — the nose tip shifting laterally relative to the eyes.
 // Both are normalized against the detected face's own size, so thresholds
 // don't depend on how close the camera is.
+//
+// Requiring only ONE of the two used to be enough (2026-09 QA finding:
+// FR-E-18 — a static photo held up to the camera and tilted/rotated during
+// the capture window reproduces a head turn's landmark-position delta just
+// as well as a real head does, with zero genuine 3D motion involved, so
+// "either signal passes" was trivially defeated by a printed or on-screen
+// photo). A held photo cannot blink — its eye landmarks don't independently
+// dip and recover the way an eyelid does — so requiring both signals closes
+// that bypass without needing any new capture hardware or a server-side
+// model: a spoofer now has to reproduce two independent motions, one of
+// which a flat image cannot produce at all.
 import type { FaceLandmarks68 } from "face-api.js";
 
 type Point = { x: number; y: number };
@@ -34,7 +46,7 @@ function eyeAspectRatio(eye: Point[]): number {
 export interface LivenessResult {
   passed: boolean;
   score:  number; // 0–1, informational only — the backend stores it but never gates on it
-  signal: "blink" | "head_turn" | null;
+  signal: "blink_and_head_turn" | "blink" | "head_turn" | null;
 }
 
 /**
@@ -111,9 +123,13 @@ export class LivenessTracker {
     const blinkScore    = this.blinkDetected ? Math.min(1, 1 - this.minEarDuringBlink / (this.earBaseline || 1)) / (1 - EAR_BLINK_RATIO) : 0;
     const headTurnScore = Math.min(1, this.maxHeadTurnRatio / HEAD_TURN_RATIO);
 
-    if (this.blinkDetected) return { passed: true, score: clamp01(blinkScore), signal: "blink" };
-    if (this.headTurnDetected) return { passed: true, score: clamp01(headTurnScore), signal: "head_turn" };
-    return { passed: false, score: clamp01(Math.max(blinkScore, headTurnScore) * 0.5), signal: null };
+    // Both signals required — see this file's module docstring (FR-E-18) for
+    // why "either one" was defeatable by a tilted static photo.
+    if (this.blinkDetected && this.headTurnDetected) {
+      return { passed: true, score: clamp01((blinkScore + headTurnScore) / 2), signal: "blink_and_head_turn" };
+    }
+    const partialSignal = this.blinkDetected ? "blink" : this.headTurnDetected ? "head_turn" : null;
+    return { passed: false, score: clamp01(Math.max(blinkScore, headTurnScore) * 0.5), signal: partialSignal };
   }
 
   reset(): void {

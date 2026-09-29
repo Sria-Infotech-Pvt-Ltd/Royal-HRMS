@@ -55,6 +55,7 @@ from apps.voice_commands.llm_fallback import try_llm_fallback
 from apps.voice_commands.matcher import DEFAULT_LANG, NO_MATCH_INTENT, get_conversational, match_intent
 from apps.voice_commands.mode_extractor import extract_attendance_mode
 from apps.voice_commands.normalizer import normalize_transcript
+from apps.voice_commands.payroll_period_extractor import strip_payroll_period_phrases
 from apps.voice_commands.payslip_extractor import (
     strip_employee_name_phrases as strip_payslip_employee_name_phrases,
     strip_payslip_query_phrases,
@@ -81,8 +82,24 @@ logger = logging.getLogger(__name__)
 # (Phase 3.1 — Gap 1) rather than a bare string, selected through text() at
 # every call site, same pattern executor_*.py's own messages already use.
 _NO_MATCH_MESSAGE = {
-    'en': "Sorry, I didn't catch that — could you say it differently?",
-    'hi': 'माफ़ कीजिए, मैं समझ नहीं पाया — क्या आप इसे दूसरे तरीके से कह सकते हैं?',
+    # BUG-002 (2026-09-23): a plainly out-of-scope question ("what is the
+    # weather today?") reached this exact branch (no clarification
+    # candidate, LLM fallback also declined) and got a generic "didn't catch
+    # that" — which reads as "try rephrasing," inviting the user to keep
+    # asking a question this assistant can never answer. This is also the
+    # one message a garbled-but-genuinely-HR-related transcript falls back
+    # to (nothing downstream can tell the two cases apart once every tier
+    # has declined), so the copy below covers both: it's honest that the
+    # request wasn't understood as an HRMS action, without insisting the
+    # topic itself was invalid.
+    'en': (
+        "That doesn't seem related to Royal HRMS. I'm the assistant here to help with queries "
+        "within Royal HRMS — like attendance, leave, and payroll. Do you have anything else to ask?"
+    ),
+    'hi': (
+        'यह Royal HRMS से संबंधित नहीं लगता। मैं Royal HRMS के भीतर के सवालों में मदद करने वाला असिस्टेंट हूँ — '
+        'जैसे उपस्थिति, छुट्टी और पेरोल। क्या आपको कुछ और पूछना है?'
+    ),
 }
 # Generic on purpose — apply_leave was the only conversational intent when
 # this was first written, but request_attendance_correction is conversational
@@ -233,6 +250,7 @@ def handle_transcript(
     stripped_text = strip_employee_name_phrases(stripped_text)
     stripped_text = strip_payslip_query_phrases(stripped_text)
     stripped_text = strip_payslip_employee_name_phrases(stripped_text)
+    stripped_text = strip_payroll_period_phrases(stripped_text)
     matching_text = strip_correction_slot_phrases(stripped_text)
     fresh_match = match_intent(matching_text, lang=lang)
 

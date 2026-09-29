@@ -17,6 +17,7 @@ from apps.attendance.serializers_my_attendance import (
     StatsSerializer,
 )
 from apps.attendance.services_attendance import AttendanceDashboardService, PunchService
+from apps.attendance.services_face_matching import FaceVerificationBlockedError
 from apps.attendance.views.my_attendance import AttendanceCorrectionView
 
 from apps.voice_commands.executor_result import ExecutionResult
@@ -186,6 +187,16 @@ def _execute_punch(
         PunchService.record_punch(request.user, punch_data)
     except ValueError as exc:
         return ExecutionResult(success=False, message=str(exc))
+    except FaceVerificationBlockedError as exc:
+        # Same terminal-block signal AttendancePunchView surfaces for web —
+        # see conversation_clock_in_face.py, which reads this off the outcome
+        # directly for the mid-conversation retry turn; this is the path hit
+        # only when a blocked outcome reaches PunchService.record_punch a
+        # second time via _finish_punch's own re-check.
+        return ExecutionResult(
+            success=False, message=str(exc),
+            data={'blocked': True, 'retry_after_seconds': exc.retry_after_seconds},
+        )
     except PermissionError as exc:
         return ExecutionResult(success=False, message=str(exc))
 

@@ -16,7 +16,13 @@ const _REGISTRATION_MESSAGES: Record<string, string> = {
 const _REGISTRATION_MISSING_MESSAGE =
   "Face ID registration is mandatory. Please register your face ID from your Profile page before clocking in.";
 
-type NormalisedError = { message?: string };
+type NormalisedError = { message?: string; data?: { blocked?: boolean; retry_after_seconds?: number } };
+
+function formatCountdown(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
 
 function parseBrowser(): string {
   if (typeof navigator === "undefined") return "Unknown";
@@ -58,6 +64,32 @@ export function useClockWidget() {
   const [session, setSession] = useState<TodaySession | null>(null);
   const [isPunching, setIsPunching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  // Set once the backend reports the face-verification attempt cap has
+  // tripped (FaceVerificationBlockedError, services_face_matching.py) — an
+  // epoch-ms deadline, not just a boolean, so the button can show a live
+  // countdown instead of a static "try later" that gives no sense of when.
+  // Until this passes, punch() refuses to even call the API — see FR-E-18's
+  // QA finding that nothing previously stopped a retry click from just
+  // repeating the same rejection over and over, indistinguishable from an
+  // ordinary mismatch.
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [lockoutSecondsRemaining, setLockoutSecondsRemaining] = useState(0);
+
+  useEffect(() => {
+    if (!lockoutUntil) return;
+    const tick = () => {
+      const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setLockoutUntil(null);
+        setLockoutSecondsRemaining(0);
+      } else {
+        setLockoutSecondsRemaining(remaining);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lockoutUntil]);
 
   useEffect(() => {
     if (todayData) setSession(todayData);
@@ -154,6 +186,14 @@ export function useClockWidget() {
         return false;
       }
 
+      if (lockoutUntil && Date.now() < lockoutUntil) {
+        showToast(
+          `Too many failed face verification attempts. Please wait ${formatCountdown(lockoutSecondsRemaining)} before trying again.`,
+          "error"
+        );
+        return false;
+      }
+
       setIsPunching(true);
       try {
         const res = await clientApi.post(API.attendance.punch, {
@@ -182,17 +222,21 @@ export function useClockWidget() {
         return true;
       } catch (err: unknown) {
         const e = err as NormalisedError;
+        if (e?.data?.blocked && typeof e.data.retry_after_seconds === "number") {
+          setLockoutUntil(Date.now() + e.data.retry_after_seconds * 1000);
+        }
         showToast(e?.message ?? "Punch failed. Please try again.", "error");
         return false;
       } finally {
         setIsPunching(false);
       }
     },
-    [showToast, faceRegistrationMissing, faceStatus]
+    [showToast, faceRegistrationMissing, faceStatus, lockoutUntil, lockoutSecondsRemaining]
   );
 
   return {
     session, isLoading: fetchLoading && !session, isPunching, isLocating,
     faceVerificationRequired, faceRegistrationMissing, prepareLocation, punch,
+    isLockedOut: lockoutUntil !== null, lockoutSecondsRemaining,
   };
 }

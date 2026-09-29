@@ -13,6 +13,15 @@ _POSSESSIVE_NAME_RE = re.compile(r"(?P<name>[a-z][a-z'\- ]*?)['’`]s(?=\s+leave
 _FOR_NAME_RE = re.compile(r"\bfor\s+(?!leave\b)(?P<name>.+?)\s*$", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r'\s+')
 
+# Cuts a raw "for X" capture down to just the name, dropping a trailing
+# relative clause the speaker appended — e.g. "approve leave for john smith
+# who has one pending leave request" -> "john smith". See
+# extract_employee_name_query's docstring for why _FOR_NAME_RE itself stays
+# greedy to end-of-string despite this.
+_RELATIVE_CLAUSE_START_RE = re.compile(
+    r"\b(?:who|which|that|having|with|whose|whom|and|but|when)\b", re.IGNORECASE,
+)
+
 
 def _nfc(pattern: str) -> str:
     """NFC-normalize a regex pattern literal — defensive belt-and-suspenders
@@ -104,11 +113,31 @@ def _find_name_span(text: str) -> Optional[tuple]:
 
 
 def extract_employee_name_query(text: str) -> Optional[str]:
-    """Best-effort extraction of the employee name mentioned in an approve_leave/reject_leave utterance."""
+    """
+    Best-effort extraction of the employee name mentioned in an
+    approve_leave/reject_leave utterance.
+
+    _find_name_span's own "for X" capture is greedy to end-of-string (needed
+    so strip_employee_name_phrases removes a WHOLE trailing relative clause
+    before intent matching, not just the name inside it — a partial strip
+    would leave clause words diluting the fuzzy score against the registered
+    "approve leave for" phrase). That means a sentence like "approve leave
+    for john smith who has one pending leave request" raw-captures "john
+    smith who has one pending leave request" as the "name" here — cut at
+    the first relative-clause word so the actual person-lookup below
+    (match_employee_name, WRatio) fuzzy-matches against just "john smith"
+    instead. Left uncut, WRatio's leniency happens to paper over a short
+    trailing clause (surviving purely on luck), but measurably degrades for
+    a longer STT transcript or a 3-word name — a bug independent of, but
+    easily mistaken for, an intent-classification misroute.
+    """
     span = _find_name_span(text)
     if not span:
         return None
     _, _, name = span
+    clause_match = _RELATIVE_CLAUSE_START_RE.search(name)
+    if clause_match:
+        name = name[:clause_match.start()]
     name = name.strip(" .,'\"")
     return name or None
 

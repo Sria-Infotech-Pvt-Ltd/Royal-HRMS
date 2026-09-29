@@ -670,6 +670,7 @@ intents:
       - "what is our payroll cost"
       - "check payroll cost summary"
       - "show payroll cost summary"
+      - "payroll cost summary"
       - "what's the total payroll cost"
       - "how much did we spend on payroll"
       - "how much did we spend on payroll this month"

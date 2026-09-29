@@ -133,7 +133,7 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
             <FaceStatusPanel
               icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
               title="Couldn't confirm you're live"
-              message="We didn't detect a natural blink or head turn in time. Make sure you're well-lit and centered, then try again."
+              message="We didn't detect both a natural blink and a slight head turn in time. Make sure you're well-lit and centered, then try again."
               action={{ label: "Try Again", onClick: retry }}
               secondaryAction={{ label: "Cancel", onClick: handleClose }}
             />

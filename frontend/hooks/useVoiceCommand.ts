@@ -658,6 +658,17 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     autoListenSchedulerRef.current?.cancel();
   }, [stopVadTap]);
 
+  // Muting mid-sentence stops the current utterance immediately, not just
+  // the next one — useVoiceMutePreference.toggleMuted used to do this
+  // itself via window.speechSynthesis.cancel(), a no-op left over from
+  // before TTS moved to server-side Sarvam audio played through the
+  // <audio> element cancelSpeech() above actually owns (BUG-001 cleanup,
+  // 2026-09-23). isMuted flipping true is the only case that needs to
+  // interrupt playback — flipping false has nothing playing to resume.
+  useEffect(() => {
+    if (isMuted) cancelSpeech();
+  }, [isMuted, cancelSpeech]);
+
   // Speaks the same message text shown in the panel/toast, via POST
   // /api/voice/speak/ (Sarvam Bulbul TTS, always voiced as "shubh"
   // server-side) in `language` — the response's own detected language
@@ -706,6 +717,15 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           // existing dismiss-timer behavior so nothing hangs" half of that
           // failure handling (see speakThenDismiss's own onEnd, which sizes
           // its delay off the DISPLAYED text's reading time, not a guess).
+          //
+          // BUG-001 (2026-09-23): this used to be silent — console.error only
+          // (still logged inside fetchSpeechAudio) — so a TTS outage read to
+          // the user as "the bot answered in text but never spoke," with
+          // nothing telling them why or that it was a known failure rather
+          // than a muted assistant. One toast, not a per-utterance spam risk:
+          // fetchSpeechAudio itself only ever resolves null after its own
+          // internal retry already failed.
+          showToast("Voice response unavailable — showing text only.", "error");
           settle();
           return;
         }
@@ -724,7 +744,16 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
 
           if (BARGE_IN_ENABLED) startVadTap(token);
           audio.play().catch((err) => {
+            // Most likely a browser autoplay-policy rejection (NotAllowedError)
+            // — this call happens asynchronously, inside a .then() after the
+            // /voice/speak/ network round-trip, not directly inside the
+            // original click/voice-input handler some browsers require. Was
+            // console.error-only (BUG-001, 2026-09-23) — the panel/toast text
+            // already rendered by the time this promise settles, so a blocked
+            // play() read to the user as "no voice response" with zero
+            // indication why.
             console.error("Voice speak: playback failed —", err);
+            showToast("Voice response unavailable — showing text only.", "error");
             finish();
           });
         } catch (err) {
@@ -736,13 +765,14 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           // had failed, and must never leave the caller hanging without
           // settle() ever firing.
           console.error("Voice speak: could not start playback —", err);
+          showToast("Voice response unavailable — showing text only.", "error");
           settle();
         }
       });
 
       return true;
     },
-    [isMuted, cancelSpeech, stopVadTap, startVadTap]
+    [isMuted, cancelSpeech, stopVadTap, startVadTap, showToast]
   );
 
   // Speaks spokenText in `language`, then dismisses the panel — timed to the

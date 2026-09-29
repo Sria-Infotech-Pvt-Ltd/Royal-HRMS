@@ -162,6 +162,19 @@ def _euclidean_distance(a: list, b: list) -> float:
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
+class FaceVerificationBlockedError(PermissionError):
+    """Raised instead of a plain PermissionError when the rejection is a
+    terminal block (attempt cap, replay, low-confidence — see
+    FaceVerificationOutcome.blocked) rather than an ordinary retryable
+    mismatch, so callers that want to surface a countdown/disable-retry UI
+    (AttendancePunchView, voice's _execute_punch) can tell the two apart
+    without inspecting the message string."""
+
+    def __init__(self, message: str, retry_after_seconds: Optional[int] = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
 @dataclass
 class FaceVerificationOutcome:
     required:           bool
@@ -175,6 +188,11 @@ class FaceVerificationOutcome:
     # retry loop (see apps.voice_commands.conversation_clock_in_face) uses
     # this to decide whether "try again" is even worth offering.
     blocked:            bool = False
+    # Only ever set alongside blocked=True from the attempt-cap gate — how
+    # many more seconds the cap stays tripped, so a caller can show a
+    # countdown / disable retry instead of just repeating the same rejection
+    # message on every click (see FaceAntiSpoofingGuard.seconds_until_unblocked).
+    retry_after_seconds: Optional[int] = None
 
 
 class FaceVerificationService:
@@ -269,6 +287,7 @@ class FaceVerificationService:
             return FaceVerificationOutcome(
                 required=True, embedding_provided=True, is_match=False,
                 distance=None, rejection_message=_ATTEMPT_CAP_MESSAGE, blocked=True,
+                retry_after_seconds=FaceAntiSpoofingGuard.seconds_until_unblocked(employee),
             )
         if FaceAntiSpoofingGuard.check_replay(employee, fingerprint, capture_session_id):
             FaceAntiSpoofingGuard.record_attempt(

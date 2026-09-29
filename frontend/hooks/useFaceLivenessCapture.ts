@@ -43,7 +43,10 @@ export type LivenessCapturePhase =
 // ~0.3–0.5s of a consistently detected face before the liveness challenge starts —
 // avoids kicking it off on a single lucky frame while the user is still settling in.
 const STABLE_FRAMES_TO_START_LIVENESS = 10;
-const LIVENESS_TIMEOUT_MS = 9000;
+// Widened from 9000ms now that LivenessTracker.getResult() requires BOTH a
+// blink and a head turn (see lib/faceApi/liveness.ts) rather than either —
+// two distinct deliberate motions need more room than one did.
+const LIVENESS_TIMEOUT_MS = 12000;
 const DETECTOR_OPTIONS = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
 
 // ─── Quality-gated capture (used by every caller, framesToCapture >= 1) ────

@@ -8,6 +8,12 @@ import type { AttendanceMode, PunchLocation } from "@/types/attendance";
 
 const MODE: AttendanceMode = "office";
 
+function formatCountdown(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
 function todayString() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -20,15 +26,19 @@ interface Props {
 }
 
 export default function ClockInButton({ onPunchSuccess }: Props) {
-  const { session, isLoading, isPunching, faceVerificationRequired, prepareLocation, punch } = useClockWidget();
+  const {
+    session, isLoading, isPunching, faceVerificationRequired, prepareLocation, punch,
+    isLockedOut, lockoutSecondsRemaining,
+  } = useClockWidget();
   const [showModal, setShowModal] = useState(false);
   const [showFaceModal, setShowFaceModal] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
 
   const isClockedIn = session?.is_clocked_in ?? false;
-  const isBusy      = isLoading || isPunching;
+  const isBusy      = isLoading || isPunching || isLockedOut;
 
   async function handlePunch() {
+    if (isLockedOut) return;
     // Location is fetched and geofence-validated BEFORE face verification —
     // same order the voice clock-in/out flow enforces.
     const { ok, location } = await prepareLocation(MODE);
@@ -71,7 +81,12 @@ export default function ClockInButton({ onPunchSuccess }: Props) {
           onMouseEnter={e => { if (!isBusy) (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; }}
         >
-          {isPunching ? (
+          {isLockedOut ? (
+            <>
+              <i className="ti ti-lock" style={{ fontSize: 14 }} />
+              Try again in {formatCountdown(lockoutSecondsRemaining)}
+            </>
+          ) : isPunching ? (
             <>
               <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />
               Please wait…

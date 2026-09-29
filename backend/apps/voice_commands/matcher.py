@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -26,6 +27,81 @@ DEFAULT_CONFIDENCE_THRESHOLD = 80
 CLARIFICATION_CONFIDENCE_THRESHOLD = 60
 
 NO_MATCH_INTENT = 'no_match'
+
+# Guards the clarification band below — see _shares_meaningful_word's own
+# docstring for why a raw fuzzy score alone isn't enough there (BUG-002,
+# 2026-09-23: "what is the weather today?" got a confident-sounding "did you
+# mean: who's present today?" purely from shared filler words). Deliberately
+# small and English-only (a handful of near-universal function words), not an
+# exhaustive stopword list — it only needs to strip enough noise that overlap
+# in what's LEFT is a meaningful signal, not eliminate every possible filler.
+_STOPWORDS = frozenset({
+    'a', 'an', 'the', 'is', 'are', 'was', 'were', 'am', 'be', 'been', 'being',
+    'what', 'when', 'where', 'who', 'whom', 'which', 'why', 'how',
+    'i', 'me', 'my', 'mine', 'you', 'your', 'yours', 'he', 'him', 'his', 'she', 'her', 'hers',
+    'it', 'its', 'we', 'us', 'our', 'ours', 'they', 'them', 'their', 'theirs',
+    'do', 'does', 'did', 'done', 'doing', 'have', 'has', 'had',
+    'to', 'of', 'in', 'on', 'at', 'for', 'with', 'from', 'by', 'about', 'as', 'into', 'through',
+    'and', 'or', 'but', 'if', 'so', 'than', 'that', 'this', 'these', 'those', 'there',
+    'can', 'could', 'will', 'would', 'shall', 'should', 'may', 'might', 'must',
+    'not', 'no', 'yes', 'please', 'today', 'now', 'right', 'just', 'get', 'give', 'tell', 'show',
+})
+_WORD_RE = re.compile(r"[a-z']+")
+
+
+def _meaningful_words(text: str) -> frozenset:
+    return frozenset(w for w in _WORD_RE.findall(text.lower()) if w not in _STOPWORDS and len(w) > 1)
+
+
+_FUZZY_WORD_MATCH_THRESHOLD = 70
+
+
+def _shares_meaningful_word(normalized_text: str, matched_phrase: str) -> bool:
+    """
+    True when normalized_text and matched_phrase share at least one
+    non-filler word, or a close (typo/concatenation-tolerant) variant of one.
+    A clarification-band score (60-79) can be reached purely through shared
+    filler words ("what"/"is"/"how"/"who"/"the"/...) between a completely
+    unrelated transcript and a registered phrase — rapidfuzz's
+    token_sort_ratio has no concept of which words actually carry the
+    meaning. Without this check, "what is the weather today?" scored 60.6
+    against "what is my net pay" (shares only "what"/"is"), producing a
+    confusingly HR-flavored "did you mean: what is my net pay?" for a
+    question with nothing to do with Royal HRMS at all. Confident matches
+    (>= DEFAULT_CONFIDENCE_THRESHOLD) are never subject to this — an 80+
+    token_sort_ratio already requires the words themselves to line up
+    closely, not just a filler-word coincidence.
+
+    An exact set intersection alone is too strict for two real, intentional
+    shapes already in this registry/this app's transcripts, so a fuzzy
+    fallback covers both:
+      - Concatenated registry entries built for STT-dropped-space artifacts
+        (e.g. "leavebalance", "rejectleave" — see registry/intents_en.yaml's
+        own "toclockin"-style entries) tokenize as ONE word, so "balance"
+        can never appear in a literal word-set built from "leavebalance" —
+        substring containment catches it.
+      - A genuinely garbled STT transcript can typo a word beyond exact
+        match ("Paisley" for "payslip", "Praise" for "raise") — this is
+        precisely what rapidfuzz's own scoring already tolerates for the
+        phrase AS A WHOLE; per-word fuzz.ratio applies that same tolerance
+        here instead of demanding letter-perfect words.
+    """
+    query_words = _meaningful_words(normalized_text)
+    phrase_words = _meaningful_words(matched_phrase)
+    if not query_words or not phrase_words:
+        return False
+    if query_words & phrase_words:
+        return True
+
+    phrase_compact = matched_phrase.replace(' ', '')
+    for query_word in query_words:
+        if len(query_word) < 4:
+            continue  # too short for either fuzzy check to mean anything
+        if query_word in phrase_compact:
+            return True
+        if any(fuzz.ratio(query_word, phrase_word) >= _FUZZY_WORD_MATCH_THRESHOLD for phrase_word in phrase_words):
+            return True
+    return False
 
 
 @dataclass
@@ -108,11 +184,15 @@ def match_intent(
     candidate_intent = phrase_index[matched_phrase]
 
     if score < threshold:
+        in_clarification_band = (
+            score >= CLARIFICATION_CONFIDENCE_THRESHOLD
+            and _shares_meaningful_word(normalized_text, matched_phrase)
+        )
         return MatchResult(
             intent=NO_MATCH_INTENT,
             confidence=score,
             matched_phrase=matched_phrase,
-            candidate_intent=candidate_intent if score >= CLARIFICATION_CONFIDENCE_THRESHOLD else None,
+            candidate_intent=candidate_intent if in_clarification_band else None,
         )
 
     return MatchResult(

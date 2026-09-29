@@ -53,13 +53,15 @@ export function useVoiceMutePreference() {
     setIsMuted(prev => {
       const next = !prev;
       writeStoredPreference(next);
-      // Muting mid-sentence should stop the current utterance immediately,
-      // not just suppress the next one.
-      if (next && typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
       return next;
     });
+    // Interrupting a currently-playing utterance the instant this flips true
+    // is owned by useVoiceCommand (its cancelSpeech(), reacting to the
+    // isMuted value this hook returns) — not here. This hook only knows the
+    // preference, not the <audio> element actually playing it; a
+    // window.speechSynthesis.cancel() call here was dead code left over
+    // from before TTS moved to server-side Sarvam audio (BUG-001 cleanup,
+    // 2026-09-23) and never actually stopped anything.
   }, []);
 
   return { isMuted, toggleMuted };
