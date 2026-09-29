@@ -173,6 +173,28 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const tempIdCounter = useRef(0);
   const nextTempId = () => `temp-${++tempIdCounter.current}`;
 
+  // A resumed draft's entries carry ids that were already saved into
+  // draft_data in a PREVIOUS session — the ref above always restarts its
+  // count at 0 on a fresh mount, so without this, newly added entries in
+  // this session could still collide with ids saved earlier (or, for a
+  // draft saved back when nextTempId() was the old, non-unique local
+  // variable, the loaded list itself can already contain duplicates).
+  // Called once, right when a draft's entries are loaded: raises the
+  // counter past every "temp-N" id already in use, then reassigns a fresh
+  // id to any entry whose id collides with an earlier one in the same list.
+  function repairTempIds<T extends { id: string }>(list: T[]): T[] {
+    for (const entry of list) {
+      const match = /^temp-(\d+)$/.exec(entry.id);
+      if (match) tempIdCounter.current = Math.max(tempIdCounter.current, Number(match[1]));
+    }
+    const seen = new Set<string>();
+    return list.map(entry => {
+      if (seen.has(entry.id)) return { ...entry, id: nextTempId() };
+      seen.add(entry.id);
+      return entry;
+    });
+  }
+
   useEffect(() => {
     Promise.all([
       clientApi.get<{ data: HireActionData }>(API.hireActions.detail(hireActionId)),
@@ -201,7 +223,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       setPhone(String(d.phone ?? ""));
       setIdentityExtras(x => ({ ...x, ...(d as Partial<IdentityExtras>) }));
       const savedContacts = d.emergency_contacts as EmergencyContactEntry[] | undefined;
-      if (savedContacts && savedContacts.length > 0) setEmergencyContacts(savedContacts);
+      if (savedContacts && savedContacts.length > 0) setEmergencyContacts(repairTempIds(savedContacts));
       setAddressExtras(x => ({ ...x, ...(d as Partial<AddressExtras>) }));
       setForm(f => ({ ...f, ...(d as Partial<ProfileForm>) }));
       setEmployment(e => ({
@@ -214,16 +236,22 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       }));
       setBasicPay(b => ({ ...b, ...(d as Partial<BasicPayDraft>) }));
       setStatutory(s => ({ ...s, ...(d as Partial<StatutoryDraft>) }));
-      setFamilyEntries((d.family_entries as FamilyEntry[]) ?? []);
-      setNomineeEntries((d.nominee_entries as NomineeEntry[]) ?? []);
-      setEducationEntries((d.education_entries as EducationEntry[]) ?? []);
-      setExperienceEntries((d.experience_entries as ExperienceEntry[]) ?? []);
-      setAssetEntries((d.asset_entries as AssetEntry[]) ?? []);
+      // Family is repaired BEFORE nominees so that if a duplicate family id
+      // gets reassigned, nominees referencing the OLD id (rare — only
+      // possible for a draft already corrupted before this fix existed)
+      // simply fail to match anything further rather than pointing at the
+      // wrong person; there's no way to recover which nominee meant which
+      // duplicate short of asking HR to re-pick it on this step.
+      setFamilyEntries(repairTempIds((d.family_entries as FamilyEntry[]) ?? []));
+      setNomineeEntries(repairTempIds((d.nominee_entries as NomineeEntry[]) ?? []));
+      setEducationEntries(repairTempIds((d.education_entries as EducationEntry[]) ?? []));
+      setExperienceEntries(repairTempIds((d.experience_entries as ExperienceEntry[]) ?? []));
+      setAssetEntries(repairTempIds((d.asset_entries as AssetEntry[]) ?? []));
       setCoreSkills(String(d.core_skills ?? ""));
       setCertifications(String(d.certifications ?? ""));
       setVerification(v => ({ ...v, ...(d as Partial<VerificationDraft>) }));
     }).finally(() => setLoading(false));
-  }, [hireActionId]);
+  }, [hireActionId]); // eslint-disable-line react-hooks/exhaustive-deps -- repairTempIds is redefined every render; only load once per hireActionId, same as the rest of this effect
 
   // Father's/mother's name in step 1 are read-only ("FROM FAMILY") — they
   // mirror whatever Father/Mother entries exist in step 4's family list,
