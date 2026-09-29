@@ -427,12 +427,38 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     }
   }
 
+  // Drives BOTH the sidebar's "N fields still required" box AND (as of this
+  // fix) the green-checkmark/"done" state itself for every step listed here
+  // — re-derived from CURRENT field values on every render, not a one-time
+  // "did the user ever pass Next through this step" flag. That distinction
+  // is the actual QA-reported bug (#33): highestSaved only ever increases,
+  // so a step validated-and-passed once, then edited back to blank
+  // afterward (e.g. clearing PAN/Aadhaar after initially filling them),
+  // kept showing a green check and counting toward the progress % forever.
+  // Steps not listed here (Basic Pay, Assets — genuinely no required
+  // fields) fall back to the old highestSaved-based "done" in the sidebar.
   const missingByStep = useMemo(() => {
     const m: Record<number, string[]> = {};
     m[0] = [!firstName.trim() && "First name", !lastName.trim() && "Last name", !form.date_of_birth && "Date of birth"].filter(Boolean) as string[];
     m[1] = [!employment.employment_type && "Employment type", !employment.role && "Reporting manager"].filter(Boolean) as string[];
+    m[3] = [
+      !statutory.pan_number.trim() && "PAN",
+      !statutory.aadhaar_number.trim() && "Aadhaar",
+      !statutory.account_holder_name.trim() && "Account holder name",
+      !statutory.account_number.trim() && "Account number",
+      !statutory.ifsc_code.trim() && "IFSC code",
+    ].filter(Boolean) as string[];
+    m[5] = educationEntries.some(e => e.institution?.trim()) ? [] : ["At least one education entry"];
+    m[6] = (() => {
+      const uploadedTypes = new Set(documents.map(d => d.document_type));
+      return REQUIRED_DOC_KEYS.filter(k => !uploadedTypes.has(k)).map(k => REQUIRED_DOC_LABELS[k] ?? k);
+    })();
     return m;
-  }, [firstName, lastName, form.date_of_birth, employment.employment_type, employment.role]);
+  }, [
+    firstName, lastName, form.date_of_birth, employment.employment_type, employment.role,
+    statutory.pan_number, statutory.aadhaar_number, statutory.account_holder_name,
+    statutory.account_number, statutory.ifsc_code, educationEntries, documents,
+  ]);
 
   if (loading || !action) {
     return (
@@ -444,7 +470,15 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     );
   }
 
-  const progressPct = Math.round(((highestSaved + 1) / STEPS.length) * 100);
+  // Same "re-derive from current field values where tracked, else fall back
+  // to the historical highestSaved flag" rule HireWizardSidebar's own
+  // checkmarks use — kept in sync so the top progress bar and the sidebar
+  // never disagree about which steps actually count as done.
+  const doneStepCount = STEPS.reduce((count, _step, i) => {
+    const isDone = missingByStep[i] !== undefined ? missingByStep[i].length === 0 : i <= highestSaved;
+    return count + (isDone ? 1 : 0);
+  }, 0);
+  const progressPct = Math.round((doneStepCount / STEPS.length) * 100);
 
   return (
     <>

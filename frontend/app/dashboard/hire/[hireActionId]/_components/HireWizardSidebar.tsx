@@ -33,15 +33,25 @@ interface Props {
 // is the one that locks steps until the previous one is saved; this sidebar
 // deliberately does NOT mirror that anymore, since HR filling this out
 // needs to be able to jump ahead — e.g. to Documents or Review — without
-// being forced through every step in order first). `highestSaved` still
-// only drives the checkmark/"done" styling, not what's reachable.
+// being forced through every step in order first).
 export default function HireWizardSidebar({ steps, currentStep, highestSaved, onStepClick, missingByStep }: Props) {
   const totalMissing = Object.values(missingByStep).reduce((n, arr) => n + arr.length, 0);
 
   return (
     <div className="wiz-nav">
       {steps.map((step, i) => {
-        const isDone      = i <= highestSaved;
+        // For any step HireWizardClient actually tracks required fields for
+        // (missingByStep[i] exists), the green check is re-derived from
+        // CURRENT field values every render — never a one-time "you passed
+        // Next through here once" flag. That used to mean a step validated
+        // and passed, then edited back to blank afterward (e.g. clearing
+        // PAN/Aadhaar after initially filling them), kept showing done
+        // forever and inflating the progress % — the exact bug this fixes.
+        // Untracked steps (Basic Pay, Assets — genuinely no required
+        // fields) fall back to the historical highestSaved flag.
+        const isDone = missingByStep[i] !== undefined
+          ? missingByStep[i].length === 0
+          : i <= highestSaved;
         const isActive    = i === currentStep;
         return (
           <div key={step.label}>
