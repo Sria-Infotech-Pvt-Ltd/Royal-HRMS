@@ -16,6 +16,25 @@ from rest_framework import serializers
 from core.permissions import has_perm as _has_perm
 from core.file_validation import validate_file_content as _validate_file_content
 
+
+def _validate_dob_not_future_and_of_age(value):
+    """Shared date-of-birth rule: must be in the past, and the employee must
+    be between 18 and 80 years old. Used by both EmployeeProfileSerializer
+    (self-service Personal step) and EmployeeBulkImportRowSerializer (bulk
+    import), which previously had no DOB validation at all and accepted
+    obviously-wrong future dates like 2030-01-01 (QA #61)."""
+    if value is None:
+        return value
+    today = date.today()
+    if value >= today:
+        raise serializers.ValidationError('Date of birth must be in the past.')
+    age = (today - value).days // 365
+    if age < 18:
+        raise serializers.ValidationError('Employee must be at least 18 years old.')
+    if age > 80:
+        raise serializers.ValidationError('Please enter a valid date of birth.')
+    return value
+
 from apps.accounts.models import (
     AuditLog,
     Company,
@@ -1524,18 +1543,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
         return value
 
     def validate_date_of_birth(self, value):
-        if value is None:
-            return value
-        from datetime import date as _date
-        today = _date.today()
-        if value >= today:
-            raise serializers.ValidationError('Date of birth must be in the past.')
-        age = (today - value).days // 365
-        if age < 18:
-            raise serializers.ValidationError('Employee must be at least 18 years old.')
-        if age > 80:
-            raise serializers.ValidationError('Please enter a valid date of birth.')
-        return value
+        return _validate_dob_not_future_and_of_age(value)
 
     def validate_year_of_passing(self, value):
         if value is not None and not (1950 <= value <= 2099):
@@ -2412,7 +2420,15 @@ class ApprovalWorkflowRuleUpdateSerializer(serializers.Serializer):
 # ── Employee Bulk Import ───────────────────────────────────────────────────────
 
 _EMP_PHONE_RE         = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
-_EMP_IMPORT_DATE_FMTS = ['%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%m/%d/%Y', 'iso-8601']
+# Bulk import accepts ONLY ISO 8601 (YYYY-MM-DD) — a CSV/XLSX import is the
+# one place ambiguous formats like DD/MM/YYYY vs MM/DD/YYYY genuinely cannot
+# be told apart (e.g. "03/04/2026"), so every other format was previously
+# accepted too, silently mis-parsing rows. '%Y-%m-%d' and 'iso-8601' are the
+# same format under DRF's hood — listing both used to make DRF's own
+# "use one of these formats" error message repeat "YYYY-MM-DD" twice
+# (QA #64); keeping only '%Y-%m-%d' fixes both the ambiguity and the
+# duplicated message text.
+_EMP_IMPORT_DATE_FMTS = ['%Y-%m-%d']
 _EMP_VALID_GENDERS    = frozenset({'male', 'female', 'other'})
 _EMP_VALID_BLOOD      = frozenset({'a+', 'a-', 'b+', 'b-', 'o+', 'o-', 'ab+', 'ab-'})
 
@@ -2533,3 +2549,10 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
         if value and len(value) > 500:
             raise serializers.ValidationError('Address must be 500 characters or fewer.')
         return value
+
+    def validate_date_of_birth(self, value):
+        # Reuses the same past-date/18-80-years-old rule as the Personal
+        # step's own EmployeeProfileSerializer.validate_date_of_birth — a
+        # future DOB such as 2030-01-01 previously sailed through bulk
+        # import unvalidated (QA #61).
+        return _validate_dob_not_future_and_of_age(value)

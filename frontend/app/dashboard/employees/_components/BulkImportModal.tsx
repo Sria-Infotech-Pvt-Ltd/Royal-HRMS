@@ -74,7 +74,10 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
   }
 
   async function handleUpload() {
-    if (!file) return;
+    if (!file) {
+      setFileError("Please select a file first.");
+      return;
+    }
     setUploading(true);
     setSubmitError(null);
     setResult(null);
@@ -122,7 +125,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
             <button
               className="btn btn-filled"
               onClick={handleUpload}
-              disabled={!file || uploading}
+              disabled={uploading}
               suppressHydrationWarning
             >
               {uploading

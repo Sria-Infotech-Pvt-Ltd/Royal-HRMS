@@ -205,17 +205,34 @@ class EmployeeBulkImportView(APIView):
         created_rows: list = []
         row_errors:   list = []
         skipped_rows: list = []
+        # Distinct row numbers that failed — NOT the same as len(row_errors),
+        # which counts individual field-level errors (one row with 4 invalid
+        # fields previously inflated the reported "failed" count by 4 even
+        # though only 1 row actually failed — QA #58). created + skipped +
+        # len(failed_row_ids) == total_rows always holds.
+        failed_row_ids: set = set()
 
         for idx, raw_row in enumerate(rows, start=2):
             row_data = _normalize_employee_import_headers(raw_row)
             ser = EmployeeBulkImportRowSerializer(data=row_data)
 
+            # Whatever raw email string this row had, valid or not — used as
+            # the error table's Email column below even for rows that fail
+            # serializer validation itself (before `vd`/its cleaned email
+            # exists). Falls back to '' only if the column was entirely
+            # absent/blank (QA #62 — error table left Email blank for most
+            # rows because the raw value was only ever surfaced from `vd`,
+            # which never gets built for a serializer-validation failure).
+            raw_email = (row_data.get('email') or '').strip()
+
             if not ser.is_valid():
+                failed_row_ids.add(idx)
                 for field, msgs in ser.errors.items():
                     row_errors.append({
-                        'row':     idx,
-                        'field':   field,
-                        'message': msgs[0] if isinstance(msgs, list) else str(msgs),
+                        'row':        idx,
+                        'field':      field,
+                        'identifier': raw_email,
+                        'message':    msgs[0] if isinstance(msgs, list) else str(msgs),
                     })
                 continue
 
@@ -235,6 +252,7 @@ class EmployeeBulkImportView(APIView):
             branch_raw  = vd['branch']
             branch_name = branch_map.get(branch_raw.lower())
             if branch_name is None:
+                failed_row_ids.add(idx)
                 row_errors.append({
                     'row':        idx,
                     'field':      'branch',
@@ -246,10 +264,28 @@ class EmployeeBulkImportView(APIView):
             # Org Unit + Position — department/designation get derived from
             # the Position after the employee is created, same as Create
             # Employee's own Position picker.
+            #
+            # Report against 'org_unit' (not 'position') whenever the org
+            # unit itself doesn't exist at all — otherwise "No active
+            # position X in org unit NoSuchUnit" reads as a position problem
+            # when the org unit name is what the user actually typed wrong
+            # (QA #65). Only once the org unit is confirmed to exist do we
+            # treat a non-match as a position-title problem.
             unit_raw  = vd['org_unit']
             title_raw = vd['position_title']
+            org_unit_exists = any(unit_raw.lower() == u for (u, _t) in position_map.keys())
             matches = position_map.get((unit_raw.lower(), title_raw.lower()), [])
+            if not org_unit_exists:
+                failed_row_ids.add(idx)
+                row_errors.append({
+                    'row':        idx,
+                    'field':      'org_unit',
+                    'identifier': email,
+                    'message':    f'Org unit "{unit_raw}" not found.',
+                })
+                continue
             if not matches:
+                failed_row_ids.add(idx)
                 row_errors.append({
                     'row':        idx,
                     'field':      'position',
@@ -258,6 +294,7 @@ class EmployeeBulkImportView(APIView):
                 })
                 continue
             if len(matches) > 1:
+                failed_row_ids.add(idx)
                 row_errors.append({
                     'row':        idx,
                     'field':      'position',
@@ -271,6 +308,7 @@ class EmployeeBulkImportView(APIView):
             role_raw = vd['role']
             role_obj = role_map.get(role_raw.lower())
             if role_obj is None:
+                failed_row_ids.add(idx)
                 row_errors.append({
                     'row':        idx,
                     'field':      'role',
@@ -279,6 +317,7 @@ class EmployeeBulkImportView(APIView):
                 })
                 continue
             if role_obj.role_permissions.filter(permission__codename='settings.edit').exists():
+                failed_row_ids.add(idx)
                 row_errors.append({
                     'row':        idx,
                     'field':      'role',
@@ -386,6 +425,7 @@ class EmployeeBulkImportView(APIView):
 
             except Exception as exc:
                 logger.error('Bulk import row %d failed (%s): %s', idx, email, exc)
+                failed_row_ids.add(idx)
                 row_errors.append({
                     'row':        idx,
                     'field':      'general',
@@ -396,7 +436,12 @@ class EmployeeBulkImportView(APIView):
         total_rows    = len(rows)
         created_count = len(created_ids)
         skipped_count = len(skipped_rows)
-        fail_count    = len(row_errors)
+        # Distinct FAILED ROWS, not individual field errors (see
+        # failed_row_ids' definition above) — the annual_ctc "not created"
+        # warning appended earlier is deliberately NOT counted here since
+        # that row's employee was still created successfully; only rows that
+        # actually failed to import land in failed_row_ids.
+        fail_count    = len(failed_row_ids)
 
         AuditLog.objects.create(
             user       = request.user,

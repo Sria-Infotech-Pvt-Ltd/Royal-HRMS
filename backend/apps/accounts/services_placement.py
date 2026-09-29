@@ -34,12 +34,22 @@ def current_placement(position: 'Position', as_of=None) -> 'Placement | None':
     )
 
 
-def sync_from_position(position: 'Position', *, force: bool = False) -> None:
+def sync_from_position(position: 'Position', *, force: bool = False, as_of=None) -> None:
     """Push the Position's effective title onto its current holder's (as of
     today, via the current Placement) User.designation, and the nearest
     is_department_level unit in the holder's Org Unit chain (self-first —
     see services_approval.resolve_employee_department_name()) onto
     User.department, when one exists in that chain.
+
+    `as_of` lets a caller that just created/assigned a specific Placement
+    look that placement up by ITS effective date rather than today's date —
+    without it, current_placement() defaults to today, so a Placement whose
+    effective_from is in the future (e.g. bulk-imported/hired employees with
+    a future Date of Joining) would resolve to "no current holder" and
+    silently skip the designation/department sync entirely, even though
+    assign_position() had just called this with force=True specifically to
+    set it (QA #59 — Position saved via Placement, but Designation stayed
+    blank in the Employee Directory table for anyone whose DOJ is upcoming).
 
     Each half respects its own *_synced_from_position flag independently —
     designation_synced_from_position and department_synced_from_position —
@@ -47,7 +57,7 @@ def sync_from_position(position: 'Position', *, force: bool = False) -> None:
     other, unless force=True (an explicit assignment always wins for both)."""
     from apps.accounts.services_approval import resolve_employee_department_name
 
-    current = current_placement(position)
+    current = current_placement(position, as_of=as_of)
     if current is None:
         return
     holder = current.employee
@@ -155,5 +165,5 @@ def assign_position(
             placement.full_clean()  # friendly-path 400 for an overlap the pre-close above didn't resolve
             placement.save()
 
-    sync_from_position(position, force=True)
+    sync_from_position(position, force=True, as_of=effective_from)
     return placement
