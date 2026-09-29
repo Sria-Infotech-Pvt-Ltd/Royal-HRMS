@@ -18,7 +18,8 @@ const SECTIONS = [
   { value: "Personal details",     label: "Personal details" },
   { value: "Contact & address",    label: "Contact & address" },
   { value: "Emergency contact",    label: "Emergency contact" },
-  { value: "Statutory & bank",     label: "Statutory & bank" },
+  { value: "Bank details",         label: "Bank details" },
+  { value: "Family & nomination",  label: "Family & nomination" },
   { value: "Other",                label: "Other" },
 ];
 

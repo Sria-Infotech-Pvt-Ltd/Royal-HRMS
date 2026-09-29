@@ -20,6 +20,7 @@ import { useFaceRegistrationCard } from "@/hooks/useFaceRegistrationCard";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import EmployeeDrawer from "@/app/dashboard/employees/_components/EmployeeDrawer";
 import ProfileEditModal from "@/app/dashboard/employees/_components/ProfileEditModal";
+import ProfileCorrectionModal from "@/app/dashboard/ess/_components/ProfileCorrectionModal";
 import ChangePasswordForm from "./ChangePasswordForm";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import ProfilePhotoModal from "@/components/ProfilePhotoModal";
@@ -53,7 +54,9 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
 
   const [showRecord, setShowRecord] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showCorrection, setShowCorrection] = useState(false);
   const [savedJustNow, setSavedJustNow] = useState(false);
+  const [correctionSubmitted, setCorrectionSubmitted] = useState(false);
 
   const [showFaceRegistration, setShowFaceRegistration] = useState(false);
   const { state: faceCardState, loading: faceCardLoading, notes: faceRejectionNotes, refetch: refetchFaceStatus } = useFaceRegistrationCard();
@@ -103,6 +106,12 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       {savedJustNow && (
         <div className="alert alert-success mb-16">
           <i className="ti ti-circle-check" /> Your profile was updated.
+        </div>
+      )}
+
+      {correctionSubmitted && (
+        <div className="alert alert-success mb-16">
+          <i className="ti ti-circle-check" /> Correction request submitted — track it under My Requests.
         </div>
       )}
 
@@ -192,9 +201,14 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Update your mobile number, address or emergency contact</div>
             </button>
           ) : (
-            <div style={{ padding: "14px 16px", color: "var(--on-variant)", fontSize: 12.5 }}>
-              Self-service profile editing has been disabled for your role. Contact HR to update your details.
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowCorrection(true)}
+              style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
+            >
+              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Request profile correction</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Submit a change for HR to review and apply</div>
+            </button>
           )}
         </div>
       </div>
@@ -258,10 +272,24 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           employee={toDrawerEmployee(profile, photoUrl)}
           mode="self"
           onClose={() => setShowRecord(false)}
-          onRequestCorrection={canEditDirectly
-            ? () => router.push(`/dashboard/employees/${profile.employee_id}`)
-            : () => { setShowRecord(false); setShowEdit(true); }}
-          correctionLabel="Edit my record"
+          onRequestCorrection={() => {
+            setShowRecord(false);
+            if (canEditDirectly) router.push(`/dashboard/employees/${profile.employee_id}`);
+            // Direct-edit is only offered when the account actually holds
+            // employees.edit_own_profile — otherwise this must go through
+            // the real HR-approved request flow (ProfileCorrectionModal),
+            // never a silent bypass straight to the editable form.
+            else if (canEditOwnProfile) setShowEdit(true);
+            else setShowCorrection(true);
+          }}
+          correctionLabel={canEditDirectly ? "Edit my record" : canEditOwnProfile ? "Edit my details" : "Request profile correction"}
+        />
+      )}
+
+      {showCorrection && (
+        <ProfileCorrectionModal
+          onClose={() => setShowCorrection(false)}
+          onSubmitted={() => { setShowCorrection(false); setCorrectionSubmitted(true); }}
         />
       )}
 
