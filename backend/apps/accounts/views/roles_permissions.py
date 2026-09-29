@@ -53,7 +53,8 @@ from core.template_context import (
 )
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.authentication import JWTAuthentication   
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 
 from apps.accounts.models import (
@@ -238,6 +239,27 @@ class RoleDetailView(APIView):
                 f"Role '{serializer.validated_data['name']}' already exists.",
                 http_status=status.HTTP_409_CONFLICT,
             )
+
+        # Permissions are baked into the access/refresh token at login and
+        # (per FreshClaimsTokenRefreshSerializer's own docstring) deliberately
+        # NOT re-derived on the silent 15-min refresh — that comment assumes
+        # "a role/permission change already forces re-login", but nothing
+        # actually enforced that until now. Without this, anyone already
+        # logged in under this role keeps acting on the OLD permission set
+        # for up to the refresh token's full 7-day lifetime after an admin
+        # changes what the role can do — backend has_perm() checks would
+        # already reflect the new permissions (those hit the DB fresh every
+        # request), but the JWT claim and the UI gates reading it would not.
+        # Blacklisting every outstanding token for this role's active users
+        # forces their next request to 401 and their next login to pick up
+        # the real, current permission set — same mechanism
+        # EmployeePasswordResetView already uses for a single user.
+        affected_user_ids = list(
+            User.objects.filter(role=updated_role, is_active=True).values_list('id', flat=True)
+        )
+        if affected_user_ids:
+            for outstanding in OutstandingToken.objects.filter(user_id__in=affected_user_ids):
+                BlacklistedToken.objects.get_or_create(token=outstanding)
 
         AuditLog.objects.create(
             user=request.user, action='role_updated', module='accounts',
