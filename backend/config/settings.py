@@ -380,6 +380,11 @@ REST_FRAMEWORK = {
         'forgot_password':      '5/hour',
         'reset_password':       '10/hour',
         'otp_verify':           '10/hour',
+        # A polling internal system (e.g. Project Budget & Tracking)
+        # reasonably needs more headroom than a human-facing anon action
+        # like login/forgot-password, but still capped well under
+        # anything resembling a scrape.
+        'external_api':         '120/hour',
     },
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
 }

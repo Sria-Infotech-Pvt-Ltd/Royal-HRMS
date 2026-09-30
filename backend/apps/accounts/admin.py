@@ -14,6 +14,7 @@ from apps.accounts.models import (
     EmployeeCodeSettings,
     EmployeeDocument,
     EmployeeProfile,
+    ExternalAPIKey,
     OTPVerification,
     PasswordResetToken,
     Permission,
@@ -104,6 +105,23 @@ class PasswordResetTokenAdmin(admin.ModelAdmin):
     readonly_fields = ('id', 'created_at')
 
     def has_add_permission(self, request):
+        return False
+
+
+# ─── External API Keys ───────────────────────────────────────────────────────
+
+@admin.register(ExternalAPIKey)
+class ExternalAPIKeyAdmin(admin.ModelAdmin):
+    # No raw key value is ever stored — only its hash — so there's nothing
+    # to show here beyond metadata; revoking is just flipping is_active,
+    # never editing key_hash by hand.
+    list_display   = ('name', 'is_active', 'created_by', 'created_at', 'last_used_at')
+    list_filter    = ('is_active',)
+    readonly_fields = ('id', 'key_hash', 'created_by', 'created_at', 'last_used_at')
+
+    def has_add_permission(self, request):
+        # New keys are generated via `manage.py generate_external_api_key`
+        # (needs to print the raw key exactly once) — not through this form.
         return False
 
 

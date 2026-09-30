@@ -5,6 +5,7 @@ from apps.accounts.views_email_log import (
     EmailLogResendView,
 )
 from apps.accounts.views_reset_password import EmployeePasswordResetView, EmployeeInviteStatusView, ResendInviteView
+from apps.accounts.views_external_api import ExternalEmployeeBasicListView
 from apps.accounts.views_hire import (
     HireActionDetailView,
     HireActionDocumentDetailView,
@@ -144,6 +145,9 @@ urlpatterns = [
     path('reset-password/',  ResetPasswordView.as_view(),   name='reset-password'),
     path('change-password/', ChangePasswordView.as_view(),  name='change-password'),
     path('invite/<uuid:token>/', InviteCheckView.as_view(), name='invite-check'),
+
+    # External systems (API-key authenticated, not a real HRMS login)
+    path('external/employees/', ExternalEmployeeBasicListView.as_view(), name='external-employee-list'),
 
     # Employees
     path('employees/',                                           EmployeeListCreateView.as_view(),       name='employee-list-create'),

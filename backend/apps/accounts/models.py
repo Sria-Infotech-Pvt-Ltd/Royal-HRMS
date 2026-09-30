@@ -963,6 +963,42 @@ class PasswordResetToken(models.Model):
         )
 
 
+# ─── External API Keys ──────────────────────────────────────────────────────
+
+class ExternalAPIKey(models.Model):
+    """
+    Credentials for another internal system (e.g. the Project Budget &
+    Tracking tool) to call this app's read-only external APIs — those
+    systems have no HRMS login of their own (no User row, no JWT session),
+    so the normal cookie-based auth flow doesn't apply to them.
+
+    Only the SHA-256 hash of the raw key is ever stored, never the key
+    itself — the raw value is shown to whoever generates it exactly once
+    (same principle as a password: this app should never be able to show
+    it again, only verify a presented key against the stored hash).
+    """
+    id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name          = models.CharField(
+                        max_length=100, unique=True,
+                        help_text='Which system this key belongs to, e.g. "project_budget_tool".',
+                    )
+    key_hash      = models.CharField(max_length=64, unique=True, db_index=True)
+    is_active     = models.BooleanField(default=True)
+    created_by    = models.ForeignKey(
+                        User, on_delete=models.SET_NULL, null=True, blank=True,
+                        related_name='created_external_api_keys',
+                    )
+    created_at    = models.DateTimeField(auto_now_add=True)
+    last_used_at  = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'accounts_external_api_keys'
+        ordering = ['name']
+
+    def __str__(self):
+        return f'{self.name} ({"active" if self.is_active else "revoked"})'
+
+
 # ─── Audit Log ────────────────────────────────────────────────────────────────
 
 class AuditLog(models.Model):
