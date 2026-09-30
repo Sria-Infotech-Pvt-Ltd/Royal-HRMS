@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 import CountrySelect from "@/components/CountrySelect";
 import { useIfscLookup } from "@/hooks/useIfscLookup";
@@ -9,14 +9,14 @@ export interface StatutoryDraft {
   pan_number: string; aadhaar_number: string; passport_number: string; passport_expiry: string;
   passport_issue_date: string; passport_place_of_issue: string; passport_country_of_issue: string;
   uan_number: string; esi_number: string; pf_covered: string; esi_covered: string;
-  account_number: string; ifsc_code: string; bank_name: string; account_holder_name: string;
+  account_number: string; ifsc_code: string; bank_name: string; bank_branch_address: string; account_holder_name: string;
 }
 
 export const EMPTY_STATUTORY: StatutoryDraft = {
   pan_number: "", aadhaar_number: "", passport_number: "", passport_expiry: "",
   passport_issue_date: "", passport_place_of_issue: "", passport_country_of_issue: "",
   uan_number: "", esi_number: "", pf_covered: "true", esi_covered: "false",
-  account_number: "", ifsc_code: "", bank_name: "", account_holder_name: "",
+  account_number: "", ifsc_code: "", bank_name: "", bank_branch_address: "", account_holder_name: "",
 };
 
 function Toggle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -49,15 +49,28 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
 
   const { lookup: lookupIfsc } = useIfscLookup();
   const latestIfscRef = useRef("");
+  // Explicit feedback on every lookup outcome — this used to silently do
+  // nothing when a valid-format IFSC code wasn't in the lookup dataset
+  // (or the network call failed), leaving no way to tell "this code is
+  // wrong" apart from "nothing happened yet" (reported live: a tester's
+  // real HDFC code "wasn't accepted" with no error shown either way).
+  const [ifscStatus, setIfscStatus] = useState<"idle" | "checking" | "found" | "not_found">("idle");
   function setIfsc(raw: string) {
     const normalized = raw.toUpperCase();
     set("ifsc_code", normalized);
     latestIfscRef.current = normalized;
     if (/^[A-Z]{4}0[A-Z0-9]{6}$/.test(normalized)) {
+      setIfscStatus("checking");
       lookupIfsc(normalized).then(info => {
-        if (!info || latestIfscRef.current !== normalized) return;
+        if (latestIfscRef.current !== normalized) return;
+        if (!info) { setIfscStatus("not_found"); return; }
+        setIfscStatus("found");
         if (info.bank) set("bank_name", info.bank);
+        const branchAddress = [info.branch, info.address, info.city, info.state].filter(Boolean).join(", ");
+        if (branchAddress) set("bank_branch_address", branchAddress);
       });
+    } else {
+      setIfscStatus("idle");
     }
   }
 
@@ -166,10 +179,21 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
         <div className="f">
           <label>IFSC code <span className="req">*</span></label>
           <input value={value.ifsc_code} onChange={e => setIfsc(e.target.value)} placeholder="HDFC0001234" maxLength={11} className="finput" />
+          {ifscStatus === "checking" && <div className="hint">Looking up bank…</div>}
+          {ifscStatus === "found" && <div className="hint" style={{ color: "var(--success, #16a34a)" }}>Bank and branch found — filled in below.</div>}
+          {ifscStatus === "not_found" && (
+            <div className="hint" style={{ color: "var(--error)" }}>
+              No bank found for this IFSC code — double-check it, or enter the bank name/branch manually below.
+            </div>
+          )}
         </div>
         <div className="f">
           <label>Bank name <span className="tag">OPTIONAL</span></label>
           <input value={value.bank_name} onChange={e => set("bank_name", e.target.value)} placeholder="e.g. HDFC Bank" className="finput" />
+        </div>
+        <div className="f">
+          <label>Branch / address <span className="tag">OPTIONAL</span></label>
+          <input value={value.bank_branch_address} onChange={e => set("bank_branch_address", e.target.value)} placeholder="Auto-filled from IFSC, or enter manually" className="finput" />
         </div>
       </div>
     </div>
