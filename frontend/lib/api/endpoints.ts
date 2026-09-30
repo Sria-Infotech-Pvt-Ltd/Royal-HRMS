@@ -62,6 +62,14 @@ export const API = {
     detail: (id: string | number) => `/designations/${id}/`,
   },
 
+  assets: {
+    list: "/assets/",
+    detail: (id: string) => `/assets/${id}/`,
+    employeeAssets: (employeeId: string) => `/assets/employees/${employeeId}/`,
+    assign: (employeeId: string) => `/assets/employees/${employeeId}/assign/`,
+    return: (assignmentId: string) => `/assets/assignments/${assignmentId}/return/`,
+  },
+
   orgChart: {
     get: (branch?: string) => branch ? `/org-chart/?branch=${encodeURIComponent(branch)}` : "/org-chart/",
   },

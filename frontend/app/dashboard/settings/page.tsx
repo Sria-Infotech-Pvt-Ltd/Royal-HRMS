@@ -15,6 +15,7 @@ const SETTINGS_ITEMS = [
   { id: "assessment-config",  cat: "modules", icon: "ti-clipboard-check", iconClass: "sc-modules", label: "Assessment Config",     desc: "Pass percentage, attempt limits and time settings" },
   { id: "onboarding-fields",  cat: "modules", icon: "ti-forms",           iconClass: "sc-modules", label: "Onboarding Fields",     desc: "Show, hide, require, or add fields on the employee onboarding wizard" },
   { id: "referral-rules",     cat: "modules", icon: "ti-user-plus",       iconClass: "sc-modules", label: "Referral Rules",        desc: "Manage the rules and bonus details shown on the Referral page" },
+  { id: "assets",             cat: "modules", icon: "ti-package",         iconClass: "sc-modules", label: "Assets",                desc: "Track company equipment and assign it to employees" },
   { id: "email-templates",    cat: "comm",    icon: "ti-mail",            iconClass: "sc-comm",    label: "Email Templates",       desc: "Customize transactional emails and birthday wish settings" },
   { id: "smtp",               cat: "comm",    icon: "ti-server",          iconClass: "sc-comm",    label: "SMTP Settings",         desc: "Outgoing email server configuration" },
   { id: "notifications",      cat: "comm",    icon: "ti-bell",            iconClass: "sc-comm",    label: "Notifications",         desc: "In-app and email notification preferences" },
@@ -49,6 +50,7 @@ const ITEM_ROUTES: Record<string, string> = {
   "onboarding-fields":    "/dashboard/settings/onboarding-fields",
   "referral-rules":       "/dashboard/settings/referral-rules",
   "notifications":        "/dashboard/settings/notifications",
+  "assets":               "/dashboard/settings/assets",
 };
 
 const COMING_SOON_ITEMS = new Set<string>([]);

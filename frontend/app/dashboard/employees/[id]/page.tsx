@@ -38,6 +38,7 @@ import { AttendanceTab } from "./_components/AttendanceTab";
 import SalaryTab from "./_components/SalaryTab";
 import PayrollTab from "./_components/PayrollTab";
 import PromotionTab from "./_components/PromotionTab";
+import AssetsTab from "./_components/AssetsTab";
 
 interface ApiProfile {
   date_of_birth?: string; gender?: string; marital_status?: string;
@@ -742,6 +743,8 @@ export default function EmployeeProfilePage({
           roleOptions={roleOptions}
           onUpdated={onPromotionUpdated}
         />
+      ) : tab === "assets" ? (
+        <AssetsTab employeeId={id} />
       ) : tab === "wishes" ? (
         <WishesTab
           employeeId={id}
