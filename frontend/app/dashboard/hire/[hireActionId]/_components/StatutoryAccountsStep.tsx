@@ -182,8 +182,16 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
           {ifscStatus === "checking" && <div className="hint">Looking up bank…</div>}
           {ifscStatus === "found" && <div className="hint" style={{ color: "var(--success, #16a34a)" }}>Bank and branch found — filled in below.</div>}
           {ifscStatus === "not_found" && (
-            <div className="hint" style={{ color: "var(--error)" }}>
-              No bank found for this IFSC code — double-check it, or enter the bank name/branch manually below.
+            // Deliberately NOT var(--error)/red — a valid-format code that
+            // just isn't in this lookup dataset used to render identically
+            // to an actually-malformed code, which testers read as "the
+            // system is rejecting this IFSC". The code itself is still
+            // accepted here regardless (setIfsc always saves it, and the
+            // real format check on Next only checks the pattern, not
+            // whether this lookup found a match) — only the convenience
+            // auto-fill didn't have data for this specific branch.
+            <div className="hint" style={{ color: "var(--warn, #b45309)" }}>
+              Couldn&apos;t auto-fill bank details for this code — it&apos;s still accepted, just enter the bank name/branch manually below.
             </div>
           )}
         </div>
