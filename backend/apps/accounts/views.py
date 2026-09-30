@@ -3416,14 +3416,26 @@ class EmployeeDetailView(APIView):
         data          = request.data
         update_fields = ['updated_at']
         changes       = {}
-        # full_name/phone/date_of_joining are shown as read-only on the
-        # employee detail page once onboarding is complete ("set by system,
-        # not editable" — see PROFILE_SECTIONS in the frontend's _data.ts).
-        # That was previously a front-end-only convention with no matching
-        # check here, so any direct API call could silently overwrite them
-        # even after the UI stopped offering a way to. Enforced here now so
-        # the lock is real, not just an absent button.
+        dob_saved     = False
+        # date_of_joining is shown as read-only on the employee detail page
+        # once onboarding is complete ("set by system, not editable" — see
+        # PROFILE_SECTIONS in the frontend's _data.ts). That was previously a
+        # front-end-only convention with no matching check here, so any
+        # direct API call could silently overwrite it even after the UI
+        # stopped offering a way to. Enforced here now so the lock is real,
+        # not just an absent button.
+        #
+        # employee_id and full_name are permanently immutable through this
+        # endpoint (checked immediately below), regardless of onboarding
+        # status — not subject to this onboarding-status lock at all. phone
+        # is intentionally NOT locked either: Mobile Number must stay freely
+        # editable per the Employee Details business rule.
         locked = employee.onboarding_status == User.ONBOARDING_COMPLETE
+
+        if 'employee_id' in data:
+            submitted_employee_id = (data.get('employee_id') or '').strip()
+            if submitted_employee_id and submitted_employee_id != employee.employee_id:
+                return error('Employee ID cannot be modified.')
 
         role_name = (data.get('role') or '').strip()
         if role_name:
@@ -3457,27 +3469,33 @@ class EmployeeDetailView(APIView):
 
         if 'phone' in data:
             phone = (data.get('phone') or '').strip()
-            if locked and phone != employee.phone:
-                return error(
-                    'Phone number is locked once onboarding is complete and can no longer be changed here.',
-                    http_status=status.HTTP_409_CONFLICT,
-                )
+            from apps.accounts.serializers import _PHONE_RE_PROFILE
+            if phone and not _PHONE_RE_PROFILE.match(phone):
+                return error('Enter a valid mobile number (digits, spaces, +, -, ( ) allowed; 7–20 characters).')
             if employee.phone != phone:
                 changes['phone'] = {'from': employee.phone, 'to': phone}
             employee.phone = phone
             update_fields.append('phone')
 
+        # Employee Name is permanently immutable through this endpoint (not
+        # just once onboarding completes) — see the employee_id check above
+        # for the matching rule on that field.
         full_name = (data.get('full_name') or '').strip()
-        if full_name:
-            if locked and full_name != employee.full_name:
-                return error(
-                    'Full name is locked once onboarding is complete and can no longer be changed here.',
-                    http_status=status.HTTP_409_CONFLICT,
-                )
-            if employee.full_name != full_name:
-                changes['full_name'] = {'from': employee.full_name, 'to': full_name}
-            employee.full_name = full_name
-            update_fields.append('full_name')
+        if full_name and full_name != employee.full_name:
+            return error('Employee name cannot be modified.')
+
+        if 'email' in data:
+            new_email_raw = (data.get('email') or '').strip()
+            if new_email_raw:
+                if not EMAIL_RE.match(new_email_raw):
+                    return error('Enter a valid email address.')
+                new_email = User.objects.normalize_email(new_email_raw)
+                if new_email.lower() != employee.email.lower():
+                    if User.objects.filter(email__iexact=new_email).exclude(pk=employee.pk).exists():
+                        return error('Another account already uses this email address.')
+                    changes['email'] = {'from': employee.email, 'to': new_email}
+                    employee.email = new_email
+                    update_fields.append('email')
 
         doj = (data.get('date_of_joining') or '').strip()
         if doj:
@@ -3498,16 +3516,28 @@ class EmployeeDetailView(APIView):
         dob_raw = (data.get('date_of_birth') or '').strip()
         if dob_raw:
             try:
-                datetime.strptime(dob_raw, '%Y-%m-%d')
+                dob_parsed = datetime.strptime(dob_raw, '%Y-%m-%d').date()
             except ValueError:
                 return error('date_of_birth must be in YYYY-MM-DD format.')
+            # Reuses EmployeeProfileSerializer's own field validator (past
+            # date, age 18-80) instead of a second, inconsistent date check —
+            # this endpoint previously only validated format and silently
+            # skipped the age-range rule the onboarding wizard already enforces.
+            from apps.accounts.serializers import EmployeeProfileSerializer
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            try:
+                EmployeeProfileSerializer().validate_date_of_birth(dob_parsed)
+            except DRFValidationError as exc:
+                detail = exc.detail
+                return error(str(detail[0]) if isinstance(detail, list) and detail else str(detail))
             from apps.accounts.models import EmployeeProfile
             profile, _ = EmployeeProfile.objects.get_or_create(user=employee)
             old_dob = str(profile.date_of_birth) if profile.date_of_birth else ''
             if old_dob != dob_raw:
                 changes['date_of_birth'] = {'from': old_dob, 'to': dob_raw}
-            profile.date_of_birth = dob_raw
+            profile.date_of_birth = dob_parsed
             profile.save(update_fields=['date_of_birth', 'updated_at'])
+            dob_saved = True
 
         # Personal/Education/Bank/Emergency EmployeeProfile fields — previously
         # displayed on this page's edit form but silently dropped on save (no
@@ -3538,7 +3568,7 @@ class EmployeeDetailView(APIView):
             serializer.save()
             profile_saved = True
 
-        if len(update_fields) == 1 and not profile_saved:
+        if len(update_fields) == 1 and not profile_saved and not dob_saved:
             # Check if hr_id, reporting_manager_id, or reporting_approver_id will be set before bailing
             if 'hr_id' not in data and 'reporting_manager_id' not in data and 'reporting_approver_id' not in data:
                 return error('No updatable fields provided.')
@@ -3601,7 +3631,7 @@ class EmployeeDetailView(APIView):
             if 'reporting_approver' not in update_fields:
                 update_fields.append('reporting_approver')
 
-        if len(update_fields) == 1 and not profile_saved:
+        if len(update_fields) == 1 and not profile_saved and not dob_saved:
             return error('No updatable fields provided.')
 
         # Promotion (Employee > Promotion screen) piggybacks on this same
@@ -3652,6 +3682,15 @@ class EmployeeDetailView(APIView):
                     remarks               = remarks,
                     promoted_by           = request.user,
                 )
+
+        if 'email' in changes:
+            # Never raises (logs and returns False on failure) — reuses the
+            # same confirmation-to-new/security-alert-to-old notification
+            # pair CompanySystemAdminView.post() uses for the equivalent
+            # system_admin-login-email-change action, instead of a second
+            # implementation.
+            from apps.accounts.utils import send_email_change_notifications
+            send_email_change_notifications(employee, changes['email']['from'])
 
         employee = _get_employee(employee_id)
         return success('Employee updated successfully.', data=_employee_dict(employee))

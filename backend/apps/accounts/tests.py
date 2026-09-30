@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.core.cache import cache
@@ -469,6 +470,287 @@ class EmployeeResetPasswordTests(TestCase):
 
         self.hr_user.refresh_from_db()
         self.assertTrue(self.hr_user.check_password('TestPass123!'))
+
+
+class EmployeeDetailsFieldProtectionTests(TestCase):
+    """Employee ID/Name immutability, DOB/Mobile/Email edit + validation, and
+    System Admin/HR Admin/Branch Admin scoping on EmployeeDetailView.put() —
+    covers the Employee Details business rule: Employee ID and Employee Name
+    stay permanently read-only; Date of Birth, Mobile Number, and Email
+    become editable for every role already authorized via employees.edit.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+
+        system_admin_role = make_role(
+            'system_admin', permission_codenames=['employees.view', 'employees.edit', 'settings.edit'],
+        )
+        self.system_admin = make_user(
+            'sysadmin@test.com', role=system_admin_role, password='TestPass123!',
+            employee_id='EMPSYS001', full_name='Sys Admin', branch='Mumbai HQ',
+        )
+
+        hr_admin_role = make_role('hr_admin', permission_codenames=['employees.view', 'employees.edit'])
+        self.hr_admin = make_user(
+            'hradmin@test.com', role=hr_admin_role, password='TestPass123!',
+            employee_id='EMPHRA001', full_name='HR Admin', branch='Mumbai HQ',
+        )
+
+        branch_admin_role = make_role('branch_admin', permission_codenames=['employees.view', 'employees.edit'])
+        self.branch_admin = make_user(
+            'branchadmin@test.com', role=branch_admin_role, password='TestPass123!',
+            employee_id='EMPBRA001', full_name='Branch Admin', branch='Mumbai HQ',
+        )
+
+        no_perm_role = make_role('no_perm_role')
+        self.no_perm_user = make_user(
+            'noperm@test.com', role=no_perm_role, password='TestPass123!',
+            employee_id='EMPNOP001', full_name='No Perm', branch='Mumbai HQ',
+        )
+
+        employee_role = make_role('employee')
+        self.employee = make_user(
+            'target@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPTGT001', full_name='Target Employee', branch='Mumbai HQ',
+            phone='9876500001', onboarding_status=User.ONBOARDING_COMPLETE,
+        )
+        self.other_branch_employee = make_user(
+            'otherbranch@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPOTB001', full_name='Other Branch Employee', branch='Delhi HQ',
+        )
+        self.someone_else = make_user(
+            'someoneelse@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPSE0001', full_name='Someone Else', branch='Mumbai HQ',
+        )
+
+    def _url(self, employee_id: str | None = None):
+        return reverse('employee-detail', kwargs={'employee_id': employee_id or self.employee.employee_id})
+
+    # ── Employee ID / Employee Name immutability ───────────────────────────
+
+    def test_employee_id_cannot_be_changed(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'employee_id': 'HACKED001'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Employee ID cannot be modified', resp.data['message'])
+
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.employee_id, 'EMPTGT001')
+
+    def test_employee_id_echoed_back_unchanged_is_not_rejected(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(
+            self._url(), {'employee_id': self.employee.employee_id, 'phone': '9876500002'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.employee_id, 'EMPTGT001')
+        self.assertEqual(self.employee.phone, '9876500002')
+
+    def test_full_name_cannot_be_changed(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'full_name': 'Hacked Name'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Employee name cannot be modified', resp.data['message'])
+
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.full_name, 'Target Employee')
+
+    def test_full_name_immutable_regardless_of_onboarding_status(self):
+        # Previously full_name was only locked once onboarding was complete —
+        # confirm a not-yet-onboarded employee is protected too.
+        pending_role = make_role('employee_pending', permission_codenames=[])
+        pending_employee = make_user(
+            'pending@test.com', role=pending_role, password='TestPass123!',
+            employee_id='EMPPND001', full_name='Pending Employee', branch='Mumbai HQ',
+            onboarding_status=User.ONBOARDING_PENDING,
+        )
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(pending_employee.employee_id), {'full_name': 'New Name'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        pending_employee.refresh_from_db()
+        self.assertEqual(pending_employee.full_name, 'Pending Employee')
+
+    def test_full_name_echoed_back_unchanged_is_not_rejected(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(
+            self._url(), {'full_name': self.employee.full_name, 'phone': '9876500003'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    # ── Date of Birth ───────────────────────────────────────────────────────
+
+    def test_valid_date_of_birth_accepted(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        dob = (date.today() - timedelta(days=365 * 30)).isoformat()
+        resp = self.client.put(self._url(), {'date_of_birth': dob}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(str(self.employee.profile.date_of_birth), dob)
+
+    def test_future_date_of_birth_rejected(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        dob = (date.today() + timedelta(days=1)).isoformat()
+        resp = self.client.put(self._url(), {'date_of_birth': dob}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('past', resp.data['message'])
+
+    def test_under_18_date_of_birth_rejected(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        dob = (date.today() - timedelta(days=365 * 10)).isoformat()
+        resp = self.client.put(self._url(), {'date_of_birth': dob}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('18', resp.data['message'])
+
+    def test_over_80_date_of_birth_rejected(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        dob = (date.today() - timedelta(days=365 * 85)).isoformat()
+        resp = self.client.put(self._url(), {'date_of_birth': dob}, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_malformed_date_of_birth_rejected(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'date_of_birth': '30-02-2000'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('YYYY-MM-DD', resp.data['message'])
+
+    # ── Mobile Number ───────────────────────────────────────────────────────
+
+    def test_valid_mobile_number_accepted_regardless_of_onboarding_status(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'phone': '+91 98765 43210'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.phone, '+91 98765 43210')
+
+    def test_invalid_mobile_number_rejected(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'phone': 'not-a-phone-number!!'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.phone, '9876500001')
+
+    def test_blank_mobile_number_allowed(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'phone': ''}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.phone, '')
+
+    # ── Email ────────────────────────────────────────────────────────────────
+
+    @patch('django.core.mail.backends.smtp.EmailBackend.send_messages', return_value=1)
+    def test_valid_email_change_accepted_and_notifications_sent(self, mock_send):
+        from apps.accounts.models import SMTPSettings
+        SMTPSettings.objects.create(
+            name='Test SMTP', host='smtp.example.com', port=587,
+            username='test@example.com', password='irrelevant',
+            from_email='test@example.com', is_active=True,
+        )
+        old_email = self.employee.email
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'email': 'new-address@test.com'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.email, 'new-address@test.com')
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action='employee_updated', object_id=str(self.employee.id),
+                changes__email__from=old_email, changes__email__to='new-address@test.com',
+            ).exists()
+        )
+        # Confirmation-to-new + security-alert-to-old, same as
+        # CompanySystemAdminView's equivalent email-change action.
+        self.assertEqual(mock_send.call_count, 2)
+
+        # The new email must actually be usable to log in with — proves this
+        # isn't a cosmetic display-only change and login isn't broken.
+        new_client = APIClient()
+        _login(new_client, 'new-address@test.com', password='TestPass123!')
+
+    def test_invalid_email_format_rejected(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'email': 'not-an-email'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.email, 'target@test.com')
+
+    def test_email_already_in_use_by_another_account_rejected(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'email': 'someoneelse@test.com'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.email, 'target@test.com')
+
+    def test_email_unchanged_value_is_a_no_op(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        resp = self.client.put(
+            self._url(), {'email': self.employee.email, 'phone': '9123456785'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertFalse(
+            AuditLog.objects.filter(
+                action='employee_updated', object_id=str(self.employee.id), changes__has_key='email',
+            ).exists()
+        )
+
+    # ── Combined edit (DOB + Mobile + Email together) ──────────────────────
+
+    def test_hr_admin_can_update_dob_mobile_and_email_together(self):
+        _login(self.client, 'hradmin@test.com', password='TestPass123!')
+        dob = (date.today() - timedelta(days=365 * 25)).isoformat()
+        resp = self.client.put(self._url(), {
+            'date_of_birth': dob, 'phone': '9123456780', 'email': 'combined@test.com',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+        self.employee.refresh_from_db()
+        self.assertEqual(str(self.employee.profile.date_of_birth), dob)
+        self.assertEqual(self.employee.phone, '9123456780')
+        self.assertEqual(self.employee.email, 'combined@test.com')
+
+    # ── Permissions / scoping ───────────────────────────────────────────────
+
+    def test_unauthorized_role_denied(self):
+        _login(self.client, 'noperm@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'phone': '9123456781'}, format='json')
+        self.assertEqual(resp.status_code, 403)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.phone, '9876500001')
+
+    def test_system_admin_can_edit_employee_in_any_branch(self):
+        _login(self.client, 'sysadmin@test.com', password='TestPass123!')
+        resp = self.client.put(
+            self._url(self.other_branch_employee.employee_id), {'phone': '9123456782'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    def test_branch_admin_can_edit_employee_within_own_branch(self):
+        _login(self.client, 'branchadmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(), {'phone': '9123456783'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    def test_branch_admin_cannot_edit_employee_outside_own_branch(self):
+        _login(self.client, 'branchadmin@test.com', password='TestPass123!')
+        resp = self.client.put(
+            self._url(self.other_branch_employee.employee_id), {'phone': '9123456784'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 404)
+        self.other_branch_employee.refresh_from_db()
+        self.assertEqual(self.other_branch_employee.phone, '')
+
+    def test_branch_admin_cannot_smuggle_employee_id_change_alongside_other_fields(self):
+        _login(self.client, 'branchadmin@test.com', password='TestPass123!')
+        resp = self.client.put(
+            self._url(), {'employee_id': 'BYPASS001', 'phone': '9123456786'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.employee_id, 'EMPTGT001')
+        self.assertEqual(self.employee.phone, '9876500001')
 
 
 class CompanyEmailWrapperFooterTests(SimpleTestCase):

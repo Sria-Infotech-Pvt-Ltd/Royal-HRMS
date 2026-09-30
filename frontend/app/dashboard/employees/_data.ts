@@ -146,13 +146,14 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
     icon: "ti-user",
     kind: "grid",
     fields: [
-      // ── read-only identity fields (set by system, not editable) ──
+      // ── read-only identity fields (permanently set by system, not editable) ──
       { key: "code",          label: "Employee ID",    type: "readonly" },
       { key: "firstName",     label: "First Name",     type: "readonly" },
       { key: "lastName",      label: "Last Name",      type: "readonly" },
       { key: "dateOfJoining", label: "Date of Joining", type: "readonly" },
-      { key: "loginEmail",    label: "Login Email",    type: "readonly" },
-      { key: "mobileNumber",  label: "Phone",          type: "readonly" },
+      // ── editable contact fields ──
+      { key: "loginEmail",    label: "Login Email",    type: "email", required: true },
+      { key: "mobileNumber",  label: "Phone",          type: "tel" },
       // ── editable employment fields (options injected at runtime from API) ──
       { key: "department",  label: "Department",  type: "select", required: true, options: [] },
       { key: "designation", label: "Designation", type: "select", required: true, options: [] },

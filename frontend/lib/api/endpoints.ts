@@ -68,6 +68,17 @@ export const API = {
     employeeAssets: (employeeId: string) => `/assets/employees/${employeeId}/`,
     assign: (employeeId: string) => `/assets/employees/${employeeId}/assign/`,
     return: (assignmentId: string) => `/assets/assignments/${assignmentId}/return/`,
+    sendToMaintenance: (id: string) => `/assets/${id}/send-to-maintenance/`,
+    completeMaintenance: (recordId: string) => `/assets/maintenance/${recordId}/complete/`,
+    categories: {
+      list: "/assets/categories/",
+      detail: (id: number | string) => `/assets/categories/${id}/`,
+    },
+    types: {
+      list: (categoryId?: number | string) =>
+        categoryId ? `/assets/types/?category=${categoryId}` : "/assets/types/",
+      detail: (id: number | string) => `/assets/types/${id}/`,
+    },
   },
 
   orgChart: {

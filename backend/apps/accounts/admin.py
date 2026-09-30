@@ -56,7 +56,12 @@ class UserAdmin(BaseUserAdmin):
     list_filter    = ('role', 'is_active', 'must_change_password', 'is_staff')
     search_fields  = ('email', 'full_name', 'employee_id', 'department', 'branch')
     ordering       = ('email',)
-    readonly_fields = ('id', 'date_joined', 'updated_at', 'last_login_ip')
+    # employee_id/full_name: permanently immutable once an employee exists —
+    # same rule EmployeeDetailView.put() enforces on the API side. Django
+    # only applies readonly_fields to the *change* form, so add_fieldsets
+    # above (creating a new user) is unaffected — full_name is still set
+    # once at creation, employee_id is still system-generated elsewhere.
+    readonly_fields = ('id', 'employee_id', 'full_name', 'date_joined', 'updated_at', 'last_login_ip')
 
     fieldsets = (
         (None, {'fields': ('id', 'email', 'password')}),

@@ -12,6 +12,43 @@ from django.core.validators import MinValueValidator
 from django.db import models
 
 
+class AssetCategory(models.Model):
+    """Asset Category master data — mirrors apps.accounts.models.Department's
+    exact shape (name unique, is_active, no branch scoping — company-wide)."""
+
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'assets_category'
+        ordering = ['name']
+        verbose_name_plural = 'Asset Categories'
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class AssetType(models.Model):
+    """Asset Type master data — mirrors Designation's exact shape (name +
+    parent FK unique together, is_active)."""
+
+    name = models.CharField(max_length=100)
+    category = models.ForeignKey(AssetCategory, on_delete=models.CASCADE, related_name='asset_types')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'assets_type'
+        ordering = ['name']
+        unique_together = ('name', 'category')
+
+    def __str__(self) -> str:
+        return f'{self.name} ({self.category.name})'
+
+
 class Asset(models.Model):
     """One row per physical company asset (laptop, phone, furniture, ...)."""
 
@@ -47,8 +84,23 @@ class Asset(models.Model):
 
     asset_tag  = models.CharField(max_length=50, unique=True)
     asset_name = models.CharField(max_length=150)
+    # Stores the AssetCategory/AssetType NAME (e.g. "IT Equipment", "Laptop",
+    # or "Other") — kept as plain CharFields rather than FKs deliberately:
+    # converting them would require a data migration re-mapping every
+    # existing asset's free-text value, which isn't genuinely required just
+    # to add master-data-backed dropdowns/validation going forward. The
+    # AssetCategory/AssetType tables below are the source of truth for what
+    # a NEW value must match; existing rows keep whatever string they
+    # already had (see AssetSerializer.validate — unchanged-on-update values
+    # are exempt from the master-data check for exactly this reason).
     category   = models.CharField(max_length=100)
     asset_type = models.CharField(max_length=100)
+    # Populated only when category/asset_type == "Other" — the standard
+    # master value ("Other") is never overwritten with free text; the
+    # custom text goes here instead (see spec: "Do not replace the master
+    # value with arbitrary user text").
+    category_other   = models.CharField(max_length=100, blank=True, default='')
+    asset_type_other = models.CharField(max_length=100, blank=True, default='')
     brand      = models.CharField(max_length=100, blank=True, default='')
     # Django reserves no special meaning for a field literally named "model" —
     # matches the spec's own field name exactly, no clash with Meta.model etc.
@@ -166,3 +218,93 @@ class AssetAssignment(models.Model):
 
     def __str__(self) -> str:
         return f'{self.asset.asset_tag} -> {self.employee.full_name} ({self.status})'
+
+
+class AssetMaintenanceRecord(models.Model):
+    """
+    One row per maintenance/repair cycle — a SEPARATE history table from
+    AssetAssignment (not extra columns on it), the same way AssetAssignment
+    is its own table rather than extra columns on Asset: a laptop can go
+    through many assign/return cycles AND, independently, many repair
+    cycles over its life, and each needs its own append-only history.
+    Never deleted; only ever completed (fills in the completed_* fields).
+    """
+
+    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_COMPLETED   = 'completed'
+    STATUS_CHOICES = [
+        (STATUS_IN_PROGRESS, 'In Progress'),
+        (STATUS_COMPLETED,   'Completed'),
+    ]
+
+    OUTCOME_REPAIRED       = 'repaired'
+    OUTCOME_NOT_REPAIRABLE = 'not_repairable'
+    OUTCOME_CHOICES = [
+        (OUTCOME_REPAIRED,       'Repaired'),
+        (OUTCOME_NOT_REPAIRABLE, 'Not Repairable'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name='maintenance_records')
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default=STATUS_IN_PROGRESS)
+
+    # ── Opened (Send to Maintenance) ──
+    maintenance_start_date   = models.DateField()
+    # Named "issue" (not "reason") — deliberately distinct from
+    # AssetAssignment.return_reason (why it came back) vs. this (what's
+    # actually wrong with it), even though both were flagged 'damaged'.
+    issue                     = models.TextField()
+    expected_completion_date = models.DateField(null=True, blank=True)
+    vendor                    = models.CharField(max_length=150, blank=True, default='')
+    estimated_cost = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    notes = models.TextField(blank=True, default='')
+    sent_to_maintenance_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='asset_maintenance_sent',
+    )
+
+    # ── Closed (Complete Maintenance) — all blank/null until completed ──
+    # "_date" (not "_at") matches this app's own convention for a plain
+    # user-entered date (assigned_date, return_date, ...) vs. "_at" for an
+    # automatic DateTimeField (created_at/updated_at below).
+    completed_date    = models.DateField(null=True, blank=True)
+    outcome            = models.CharField(max_length=20, choices=OUTCOME_CHOICES, blank=True, default='')
+    maintenance_notes = models.TextField(blank=True, default='')
+    actual_cost = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='asset_maintenance_completed',
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'assets_maintenance_record'
+        ordering = ['-maintenance_start_date', '-created_at']
+        indexes = [
+            models.Index(fields=['asset', 'status'], name='assetmaint_asset_status_idx'),
+        ]
+        constraints = [
+            # Same belt-and-suspenders pattern as
+            # unique_active_assignment_per_asset above — the application-level
+            # check (asset.status must be 'damaged' to send to maintenance)
+            # is the primary guard; this closes the race-condition gap it
+            # alone would leave, and directly satisfies "prevent duplicate
+            # active maintenance records for the same asset."
+            models.UniqueConstraint(
+                fields=['asset'],
+                condition=models.Q(status='in_progress'),
+                name='unique_active_maintenance_per_asset',
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.asset.asset_tag} maintenance ({self.status})'

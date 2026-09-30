@@ -399,6 +399,11 @@ export default function EmployeeProfilePage({
         reporting_manager_id:   values.reportingManagerId   || null,
         reporting_approver_id:  values.reportingApproverId  || null,
         hr_id:                  values.hrId                  || null,
+        // Contact fields — Employee ID/Name stay excluded from this payload
+        // entirely (read-only on this form, permanently immutable on the
+        // backend regardless of what's sent).
+        email:                  values.loginEmail           || null,
+        phone:                  values.mobileNumber         || "",
         // Personal fields
         // date_of_birth/year_of_passing/total_experience_years are the only
         // fields below backed by a nullable model column — everything else
@@ -744,7 +749,7 @@ export default function EmployeeProfilePage({
           onUpdated={onPromotionUpdated}
         />
       ) : tab === "assets" ? (
-        <AssetsTab employeeId={id} />
+        <AssetsTab employeeId={employeeUuid} />
       ) : tab === "wishes" ? (
         <WishesTab
           employeeId={id}
