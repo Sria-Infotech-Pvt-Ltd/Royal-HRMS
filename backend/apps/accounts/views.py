@@ -3595,12 +3595,19 @@ class EmployeeDetailView(APIView):
             if 'hr' not in update_fields:
                 update_fields.append('hr')
 
-        # Manual reporting manager assignment (overrides auto-assign; blocked for managers)
+        # Manual reporting manager assignment (overrides auto-assign; blocked for managers).
+        # The role check only applies when an actual value is being assigned
+        # (mirrors the equivalent check in EmployeeListCreateView.post() above)
+        # — the frontend's PUT payload always includes this key (null when
+        # empty, same as every other field it sends), so a Manager with no
+        # reporting manager would otherwise have ANY unrelated field edit
+        # (DOB, phone, ...) rejected purely because the key was present,
+        # even though nothing about reporting_manager actually changed.
         if 'reporting_manager_id' in data:
-            if employee.role and employee.role.can_manage_team:
-                return error('Managers do not have a reporting manager.')
             rm_val = data.get('reporting_manager_id')
             if rm_val:
+                if employee.role and employee.role.can_manage_team:
+                    return error('Managers do not have a reporting manager.')
                 try:
                     rm_user = User.objects.get(pk=rm_val, is_active=True)
                 except (User.DoesNotExist, Exception):

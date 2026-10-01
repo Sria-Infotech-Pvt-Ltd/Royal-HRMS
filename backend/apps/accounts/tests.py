@@ -999,6 +999,109 @@ class EmployeeDetailsFieldProtectionTests(TestCase):
         self.assertEqual(self.employee.phone, '9876500001')
 
 
+class ManagerReportingManagerEditTests(TestCase):
+    """Regression: EmployeeDetailView.put() rejected ANY edit to a Manager
+    (even an unrelated field like DOB) with "Managers do not have a
+    reporting manager." The frontend always includes reporting_manager_id
+    in its PUT payload (null when empty, same as every other field it
+    sends) — the backend's old check fired on the key merely being
+    PRESENT, not on an actual value being submitted, unlike the equivalent
+    check in EmployeeListCreateView.post() which only checks truthy values.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        hr_role = make_role('hr_admin_mgr_test', permission_codenames=['employees.view', 'employees.edit'])
+        self.hr = make_user(
+            'hrmgrtest@test.com', role=hr_role, password='TestPass123!',
+            employee_id='EMPHRM001', full_name='HR Tester', branch='Mumbai HQ',
+        )
+        manager_role = make_role('manager_reporting_test', can_manage_team=True)
+        self.other_manager = make_user(
+            'othermanager@test.com', role=manager_role, password='TestPass123!',
+            employee_id='EMPMGR002', full_name='Other Manager', branch='Mumbai HQ',
+        )
+        self.manager = make_user(
+            'manager@test.com', role=manager_role, password='TestPass123!',
+            employee_id='EMPMGR001', full_name='Gangadhara Reddy', branch='Mumbai HQ',
+            reporting_manager=None,
+        )
+        employee_role = make_role('employee_reporting_test')
+        self.employee = make_user(
+            'emp@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPEMP001', full_name='Regular Employee', branch='Mumbai HQ',
+            reporting_manager=self.other_manager,
+        )
+        _login(self.client, 'hrmgrtest@test.com', password='TestPass123!')
+
+    def _url(self, employee):
+        return reverse('employee-detail', kwargs={'employee_id': employee.employee_id})
+
+    def test_manager_with_empty_reporting_manager_can_save_dob(self):
+        resp = self.client.put(self._url(self.manager), {
+            'reporting_manager_id': None, 'date_of_birth': '1990-05-15',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.manager.refresh_from_db()
+        self.assertEqual(str(self.manager.profile.date_of_birth), '1990-05-15')
+        self.assertIsNone(self.manager.reporting_manager)
+
+    def test_manager_with_empty_reporting_manager_can_save_phone_email_address(self):
+        resp = self.client.put(self._url(self.manager), {
+            'reporting_manager_id': None, 'phone': '9988776655', 'email': 'newmanager@test.com',
+            'current_address': 'Kondapur, Hyderabad',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.manager.refresh_from_db()
+        self.assertEqual(self.manager.phone, '9988776655')
+        self.assertEqual(self.manager.email, 'newmanager@test.com')
+        self.assertIsNone(self.manager.reporting_manager)
+
+    def test_manager_cannot_be_assigned_a_reporting_manager(self):
+        resp = self.client.put(self._url(self.manager), {
+            'reporting_manager_id': str(self.other_manager.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Managers do not have a reporting manager', resp.data['message'])
+        self.manager.refresh_from_db()
+        self.assertIsNone(self.manager.reporting_manager)
+
+    def test_manager_reporting_manager_id_key_omitted_entirely_still_saves(self):
+        resp = self.client.put(self._url(self.manager), {'phone': '9000000000'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.manager.refresh_from_db()
+        self.assertEqual(self.manager.phone, '9000000000')
+
+    def test_non_manager_with_valid_reporting_manager_unaffected(self):
+        # Existing behavior for a regular employee must be unchanged: a real
+        # reporting_manager_id still gets applied normally.
+        new_manager = make_user(
+            'newmgr@test.com',
+            role=make_role('manager_reporting_test2', can_manage_team=True),
+            employee_id='EMPMGR003', full_name='New Manager', branch='Mumbai HQ',
+        )
+        resp = self.client.put(self._url(self.employee), {
+            'reporting_manager_id': str(new_manager.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_manager_id, new_manager.pk)
+
+    def test_non_manager_clearing_reporting_manager_still_works(self):
+        resp = self.client.put(self._url(self.employee), {'reporting_manager_id': None}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertIsNone(self.employee.reporting_manager)
+
+    def test_non_manager_self_assignment_still_rejected(self):
+        resp = self.client.put(self._url(self.employee), {
+            'reporting_manager_id': str(self.employee.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('cannot be their own reporting manager', resp.data['message'])
+
+
 class CompanyEmailWrapperFooterTests(SimpleTestCase):
     """
     Regression test for the Royal HRMS website footer link added to
