@@ -70,24 +70,18 @@ export default function EmployeeCodeSettingsPage() {
     } else if (!/^[A-Za-z]+$/.test(form.prefix.trim())) {
       errs.prefix = "Prefix must contain letters only.";
     }
-    if (form.padding < 3 || form.padding > 8) {
-      errs.padding = "Padding must be between 3 and 8.";
-    }
-    if (form.next_sequence < 1) {
-      errs.next_sequence = "Starting number must be at least 1.";
-    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
 
-  function onField(key: keyof EmployeeCodeSettings, value: string) {
+  // padding/next_sequence are no longer editable here, but are still part
+  // of the save payload below (API contract unchanged) — carried through
+  // from whatever GET returned, untouched by the user.
+  function onPrefixChange(value: string) {
     setSaved(false);
     setApiError(null);
-    setErrors(e => ({ ...e, [key]: undefined }));
-    setForm(f => ({
-      ...f,
-      [key]: key === "prefix" ? value : Number(value),
-    }));
+    setErrors(e => ({ ...e, prefix: undefined }));
+    setForm(f => ({ ...f, prefix: value }));
   }
 
   async function onSave() {
@@ -134,7 +128,7 @@ export default function EmployeeCodeSettingsPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Employee ID Format</div>
-          <div className="page-sub">Configure the prefix, digit count, and starting number for employee codes</div>
+          <div className="page-sub">Configure the prefix used for new employee codes</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
@@ -179,7 +173,7 @@ export default function EmployeeCodeSettingsPage() {
               <input
                 className={`field-input${errors.prefix ? " field-error" : ""}`}
                 value={form.prefix}
-                onChange={e => onField("prefix", e.target.value)}
+                onChange={e => onPrefixChange(e.target.value)}
                 maxLength={10}
                 placeholder="e.g. RSS"
                 style={{ maxWidth: 200 }}
@@ -187,47 +181,6 @@ export default function EmployeeCodeSettingsPage() {
               {errors.prefix && <div className="field-error-msg">{errors.prefix}</div>}
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
                 Letters only, max 10 characters. Saved as uppercase.
-              </div>
-            </div>
-
-            {/* Digit padding */}
-            <div className="field-group">
-              <label className="field-label">
-                Digit padding <span style={{ color: "var(--error)" }}>*</span>
-              </label>
-              <input
-                type="number"
-                className={`field-input${errors.padding ? " field-error" : ""}`}
-                value={form.padding}
-                min={3}
-                max={8}
-                onChange={e => onField("padding", e.target.value)}
-                style={{ maxWidth: 200 }}
-              />
-              {errors.padding && <div className="field-error-msg">{errors.padding}</div>}
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-                Not currently used — employee IDs are generated from date of joining + name
-                initials rather than a padded sequence number.
-              </div>
-            </div>
-
-            {/* Next sequence */}
-            <div className="field-group">
-              <label className="field-label">
-                Next sequence number <span style={{ color: "var(--error)" }}>*</span>
-              </label>
-              <input
-                type="number"
-                className={`field-input${errors.next_sequence ? " field-error" : ""}`}
-                value={form.next_sequence}
-                min={1}
-                onChange={e => onField("next_sequence", e.target.value)}
-                style={{ maxWidth: 200 }}
-              />
-              {errors.next_sequence && <div className="field-error-msg">{errors.next_sequence}</div>}
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-                Not currently used — employee IDs are generated from date of joining + name
-                initials rather than a padded sequence number.
               </div>
             </div>
 
