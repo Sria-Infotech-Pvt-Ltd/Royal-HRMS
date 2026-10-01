@@ -17,12 +17,24 @@ interface FieldErrors {
   next_sequence?: string;
 }
 
-const PREVIEW_COUNT = 3;
+// Employee ID format: prefix + date of joining (DDMM) + name initials
+// (first letter of first name + first letter of last name) — e.g.
+// RSS + 0308 (3 Aug) + TG (Teerdaveni Gedela) -> RSS0308TG. Shown here with
+// fixed example people/dates, not derived from padding/next_sequence
+// (those no longer affect the generated id under this format).
+const PREVIEW_EXAMPLES: { name: string; doj: string; ddmm: string; initials: string }[] = [
+  { name: "Teerdaveni Gedela", doj: "03 Aug", ddmm: "0308", initials: "TG" },
+  { name: "Ravi Kumar",        doj: "15 Sep", ddmm: "1509", initials: "RK" },
+  { name: "Rahul Kumar",       doj: "15 Sep", ddmm: "1509", initials: "RK" },
+];
 
-function buildPreview(prefix: string, padding: number, start: number): string[] {
-  return Array.from({ length: PREVIEW_COUNT }, (_, i) =>
-    `${prefix}${String(start + i).padStart(padding, "0")}`
-  );
+function buildPreview(prefix: string): { label: string; code: string; note?: string }[] {
+  const p = prefix || "EMP";
+  return PREVIEW_EXAMPLES.map((ex, i) => ({
+    label: `${ex.name} (joined ${ex.doj})`,
+    code: i === 2 ? `${p}${ex.ddmm}${ex.initials}2` : `${p}${ex.ddmm}${ex.initials}`,
+    note: i === 2 ? "Same day + same initials as above — a 2 is appended to keep it unique" : undefined,
+  }));
 }
 
 export default function EmployeeCodeSettingsPage() {
@@ -104,11 +116,7 @@ export default function EmployeeCodeSettingsPage() {
     }
   }
 
-  const preview = buildPreview(
-    form.prefix.trim().toUpperCase() || "EMP",
-    form.padding,
-    form.next_sequence
-  );
+  const preview = buildPreview(form.prefix.trim().toUpperCase() || "EMP");
 
   if (loading) {
     return (
@@ -198,7 +206,8 @@ export default function EmployeeCodeSettingsPage() {
               />
               {errors.padding && <div className="field-error-msg">{errors.padding}</div>}
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-                Number of digits (3–8). E.g. 5 produces RSS00001.
+                Not currently used — employee IDs are generated from date of joining + name
+                initials rather than a padded sequence number.
               </div>
             </div>
 
@@ -217,7 +226,8 @@ export default function EmployeeCodeSettingsPage() {
               />
               {errors.next_sequence && <div className="field-error-msg">{errors.next_sequence}</div>}
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-                The number assigned to the next new employee created.
+                Not currently used — employee IDs are generated from date of joining + name
+                initials rather than a padded sequence number.
               </div>
             </div>
 
@@ -231,43 +241,36 @@ export default function EmployeeCodeSettingsPage() {
           </div>
           <div style={{ padding: "20px 24px" }}>
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 14 }}>
-              Next {PREVIEW_COUNT} employee IDs that will be generated:
+              Format: prefix + date of joining (DDMM) + name initials. Example IDs:
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {preview.map((code, idx) => (
+              {preview.map((ex, idx) => (
                 <div
                   key={idx}
                   style={{
                     display: "flex",
-                    alignItems: "center",
-                    gap: 8,
+                    flexDirection: "column",
+                    gap: 2,
                     padding: "8px 12px",
                     borderRadius: "var(--radius)",
-                    background: idx === 0 ? "var(--primary-c, rgba(30,78,140,0.08))" : "var(--bg-low)",
-                    border: idx === 0 ? "1px solid rgba(30,78,140,0.2)" : "1px solid var(--outline-v)",
+                    background: "var(--bg-low)",
+                    border: "1px solid var(--outline-v)",
                   }}
                 >
-                  <span style={{
-                    fontFamily: "monospace",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: idx === 0 ? "var(--primary)" : "var(--on-bg)",
-                    flex: 1,
-                  }}>
-                    {code}
-                  </span>
-                  {idx === 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      color: "var(--primary)",
-                      background: "rgba(30,78,140,0.1)",
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      letterSpacing: "0.03em",
+                      fontFamily: "monospace",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: "var(--on-bg)",
+                      flex: 1,
                     }}>
-                      NEXT
+                      {ex.code}
                     </span>
+                  </div>
+                  <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{ex.label}</span>
+                  {ex.note && (
+                    <span style={{ fontSize: 11, color: "var(--primary)" }}>{ex.note}</span>
                   )}
                 </div>
               ))}

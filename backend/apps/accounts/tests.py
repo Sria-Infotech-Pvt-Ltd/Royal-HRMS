@@ -472,6 +472,138 @@ class EmployeeResetPasswordTests(TestCase):
         self.assertTrue(self.hr_user.check_password('TestPass123!'))
 
 
+class EmployeeCodeGenerationTests(TestCase):
+    """New Employee ID format: prefix + date-of-joining (DDMM) + name
+    initials, with a numeric-suffix collision strategy — replaces the old
+    pure sequence-number format for NEW employees only. Exercises
+    EmployeeCodeSettings.generate_employee_id() directly with the exact
+    argument shapes each of the three real call sites passes (a string date
+    from EmployeeListCreateView.post(), a date object from
+    OnboardingApprovalView/EmployeeBulkImportView), since all three already
+    funnel through this one shared method with no call-site-specific logic.
+    """
+
+    def setUp(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        EmployeeCodeSettings.objects.update_or_create(
+            pk=1, defaults={'prefix': 'RSS', 'padding': 5, 'next_sequence': 1},
+        )
+        role = make_role('employee_codegen_test')
+        self.existing = make_user(
+            'existing@test.com', role=role, employee_id='RSS00001', full_name='Pre Existing',
+        )
+
+    def test_ddmm_and_initials_two_word_name(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        emp_id = EmployeeCodeSettings.generate_employee_id(
+            first_name='Teerdaveni', last_name='Gedela', date_of_joining=date(2026, 8, 3),
+        )
+        self.assertEqual(emp_id, 'RSS0308TG')
+
+    def test_date_of_joining_passed_as_string_matches_date_object(self):
+        # EmployeeListCreateView.post() passes date_of_joining as a raw
+        # 'YYYY-MM-DD' string (pre-validated via strptime), unlike the other
+        # two call sites which already have a real date object.
+        from apps.accounts.models import EmployeeCodeSettings
+        emp_id = EmployeeCodeSettings.generate_employee_id(
+            first_name='Ravi', last_name='Kumar', date_of_joining='2026-09-15',
+        )
+        self.assertEqual(emp_id, 'RSS1509RK')
+
+    def test_date_of_joining_defaults_to_today_when_missing(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        emp_id = EmployeeCodeSettings.generate_employee_id(
+            first_name='No', last_name='Date', date_of_joining=None,
+        )
+        self.assertEqual(emp_id, f'RSS{date.today().strftime("%d%m")}ND')
+
+    def test_single_word_name_repeats_first_initial(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        emp_id = EmployeeCodeSettings.generate_employee_id(
+            first_name='Madonna', last_name='', date_of_joining=date(2026, 1, 20),
+        )
+        self.assertEqual(emp_id, 'RSS2001MM')
+
+    def test_both_names_blank_falls_back_to_xx(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        emp_id = EmployeeCodeSettings.generate_employee_id(
+            first_name='', last_name='', date_of_joining=date(2026, 1, 20),
+        )
+        self.assertEqual(emp_id, 'RSS2001XX')
+
+    def test_multi_word_onboarding_approval_style_split(self):
+        # Mirrors OnboardingApprovalView.post()'s exact existing split:
+        # full_name.split(' ', 1) -> first_name = first word, last_name =
+        # everything after. Only the first letter of each is used, same
+        # rule as every other call site — not re-parsed into a "real"
+        # surname, matching "preserve existing name fields" from the brief.
+        from apps.accounts.models import EmployeeCodeSettings
+        full_name = 'Mary Jane Smith'
+        parts = full_name.split(' ', 1)
+        emp_id = EmployeeCodeSettings.generate_employee_id(
+            first_name=parts[0], last_name=parts[1] if len(parts) > 1 else '',
+            date_of_joining=date(2026, 4, 12),
+        )
+        self.assertEqual(emp_id, 'RSS1204MJ')  # 'J' from "Jane Smith", not "Smith"
+
+    def test_prefix_is_configurable(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        EmployeeCodeSettings.objects.filter(pk=1).update(prefix='ACM')
+        emp_id = EmployeeCodeSettings.generate_employee_id(
+            first_name='Ravi', last_name='Kumar', date_of_joining=date(2026, 9, 15),
+        )
+        self.assertEqual(emp_id, 'ACM1509RK')
+
+    def test_next_sequence_is_not_incremented(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        before = EmployeeCodeSettings.objects.get(pk=1).next_sequence
+        EmployeeCodeSettings.generate_employee_id(
+            first_name='Ravi', last_name='Kumar', date_of_joining=date(2026, 9, 15),
+        )
+        after = EmployeeCodeSettings.objects.get(pk=1).next_sequence
+        self.assertEqual(before, after)
+
+    def test_collision_appends_suffix(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        employee_role = make_role('employee_codegen_collision')
+        make_user(
+            'ravi1@test.com', role=employee_role, employee_id='RSS0308RK', full_name='Ravi Kumar',
+        )
+        emp_id = EmployeeCodeSettings.generate_employee_id(
+            first_name='Rahul', last_name='Kumar', date_of_joining=date(2026, 8, 3),
+        )
+        self.assertEqual(emp_id, 'RSS0308RK2')
+
+    def test_collision_increments_suffix_past_first_duplicate(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        employee_role = make_role('employee_codegen_collision2')
+        make_user('a@test.com', role=employee_role, employee_id='RSS0308RK', full_name='A')
+        make_user('b@test.com', role=employee_role, employee_id='RSS0308RK2', full_name='B')
+        emp_id = EmployeeCodeSettings.generate_employee_id(
+            first_name='Rahul', last_name='Kumar', date_of_joining=date(2026, 8, 3),
+        )
+        self.assertEqual(emp_id, 'RSS0308RK3')
+
+    def test_no_collision_when_initials_differ(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        employee_role = make_role('employee_codegen_no_collision')
+        make_user(
+            'ravi2@test.com', role=employee_role, employee_id='RSS0308RK', full_name='Ravi Kumar',
+        )
+        emp_id = EmployeeCodeSettings.generate_employee_id(
+            first_name='Anita', last_name='Shah', date_of_joining=date(2026, 8, 3),
+        )
+        self.assertEqual(emp_id, 'RSS0308AS')
+
+    def test_existing_employee_id_unaffected_by_new_generation(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        EmployeeCodeSettings.generate_employee_id(
+            first_name='Ravi', last_name='Kumar', date_of_joining=date(2026, 9, 15),
+        )
+        self.existing.refresh_from_db()
+        self.assertEqual(self.existing.employee_id, 'RSS00001')
+
+
 class EmployeeDetailsFieldProtectionTests(TestCase):
     """Employee ID/Name immutability, DOB/Mobile/Email edit + validation, and
     System Admin/HR Admin/Branch Admin scoping on EmployeeDetailView.put() —

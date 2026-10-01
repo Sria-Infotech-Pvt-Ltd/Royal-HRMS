@@ -730,30 +730,74 @@ class EmployeeCodeSettings(models.Model):
         return obj
 
     @classmethod
+    def _initials(cls, first_name: str, last_name: str) -> str:
+        """First letter of first_name + first letter of last_name, uppercased.
+
+        last_name blank (single-word name — e.g. a Branch Admin quick-add,
+        or a one-word onboarding full_name) repeats the first initial
+        instead of a filler letter, so a real person's ID never contains a
+        character that didn't come from their own name. Both blank (fully
+        degenerate data) falls back to 'XX' so this never returns a blank
+        or single-character segment.
+        """
+        first_initial = (first_name or '').strip()[:1].upper()
+        last_initial  = (last_name or '').strip()[:1].upper()
+        if not last_initial:
+            last_initial = first_initial
+        if not first_initial and not last_initial:
+            return 'XX'
+        return f'{first_initial}{last_initial}'
+
+    @classmethod
     def generate_employee_id(
         cls,
         first_name: str,
         last_name: str,
         date_of_joining=None,
     ) -> str:
-        """Generate sequential ID: prefix + zero-padded sequence number.
+        """Generate ID: prefix + date of joining (DDMM) + name initials.
 
-        Format example: RSS + 00020 (padding=5, next_sequence=20) → RSS00020
-        Increments next_sequence atomically after each ID is claimed.
+        Format example: RSS + 0308 (3 Aug) + TG (Teerdaveni Gedela) → RSS0308TG
+
+        Two different employees can legitimately share DDMM+initials (e.g.
+        two "RK"s joining the same day) — collisions are resolved by
+        appending 2, 3, 4... to the base id until a free one is found,
+        inside the same select_for_update()-protected critical section
+        every caller already goes through, so two concurrent requests can
+        never claim the same id (the second blocks until the first's
+        check-and-decide finishes, same as the previous sequence-counter
+        design relied on for its own atomicity).
+
+        next_sequence is intentionally no longer consumed here — the new
+        format doesn't need a running counter — and is left untouched
+        rather than incremented for a value nothing reads anymore.
         """
+        from datetime import date as _date
+        from datetime import datetime as _datetime
+
         from django.db import transaction as _tx
+
+        doj = date_of_joining or _date.today()
+        if isinstance(doj, str):
+            doj = _datetime.strptime(doj, '%Y-%m-%d').date()
+        ddmm = doj.strftime('%d%m')
+        initials = cls._initials(first_name, last_name)
 
         with _tx.atomic():
             cfg = cls.objects.select_for_update().get_or_create(
                 pk=1,
                 defaults={'prefix': 'EMP', 'padding': 5, 'next_sequence': 1},
             )[0]
-            prefix   = cfg.prefix or 'EMP'
-            seq      = str(cfg.next_sequence).zfill(cfg.padding)
-            emp_id   = f'{prefix}{seq}'
-            cfg.next_sequence += 1
-            cfg.save(update_fields=['next_sequence', 'updated_at'])
-        return emp_id
+            prefix = cfg.prefix or 'EMP'
+            base   = f'{prefix}{ddmm}{initials}'
+
+            candidate = base
+            suffix = 2
+            while User.objects.filter(employee_id=candidate).exists():
+                candidate = f'{base}{suffix}'
+                suffix += 1
+
+        return candidate
 
 
 # ─── Birthday Settings (singleton) ───────────────────────────────────────────
