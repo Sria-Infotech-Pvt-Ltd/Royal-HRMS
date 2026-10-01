@@ -604,6 +604,120 @@ class EmployeeCodeGenerationTests(TestCase):
         self.assertEqual(self.existing.employee_id, 'RSS00001')
 
 
+class EmployeeIdConversionDryRunTests(TestCase):
+    """dry_run_employee_id_conversion — read-only preview command. Verifies
+    the mapping/collision/ordering logic and, just as importantly, that it
+    makes zero writes (every employee_id is byte-for-byte unchanged after
+    running it)."""
+
+    def setUp(self):
+        from apps.accounts.models import EmployeeCodeSettings
+        EmployeeCodeSettings.objects.update_or_create(
+            pk=1, defaults={'prefix': 'RSS', 'padding': 5, 'next_sequence': 1},
+        )
+        role = make_role('employee_dryrun_test')
+        # Deliberately created in this order: Ravi, Rahul, Rohit all share
+        # date_of_joining + "R_" initials -> a 3-way collision group, whose
+        # order should resolve by creation order (date_joined) since their
+        # date_of_joining ties exactly.
+        self.teerdaveni = make_user(
+            'teerdaveni@test.com', role=role, employee_id='DEM00025',
+            full_name='Teerdaveni Gedela', date_of_joining=date(2026, 8, 3),
+        )
+        self.ravi = make_user(
+            'ravi@test.com', role=role, employee_id='DEM00030',
+            full_name='Ravi Kumar', date_of_joining=date(2026, 9, 15),
+        )
+        self.rahul = make_user(
+            'rahul@test.com', role=role, employee_id='DEM00031',
+            full_name='Rahul Kumar', date_of_joining=date(2026, 9, 15),
+        )
+        self.rohit = make_user(
+            'rohit@test.com', role=role, employee_id='DEM00032',
+            full_name='Rohit Khan', date_of_joining=date(2026, 9, 15), is_active=False,
+        )
+        self.no_doj = make_user(
+            'nodoj@test.com', role=role, employee_id='DEM00040',
+            full_name='No Date Person', date_of_joining=None,
+        )
+        self.no_name = make_user(
+            'noname@test.com', role=role, employee_id='DEM00041',
+            full_name='', date_of_joining=date(2026, 1, 1),
+        )
+
+    def _run(self):
+        # Calls handle_tenant() directly rather than going through
+        # TenantCommand.handle() via call_command() — that wrapper closes
+        # the DB connection in its finally block when it's done, which is
+        # correct for a real one-shot `manage.py ...` process but destroys
+        # the connection this TestCase's own transaction still needs for
+        # every assertion/test after it. The test runner already keeps the
+        # connection pointed at the TESTCO tenant schema for the whole
+        # test, so handle_tenant() sees the same data either way.
+        import io
+        from apps.accounts.management.commands.dry_run_employee_id_conversion import Command
+        from apps.tenants.models import Client
+        from config.test_runner import TEST_COMPANY_CODE
+        client = Client.objects.get(company_code=TEST_COMPANY_CODE)
+        out = io.StringIO()
+        Command(stdout=out).handle_tenant(client)
+        return out.getvalue()
+
+    def test_makes_zero_database_writes(self):
+        before = {
+            u.pk: u.employee_id for u in
+            [self.teerdaveni, self.ravi, self.rahul, self.rohit, self.no_doj, self.no_name]
+        }
+        self._run()
+        for u in [self.teerdaveni, self.ravi, self.rahul, self.rohit, self.no_doj, self.no_name]:
+            u.refresh_from_db()
+            self.assertEqual(u.employee_id, before[u.pk])
+
+    def test_report_contains_expected_mapping(self):
+        report = self._run()
+        self.assertIn('DEM00025  ->  RSS0308TG', report)
+        self.assertIn('No collision', report)
+
+    def test_report_detects_three_way_collision_in_creation_order(self):
+        report = self._run()
+        # Ravi created first -> bare id; Rahul second -> suffix 2;
+        # Rohit (inactive) third -> suffix 3 — proves inactive employees
+        # are included in collision detection, not skipped.
+        self.assertIn('DEM00030  ->  RSS1509RK', report)
+        self.assertIn('DEM00031  ->  RSS1509RK2', report)
+        self.assertIn('DEM00032  ->  RSS1509RK3', report)
+        self.assertIn('[INACTIVE]', report)
+        self.assertIn('Collision group of 3', report)
+
+    def test_report_flags_missing_date_of_joining(self):
+        report = self._run()
+        self.assertIn('DEM00040', report)
+        self.assertIn('missing date of joining', report)
+
+    def test_report_flags_missing_name(self):
+        report = self._run()
+        self.assertIn('DEM00041', report)
+        self.assertIn('missing/blank name', report)
+
+    def test_summary_counts(self):
+        # Computed relative to whatever else already exists in this tenant
+        # schema (e.g. fixtures left behind by other test classes sharing
+        # this --keepdb database) rather than a hardcoded absolute count,
+        # so this stays correct regardless of what else is in the schema —
+        # the 6 users this test's own setUp created are what's actually
+        # being verified.
+        other_existing = User.objects.exclude(employee_id='').exclude(
+            pk__in=[
+                self.teerdaveni.pk, self.ravi.pk, self.rahul.pk,
+                self.rohit.pk, self.no_doj.pk, self.no_name.pk,
+            ],
+        ).count()
+        report = self._run()
+        self.assertIn(f'Total employee rows considered: {other_existing + 6}', report)
+        self.assertIn('Total collision groups (2+ employees sharing DDMM+initials): 1', report)
+        self.assertIn('Total employees that would receive a numeric suffix: 2', report)
+
+
 class EmployeeDetailsFieldProtectionTests(TestCase):
     """Employee ID/Name immutability, DOB/Mobile/Email edit + validation, and
     System Admin/HR Admin/Branch Admin scoping on EmployeeDetailView.put() —

@@ -36,6 +36,99 @@ def _future_monday(weeks_ahead: int = 2) -> datetime.date:
     return base + datetime.timedelta(days=(7 - base.weekday()) % 7 or 7)
 
 
+class LeavePolicyNameEditTests(TestCase):
+    """Leave Type name (leave_type_label) is now editable via PUT, not just
+    at creation — covers LeavePolicyUpdateSerializer's new field and the
+    shared _validate_leave_type_label() duplicate/character-rule check."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        role = make_role('hr_leavepolicy_test', permission_codenames=['settings.edit'])
+        self.hr = make_user('hrpolicy@test.com', role=role, password='TestPass123!')
+        self.comp_off = LeavePolicy.objects.create(
+            leave_type='comp_off', leave_type_label='Comp Off', annual_days=Decimal('2.0'),
+        )
+        self.half_day = LeavePolicy.objects.create(
+            leave_type='half_day_leave', leave_type_label='Half Day Leave', annual_days=Decimal('5.0'),
+        )
+        _login(self.client, 'hrpolicy@test.com')
+
+    def _url(self, leave_type: str):
+        return reverse('leave-policy-detail', kwargs={'leave_type': leave_type})
+
+    def test_create_sets_name_visible_in_list(self):
+        resp = self.client.post(reverse('leave-policy-list'), {
+            'leave_type_label': 'Sabbatical', 'annual_days': 0,
+        }, format='json')
+        self.assertEqual(resp.status_code, 201, resp.data)
+        listing = self.client.get(reverse('leave-policy-list'))
+        names = [p['leave_type_display'] for p in listing.data['data']]
+        self.assertIn('Sabbatical', names)
+
+    def test_rename_updates_same_record_not_a_new_one(self):
+        before_count = LeavePolicy.objects.count()
+        resp = self.client.put(self._url('comp_off'), {'leave_type_label': 'Compensatory Off'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(LeavePolicy.objects.count(), before_count)
+
+        self.comp_off.refresh_from_db()
+        self.assertEqual(self.comp_off.leave_type_label, 'Compensatory Off')
+        self.assertEqual(self.comp_off.leave_type, 'comp_off')  # key/slug never changes
+        self.assertEqual(resp.data['data']['leave_type_display'], 'Compensatory Off')
+
+    def test_rename_to_duplicate_name_rejected(self):
+        resp = self.client.put(self._url('half_day_leave'), {'leave_type_label': 'Comp Off'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.half_day.refresh_from_db()
+        self.assertEqual(self.half_day.leave_type_label, 'Half Day Leave')
+
+    def test_rename_to_duplicate_name_case_insensitive_rejected(self):
+        resp = self.client.put(self._url('half_day_leave'), {'leave_type_label': 'comp off'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_resaving_unchanged_name_is_not_a_self_collision(self):
+        resp = self.client.put(self._url('comp_off'), {
+            'leave_type_label': 'Comp Off', 'annual_days': 3,
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.comp_off.refresh_from_db()
+        self.assertEqual(self.comp_off.annual_days, Decimal('3.0'))
+
+    def test_rename_invalid_characters_rejected(self):
+        resp = self.client.put(self._url('comp_off'), {'leave_type_label': 'Comp Off 2.0!'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.comp_off.refresh_from_db()
+        self.assertEqual(self.comp_off.leave_type_label, 'Comp Off')
+
+    def test_rename_builtin_type_keeps_its_key(self):
+        LeavePolicy.objects.update_or_create(
+            leave_type='casual', defaults={'leave_type_label': 'Casual Leave', 'annual_days': Decimal('12.0')},
+        )
+        resp = self.client.put(self._url('casual'), {'leave_type_label': 'Short Leave'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        policy = LeavePolicy.objects.get(leave_type='casual')
+        self.assertEqual(policy.leave_type_label, 'Short Leave')
+
+    def test_other_fields_still_editable_without_touching_name(self):
+        # Mirrors the frontend's toggleActive() call — a bare partial update
+        # with no leave_type_label in the payload at all.
+        resp = self.client.put(self._url('comp_off'), {'is_active': False}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.comp_off.refresh_from_db()
+        self.assertFalse(self.comp_off.is_active)
+        self.assertEqual(self.comp_off.leave_type_label, 'Comp Off')
+
+    def test_unauthorized_user_cannot_rename(self):
+        no_perm_role = make_role('no_perm_leavepolicy_test')
+        make_user('noperm@test.com', role=no_perm_role, password='TestPass123!')
+        _login(self.client, 'noperm@test.com')
+        resp = self.client.put(self._url('comp_off'), {'leave_type_label': 'Hacked'}, format='json')
+        self.assertEqual(resp.status_code, 403)
+        self.comp_off.refresh_from_db()
+        self.assertEqual(self.comp_off.leave_type_label, 'Comp Off')
+
+
 class LeaveBalanceAdjustDecimalTests(TestCase):
     """Regression test: patching only one of total_days/used_days left the
     in-memory LeaveBalance with one Decimal field and one raw-float field.

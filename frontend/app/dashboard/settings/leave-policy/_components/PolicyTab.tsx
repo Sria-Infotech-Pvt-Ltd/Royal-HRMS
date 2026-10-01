@@ -20,6 +20,7 @@ interface LeavePolicy {
 }
 
 interface EditForm {
+  leave_type_label: string;
   annual_days: number;
   can_carry_forward: boolean;
   max_carry_forward_days: number;
@@ -58,7 +59,7 @@ export default function PolicyTab() {
 
   // ── Edit state ────────────────────────────────────────────────────────────
   const [editing,   setEditing]   = useState<LeavePolicy | null>(null);
-  const [form,      setForm]      = useState<EditForm>({ annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
+  const [form,      setForm]      = useState<EditForm>({ leave_type_label: "", annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
   const [errors,    setErrors]    = useState<Record<string, string>>({});
   const [isSaving,  setIsSaving]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -77,7 +78,7 @@ export default function PolicyTab() {
   // ── Edit handlers ─────────────────────────────────────────────────────────
   function openEdit(p: LeavePolicy) {
     setEditing(p);
-    setForm({ annual_days: Number(p.annual_days), can_carry_forward: p.can_carry_forward, max_carry_forward_days: p.max_carry_forward_days, policy_note: p.policy_note ?? "", is_active: p.is_active });
+    setForm({ leave_type_label: p.leave_type_display, annual_days: Number(p.annual_days), can_carry_forward: p.can_carry_forward, max_carry_forward_days: p.max_carry_forward_days, policy_note: p.policy_note ?? "", is_active: p.is_active });
     setErrors({});
     setSaveError(null);
   }
@@ -86,6 +87,9 @@ export default function PolicyTab() {
 
   function validateEdit(): boolean {
     const e: Record<string, string> = {};
+    const label = form.leave_type_label.trim();
+    if (!label) e.leave_type_label = "Display name is required.";
+    else if (!LEAVE_NAME_RE.test(label)) e.leave_type_label = "Display name can only contain letters, spaces, and hyphens — no numbers or special characters.";
     if (form.annual_days < 0) e.annual_days = "Annual days cannot be negative.";
     if (form.can_carry_forward && form.max_carry_forward_days < 1) e.max_carry_forward_days = "Must be at least 1 when carry forward is enabled.";
     setErrors(e);
@@ -327,6 +331,16 @@ export default function PolicyTab() {
           {saveError && (
             <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>{saveError}</div>
           )}
+          <div className="field-group mb-16">
+            <label className="field-label">Leave Type Name *</label>
+            <input
+              className={`field-input${errors.leave_type_label ? " field-error" : ""}`}
+              type="text"
+              value={form.leave_type_label}
+              onChange={e => editField("leave_type_label", sanitizeLeaveName(e.target.value))}
+            />
+            {errors.leave_type_label && <p className="field-error-msg">{errors.leave_type_label}</p>}
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
             <div className="field-group mb-16">
               <label className="field-label">Annual Days *</label>

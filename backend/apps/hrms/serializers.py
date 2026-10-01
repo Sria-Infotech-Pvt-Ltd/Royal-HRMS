@@ -1,6 +1,7 @@
 import logging
 import re
 
+from django.db.models import Q
 from rest_framework import serializers
 
 from .models import (
@@ -111,6 +112,32 @@ def validate_receipt_file(file) -> None:
 
 _LEAVE_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z -]*$")
 
+
+def _validate_leave_type_label(value: str, exclude_pk=None) -> str:
+    """Shared by LeavePolicyCreateSerializer and LeavePolicyUpdateSerializer
+    so the two flows can never drift apart. exclude_pk excludes the record
+    being edited from the duplicate check (otherwise saving an unchanged
+    name on update would always "collide" with itself). The duplicate check
+    matches on the derived key (same slug a create would produce — catches
+    a rename colliding with a built-in type's fixed leave_type, e.g.
+    renaming something to "Sick") OR an exact case-insensitive match on
+    another row's own explicit leave_type_label.
+    """
+    value = value.strip()
+    if not value:
+        raise serializers.ValidationError('Display name cannot be empty.')
+    if not _LEAVE_NAME_RE.match(value):
+        raise serializers.ValidationError(
+            'Display name can only contain letters, spaces, and hyphens — no numbers or special characters.'
+        )
+    key = value.lower().replace(' ', '_').replace('-', '_')
+    qs = LeavePolicy.objects.filter(Q(leave_type=key) | Q(leave_type_label__iexact=value))
+    if exclude_pk is not None:
+        qs = qs.exclude(pk=exclude_pk)
+    if qs.exists():
+        raise serializers.ValidationError('A leave type with this name already exists.')
+    return value
+
 _POLICY_RULE_FIELDS = [
     # Application Rules
     'minimum_leave_duration', 'maximum_leave_duration', 'maximum_consecutive_days',
@@ -198,17 +225,7 @@ class LeavePolicyCreateSerializer(serializers.Serializer):
     allow_leave_combination   = serializers.BooleanField(default=False, required=False)
 
     def validate_leave_type_label(self, value):
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError('Display name cannot be empty.')
-        if not _LEAVE_NAME_RE.match(value):
-            raise serializers.ValidationError(
-                'Display name can only contain letters, spaces, and hyphens — no numbers or special characters.'
-            )
-        key = value.lower().replace(' ', '_').replace('-', '_')
-        if LeavePolicy.objects.filter(leave_type=key).exists():
-            raise serializers.ValidationError('A leave type with this name already exists.')
-        return value
+        return _validate_leave_type_label(value)
 
     def validate_annual_days(self, value):
         if value < 0:
@@ -238,14 +255,22 @@ class LeavePolicyCreateSerializer(serializers.Serializer):
 
 
 class LeavePolicyUpdateSerializer(serializers.ModelSerializer):
+    # Explicit (not auto-generated from the model field, which is blank=True
+    # and would default to required=False) — editing the name still
+    # requires a real value, same as creating one.
+    leave_type_label = serializers.CharField(max_length=100, required=False)
+
     class Meta:
         model  = LeavePolicy
         fields = (
-            ['annual_days', 'can_carry_forward', 'max_carry_forward_days',
+            ['leave_type_label', 'annual_days', 'can_carry_forward', 'max_carry_forward_days',
              'carry_forward_type', 'carry_forward_mode', 'carry_forward_expiry_days',
              'policy_note', 'is_active']
             + _POLICY_RULE_FIELDS
         )
+
+    def validate_leave_type_label(self, value):
+        return _validate_leave_type_label(value, exclude_pk=self.instance.pk if self.instance else None)
 
     def validate_annual_days(self, value):
         if value < 0:
