@@ -27,7 +27,7 @@ interface Props {
 
 export default function ClockInButton({ onPunchSuccess }: Props) {
   const {
-    session, isLoading, isPunching, faceVerificationRequired, prepareLocation, punch,
+    session, isLoading, isPunching, isLocating, faceVerificationRequired, prepareLocation, punch,
     isLockedOut, lockoutSecondsRemaining,
   } = useClockWidget();
   const [showModal, setShowModal] = useState(false);
@@ -35,7 +35,11 @@ export default function ClockInButton({ onPunchSuccess }: Props) {
   const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
 
   const isClockedIn = session?.is_clocked_in ?? false;
-  const isBusy      = isLoading || isPunching || isLockedOut;
+  // isLocating covers prepareLocation()'s GPS acquisition + geofence-check
+  // call — without it here, the button stayed clickable during that window,
+  // letting a repeated click start a second, fully independent punch flow
+  // (GPS + geofence + face capture + punch) stacked on top of the first.
+  const isBusy      = isLoading || isPunching || isLocating || isLockedOut;
 
   async function handlePunch() {
     if (isLockedOut) return;
