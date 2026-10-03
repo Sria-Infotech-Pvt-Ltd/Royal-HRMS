@@ -404,6 +404,7 @@ export default function EmployeeProfilePage({
         // backend regardless of what's sent).
         email:                  values.loginEmail           || null,
         phone:                  values.mobileNumber         || "",
+        date_of_joining:        values.dateOfJoining        || null,
         // Personal fields
         // date_of_birth/year_of_passing/total_experience_years are the only
         // fields below backed by a nullable model column — everything else

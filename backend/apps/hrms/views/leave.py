@@ -281,6 +281,89 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
     return created_count
 
 
+def _allocate_new_policy_for_existing_employees(policy, today=None) -> int:
+    """
+    Backfills LeaveBalance rows for a BRAND-NEW LeavePolicy (e.g. a custom
+    type like "Menstrual Leave" created mid-year) against every existing
+    active employee — closing the gap where _allocate_leaves_for_employee()
+    only ever runs at employee-creation time, so an employee who already
+    existed before this policy did never gets a balance for it until the
+    next annual reset (apps/hrms/tasks.py's reset_annual_leave_balances).
+
+    Eligibility reuses _eligible_for_policy() (branch/department/designation
+    + minimum_service_period, computed from the employee's REAL
+    date_of_joining) rather than duplicating those rules — deliberately NOT
+    reusing _allocate_leaves_for_employee()'s own minimum_service_period
+    check, which assumes "0 months served" for a brand-new joiner and would
+    incorrectly skip every existing, already-tenured employee from a policy
+    that has any minimum_service_period at all. applicable_gender isn't part
+    of _eligible_for_policy() (that function is also used by the Carry
+    Forward preview, which doesn't apply it either) — checked here inline,
+    the same single-condition check _allocate_leaves_for_employee() already
+    uses, not a new implementation.
+
+    Prorates from TODAY for the remainder of the current leave year — this
+    policy didn't exist earlier this year, so there's nothing to backdate
+    to. Idempotent via get_or_create: safe to call more than once (e.g. a
+    retry after a partial failure) without creating duplicates or touching
+    any LeaveBalance row that already exists, for this or any other leave
+    type. No shared transaction wraps the whole loop, deliberately — each
+    employee's get_or_create is its own atomic write, so a failure partway
+    through leaves already-created rows intact and a retry only fills in
+    what's still missing, rather than an all-or-nothing block that would
+    discard partial progress.
+
+    Returns the number of LeaveBalance rows actually created.
+    """
+    from apps.accounts.models import EmployeeProfile, User
+
+    if today is None:
+        today = date.today()
+    year              = today.year
+    remaining_months  = 13 - today.month
+    check_gender      = policy.applicable_gender not in ('', 'all')
+
+    created_count = 0
+    employees = (
+        User.objects.filter(is_active=True)
+        .exclude(employee_id='')
+        .select_related('profile')
+    )
+    for employee in employees:
+        try:
+            if not _eligible_for_policy(employee, policy, today):
+                continue
+            if check_gender:
+                profile = getattr(employee, 'profile', None)
+                emp_gender = (profile.gender or 'all') if profile else 'all'
+                if emp_gender != policy.applicable_gender:
+                    continue
+
+            raw     = float(policy.annual_days) * remaining_months / 12
+            prorata = Decimal(str(round(raw * 2) / 2))
+
+            _, created = LeaveBalance.objects.get_or_create(
+                employee=employee,
+                leave_type=policy.leave_type,
+                year=year,
+                defaults={'total_days': prorata, 'carried_forward': Decimal('0')},
+            )
+            if created:
+                created_count += 1
+        except Exception:
+            logger.exception(
+                'Failed to backfill leave_type=%s for employee=%s — continuing with remaining employees.',
+                policy.leave_type, employee.pk,
+            )
+
+    if created_count:
+        logger.info(
+            'Backfilled %d leave balance(s) for new policy "%s" (year %d)',
+            created_count, policy.leave_type, year,
+        )
+    return created_count
+
+
 def _get_holiday_dates(start: date, end: date, branch_name: str = '') -> set:
     from core.cache_service import HolidayCacheService
     return HolidayCacheService.get_holiday_dates(start, end, branch_name)
@@ -500,6 +583,11 @@ class LeavePolicyView(APIView):
             leave_type=leave_type_key, leave_type_label=label, **data
         )
         logger.info('Created leave type "%s" by %s', leave_type_key, request.user.email)
+        # Backfill existing employees now, rather than leaving them without a
+        # balance for this type until the next annual reset — see that
+        # function's own docstring for why this is a separate pass from
+        # _allocate_leaves_for_employee() rather than reusing it directly.
+        _allocate_new_policy_for_existing_employees(policy)
         return success('Leave type created.', LeavePolicySerializer(policy).data, http_status=status.HTTP_201_CREATED)
 
     def delete(self, request, leave_type: str):

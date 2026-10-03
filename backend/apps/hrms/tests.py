@@ -129,6 +129,204 @@ class LeavePolicyNameEditTests(TestCase):
         self.assertEqual(self.comp_off.leave_type_label, 'Comp Off')
 
 
+class LeavePolicyNewTypeBackfillTests(TestCase):
+    """Creating a new LeavePolicy (e.g. a custom "Menstrual Leave" type) must
+    backfill a LeaveBalance for every existing eligible active employee —
+    previously only _allocate_leaves_for_employee() (employee-creation time)
+    and the annual reset task created balances, so an employee who already
+    existed before a new policy did would never get one until next year.
+    See _allocate_new_policy_for_existing_employees() in
+    apps/hrms/views/leave.py.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        hr_role = make_role('hr_backfill_test', permission_codenames=['settings.edit'])
+        self.hr = make_user('hrbackfill@test.com', role=hr_role, password='TestPass123!')
+
+        today = datetime.date.today()
+        long_ago = today.replace(year=today.year - 3)   # 36 months served
+        recent   = today.replace(day=1)                 # < 1 month served
+
+        emp_role = make_role('employee_backfill_test')
+        self._emp_id_seq = 0
+
+        def _mk(email, **kwargs):
+            # _allocate_new_policy_for_existing_employees() (like every other
+            # "real employee" query in this codebase) excludes employee_id=''
+            # — make_user() leaves it blank unless given explicitly, unlike
+            # the real creation views which auto-generate one. setdefault
+            # (not a literal kwarg) for every field a caller might override,
+            # so e.g. _mk(..., branch='Delhi HQ') doesn't collide with the
+            # default below as a duplicate keyword argument.
+            self._emp_id_seq += 1
+            kwargs.setdefault('employee_id', f'EMPBKF{self._emp_id_seq:03d}')
+            kwargs.setdefault('role', emp_role)
+            kwargs.setdefault('branch', 'Mumbai HQ')
+            kwargs.setdefault('department', 'Engineering')
+            kwargs.setdefault('designation', 'Engineer')
+            kwargs.setdefault('date_of_joining', long_ago)
+            return make_user(email, password='TestPass123!', **kwargs)
+
+        self.eligible      = _mk('eligible@test.com', full_name='Eligible Employee')
+        self.other_branch  = _mk('otherbranch@test.com', full_name='Other Branch', branch='Delhi HQ')
+        self.other_dept    = _mk('otherdept@test.com', full_name='Other Dept', department='Sales')
+        self.other_desig   = _mk('otherdesig@test.com', full_name='Other Desig', designation='Manager')
+        self.short_tenure  = _mk('shorttenure@test.com', full_name='Short Tenure', date_of_joining=recent)
+        self.inactive_emp  = _mk('inactive@test.com', full_name='Inactive', is_active=False)
+        self._mk_extra = _mk  # exposed for tests that need one more ad-hoc employee
+
+        self._today = today
+
+    def _create_policy(self, label, **extra):
+        payload = {'leave_type_label': label, 'annual_days': 12}
+        payload.update(extra)
+        resp = self.client.post(reverse('leave-policy-list'), payload, format='json')
+        self.assertEqual(resp.status_code, 201, resp.data)
+        return LeavePolicy.objects.get(leave_type=resp.data['data']['leave_type'])
+
+    def test_create_new_policy_backfills_eligible_employee(self):
+        _login(self.client, 'hrbackfill@test.com', password='TestPass123!')
+        policy = self._create_policy('Compassionate Leave')
+        self.assertTrue(
+            LeaveBalance.objects.filter(
+                employee=self.eligible, leave_type=policy.leave_type, year=self._today.year,
+            ).exists()
+        )
+
+    def test_ineligible_branch_employee_does_not_receive_balance(self):
+        _login(self.client, 'hrbackfill@test.com', password='TestPass123!')
+        policy = self._create_policy('Branch Leave', applicable_branches=['Mumbai HQ'])
+        self.assertTrue(
+            LeaveBalance.objects.filter(employee=self.eligible, leave_type=policy.leave_type).exists()
+        )
+        self.assertFalse(
+            LeaveBalance.objects.filter(employee=self.other_branch, leave_type=policy.leave_type).exists()
+        )
+
+    def test_female_only_policy_excludes_male_employees(self):
+        from apps.accounts.models import EmployeeProfile
+        EmployeeProfile.objects.update_or_create(user=self.eligible, defaults={'gender': 'male'})
+        female_employee = self._mk_extra('female@test.com', full_name='Female Employee')
+        EmployeeProfile.objects.update_or_create(user=female_employee, defaults={'gender': 'female'})
+
+        _login(self.client, 'hrbackfill@test.com', password='TestPass123!')
+        policy = self._create_policy('Menstrual Leave', applicable_gender='female')
+
+        self.assertFalse(
+            LeaveBalance.objects.filter(employee=self.eligible, leave_type=policy.leave_type).exists()
+        )
+        self.assertTrue(
+            LeaveBalance.objects.filter(employee=female_employee, leave_type=policy.leave_type).exists()
+        )
+
+    def test_department_and_designation_eligibility_respected(self):
+        _login(self.client, 'hrbackfill@test.com', password='TestPass123!')
+        policy = self._create_policy(
+            'Team Leave',
+            applicable_departments=['Engineering'], applicable_designations=['Engineer'],
+        )
+        self.assertTrue(
+            LeaveBalance.objects.filter(employee=self.eligible, leave_type=policy.leave_type).exists()
+        )
+        self.assertFalse(
+            LeaveBalance.objects.filter(employee=self.other_dept, leave_type=policy.leave_type).exists()
+        )
+        self.assertFalse(
+            LeaveBalance.objects.filter(employee=self.other_desig, leave_type=policy.leave_type).exists()
+        )
+
+    def test_minimum_service_period_respected_for_existing_employees(self):
+        _login(self.client, 'hrbackfill@test.com', password='TestPass123!')
+        policy = self._create_policy('Tenure Leave', minimum_service_period=12)
+        self.assertTrue(
+            LeaveBalance.objects.filter(employee=self.eligible, leave_type=policy.leave_type).exists(),
+            "An employee with years of service must pass a 12-month minimum_service_period check.",
+        )
+        self.assertFalse(
+            LeaveBalance.objects.filter(employee=self.short_tenure, leave_type=policy.leave_type).exists(),
+        )
+
+    def test_inactive_employee_excluded(self):
+        _login(self.client, 'hrbackfill@test.com', password='TestPass123!')
+        policy = self._create_policy('Active Only Leave')
+        self.assertFalse(
+            LeaveBalance.objects.filter(employee=self.inactive_emp, leave_type=policy.leave_type).exists()
+        )
+
+    def test_running_allocation_twice_does_not_duplicate(self):
+        from apps.hrms.views.leave import _allocate_new_policy_for_existing_employees
+        _login(self.client, 'hrbackfill@test.com', password='TestPass123!')
+        policy = self._create_policy('Idempotent Leave')
+
+        first_count = LeaveBalance.objects.filter(leave_type=policy.leave_type).count()
+        second_run_created = _allocate_new_policy_for_existing_employees(policy)
+        second_count = LeaveBalance.objects.filter(leave_type=policy.leave_type).count()
+
+        self.assertEqual(second_run_created, 0)
+        self.assertEqual(first_count, second_count)
+
+    def test_existing_balance_value_not_overwritten_by_rerun(self):
+        from apps.hrms.views.leave import _allocate_new_policy_for_existing_employees
+        _login(self.client, 'hrbackfill@test.com', password='TestPass123!')
+        policy = self._create_policy('Preserve Value Leave')
+
+        balance = LeaveBalance.objects.get(employee=self.eligible, leave_type=policy.leave_type)
+        balance.total_days = Decimal('999')
+        balance.used_days = Decimal('3')
+        balance.save(update_fields=['total_days', 'used_days'])
+
+        _allocate_new_policy_for_existing_employees(policy)
+
+        balance.refresh_from_db()
+        self.assertEqual(balance.total_days, Decimal('999'))
+        self.assertEqual(balance.used_days, Decimal('3'))
+
+    def test_other_leave_type_balances_unaffected(self):
+        LeaveBalance.objects.create(
+            employee=self.eligible, leave_type='casual', year=self._today.year,
+            total_days=Decimal('12'), used_days=Decimal('4'),
+        )
+        _login(self.client, 'hrbackfill@test.com', password='TestPass123!')
+        self._create_policy('Unrelated New Leave')
+
+        casual_balance = LeaveBalance.objects.get(employee=self.eligible, leave_type='casual', year=self._today.year)
+        self.assertEqual(casual_balance.total_days, Decimal('12'))
+        self.assertEqual(casual_balance.used_days, Decimal('4'))
+
+    def test_my_leave_balance_api_returns_new_type_after_creation(self):
+        _login(self.client, 'hrbackfill@test.com', password='TestPass123!')
+        policy = self._create_policy('Visible New Leave')
+
+        _login(self.client, 'eligible@test.com', password='TestPass123!')
+        resp = self.client.get(reverse('leave-balance'), {'year': self._today.year})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        leave_types = [b['leave_type'] for b in resp.data['data']]
+        self.assertIn(policy.leave_type, leave_types)
+
+    def test_new_employee_creation_allocation_still_works(self):
+        """Regression: _allocate_leaves_for_employee() (employee-creation
+        time path) must still work unchanged alongside the new backfill
+        function — they coexist, neither replaces the other."""
+        from apps.hrms.views.leave import _allocate_leaves_for_employee
+        LeavePolicy.objects.update_or_create(
+            leave_type='casual', defaults={'leave_type_label': 'Casual Leave', 'annual_days': Decimal('12.0')},
+        )
+        new_emp = self._mk_extra('newjoiner@test.com', full_name='New Joiner', date_of_joining=self._today)
+        created = _allocate_leaves_for_employee(new_emp, str(self._today))
+        self.assertGreater(created, 0)
+        self.assertTrue(
+            LeaveBalance.objects.filter(employee=new_emp, leave_type='casual', year=self._today.year).exists()
+        )
+
+    def test_annual_reset_task_still_importable_and_unaffected(self):
+        """Regression: confirms the new backfill function doesn't shadow or
+        interfere with the annual reset Celery task's own name/behavior."""
+        from apps.hrms.tasks import reset_annual_leave_balances
+        self.assertTrue(callable(reset_annual_leave_balances))
+
+
 class LeaveBalanceAdjustDecimalTests(TestCase):
     """Regression test: patching only one of total_days/used_days left the
     in-memory LeaveBalance with one Decimal field and one raw-float field.

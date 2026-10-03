@@ -150,10 +150,10 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
       { key: "code",          label: "Employee ID",    type: "readonly" },
       { key: "firstName",     label: "First Name",     type: "readonly" },
       { key: "lastName",      label: "Last Name",      type: "readonly" },
-      { key: "dateOfJoining", label: "Date of Joining", type: "readonly" },
-      // ── editable contact fields ──
+      // ── editable contact/employment fields ──
       { key: "loginEmail",    label: "Login Email",    type: "email", required: true },
       { key: "mobileNumber",  label: "Phone",          type: "tel" },
+      { key: "dateOfJoining", label: "Date of Joining", type: "date" },
       // ── editable employment fields (options injected at runtime from API) ──
       { key: "department",  label: "Department",  type: "select", required: true, options: [] },
       { key: "designation", label: "Designation", type: "select", required: true, options: [] },

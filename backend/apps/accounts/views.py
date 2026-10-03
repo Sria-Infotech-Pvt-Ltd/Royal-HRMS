@@ -3417,21 +3417,13 @@ class EmployeeDetailView(APIView):
         update_fields = ['updated_at']
         changes       = {}
         dob_saved     = False
-        # date_of_joining is shown as read-only on the employee detail page
-        # once onboarding is complete ("set by system, not editable" — see
-        # PROFILE_SECTIONS in the frontend's _data.ts). That was previously a
-        # front-end-only convention with no matching check here, so any
-        # direct API call could silently overwrite it even after the UI
-        # stopped offering a way to. Enforced here now so the lock is real,
-        # not just an absent button.
-        #
         # employee_id and full_name are permanently immutable through this
         # endpoint (checked immediately below), regardless of onboarding
-        # status — not subject to this onboarding-status lock at all. phone
-        # is intentionally NOT locked either: Mobile Number must stay freely
-        # editable per the Employee Details business rule.
-        locked = employee.onboarding_status == User.ONBOARDING_COMPLETE
-
+        # status. Every other field handled by this view — phone, email,
+        # date_of_joining, date_of_birth, department/designation/branch —
+        # is editable for any authorized editor (employees.edit + branch
+        # scope) with no onboarding-status lock; no field on this endpoint
+        # is gated by onboarding status anymore.
         if 'employee_id' in data:
             submitted_employee_id = (data.get('employee_id') or '').strip()
             if submitted_employee_id and submitted_employee_id != employee.employee_id:
@@ -3497,17 +3489,16 @@ class EmployeeDetailView(APIView):
                     employee.email = new_email
                     update_fields.append('email')
 
+        # Date of Joining is editable through this endpoint for any authorized
+        # editor (employees.edit + branch scope, same as every other field
+        # here) — not locked once onboarding completes, unlike full_name/
+        # phone previously were. Format validation (YYYY-MM-DD) is unchanged.
         doj = (data.get('date_of_joining') or '').strip()
         if doj:
             try:
                 datetime.strptime(doj, '%Y-%m-%d')
             except ValueError:
                 return error('date_of_joining must be in YYYY-MM-DD format.')
-            if locked and doj != str(employee.date_of_joining):
-                return error(
-                    'Date of joining is locked once onboarding is complete and can no longer be changed here.',
-                    http_status=status.HTTP_409_CONFLICT,
-                )
             if str(employee.date_of_joining) != doj:
                 changes['date_of_joining'] = {'from': str(employee.date_of_joining), 'to': doj}
             employee.date_of_joining = doj

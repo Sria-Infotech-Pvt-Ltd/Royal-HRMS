@@ -999,6 +999,117 @@ class EmployeeDetailsFieldProtectionTests(TestCase):
         self.assertEqual(self.employee.phone, '9876500001')
 
 
+class EmployeeDetailsDateOfJoiningEditTests(TestCase):
+    """Date of Joining is now editable through EmployeeDetailView.put() for
+    any authorized editor (employees.edit + branch scope), including after
+    onboarding is complete — previously locked post-onboarding the same way
+    full_name/phone used to be. Reuses the exact fixtures/pattern from
+    EmployeeDetailsFieldProtectionTests (self.employee is already
+    ONBOARDING_COMPLETE, branch='Mumbai HQ' — the state that used to trigger
+    the 409 lock)."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+
+        branch_admin_role = make_role(
+            'branch_admin_doj_test', permission_codenames=['employees.view', 'employees.edit'],
+        )
+        self.branch_admin = make_user(
+            'branchadmin.doj@test.com', role=branch_admin_role, password='TestPass123!',
+            employee_id='EMPBRD001', full_name='Branch Admin', branch='Mumbai HQ',
+        )
+
+        employee_role = make_role('employee_doj_test')
+        self.employee = make_user(
+            'target.doj@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPTGD001', full_name='Target Employee', branch='Mumbai HQ',
+            date_of_joining='2024-01-10', onboarding_status=User.ONBOARDING_COMPLETE,
+        )
+        self.other_branch_employee = make_user(
+            'otherbranch.doj@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPOBD001', full_name='Other Branch Employee', branch='Delhi HQ',
+            date_of_joining='2024-01-10', onboarding_status=User.ONBOARDING_COMPLETE,
+        )
+        _login(self.client, 'branchadmin.doj@test.com', password='TestPass123!')
+
+    def _url(self, employee):
+        return reverse('employee-detail', kwargs={'employee_id': employee.employee_id})
+
+    def test_branch_admin_can_edit_doj_for_employee_in_own_branch(self):
+        resp = self.client.put(self._url(self.employee), {'date_of_joining': '2024-03-15'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(str(self.employee.date_of_joining), '2024-03-15')
+
+    def test_doj_change_persisted_and_returned_by_get(self):
+        put_resp = self.client.put(self._url(self.employee), {'date_of_joining': '2024-06-01'}, format='json')
+        self.assertEqual(put_resp.status_code, 200, put_resp.data)
+
+        get_resp = self.client.get(self._url(self.employee))
+        self.assertEqual(get_resp.status_code, 200, get_resp.data)
+        self.assertEqual(get_resp.data['data']['date_of_joining'], '2024-06-01')
+
+    def test_malformed_doj_rejected(self):
+        resp = self.client.put(self._url(self.employee), {'date_of_joining': '15-03-2024'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(str(self.employee.date_of_joining), '2024-01-10')
+
+    def test_branch_admin_cannot_edit_doj_outside_own_branch(self):
+        resp = self.client.put(
+            self._url(self.other_branch_employee), {'date_of_joining': '2024-03-15'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 404)
+        self.other_branch_employee.refresh_from_db()
+        self.assertEqual(str(self.other_branch_employee.date_of_joining), '2024-01-10')
+
+    def test_employee_id_unchanged_after_doj_edit(self):
+        resp = self.client.put(self._url(self.employee), {'date_of_joining': '2024-03-15'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.employee_id, 'EMPTGD001')
+
+    def test_employee_name_unchanged_after_doj_edit(self):
+        resp = self.client.put(self._url(self.employee), {'date_of_joining': '2024-03-15'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.full_name, 'Target Employee')
+
+    def test_dob_mobile_email_still_editable_alongside_doj(self):
+        resp = self.client.put(self._url(self.employee), {
+            'date_of_joining': '2024-03-15', 'date_of_birth': '1992-07-20',
+            'phone': '9876543210', 'email': 'newtarget.doj@test.com',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(str(self.employee.date_of_joining), '2024-03-15')
+        self.assertEqual(str(self.employee.profile.date_of_birth), '1992-07-20')
+        self.assertEqual(self.employee.phone, '9876543210')
+        self.assertEqual(self.employee.email, 'newtarget.doj@test.com')
+
+    def test_doj_change_recorded_in_audit_log(self):
+        resp = self.client.put(self._url(self.employee), {'date_of_joining': '2024-03-15'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        entry = AuditLog.objects.filter(
+            action='employee_updated', object_id=str(self.employee.id),
+        ).order_by('-created_at').first()
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.changes.get('date_of_joining'), {'from': '2024-01-10', 'to': '2024-03-15'})
+
+    def test_unauthorized_user_cannot_edit_doj(self):
+        no_perm_role = make_role('no_perm_doj_test')
+        make_user(
+            'noperm.doj@test.com', role=no_perm_role, password='TestPass123!',
+            employee_id='EMPNPD001', full_name='No Perm', branch='Mumbai HQ',
+        )
+        _login(self.client, 'noperm.doj@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(self.employee), {'date_of_joining': '2024-03-15'}, format='json')
+        self.assertEqual(resp.status_code, 403)
+        self.employee.refresh_from_db()
+        self.assertEqual(str(self.employee.date_of_joining), '2024-01-10')
+
+
 class ManagerReportingManagerEditTests(TestCase):
     """Regression: EmployeeDetailView.put() rejected ANY edit to a Manager
     (even an unrelated field like DOB) with "Managers do not have a
