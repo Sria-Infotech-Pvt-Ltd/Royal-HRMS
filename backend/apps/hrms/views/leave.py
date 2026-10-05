@@ -214,7 +214,10 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
 
     Pro-rata rule: joining month counts as a full month.
     e.g. joining July → 6 months remaining → 6/12 × annual_days.
-    Skips policies with minimum_service_period > 0 (new joiner has 0 months service).
+    Eligibility (including "skip policies with minimum_service_period > 0,
+    since a new joiner always has 0 months served as of their own joining
+    date") is the shared _eligible_for_policy() check, same as every other
+    LeaveBalance-creating path — see that function's docstring.
     Idempotent: get_or_create prevents duplicates on re-runs.
 
     Returns number of LeaveBalance records created.
@@ -229,35 +232,10 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
     year             = joining_date.year
     remaining_months = 13 - joining_date.month  # Jan→12, Jul→6, Dec→1
 
-    try:
-        from apps.accounts.models import EmployeeProfile
-        profile    = EmployeeProfile.objects.filter(user=employee).first()
-        emp_gender = (profile.gender or 'all') if profile else 'all'
-    except Exception:
-        emp_gender = 'all'
-
     created_count = 0
 
     for policy in LeavePolicy.objects.filter(is_active=True):
-        if policy.minimum_service_period > 0:
-            continue
-
-        if policy.applicable_branches and (
-            not employee.branch or employee.branch not in policy.applicable_branches
-        ):
-            continue
-
-        if policy.applicable_departments and (
-            not employee.department or employee.department not in policy.applicable_departments
-        ):
-            continue
-
-        if policy.applicable_designations and (
-            not employee.designation or employee.designation not in policy.applicable_designations
-        ):
-            continue
-
-        if policy.applicable_gender not in ('', 'all') and emp_gender != policy.applicable_gender:
+        if not _eligible_for_policy(employee, policy, joining_date):
             continue
 
         # Round to nearest 0.5 — standard HRMS display precision
@@ -283,35 +261,55 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
 
 def _allocate_new_policy_for_existing_employees(policy, today=None) -> int:
     """
-    Backfills LeaveBalance rows for a BRAND-NEW LeavePolicy (e.g. a custom
-    type like "Menstrual Leave" created mid-year) against every existing
-    active employee — closing the gap where _allocate_leaves_for_employee()
-    only ever runs at employee-creation time, so an employee who already
-    existed before this policy did never gets a balance for it until the
-    next annual reset (apps/hrms/tasks.py's reset_annual_leave_balances).
+    Syncs LeaveBalance rows for a LeavePolicy against every existing active
+    employee — closing the gap where _allocate_leaves_for_employee() only
+    ever runs at employee-creation time, so an employee who already existed
+    before a policy did (or became newly eligible for one through an edit)
+    would otherwise never get a balance for it until the next annual reset
+    (apps/hrms/tasks.py's reset_annual_leave_balances).
 
-    Eligibility reuses _eligible_for_policy() (branch/department/designation
-    + minimum_service_period, computed from the employee's REAL
-    date_of_joining) rather than duplicating those rules — deliberately NOT
-    reusing _allocate_leaves_for_employee()'s own minimum_service_period
-    check, which assumes "0 months served" for a brand-new joiner and would
-    incorrectly skip every existing, already-tenured employee from a policy
-    that has any minimum_service_period at all. applicable_gender isn't part
-    of _eligible_for_policy() (that function is also used by the Carry
-    Forward preview, which doesn't apply it either) — checked here inline,
-    the same single-condition check _allocate_leaves_for_employee() already
-    uses, not a new implementation.
+    Called from three places, all equally valid: LeavePolicyView.post()
+    right after a brand-new policy (e.g. "Pink Leave") is created,
+    LeavePolicyView.put() after ANY edit to an existing policy (e.g.
+    widening applicable_departments, or reactivating a deactivated policy)
+    — both only when the saved policy ends up is_active=True — and the
+    backfill_leave_balances management command for policies that predate
+    this sync existing entirely. Deliberately the same function for all
+    three rather than near-duplicate implementations: "new policy" and
+    "existing policy whose rules just changed" need identical employee-side
+    logic (find who qualifies now, create what's missing, touch nothing
+    that already exists).
 
-    Prorates from TODAY for the remainder of the current leave year — this
-    policy didn't exist earlier this year, so there's nothing to backdate
-    to. Idempotent via get_or_create: safe to call more than once (e.g. a
-    retry after a partial failure) without creating duplicates or touching
-    any LeaveBalance row that already exists, for this or any other leave
-    type. No shared transaction wraps the whole loop, deliberately — each
-    employee's get_or_create is its own atomic write, so a failure partway
-    through leaves already-created rows intact and a retry only fills in
-    what's still missing, rather than an all-or-nothing block that would
-    discard partial progress.
+    Eligibility reuses _eligible_for_policy() (branch/department/
+    designation/gender/minimum_service_period, computed from the
+    employee's REAL date_of_joining) rather than duplicating those rules —
+    deliberately NOT reusing _allocate_leaves_for_employee()'s own
+    minimum_service_period handling, which assumes "0 months served" for a
+    brand-new joiner and would incorrectly skip every existing,
+    already-tenured employee from a policy that has any
+    minimum_service_period at all.
+
+    An employee who LOSES eligibility (e.g. a policy's applicable_gender
+    narrows, or their own department changes) is never touched here —
+    this function only ever creates missing LeaveBalance rows via
+    get_or_create, never deletes or modifies an existing one. Their
+    current-year balance, used_days, and leave history stay exactly as
+    they are; they simply stop being granted a balance for this policy
+    going forward (enforced the same way for every employee, by every
+    caller re-checking eligibility each time it runs).
+
+    Prorates from TODAY for the remainder of the current leave year — a
+    newly-synced policy/employee pairing didn't exist (as an eligible
+    combination) earlier this year, so there's nothing to backdate to.
+    Idempotent via get_or_create: safe to call more than once (e.g. a
+    retry after a partial failure, or a second unrelated edit to the same
+    policy) without creating duplicates or touching any LeaveBalance row
+    that already exists, for this or any other leave type. No shared
+    transaction wraps the whole loop, deliberately — each employee's
+    get_or_create is its own atomic write, so a failure partway through
+    leaves already-created rows intact and a retry only fills in what's
+    still missing, rather than an all-or-nothing block that would discard
+    partial progress.
 
     Returns the number of LeaveBalance rows actually created.
     """
@@ -321,7 +319,6 @@ def _allocate_new_policy_for_existing_employees(policy, today=None) -> int:
         today = date.today()
     year              = today.year
     remaining_months  = 13 - today.month
-    check_gender      = policy.applicable_gender not in ('', 'all')
 
     created_count = 0
     employees = (
@@ -333,11 +330,6 @@ def _allocate_new_policy_for_existing_employees(policy, today=None) -> int:
         try:
             if not _eligible_for_policy(employee, policy, today):
                 continue
-            if check_gender:
-                profile = getattr(employee, 'profile', None)
-                emp_gender = (profile.gender or 'all') if profile else 'all'
-                if emp_gender != policy.applicable_gender:
-                    continue
 
             raw     = float(policy.annual_days) * remaining_months / 12
             prorata = Decimal(str(round(raw * 2) / 2))
@@ -563,6 +555,16 @@ class LeavePolicyView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
         serializer.save()
+        # Re-sync LeaveBalance rows against the policy's (possibly just
+        # changed) eligibility rules — covers widened/narrowed branch,
+        # department, designation, gender or minimum_service_period, and
+        # reactivation (is_active False -> True). Only when the saved
+        # policy is active: an inactive policy should never gain new
+        # balances. Never removes or modifies an existing LeaveBalance —
+        # see _allocate_new_policy_for_existing_employees()'s own
+        # docstring for why employees who lost eligibility are left alone.
+        if policy.is_active:
+            _allocate_new_policy_for_existing_employees(policy)
         return success('Policy updated.', LeavePolicySerializer(policy).data)
 
     def patch(self, request, leave_type: str):
@@ -1345,7 +1347,23 @@ class LeaveCalendarView(APIView):
 # ─── Carry Forward ────────────────────────────────────────────────────────────
 
 def _eligible_for_policy(employee, policy, today) -> bool:
-    """Return False if the employee doesn't meet the policy's eligibility rules."""
+    """
+    Return False if the employee doesn't meet the policy's eligibility rules.
+
+    The one authoritative eligibility check — every LeaveBalance-creating
+    code path (new-employee allocation, new/edited-policy sync, the annual
+    reset task, and the Carry Forward preview/execute flows) calls this
+    instead of re-implementing branch/department/designation/gender/
+    minimum-service-period matching on its own, so the rules can't drift
+    out of sync between call sites.
+
+    Gender is read via employee.profile (a OneToOneField reverse accessor,
+    related_name='profile') — callers looping over many employees should
+    select_related('profile') on their queryset to avoid N+1 queries here.
+    Intentionally does NOT check applicable_employment_types: that field is
+    stored on LeavePolicy but no employment_type field exists anywhere on
+    User/EmployeeProfile today, so there is nothing to compare it against.
+    """
     doj = getattr(employee, 'date_of_joining', None)
     if policy.minimum_service_period > 0 and doj:
         months_served = (today.year - doj.year) * 12 + (today.month - doj.month)
@@ -1363,6 +1381,11 @@ def _eligible_for_policy(employee, policy, today) -> bool:
         not employee.designation or employee.designation not in policy.applicable_designations
     ):
         return False
+    if policy.applicable_gender not in ('', 'all'):
+        profile    = getattr(employee, 'profile', None)
+        emp_gender = (profile.gender or 'all') if profile else 'all'
+        if emp_gender != policy.applicable_gender:
+            return False
     return True
 
 
@@ -1466,6 +1489,7 @@ class CarryForwardPreviewView(APIView):
         from apps.accounts.models import User
         employees = list(
             User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+            .select_related('profile')
         )
         policies = list(LeavePolicy.objects.filter(is_active=True, can_carry_forward=True))
 
@@ -1510,6 +1534,7 @@ class CarryForwardRunView(APIView):
         from apps.accounts.models import User
         employees = list(
             User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+            .select_related('profile')
         )
         policies = list(
             LeavePolicy.objects.filter(

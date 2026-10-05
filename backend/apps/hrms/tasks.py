@@ -23,7 +23,10 @@ def reset_annual_leave_balances(self):
     of its own, it's scheduled, not dispatched from a request).
 
     For every active employee:
-    - Checks each active LeavePolicy for eligibility (branch, dept, designation, service period).
+    - Checks each active LeavePolicy for eligibility via the shared
+      _eligible_for_policy() check (branch, dept, designation, gender,
+      minimum_service_period) — same function every other LeaveBalance-
+      creating path uses, see its docstring in apps/hrms/views/leave.py.
     - Carries forward unused days from the previous year (capped by max_carry_forward_days).
     - Creates a new LeaveBalance for the new year.
 
@@ -36,6 +39,7 @@ def reset_annual_leave_balances(self):
         from decimal import Decimal
         from apps.accounts.models import User
         from apps.hrms.models import CARRY_FORWARD_MANUAL, CARRY_FORWARD_UNLIMITED, LeaveBalance, LeavePolicy
+        from apps.hrms.views.leave import _eligible_for_policy
 
         today    = timezone.localdate()
         new_year = today.year
@@ -43,6 +47,7 @@ def reset_annual_leave_balances(self):
 
         active_employees = list(
             User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+            .select_related('profile')
         )
         # Automatic task only runs policies set to automatic carry-forward mode
         policies = list(LeavePolicy.objects.filter(is_active=True).exclude(carry_forward_mode=CARRY_FORWARD_MANUAL))
@@ -51,28 +56,8 @@ def reset_annual_leave_balances(self):
         skipped_total = 0
 
         for employee in active_employees:
-            doj           = getattr(employee, 'date_of_joining', None)
-            months_served = 0
-            if doj:
-                months_served = (today.year - doj.year) * 12 + (today.month - doj.month)
-
             for policy in policies:
-                if policy.minimum_service_period > 0 and months_served < policy.minimum_service_period:
-                    continue
-
-                if policy.applicable_branches and (
-                    not employee.branch or employee.branch not in policy.applicable_branches
-                ):
-                    continue
-
-                if policy.applicable_departments and (
-                    not employee.department or employee.department not in policy.applicable_departments
-                ):
-                    continue
-
-                if policy.applicable_designations and (
-                    not employee.designation or employee.designation not in policy.applicable_designations
-                ):
+                if not _eligible_for_policy(employee, policy, today):
                     continue
 
                 carry_forward = Decimal('0')

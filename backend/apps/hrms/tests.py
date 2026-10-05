@@ -327,6 +327,242 @@ class LeavePolicyNewTypeBackfillTests(TestCase):
         self.assertTrue(callable(reset_annual_leave_balances))
 
 
+class LeavePolicyEditSyncTests(TestCase):
+    """Editing an existing LeavePolicy (not just creating a new one) must
+    re-sync LeaveBalance rows against its current eligibility rules —
+    LeavePolicyView.put() now calls _allocate_new_policy_for_existing_
+    employees() after save, same function POST already used for brand-new
+    policies. Covers: widened eligibility backfills the newly-eligible,
+    narrowed eligibility never touches an existing balance/history,
+    deactivating never deletes anything, reactivating re-syncs.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        hr_role = make_role('hr_editsync_test', permission_codenames=['settings.edit'])
+        self.hr = make_user('hreditsync@test.com', role=hr_role, password='TestPass123!')
+
+        today    = datetime.date.today()
+        long_ago = today.replace(year=today.year - 3)
+        emp_role = make_role('employee_editsync_test')
+
+        self.hr_dept_emp = make_user(
+            'hrdeptemp@test.com', password='TestPass123!', role=emp_role,
+            employee_id='EDITSYNC001', date_of_joining=long_ago,
+            department='Human Resources', designation='HR Manager', branch='Mumbai HQ',
+        )
+        self.finance_emp = make_user(
+            'financeemp@test.com', password='TestPass123!', role=emp_role,
+            employee_id='EDITSYNC002', date_of_joining=long_ago,
+            department='Finance', designation='Accountant', branch='Mumbai HQ',
+        )
+        self.policy = LeavePolicy.objects.create(
+            leave_type='edit_sync_policy', leave_type_label='Edit Sync Policy',
+            annual_days=Decimal('6.0'), applicable_departments=['Human Resources'], is_active=True,
+        )
+        self._today = today
+        _login(self.client, 'hreditsync@test.com', password='TestPass123!')
+
+    def _url(self):
+        return reverse('leave-policy-detail', kwargs={'leave_type': self.policy.leave_type})
+
+    def test_widening_eligibility_backfills_newly_eligible_employee(self):
+        self.assertFalse(
+            LeaveBalance.objects.filter(employee=self.finance_emp, leave_type=self.policy.leave_type).exists()
+        )
+        resp = self.client.put(
+            self._url(), {'applicable_departments': ['Human Resources', 'Finance']}, format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(
+            LeaveBalance.objects.filter(employee=self.finance_emp, leave_type=self.policy.leave_type).exists()
+        )
+
+    def test_narrowing_eligibility_preserves_existing_balance_and_history(self):
+        # First save (even with no field changes) triggers the initial sync.
+        resp = self.client.put(self._url(), {}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        balance = LeaveBalance.objects.get(employee=self.hr_dept_emp, leave_type=self.policy.leave_type)
+        balance.used_days = Decimal('2.0')
+        balance.save(update_fields=['used_days'])
+        total_days_before = balance.total_days
+
+        # Narrow eligibility so hr_dept_emp (Human Resources) is excluded.
+        resp = self.client.put(self._url(), {'applicable_departments': ['Finance']}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+        balance.refresh_from_db()
+        self.assertEqual(balance.used_days, Decimal('2.0'))
+        self.assertEqual(balance.total_days, total_days_before)
+        self.assertTrue(
+            LeaveBalance.objects.filter(pk=balance.pk).exists(),
+            'An existing balance must never be deleted when an employee loses eligibility.',
+        )
+
+    def test_deactivating_policy_does_not_delete_existing_balances(self):
+        self.client.put(self._url(), {}, format='json')
+        self.assertTrue(
+            LeaveBalance.objects.filter(employee=self.hr_dept_emp, leave_type=self.policy.leave_type).exists()
+        )
+        resp = self.client.put(self._url(), {'is_active': False}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(
+            LeaveBalance.objects.filter(employee=self.hr_dept_emp, leave_type=self.policy.leave_type).exists()
+        )
+
+    def test_deactivating_policy_does_not_backfill_newly_eligible_employee(self):
+        resp = self.client.put(
+            self._url(),
+            {'applicable_departments': ['Human Resources', 'Finance'], 'is_active': False},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertFalse(
+            LeaveBalance.objects.filter(employee=self.finance_emp, leave_type=self.policy.leave_type).exists()
+        )
+
+    def test_reactivating_policy_resyncs_eligible_employees(self):
+        self.policy.is_active = False
+        self.policy.applicable_departments = ['Human Resources', 'Finance']
+        self.policy.save(update_fields=['is_active', 'applicable_departments'])
+        self.assertFalse(
+            LeaveBalance.objects.filter(employee=self.finance_emp, leave_type=self.policy.leave_type).exists()
+        )
+
+        resp = self.client.put(self._url(), {'is_active': True}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(
+            LeaveBalance.objects.filter(employee=self.finance_emp, leave_type=self.policy.leave_type).exists()
+        )
+
+
+class AnnualResetGenderEligibilityTests(TestCase):
+    """Regression: reset_annual_leave_balances() previously duplicated its
+    own eligibility check inline (branch/department/designation only) and
+    never evaluated applicable_gender at all — a female-only policy would
+    incorrectly credit every employee regardless of gender at the next
+    annual reset. Fixed by routing through the same shared
+    _eligible_for_policy() every other LeaveBalance-creating path uses.
+    """
+
+    def setUp(self):
+        from apps.accounts.models import EmployeeProfile
+        cache.clear()
+        today    = datetime.date.today()
+        long_ago = today.replace(year=today.year - 3)
+        emp_role = make_role('annual_reset_gender_test')
+
+        self.male_emp = make_user(
+            'maleemp@test.com', password='TestPass123!', role=emp_role,
+            employee_id='ARGT001', date_of_joining=long_ago,
+        )
+        EmployeeProfile.objects.update_or_create(user=self.male_emp, defaults={'gender': 'male'})
+
+        self.female_emp = make_user(
+            'femaleemp@test.com', password='TestPass123!', role=emp_role,
+            employee_id='ARGT002', date_of_joining=long_ago,
+        )
+        EmployeeProfile.objects.update_or_create(user=self.female_emp, defaults={'gender': 'female'})
+
+        self.policy = LeavePolicy.objects.create(
+            leave_type='reset_gender_policy', leave_type_label='Gender Reset Policy',
+            annual_days=Decimal('5.0'), applicable_gender='female', is_active=True,
+        )
+        self.prev_year = today.year - 1
+        for emp in (self.male_emp, self.female_emp):
+            LeaveBalance.objects.create(
+                employee=emp, leave_type=self.policy.leave_type, year=self.prev_year,
+                total_days=Decimal('5.0'), used_days=Decimal('0'),
+            )
+        self._today = today
+
+    def test_male_employee_not_credited_for_female_only_policy(self):
+        from apps.hrms.tasks import reset_annual_leave_balances
+        reset_annual_leave_balances()
+        self.assertFalse(
+            LeaveBalance.objects.filter(
+                employee=self.male_emp, leave_type=self.policy.leave_type, year=self._today.year,
+            ).exists()
+        )
+        self.assertTrue(
+            LeaveBalance.objects.filter(
+                employee=self.female_emp, leave_type=self.policy.leave_type, year=self._today.year,
+            ).exists()
+        )
+
+
+class BackfillLeaveBalancesCommandTests(TestCase):
+    """manage.py backfill_leave_balances — the reusable, manually-triggered
+    sync for LeavePolicy rows that predate the automatic POST/PUT sync.
+    Must default to a true dry-run (no writes at all) and only write when
+    --apply is passed; --policy must scope to one policy.
+    """
+
+    def setUp(self):
+        cache.clear()
+        today    = datetime.date.today()
+        long_ago = today.replace(year=today.year - 3)
+        emp_role = make_role('backfill_cmd_test')
+
+        self.eligible = make_user(
+            'backfillcmdemp@test.com', password='TestPass123!', role=emp_role,
+            employee_id='BCKCMD001', date_of_joining=long_ago,
+            department='Engineering', designation='Engineer', branch='Mumbai HQ',
+        )
+        # Simulates a policy created before the automatic sync existed —
+        # plain model .create(), never went through LeavePolicyView.post().
+        self.policy = LeavePolicy.objects.create(
+            leave_type='pre_sync_policy', leave_type_label='Pre-Sync Policy',
+            annual_days=Decimal('4.0'), is_active=True,
+        )
+        self._today = today
+
+    def _run(self, **options):
+        import io
+        from apps.hrms.management.commands.backfill_leave_balances import Command
+        from apps.tenants.models import Client
+        from config.test_runner import TEST_COMPANY_CODE
+        client = Client.objects.get(company_code=TEST_COMPANY_CODE)
+        options.setdefault('policy', None)
+        options.setdefault('apply', False)
+        out = io.StringIO()
+        Command(stdout=out).handle_tenant(client, **options)
+        return out.getvalue()
+
+    def test_dry_run_makes_no_database_writes(self):
+        output = self._run()
+        self.assertIn('Missing balance:     1', output)
+        self.assertIn('[DRY RUN]', output)
+        self.assertFalse(
+            LeaveBalance.objects.filter(employee=self.eligible, leave_type=self.policy.leave_type).exists()
+        )
+
+    def test_apply_creates_the_missing_balance(self):
+        output = self._run(apply=True)
+        self.assertIn('Created 1 LeaveBalance row(s).', output)
+        self.assertTrue(
+            LeaveBalance.objects.filter(employee=self.eligible, leave_type=self.policy.leave_type).exists()
+        )
+
+    def test_apply_is_idempotent_on_second_run(self):
+        self._run(apply=True)
+        output = self._run(apply=True)
+        self.assertIn('Created 0 LeaveBalance row(s).', output)
+        self.assertEqual(
+            LeaveBalance.objects.filter(employee=self.eligible, leave_type=self.policy.leave_type).count(), 1,
+        )
+
+    def test_policy_filter_scopes_to_one_policy(self):
+        LeavePolicy.objects.create(
+            leave_type='other_pre_sync_policy', leave_type_label='Other Pre-Sync Policy',
+            annual_days=Decimal('3.0'), is_active=True,
+        )
+        output = self._run(policy='pre_sync_policy')
+        self.assertIn('Pre-Sync Policy', output)
+        self.assertNotIn('Other Pre-Sync Policy', output)
+
+
 class LeaveBalanceAdjustDecimalTests(TestCase):
     """Regression test: patching only one of total_days/used_days left the
     in-memory LeaveBalance with one Decimal field and one raw-float field.
