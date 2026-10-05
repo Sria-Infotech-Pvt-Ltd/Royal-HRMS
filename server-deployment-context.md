@@ -1214,3 +1214,252 @@ easy to miss in a quick smoke test).
 -   A `PlatformAdmin` account and a first company (`DEMO2026`) now
     exist — platform-admin login and one company's login are both
     confirmed working end-to-end as of this entry.
+
+------------------------------------------------------------------------
+
+# 26. Application change log (production support, 2026-09-30 → 2026-10-03)
+
+This section covers **application-level** feature/bug-fix work on top of
+the already-deployed stack described above — not infrastructure. It's the
+recent slice of an ongoing, longer production-support engagement; only the
+work actually carried out in this stretch is logged here, in the order it
+happened. Every change listed was validated locally first (isolated Docker
+Postgres test DB, project-local venv, real `manage.py test` runs — never
+against the production database) before being committed. As of this
+entry, everything below is **committed to `production` on GitHub**
+(`Sriainfotech/Royal-HRMS`) but — see the Git/deploy-key note at the end of
+this section — **not yet pulled onto this server**, pending a deploy-key
+fix.
+
+## Asset Management
+
+-   Fixed a real production 404 in "Assign Asset": the frontend was
+    passing an employee's human-readable code into a backend route typed
+    `<uuid:employee_id>`. One-line frontend fix.
+-   Added Asset Category / Asset Type master data (mirrors
+    Department/Designation: cascading dropdowns, "Other" category/type
+    with free-text capture, quick-add modals). New models
+    `AssetCategory`/`AssetType`, migrations `0003`/`0004` (the latter
+    seeds default categories/types per tenant schema — confirmed safe via
+    this VPS's own Postgres: `apps.assets` is a `TENANT_APP`, so this runs
+    once per company schema, not once globally).
+-   Added a Send-to-Maintenance / Complete-Maintenance lifecycle:
+    `AssetMaintenanceRecord` model + migration `0005`, new views/
+    serializers, `active_maintenance` field on the asset serializer,
+    frontend action buttons. Kept as a separate history table from
+    `AssetAssignment` (an asset can cycle through assign/return and
+    repair/complete independently) — verified with an end-to-end test
+    that assignment history is never touched by a maintenance cycle.
+-   **Production incident during this work:** the three migrations above
+    were pulled to this server (code) before `migrate_schemas` had been
+    run, so `AssetCategory`/`AssetType` tables didn't exist yet — any
+    request touching Asset Category hit `relation "assets_category" does
+    not exist`. Fixed by running `.venv/bin/python manage.py
+    migrate_schemas` on the server (applies to every tenant schema) —
+    confirmed via `showmigrations assets` before and after. No data was
+    lost; this was a missing-migration-step issue, not a bad migration.
+
+## Employee Details — field-level editability and protection
+
+Employee ID and Employee Name are now **permanently immutable** through
+`EmployeeDetailView.put()` (`backend/apps/accounts/views.py`), regardless
+of onboarding status — previously only a front-end convention with no
+backend enforcement, and Employee Name was only locked *after* onboarding
+completed, not always. A direct API call can no longer change either
+field. Also closed the one remaining gap: Django Admin's `UserAdmin` now
+has `employee_id`/`full_name` in `readonly_fields` too.
+
+Made genuinely editable (previously either locked or never wired up at
+all), for any role already holding `employees.edit` (System Admin, HR
+Admin, Branch Admin — same existing branch-scope rules apply, nothing new
+introduced):
+
+-   **Date of Birth** — now validates past-date + age 18–80 by calling the
+    same validator the onboarding wizard already used
+    (`EmployeeProfileSerializer.validate_date_of_birth`), instead of only
+    checking date format as before.
+-   **Mobile Number** — no longer locked once onboarding completes; now
+    validated with the same phone regex used elsewhere
+    (`_PHONE_RE_PROFILE`) instead of no format validation at all.
+-   **Email** — new capability. Validates format + uniqueness, and reuses
+    an existing-but-orphaned helper, `send_email_change_notifications()`
+    (`apps/accounts/utils.py`) — sends a confirmation to the new address
+    and a security alert to the old one. (Found in passing: a dedicated
+    `EmployeeChangeLoginEmailView` is referenced in a docstring elsewhere
+    in the codebase but doesn't actually exist — likely removed at some
+    point; this fix did not recreate it, just reused the still-working
+    notification helper directly in the existing PUT endpoint instead.)
+-   **Date of Joining** — no longer locked once onboarding completes,
+    same pattern as Mobile Number above.
+
+Frontend: the Employee Details edit form (`frontend/app/dashboard/
+employees/_data.ts`, `[id]/page.tsx`) was updated field-by-field to match
+— Login Email and Phone switched from `readonly` to real inputs, Date of
+Joining likewise, both added to the save payload (previously silently
+omitted even though the UI showed them).
+
+## Employee ID format change
+
+Replaced the previous pure-sequential format (`EMP00001`, `EMP00002`, …)
+with `PREFIX + date-of-joining(DDMM) + name-initials` (e.g. a company with
+prefix `RSS`, employee "Teerdaveni Gedela" joining 3 Aug → `RSS0308TG`) —
+`backend/apps/accounts/models.py`, `EmployeeCodeSettings.generate_employee_id()`.
+
+-   **Existing employee IDs are completely untouched** — this only
+    affects IDs generated for employees created *after* this change.
+-   Collision handling: two people with the same join-date+initials get a
+    numeric suffix (`RSS0308RK`, `RSS0308RK2`, …), resolved inside the
+    same database lock the old sequence counter used, so two concurrent
+    signups can't collide.
+-   Single-word names fall back to repeating the one initial twice
+    (`"Madonna"` → `MM`) rather than inventing a placeholder character.
+-   All three places that generate an employee ID (direct creation,
+    onboarding-candidate approval, bulk import) already shared one
+    function, so this needed no per-call-site changes.
+-   The Employee ID Settings page (`frontend/app/dashboard/settings/
+    employee-code/page.tsx`) had its now-meaningless "Digit padding" /
+    "Next sequence number" inputs removed from the visible form (the
+    backend fields themselves were left alone — still part of the saved
+    settings object, just not shown as editable, so the API contract
+    didn't change) and the preview rewritten to show the new format with
+    example data.
+-   Added a **read-only preview tool** (new management command,
+    `dry_run_employee_id_conversion`) that computes what every *existing*
+    employee's ID *would* look like under the new format, with full
+    collision detection — makes zero database writes. This exists purely
+    so the old→new mapping can be reviewed before anyone decides whether
+    to actually convert existing employees' IDs (that conversion itself
+    was explicitly **not** implemented — only investigated and judged
+    higher-risk than it's worth, mainly because of dead
+    bookmarks/shared links built on the old IDs).
+
+## Leave Type name now editable
+
+Settings → Leave Policy → editing an existing leave type now shows and
+lets you change its display name (previously read-only in the Edit modal,
+even though the name was editable at creation time) —
+`LeavePolicyUpdateSerializer` (`backend/apps/hrms/serializers.py`) gained
+a validated `leave_type_label` field, reusing the exact same
+character-rule/duplicate-name check the Create flow already used (factored
+into one shared `_validate_leave_type_label()` function so the two flows
+can't drift apart). The leave type's internal key/slug never changes —
+only the display label.
+
+## "Menstrual Leave not showing in Employee Profile" — real root cause
+
+Not a bug in saving, displaying, or caching the policy — all of those
+work correctly. The actual gap: an employee's visible leave balances are
+driven entirely by `LeaveBalance` rows, which were previously only ever
+created (a) when an employee is created, or (b) by the annual Celery
+reset (`apps/hrms/tasks.py: reset_annual_leave_balances`). **Adding a new
+leave type (e.g. a custom "Menstrual Leave" policy) mid-year never
+granted existing employees a balance for it** — nothing re-evaluated
+already-existing employees against a brand-new policy; they'd have had to
+wait for the next annual reset. (This exact category of gap has bitten
+this codebase once before — see migration
+`0019_backfill_missing_leave_balances.py`'s own docstring, which patched
+a related but different trigger.)
+
+Fixed by adding `_allocate_new_policy_for_existing_employees()`
+(`backend/apps/hrms/views/leave.py`), called once, synchronously, right
+after a new `LeavePolicy` is created — reuses the existing eligibility
+logic (branch/department/designation/minimum-service-period via
+`_eligible_for_policy()`, gender via the same single-line check the
+employee-creation allocator already used) rather than a second
+implementation. Idempotent (`get_or_create`, safe to re-run), and
+deliberately not wrapped in one giant transaction so a partial failure
+can be retried without re-processing already-done employees. Kept
+synchronous (no new Celery task) — creating a leave policy is a rare,
+admin-initiated action, not a hot path, and the realistic employee counts
+here don't warrant the added complexity.
+
+**Found but not fixed (pre-existing, separate issue):** a custom leave
+type's display name can be up to 100 characters, but the column that
+actually stores a leave type key on `LeaveBalance`/`LeaveRequest` is
+capped at 20 — a long enough custom name (e.g. "Engineering Only Leave")
+would crash *any* balance-crediting path with a database error, not just
+the new backfill function. Worth its own fix later; out of scope for the
+Menstrual Leave issue itself.
+
+## "Managers do not have a reporting manager" blocking unrelated edits
+
+Regression affecting every Manager-role employee: saving *any* field
+change on their Employee Details page (even just Date of Birth) failed
+with this error. Root cause: `EmployeeDetailView.put()` rejected the
+request just because the `reporting_manager_id` key was *present* in the
+payload (which it always is — the frontend sends the full form every
+save, the same way every other field on that page works), regardless of
+whether its value had actually changed. Fixed by moving the role check to
+only fire when an actual (non-empty) value is being assigned — mirrors
+the equivalent, already-correct check in the employee-creation endpoint.
+Managers still cannot be assigned a reporting manager; only the false
+rejection on unrelated edits is gone.
+
+## Punch-in taking 2–3 minutes / multiple clicks not helping
+
+Investigated the full Clock In/Out chain (GPS acquisition → geofence
+pre-check API call → face-capture modal → punch API call). Confirmed the
+backend has no slow external calls anywhere in this path (geofencing is
+local Haversine math, face matching is a local embedding-distance
+comparison — no third-party API). The concrete, fixed bug:
+`ClockInButton.tsx`'s busy/disabled state didn't include the `isLocating`
+flag from `useClockWidget`, so the button stayed clickable while GPS +
+the geofence pre-check were still running — a repeated click started a
+second, fully independent punch flow stacked on top of the first, which
+explains "even trying multiple times" making it worse, not better.
+One-line fix: `isBusy` now includes `isLocating`. (A secondary,
+unconfirmed suspect also noted for later: a synchronous Redis/WebSocket
+push sits in the response path after the punch is saved — not touched,
+since it needs real production timing data to confirm before acting on
+it.)
+
+## Branch Admin "Clock In/Out not showing" — investigated, no code change
+
+Traced the dashboard-resolution logic (`frontend/app/dashboard/page.tsx`)
+and confirmed Branch Admin is seeded with `employees.view` and therefore
+*should* land on the same `HRDashboard` (and its already-present
+`ClockInButton`, inside `HrConsole`) that HR Admin uses — there is no
+code path that excludes Branch Admin specifically, and the backend punch
+API has no role restriction at all (`IsAuthenticated` only). Likely
+explanation for the specific report: the frontend session cookie
+(`role`/`permissions`/`can_manage_team`) is set once at login and never
+refreshed mid-session — confirmed by tracing every call site of
+`saveAuth()` — so an account whose permissions changed or were only
+recently granted could be showing a stale dashboard bucket until they log
+out and back in. No code was changed for this one; recommended next step
+was simply "log out and back in," with a DB-side permission check as the
+fallback if that doesn't resolve it.
+
+## Employment Type — investigated only, not implemented
+
+Confirmed "Employee Type" already exists as a UI dropdown in two
+employee-creation flows (`AddEmployeeModal.tsx`, `employees/new/
+page.tsx`, both offering Permanent/Contract/Intern/Probation) but is
+**silently discarded** in both — one flow sends it and the backend never
+reads it, the other never sends it at all despite showing it on a review
+screen. No `employment_type` field exists anywhere on `User`/
+`EmployeeProfile` today. A real field + migration would be needed to
+implement this properly; deliberately not done yet, pending a decision on
+scope (this was purely an inspection pass).
+
+## Git / deploy-key issue found during this session (unresolved as of this entry)
+
+While trying to deploy the above to this server, `git pull origin
+production` started failing with `ERROR: Repository not found`. Traced to:
+this server's SSH deploy key (`~/.ssh/id_ed25519`,
+`royalhrms-deploy@srv1795199`) authenticates successfully against GitHub,
+but is scoped to a *different* repository
+(`Sria-Infotech-Pvt-Ltd/Royal-HRMS`) than the one actually in use
+(`Sriainfotech/Royal-HRMS` — confirmed as the real one since local
+development has used that name throughout). The remote URL on this server
+has been corrected back to `git@github.com:Sriainfotech/Royal-HRMS.git`,
+but **the deploy key itself still needs to be added to that repo's
+Deploy Keys list** (`github.com/Sriainfotech/Royal-HRMS/settings/keys`,
+read-only, no write access needed) before `git pull` will work again.
+Public key, for whoever does this:
+```
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICtAGEq4cTLoKEycfWO6O5rsTuCysVO3IQosEEJAR+W3 royalhrms-deploy@srv1795199
+```
+**As of this entry, the application code above is committed to GitHub but
+has not yet been pulled onto this server** — update this note once the
+deploy key is added and the pull/build/restart has actually happened.
