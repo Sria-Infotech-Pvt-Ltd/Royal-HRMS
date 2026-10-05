@@ -1,6 +1,11 @@
 // ─── Leave type UI metadata ───────────────────────────────────────────────────
 
-export type LeaveTypeKey = "casual" | "earned" | "sick" | "lwp" | "maternity" | "paternity";
+// Widened to `string` rather than the original 6-value union — the backend
+// has long supported arbitrary custom Leave Types (e.g. a "Pink Leave"
+// policy with leave_type "mestrual_leave"), so this type was already
+// understating the real domain. Nothing below narrows on it for
+// exhaustiveness, so widening doesn't change behavior for the 6 built-ins.
+export type LeaveTypeKey = string;
 export type DurationKey  = "full_day" | "half_morning" | "half_afternoon";
 export type ReqStatus    = "pending" | "l2_pending" | "approved" | "rejected" | "cancelled";
 
@@ -26,6 +31,60 @@ export const LEAVE_TYPE_CONFIG: Record<LeaveTypeKey, LeaveTypeConfig> = {
 
 export const LEAVE_TYPES_LIST = Object.values(LEAVE_TYPE_CONFIG);
 
+// Generic styling for any custom Leave Type (e.g. "Pink Leave") that has no
+// hand-authored entry in LEAVE_TYPE_CONFIG above — intentionally neutral,
+// never mistaken for one of the 6 built-in colors. Exported so other
+// consumers (LeaveAnalytics, TeamCalendar) can use the same fallback color
+// instead of each picking their own.
+export const CUSTOM_LEAVE_TYPE_DEFAULTS = {
+  icon:  "ti-calendar-star",
+  color: "#6b7280",
+  bg:    "rgba(107,114,128,0.1)",
+} as const;
+
+// "Pink Leave" -> "PL", "Comp Off" -> "CO", "Sabbatical" -> "SA" — same
+// 2-letter-initials convention the hand-authored shortLabels above follow.
+export function shortLabelFor(label: string): string {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "??";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+// Returns the hand-authored config for one of the 6 built-ins, or a safe
+// generic config synthesized from the policy's own data for anything else —
+// never undefined, so callers never need an extra null-check on top of this.
+export function configForPolicy(policy: LeavePolicy): LeaveTypeConfig {
+  const builtin = LEAVE_TYPE_CONFIG[policy.leave_type];
+  if (builtin) return builtin;
+  const label = policy.leave_type_display || policy.leave_type;
+  return {
+    key:         policy.leave_type,
+    label,
+    shortLabel:  shortLabelFor(label),
+    icon:        CUSTOM_LEAVE_TYPE_DEFAULTS.icon,
+    color:       CUSTOM_LEAVE_TYPE_DEFAULTS.color,
+    bg:          CUSTOM_LEAVE_TYPE_DEFAULTS.bg,
+    isLwp:       false, // LWP is a protected built-in; a custom type is never treated as unpaid/unlimited
+    requiresDoc: !!(policy.attachment_required || policy.medical_certificate_required),
+  };
+}
+
+// The 6 built-ins (unconditionally, exactly as before — preserves existing
+// behavior even if one were ever deactivated) plus any active custom
+// LeavePolicy that isn't already one of the 6. The one place that decides
+// "which leave types exist" for a Select-Leave-Type-style UI — every
+// consumer that needs this should call it instead of using
+// LEAVE_TYPES_LIST directly, so custom types can't silently go missing
+// from one screen again.
+export function buildLeaveTypesList(policies: LeavePolicy[] | null | undefined): LeaveTypeConfig[] {
+  const builtinKeys = new Set(Object.keys(LEAVE_TYPE_CONFIG));
+  const customs = (policies ?? [])
+    .filter(p => p.is_active && !builtinKeys.has(p.leave_type))
+    .map(configForPolicy);
+  return [...LEAVE_TYPES_LIST, ...customs];
+}
+
 // ─── API response types ───────────────────────────────────────────────────────
 
 export interface LeavePolicy {
@@ -39,6 +98,8 @@ export interface LeavePolicy {
   is_active:             boolean;
   sandwich_leave_enabled: boolean;
   convert_to_lop:        boolean;
+  attachment_required:          boolean;
+  medical_certificate_required: boolean;
   updated_at:            string;
 }
 

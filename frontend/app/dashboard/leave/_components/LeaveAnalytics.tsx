@@ -5,7 +5,7 @@ import { API } from "@/lib/api/endpoints";
 import { getLeaveYear } from "@/lib/fiscalYear";
 import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { LeaveStats, LEAVE_TYPE_CONFIG } from "../_data";
+import { LeaveStats, LEAVE_TYPE_CONFIG, CUSTOM_LEAVE_TYPE_DEFAULTS } from "../_data";
 
 export default function LeaveAnalytics() {
   const canApproveLeave = usePermission("leave.approve");
@@ -87,7 +87,7 @@ export default function LeaveAnalytics() {
                     </span>
                   </div>
                   <div className="progress-bar">
-                    <div className="progress-fill" style={{ width: `${pct}%`, background: cfg?.color ?? "var(--primary)" }} />
+                    <div className="progress-fill" style={{ width: `${pct}%`, background: cfg?.color ?? CUSTOM_LEAVE_TYPE_DEFAULTS.color }} />
                   </div>
                 </div>
               );

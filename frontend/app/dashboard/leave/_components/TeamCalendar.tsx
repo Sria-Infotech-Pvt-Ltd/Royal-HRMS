@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import { LeaveTypeKey, LEAVE_TYPE_CONFIG } from "../_data";
+import { LeaveTypeKey, LEAVE_TYPE_CONFIG, CUSTOM_LEAVE_TYPE_DEFAULTS } from "../_data";
 
 interface CalEvent {
   id:                  string;
@@ -20,7 +20,7 @@ const MONTH_NAMES = ["January","February","March","April","May","June","July","A
 const DAY_NAMES   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 function eventColor(leaveType: LeaveTypeKey): string {
-  return LEAVE_TYPE_CONFIG[leaveType]?.color ?? "var(--primary)";
+  return LEAVE_TYPE_CONFIG[leaveType]?.color ?? CUSTOM_LEAVE_TYPE_DEFAULTS.color;
 }
 
 function dayEvents(events: CalEvent[], year: number, month: number, day: number): CalEvent[] {
@@ -65,6 +65,13 @@ export default function TeamCalendar() {
   }
 
   const usedTypes = [...new Set(allEvents.map(e => e.leave_type))];
+  // leave_type_display is already the correct label for a custom type too
+  // (e.g. "Pink Leave", not the raw "mestrual_leave" key) — read it off an
+  // actual event instead of falling back to the bare key.
+  const typeLabel = (type: LeaveTypeKey): string =>
+    LEAVE_TYPE_CONFIG[type]?.label
+    ?? allEvents.find(e => e.leave_type === type)?.leave_type_display
+    ?? type;
 
   return (
     <div className="w-full flex flex-col gap-5">
@@ -75,7 +82,7 @@ export default function TeamCalendar() {
           {usedTypes.map(type => (
             <div key={type} className="flex items-center gap-2 text-xs text-[var(--on-variant)]">
               <div className="w-3 h-3 rounded" style={{ background: eventColor(type) }} />
-              {LEAVE_TYPE_CONFIG[type]?.label ?? type}
+              {typeLabel(type)}
             </div>
           ))}
         </div>

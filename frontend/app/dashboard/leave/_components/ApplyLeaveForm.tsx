@@ -8,8 +8,8 @@ import { useToast } from "@/components/ToastProvider";
 import { getLeaveYear } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
-  LeaveTypeKey, DurationKey,
-  LEAVE_TYPES_LIST, LEAVE_TYPE_CONFIG,
+  LeaveTypeKey, DurationKey, LeaveTypeConfig,
+  buildLeaveTypesList,
   calcWorkingDays, fmtDate,
 } from "../_data";
 
@@ -64,10 +64,23 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const { data: balances } = useFetch<LeaveBalance[]>(API.leave.balance + `?year=${currentYear}`);
   const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
 
+  // The 6 built-ins plus any active custom LeavePolicy (e.g. "Pink Leave")
+  // — see buildLeaveTypesList's own docstring for why this replaces the
+  // old hardcoded LEAVE_TYPES_LIST here.
+  const leaveTypes = useMemo(() => buildLeaveTypesList(policies), [policies]);
+  const leaveTypeMap = useMemo(
+    () => Object.fromEntries(leaveTypes.map(lt => [lt.key, lt])),
+    [leaveTypes],
+  );
+
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
   const policyMap  = Object.fromEntries((policies ?? []).map(p => [p.leave_type, p]));
 
-  const ltConfig   = LEAVE_TYPE_CONFIG[form.leave_type];
+  const ltConfig: LeaveTypeConfig = leaveTypeMap[form.leave_type] ?? {
+    key: form.leave_type, label: form.leave_type, shortLabel: "??",
+    icon: "ti-calendar-star", color: "#6b7280", bg: "rgba(107,114,128,0.1)",
+    isLwp: false, requiresDoc: false,
+  };
   const balance    = balanceMap[form.leave_type];
   const policy     = policyMap[form.leave_type];
   const isHalfDay       = form.duration !== "full_day";
@@ -203,7 +216,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
           <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm p-5">
             <Lbl text="Select Leave Type" required />
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-1">
-              {LEAVE_TYPES_LIST.map(lt => {
+              {leaveTypes.map(lt => {
                 const selected = form.leave_type === lt.key;
                 const bal      = balanceMap[lt.key];
                 const avail    = bal ? Number(bal.available_days) : 0;
