@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useFetch } from "@/hooks/useFetch";
+import { API } from "@/lib/api/endpoints";
 import { useEmployeeLeave } from "@/hooks/useEmployeeLeave";
 import {
-  LEAVE_TYPE_CONFIG, STATUS_BADGE, STATUS_LABEL, fmtShortDate,
-  type LeaveRequest, type LeaveTypeKey,
+  STATUS_BADGE, STATUS_LABEL, fmtShortDate,
+  buildLeaveTypesList, CUSTOM_LEAVE_TYPE_DEFAULTS,
+  type LeaveRequest, type LeavePolicy,
 } from "@/app/dashboard/leave/_data";
 import LeaveRequestDetailModal from "@/app/dashboard/leave/_components/LeaveRequestDetailModal";
 import LopBadge from "@/app/dashboard/leave/_components/LopBadge";
@@ -13,18 +16,38 @@ interface Props {
   employeeId: string;
 }
 
-const BALANCE_DISPLAY: { key: LeaveTypeKey; icon: string; iconClass: string; barColor: string }[] = [
-  { key: "casual", icon: "ti-circle-check", iconClass: "si-success", barColor: "var(--success)" },
-  { key: "earned", icon: "ti-calendar",     iconClass: "si-primary", barColor: "var(--primary)" },
-  { key: "sick",   icon: "ti-stethoscope",  iconClass: "si-info",    barColor: "var(--info)"    },
-];
+// Bespoke icon/color this tab has always used for these 3 types specifically
+// — kept exactly as before. Any other type (maternity, paternity, or any
+// custom Leave Type such as "Pink Leave") is resolved dynamically below via
+// buildLeaveTypesList(), the same resolver ApplyLeaveForm already uses, so
+// there's one shared place that knows about custom Leave Types, not two.
+const CURATED_STYLE: Record<string, { icon: string; iconClass: string; barColor: string }> = {
+  casual: { icon: "ti-circle-check", iconClass: "si-success", barColor: "var(--success)" },
+  earned: { icon: "ti-calendar",     iconClass: "si-primary", barColor: "var(--primary)" },
+  sick:   { icon: "ti-stethoscope",  iconClass: "si-info",    barColor: "var(--info)"    },
+};
+
+// Loss of Pay already has its own dedicated card below, driven by
+// stats.lop_days/lop_requests (days used as LOP across requests) — a
+// different concept from an allocated/available balance. Its LeaveBalance
+// row (if one exists) must never also render as a normal balance card here.
+const LWP_KEY = "lwp";
 
 export function LeaveTab({ employeeId }: Props) {
   const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
   const { year, prevYear, nextYear, page, setPage, totalPages, requests, stats, loading, error } =
     useEmployeeLeave(employeeId);
 
-  const balanceMap = Object.fromEntries((stats?.balances ?? []).map(b => [b.leave_type, b]));
+  // Same policy data + resolver ApplyLeaveForm uses, so a custom Leave
+  // Type's display name/icon/color is never hardcoded here either.
+  const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
+  const leaveTypes = useMemo(() => buildLeaveTypesList(policies), [policies]);
+  const leaveTypeMap = useMemo(
+    () => Object.fromEntries(leaveTypes.map(lt => [lt.key, lt])),
+    [leaveTypes],
+  );
+
+  const balances = (stats?.balances ?? []).filter(b => b.leave_type !== LWP_KEY);
 
   if (error) {
     return (
@@ -37,23 +60,34 @@ export function LeaveTab({ employeeId }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div className="stats-grid" style={{ marginBottom: 0 }}>
-        {BALANCE_DISPLAY.map(({ key, icon, iconClass, barColor }) => {
-          const b     = balanceMap[key];
-          const total = b ? Number(b.total_days) : 0;
-          const left  = b ? Number(b.available)  : 0;
-          const used  = b ? Number(b.used_days)  : 0;
-          const pct   = total > 0 ? Math.round((used / total) * 100) : 0;
+        {balances.map(b => {
+          const curated  = CURATED_STYLE[b.leave_type];
+          const lt       = leaveTypeMap[b.leave_type];
+          const label    = lt?.label ?? b.leave_type_display;
+          const icon     = curated?.icon ?? lt?.icon ?? CUSTOM_LEAVE_TYPE_DEFAULTS.icon;
+          const barColor = curated?.barColor ?? lt?.color ?? CUSTOM_LEAVE_TYPE_DEFAULTS.color;
+          const iconBg   = lt?.bg ?? CUSTOM_LEAVE_TYPE_DEFAULTS.bg;
+          const total    = Number(b.total_days);
+          const left     = Number(b.available);
+          const used     = Number(b.used_days);
+          const pct      = total > 0 ? Math.round((used / total) * 100) : 0;
           return (
-            <div key={key} className="stat-card">
+            <div key={b.leave_type} className="stat-card">
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
                 <div>
-                  <div className="stat-label">{LEAVE_TYPE_CONFIG[key].label}</div>
+                  <div className="stat-label">{label}</div>
                   <div className="stat-value">{loading ? "—" : left}</div>
                   <div className="stat-sub">of {total} days left</div>
                 </div>
-                <div className={`stat-icon ${iconClass}`} style={{ float: "none", margin: 0 }}>
-                  <i className={`ti ${icon}`} />
-                </div>
+                {curated ? (
+                  <div className={`stat-icon ${curated.iconClass}`} style={{ float: "none", margin: 0 }}>
+                    <i className={`ti ${curated.icon}`} />
+                  </div>
+                ) : (
+                  <div className="stat-icon" style={{ float: "none", margin: 0, background: iconBg, color: barColor }}>
+                    <i className={`ti ${icon}`} />
+                  </div>
+                )}
               </div>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${pct}%`, background: barColor }} />

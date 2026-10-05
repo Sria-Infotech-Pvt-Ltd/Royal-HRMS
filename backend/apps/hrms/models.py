@@ -31,6 +31,12 @@ LEAVE_TYPE_CHOICES = [
     (LEAVE_PATERNITY, 'Paternity Leave'),
 ]
 
+# The 6 seeded leave types every company gets by default — never deletable
+# (only deactivatable), unlike a custom LeavePolicy an admin created later.
+BUILTIN_LEAVE_TYPE_KEYS = {
+    LEAVE_CASUAL, LEAVE_EARNED, LEAVE_SICK, LEAVE_LWP, LEAVE_MATERNITY, LEAVE_PATERNITY,
+}
+
 DURATION_FULL      = 'full_day'
 DURATION_MORNING   = 'half_morning'
 DURATION_AFTERNOON = 'half_afternoon'
@@ -612,6 +618,37 @@ class LeaveRequest(models.Model):
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — {self.leave_type} ({self.start_date})'
+
+
+def leave_type_usage(leave_type: str) -> dict:
+    """
+    Whether a leave_type has any existing employee data attached to it, and
+    how much — used to decide whether deleting its LeavePolicy is safe.
+
+    LeaveBalance.leave_type and LeaveRequest.leave_type are both plain
+    CharFields, not a ForeignKey to LeavePolicy — so deleting a LeavePolicy
+    row never cascades to or corrupts either table. But it does orphan them:
+    an existing balance/request for that type would be left with no backing
+    policy configuration, silently dropping out of allocation/sync (every
+    LeaveBalance-creating path filters LeavePolicy.objects.filter(is_active=
+    True)) and out of leave-application validation (LeavePolicyCacheService.
+    get() would return None for it). That's treated as "in use" and blocking
+    deletion, not a safe cascade to implement.
+    """
+    balance_qs = LeaveBalance.objects.filter(leave_type=leave_type)
+    request_qs = LeaveRequest.objects.filter(leave_type=leave_type)
+    balance_count = balance_qs.count()
+    request_count = request_qs.count()
+
+    employee_ids = set(balance_qs.values_list('employee_id', flat=True))
+    employee_ids.update(request_qs.values_list('employee_id', flat=True))
+
+    return {
+        'in_use':                  balance_count > 0 or request_count > 0,
+        'affected_employee_count': len(employee_ids),
+        'leave_balance_count':     balance_count,
+        'leave_request_count':     request_count,
+    }
 
 
 # ─── Work From Home Request ────────────────────────────────────────────────────

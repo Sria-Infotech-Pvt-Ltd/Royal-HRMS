@@ -14,7 +14,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
 from apps.accounts.models import ApprovalWorkflowRule
-from apps.hrms.models import Expense, LeaveBalance, LeavePolicy
+from apps.hrms.models import Expense, LeaveBalance, LeavePolicy, LeaveRequest
 from config.test_runner import TEST_COMPANY_CODE
 
 
@@ -127,6 +127,139 @@ class LeavePolicyNameEditTests(TestCase):
         self.assertEqual(resp.status_code, 403)
         self.comp_off.refresh_from_db()
         self.assertEqual(self.comp_off.leave_type_label, 'Comp Off')
+
+
+class LeavePolicyDeleteSafetyTests(TestCase):
+    """Deleting a custom LeavePolicy must never orphan an employee's existing
+    LeaveBalance/LeaveRequest data. LeaveBalance.leave_type/LeaveRequest.
+    leave_type are plain CharFields (no FK to LeavePolicy), so a delete can
+    never cascade — but it would silently leave existing records pointing at
+    a leave_type with no backing policy, dropping them out of future
+    allocation/sync and leave-application validation. See
+    leave_type_usage()'s own docstring in apps/hrms/models.py.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        # 'settings.edit'-holding role — e.g. System Admin's real permission set.
+        admin_role = make_role('sysadmin_delete_test', permission_codenames=['settings.edit'])
+        self.admin = make_user('sysadmin@test.com', role=admin_role, password='TestPass123!')
+        # 'leave.approve'-only role, deliberately WITHOUT settings.edit — the
+        # actual Branch Admin permission set per migration 0052, and the
+        # exact scenario fixed for tenant_ris earlier this engagement.
+        branch_admin_role = make_role('branch_admin_delete_test', permission_codenames=['leave.approve'])
+        self.branch_admin = make_user('branchadmin@test.com', role=branch_admin_role, password='TestPass123!')
+        no_perm_role = make_role('no_perm_delete_test')
+        make_user('noperm_delete@test.com', role=no_perm_role, password='TestPass123!')
+
+        self.unused_policy = LeavePolicy.objects.create(
+            leave_type='sabbatical', leave_type_label='Sabbatical', annual_days=Decimal('5.0'),
+        )
+        self.in_use_policy = LeavePolicy.objects.create(
+            leave_type='pink_leave', leave_type_label='Pink Leave', annual_days=Decimal('10.0'),
+        )
+        self.employee = make_user(
+            'pinkleaveemp@test.com', password='TestPass123!', role=make_role('employee_delete_test'),
+            employee_id='DELTEST001',
+        )
+        self.balance = LeaveBalance.objects.create(
+            employee=self.employee, leave_type='pink_leave', year=datetime.date.today().year,
+            total_days=Decimal('10.0'), used_days=Decimal('2.0'),
+        )
+
+    def _url(self, leave_type: str):
+        return reverse('leave-policy-detail', kwargs={'leave_type': leave_type})
+
+    def test_system_admin_can_delete_unused_type(self):
+        _login(self.client, 'sysadmin@test.com', password='TestPass123!')
+        resp = self.client.delete(self._url('sabbatical'))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertFalse(LeavePolicy.objects.filter(leave_type='sabbatical').exists())
+
+    def test_branch_admin_without_settings_edit_can_delete_unused_type(self):
+        """Regression for the RIS fix: deletion must work via leave.approve
+        alone, without needing settings.edit (which Branch Admin shouldn't
+        have — see the dashboard-routing/over-privilege fix earlier)."""
+        _login(self.client, 'branchadmin@test.com', password='TestPass123!')
+        resp = self.client.delete(self._url('sabbatical'))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertFalse(LeavePolicy.objects.filter(leave_type='sabbatical').exists())
+
+    def test_unauthorized_user_cannot_delete(self):
+        _login(self.client, 'noperm_delete@test.com', password='TestPass123!')
+        resp = self.client.delete(self._url('sabbatical'))
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(LeavePolicy.objects.filter(leave_type='sabbatical').exists())
+
+    def test_in_use_type_is_blocked_not_deleted(self):
+        _login(self.client, 'sysadmin@test.com', password='TestPass123!')
+        resp = self.client.delete(self._url('pink_leave'))
+        self.assertEqual(resp.status_code, 409, resp.data)
+        self.assertTrue(LeavePolicy.objects.filter(leave_type='pink_leave').exists())
+        self.assertIn('deactivate', resp.data['message'].lower())
+
+    def test_in_use_type_reports_usage_counts(self):
+        _login(self.client, 'sysadmin@test.com', password='TestPass123!')
+        resp = self.client.delete(self._url('pink_leave'))
+        usage = resp.data['data']
+        self.assertTrue(usage['in_use'])
+        self.assertEqual(usage['affected_employee_count'], 1)
+        self.assertEqual(usage['leave_balance_count'], 1)
+
+    def test_in_use_by_leave_request_only_is_also_blocked(self):
+        """A leave_type can be "in use" via LeaveRequest history even with
+        no current-year LeaveBalance row — both must be checked independently."""
+        other_policy = LeavePolicy.objects.create(
+            leave_type='comp_time', leave_type_label='Comp Time', annual_days=Decimal('3.0'),
+        )
+        LeaveRequest.objects.create(
+            employee=self.employee, leave_type='comp_time',
+            start_date=datetime.date.today(), end_date=datetime.date.today(),
+            total_days=Decimal('1.0'), reason='Test request',
+        )
+        _login(self.client, 'sysadmin@test.com', password='TestPass123!')
+        resp = self.client.delete(self._url('comp_time'))
+        self.assertEqual(resp.status_code, 409, resp.data)
+        self.assertTrue(LeavePolicy.objects.filter(leave_type='comp_time').exists())
+
+    def test_existing_leave_balance_untouched_when_delete_blocked(self):
+        _login(self.client, 'sysadmin@test.com', password='TestPass123!')
+        self.client.delete(self._url('pink_leave'))
+        self.balance.refresh_from_db()
+        self.assertEqual(self.balance.total_days, Decimal('10.0'))
+        self.assertEqual(self.balance.used_days, Decimal('2.0'))
+
+    def test_builtin_type_still_blocked_regardless_of_usage(self):
+        """Regression: built-in types remain non-deletable — unrelated to
+        the new in-use check, must not have been loosened by it."""
+        LeavePolicy.objects.update_or_create(
+            leave_type='casual', defaults={'leave_type_label': 'Casual Leave', 'annual_days': Decimal('12.0')},
+        )
+        _login(self.client, 'sysadmin@test.com', password='TestPass123!')
+        resp = self.client.delete(self._url('casual'))
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(LeavePolicy.objects.filter(leave_type='casual').exists())
+
+    def test_deactivate_still_works_unaffected(self):
+        """Regression: the existing is_active toggle (separate from delete)
+        must still work exactly as before, including for an in-use type."""
+        _login(self.client, 'sysadmin@test.com', password='TestPass123!')
+        resp = self.client.put(self._url('pink_leave'), {'is_active': False}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.in_use_policy.refresh_from_db()
+        self.assertFalse(self.in_use_policy.is_active)
+        # Still exists — deactivating is not deleting.
+        self.assertTrue(LeavePolicy.objects.filter(leave_type='pink_leave').exists())
+
+    def test_policy_list_includes_usage_info_for_custom_types(self):
+        _login(self.client, 'sysadmin@test.com', password='TestPass123!')
+        resp = self.client.get(reverse('leave-policy-list'))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        by_type = {p['leave_type']: p for p in resp.data['data']}
+        self.assertFalse(by_type['sabbatical']['usage_info']['in_use'])
+        self.assertTrue(by_type['pink_leave']['usage_info']['in_use'])
+        self.assertEqual(by_type['pink_leave']['usage_info']['affected_employee_count'], 1)
 
 
 class LeavePolicyNewTypeBackfillTests(TestCase):

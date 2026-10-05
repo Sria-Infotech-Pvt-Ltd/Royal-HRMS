@@ -27,6 +27,7 @@ from ..models import (
     LEAVE_LWP, LEAVE_TYPE_CHOICES,
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
+    BUILTIN_LEAVE_TYPE_KEYS, leave_type_usage,
 )
 from ..serializers import (
     CarryForwardInputSerializer,
@@ -595,12 +596,26 @@ class LeavePolicyView(APIView):
     def delete(self, request, leave_type: str):
         if not (_has_perm(request.user, 'settings.edit') or _has_perm(request.user, 'leave.approve')):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
-        _BUILTIN = {'casual', 'earned', 'sick', 'lwp', 'maternity', 'paternity'}
-        if leave_type in _BUILTIN:
+        if leave_type in BUILTIN_LEAVE_TYPE_KEYS:
             return error('Built-in leave types cannot be deleted.', http_status=status.HTTP_400_BAD_REQUEST)
         policy = LeavePolicy.objects.filter(leave_type=leave_type).first()
         if not policy:
             return error('Leave type not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        # LeaveBalance/LeaveRequest store leave_type as a plain string, not a
+        # ForeignKey — deleting this policy can never cascade-delete or
+        # corrupt either table. But it WOULD orphan any existing row for this
+        # type (no backing policy left to allocate/validate/sync against),
+        # so treat "has existing employee data" as a hard block rather than
+        # a silent, confusing drop — see leave_type_usage()'s own docstring.
+        usage = leave_type_usage(leave_type)
+        if usage['in_use']:
+            return error(
+                'This Leave Type cannot be deleted because it is already in use by employees '
+                'or has existing leave records. Please deactivate it instead.',
+                usage, http_status=status.HTTP_409_CONFLICT,
+            )
+
         policy.delete()
         logger.info('Deleted leave type "%s" by %s', leave_type, request.user.email)
         return success('Leave type deleted.')

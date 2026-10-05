@@ -11,6 +11,7 @@ from .models import (
     Holiday,
     LeaveBalance, LeavePolicy, LeaveRequest,
     LEAVE_TYPE_CHOICES, DURATION_CHOICES,
+    BUILTIN_LEAVE_TYPE_KEYS, leave_type_usage,
     WorkFromHomeRequest,
     WFHSavedLocation,
     SeparationRequest,
@@ -161,6 +162,11 @@ _POLICY_RULE_FIELDS = [
 
 class LeavePolicySerializer(serializers.ModelSerializer):
     leave_type_display = serializers.SerializerMethodField()
+    # Lets the frontend show the right delete confirmation (plain confirm vs.
+    # "in use, deactivate instead") without a separate round-trip per row —
+    # the delete endpoint itself (LeavePolicyView.delete()) re-checks this
+    # fresh and is the actual authoritative gate; this is a display hint only.
+    usage_info = serializers.SerializerMethodField()
 
     class Meta:
         model  = LeavePolicy
@@ -169,13 +175,23 @@ class LeavePolicySerializer(serializers.ModelSerializer):
              'max_carry_forward_days', 'carry_forward_type', 'carry_forward_mode',
              'carry_forward_expiry_days', 'policy_note', 'is_active']
             + _POLICY_RULE_FIELDS
-            + ['updated_at']
+            + ['updated_at', 'usage_info']
         )
 
     def get_leave_type_display(self, obj) -> str:
         if obj.leave_type_label:
             return obj.leave_type_label
         return dict(LEAVE_TYPE_CHOICES).get(obj.leave_type, obj.leave_type.replace('_', ' ').title())
+
+    def get_usage_info(self, obj) -> dict:
+        if obj.leave_type in BUILTIN_LEAVE_TYPE_KEYS:
+            # Built-ins are never deletable regardless of usage — no need to
+            # run the queries just to report a number nothing will use.
+            return {
+                'in_use': False, 'affected_employee_count': 0,
+                'leave_balance_count': 0, 'leave_request_count': 0,
+            }
+        return leave_type_usage(obj.leave_type)
 
 
 class LeavePolicyCreateSerializer(serializers.Serializer):

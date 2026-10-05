@@ -7,6 +7,13 @@ import clientApi from "@/lib/clientApi";
 import { LEAVE_NAME_RE, sanitizeLeaveName } from "@/lib/leaveValidation";
 import Modal from "@/components/Modal";
 
+interface LeavePolicyUsageInfo {
+  in_use: boolean;
+  affected_employee_count: number;
+  leave_balance_count: number;
+  leave_request_count: number;
+}
+
 interface LeavePolicy {
   id: number;
   leave_type: string;
@@ -17,6 +24,7 @@ interface LeavePolicy {
   policy_note: string;
   is_active: boolean;
   updated_at: string;
+  usage_info: LeavePolicyUsageInfo;
 }
 
 interface EditForm {
@@ -74,6 +82,11 @@ export default function PolicyTab() {
   // ── Row action state (toggle active / delete) ─────────────────────────────
   const [busyType,  setBusyType]  = useState<string | null>(null);
   const [rowError,  setRowError]  = useState<string | null>(null);
+
+  // ── Delete confirmation modal state ───────────────────────────────────────
+  const [deleteTarget, setDeleteTarget] = useState<LeavePolicy | null>(null);
+  const [isDeleting,   setIsDeleting]   = useState(false);
+  const [deleteError,  setDeleteError]  = useState<string | null>(null);
 
   // ── Edit handlers ─────────────────────────────────────────────────────────
   function openEdit(p: LeavePolicy) {
@@ -135,17 +148,52 @@ export default function PolicyTab() {
     }
   }
 
-  async function deletePolicy(p: LeavePolicy) {
-    if (!window.confirm(`Delete "${p.leave_type_display}"? This cannot be undone.`)) return;
-    setBusyType(p.leave_type);
-    setRowError(null);
+  function openDeleteModal(p: LeavePolicy) {
+    setDeleteError(null);
+    setDeleteTarget(p);
+  }
+
+  function closeDeleteModal() {
+    if (isDeleting) return;
+    setDeleteTarget(null);
+    setDeleteError(null);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    setDeleteError(null);
     try {
-      await clientApi.delete(API.leave.policyDetail(p.leave_type));
+      await clientApi.delete(API.leave.policyDetail(deleteTarget.leave_type));
+      setDeleteTarget(null);
       refetch();
     } catch (err: unknown) {
-      setRowError((err as { message?: string })?.message ?? "Failed to delete leave type.");
+      const e = err as { message?: string; data?: Partial<LeavePolicyUsageInfo> };
+      if (e?.data?.in_use) {
+        // Backend's own fresh check caught something the client-side
+        // snapshot (possibly a few seconds stale) missed — switch the modal
+        // to the blocked view with the authoritative counts instead of a
+        // generic error toast.
+        setDeleteTarget(prev => prev ? { ...prev, usage_info: e.data as LeavePolicyUsageInfo } : prev);
+      } else {
+        setDeleteError(e?.message ?? "Failed to delete leave type.");
+      }
     } finally {
-      setBusyType(null);
+      setIsDeleting(false);
+    }
+  }
+
+  async function deactivateFromDeleteModal() {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await clientApi.put(API.leave.policyDetail(deleteTarget.leave_type), { is_active: false });
+      setDeleteTarget(null);
+      refetch();
+    } catch (err: unknown) {
+      setDeleteError((err as { message?: string })?.message ?? "Failed to deactivate leave type.");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -297,7 +345,7 @@ export default function PolicyTab() {
                             color: BUILTIN_TYPES.has(p.leave_type) ? "var(--outline)" : "var(--error)",
                             cursor: BUILTIN_TYPES.has(p.leave_type) ? "not-allowed" : "pointer",
                           }}
-                          onClick={() => deletePolicy(p)}
+                          onClick={() => openDeleteModal(p)}
                           disabled={busyType === p.leave_type || BUILTIN_TYPES.has(p.leave_type)}
                           title={BUILTIN_TYPES.has(p.leave_type) ? "Built-in leave types cannot be deleted" : "Delete"}
                         >
@@ -432,6 +480,75 @@ export default function PolicyTab() {
               <span>Active</span>
             </label>
           </div>
+        </Modal>
+      )}
+
+      {/* Delete confirmation — two distinct cases, see openDeleteModal() */}
+      {deleteTarget && (
+        <Modal
+          title={
+            deleteTarget.usage_info.in_use
+              ? <><i className="ti ti-alert-triangle" style={{ marginRight: 8, color: "var(--warn)" }} />Leave Type is in use</>
+              : <><i className="ti ti-trash" style={{ marginRight: 8, color: "var(--error)" }} />Delete Leave Type?</>
+          }
+          onClose={closeDeleteModal}
+          closeDisabled={isDeleting}
+          footer={
+            deleteTarget.usage_info.in_use ? (
+              <>
+                <button className="btn btn-ghost" onClick={closeDeleteModal} disabled={isDeleting}>Close</button>
+                {deleteTarget.is_active && (
+                  <button className="btn btn-filled" onClick={deactivateFromDeleteModal} disabled={isDeleting}>
+                    {isDeleting ? <><Spin />&nbsp;Deactivating…</> : "Deactivate Instead"}
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <button className="btn btn-ghost" onClick={closeDeleteModal} disabled={isDeleting}>Cancel</button>
+                <button
+                  className="btn btn-filled"
+                  style={{ background: "var(--error)" }}
+                  onClick={confirmDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? <><Spin />&nbsp;Deleting…</> : "Delete"}
+                </button>
+              </>
+            )
+          }
+        >
+          {deleteError && (
+            <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>{deleteError}</div>
+          )}
+          {deleteTarget.usage_info.in_use ? (
+            <>
+              <p style={{ fontSize: 13.5, color: "var(--on-bg)", marginBottom: 14 }}>
+                This Leave Type is currently assigned to employees and has existing leave records.
+                Deleting it may affect existing employee leave balances/history, so it can&rsquo;t be
+                deleted directly — deactivate it instead to hide it from new leave applications while
+                keeping existing employee data intact.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: "var(--bg-low)", borderRadius: 8, fontSize: 13 }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "var(--on-variant)" }}>Affected employees</span>
+                  <strong>{deleteTarget.usage_info.affected_employee_count}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "var(--on-variant)" }}>Leave balance records</span>
+                  <strong>{deleteTarget.usage_info.leave_balance_count}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "var(--on-variant)" }}>Leave requests</span>
+                  <strong>{deleteTarget.usage_info.leave_request_count}</strong>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p style={{ fontSize: 13.5, color: "var(--on-bg)" }}>
+              Are you sure you want to delete &ldquo;{deleteTarget.leave_type_display}&rdquo;? This action cannot be undone.
+            </p>
+          )}
         </Modal>
       )}
     </>
