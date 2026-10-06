@@ -28,6 +28,24 @@ def _is_valid_phone(raw: str) -> bool:
     an optional +91/91 prefix stripped out first."""
     return bool(PHONE_RE.match(_PHONE_FORMAT_CHARS_RE.sub('', raw)))
 
+
+# Immutable Role.name slug for the Chief Operating Officer role — a
+# pre-existing, tenant-created role (not seeded by any migration), matched
+# on this slug rather than display_name (which is freely editable).
+COO_ROLE_NAME = 'chief_operating_officer_coo'
+
+
+def _is_coo(user) -> bool:
+    """True if `user` holds the Chief Operating Officer role specifically.
+
+    The one deliberately narrow exception to "Managers do not have a
+    reporting manager": a Manager may report to the COO, but this must
+    never be read as "a Manager may report to any Manager" — every call
+    site pairs this with the existing can_manage_team check, only
+    bypassing it for this one specific role.
+    """
+    return bool(user and user.role and user.role.name == COO_ROLE_NAME)
+
 from django.conf import settings
 from django.core import signing
 from django.core.exceptions import ValidationError
@@ -331,6 +349,15 @@ def _employee_dict(user: User) -> dict:
             'uuid': str(_hr.id)     if _hr else None,
             'name': _hr.full_name   if _hr else None,
         },
+        # Returned for every employee, including Managers — a Manager
+        # ordinarily has none (null, same as before), but one real exception
+        # now exists (Manager -> COO), and that value must be visible here
+        # rather than silently dropped.
+        'reporting_manager': {
+            'id':   mgr.employee_id if mgr else None,
+            'uuid': str(mgr.id)     if mgr else None,
+            'name': mgr.full_name   if mgr else None,
+        },
         'reporting_approver': {
             'id':   approver.employee_id if approver else None,
             'uuid': str(approver.id)     if approver else None,
@@ -341,14 +368,6 @@ def _employee_dict(user: User) -> dict:
         'custom_file_fields': custom_file_fields,
         'onboarding_status':  user.onboarding_status,
     }
-
-    # Managers ARE the reporting manager for others — they have no reporting manager themselves.
-    if not (user.role and user.role.can_manage_team):
-        result['reporting_manager'] = {
-            'id':   mgr.employee_id if mgr else None,
-            'uuid': str(mgr.id)     if mgr else None,
-            'name': mgr.full_name   if mgr else None,
-        }
 
     return result
 
@@ -3089,17 +3108,17 @@ class EmployeeListCreateView(APIView):
 
         selected_manager = None
         if reporting_manager_id:
-            if role.can_manage_team:
-                return error(
-                    'Managers do not have a reporting manager.',
-                    data={'reporting_manager_id': 'Not applicable for this role.'},
-                )
             try:
                 selected_manager = User.objects.get(pk=reporting_manager_id, is_active=True)
             except (User.DoesNotExist, ValueError, ValidationError):
                 return error(
                     'Reporting manager not found or is inactive.',
                     data={'reporting_manager_id': 'Invalid manager selected.'},
+                )
+            if role.can_manage_team and not _is_coo(selected_manager):
+                return error(
+                    'Managers do not have a reporting manager.',
+                    data={'reporting_manager_id': 'Not applicable for this role.'},
                 )
 
         temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
@@ -3597,12 +3616,12 @@ class EmployeeDetailView(APIView):
         if 'reporting_manager_id' in data:
             rm_val = data.get('reporting_manager_id')
             if rm_val:
-                if employee.role and employee.role.can_manage_team:
-                    return error('Managers do not have a reporting manager.')
                 try:
                     rm_user = User.objects.get(pk=rm_val, is_active=True)
                 except (User.DoesNotExist, Exception):
                     return error('Reporting manager not found or is inactive.')
+                if employee.role and employee.role.can_manage_team and not _is_coo(rm_user):
+                    return error('Managers do not have a reporting manager.')
                 if rm_user.pk == employee.pk:
                     return error('An employee cannot be their own reporting manager.')
                 employee.reporting_manager = rm_user
@@ -6011,7 +6030,20 @@ class ManagerListView(APIView):
             managers = managers.filter(department__iexact=department)
         if branch:
             managers = managers.filter(branch__iexact=branch)
-        managers = managers.order_by('full_name')[:_HR_MANAGER_LIST_CAP]
+        managers = list(managers.order_by('full_name')[:_HR_MANAGER_LIST_CAP])
+
+        # The Chief Operating Officer is a single company-wide executive, not
+        # scoped to any one branch/department — included here regardless of
+        # the department/branch filters above, so a Manager can be assigned
+        # the COO as their reporting manager from this same picker no matter
+        # which branch/department is being browsed. Deliberately narrow: only
+        # this one specific role (matched on its immutable slug), not every
+        # can_manage_team holder across branches.
+        existing_ids = {u.id for u in managers}
+        for coo in User.objects.filter(role__name=COO_ROLE_NAME, is_active=True).select_related('role'):
+            if coo.id not in existing_ids:
+                managers.append(coo)
+
         data = [
             {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
              'department': u.department, 'branch': u.branch}
@@ -6034,9 +6066,6 @@ class EmployeeReportingManagerView(APIView):
         if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        if employee.role and employee.role.can_manage_team:
-            return error('Managers do not have a reporting manager.')
-
         manager_id = request.data.get('reporting_manager_id')
 
         if manager_id is None:
@@ -6046,6 +6075,9 @@ class EmployeeReportingManagerView(APIView):
                 manager = User.objects.get(id=manager_id, is_active=True)
             except (User.DoesNotExist, Exception):
                 return error('Reporting manager not found or is inactive.')
+
+            if employee.role and employee.role.can_manage_team and not _is_coo(manager):
+                return error('Managers do not have a reporting manager.')
 
             if manager.id == employee.id:
                 return error('An employee cannot be their own reporting manager.')
@@ -6146,13 +6178,19 @@ def _resolve_rule_approver(role, employee):
 
     Roles with can_manage_team=True resolve via employee.reporting_manager;
     all other roles resolve via employee.hr. Validates the assigned person
-    still holds the expected capability.
+    still holds the expected capability — except the one narrow exception
+    for the COO (e.g. a Manager's own reporting_manager = COO), who is
+    accepted by role name specifically rather than by can_manage_team, since
+    the COO role deliberately does not carry that flag. This mirrors the
+    same exception already applied to the write-side checks; it does not
+    change the real approval-routing resolver (services_approval.py), which
+    never had this extra validation and needs no change.
     """
     if role is None:
         return None
     if role.can_manage_team:
         rm = getattr(employee, 'reporting_manager', None)
-        if rm and rm.role and rm.role.can_manage_team:
+        if rm and rm.role and (rm.role.can_manage_team or _is_coo(rm)):
             return rm
         return None
     else:

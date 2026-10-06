@@ -12,6 +12,7 @@ from rest_framework.test import APIClient
 from apps.accounts.factories import make_role, make_user
 from apps.accounts.models import ApprovalWorkflowRule, AuditLog, EmployeeApprovalOverride, OTPVerification, User
 from apps.accounts.serializers import ForgotPasswordSerializer
+from apps.accounts.views import COO_ROLE_NAME
 from config.test_runner import TEST_COMPANY_CODE
 
 
@@ -1443,6 +1444,195 @@ class ManagerReportingManagerEditTests(TestCase):
         }, format='json')
         self.assertEqual(resp.status_code, 400)
         self.assertIn('cannot be their own reporting manager', resp.data['message'])
+
+
+class ManagerCooReportingTests(TestCase):
+    """A Manager (role.can_manage_team=True) is blocked from having any
+    Reporting Manager in several places — deliberate, Managers ARE the
+    reporting manager for others. One narrow exception now exists: a
+    Manager may report to the Chief Operating Officer specifically — an
+    existing, pre-created production role (name='chief_operating_officer_coo',
+    can_manage_team=False) — matched via _is_coo() on that immutable role
+    slug. Never relaxed to "any Manager" or "any can_manage_team role".
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+
+        sysadmin_role = make_role('sysadmin_coo_test', permission_codenames=['settings.edit'])
+        self.sysadmin = make_user(
+            'sysadmin.coo@test.com', role=sysadmin_role, password='TestPass123!',
+            employee_id='EMPSCO001', full_name='Sys Admin', branch='Mumbai HQ',
+        )
+
+        branch_admin_role = make_role(
+            'branch_admin_coo_test', permission_codenames=['employees.view', 'employees.edit'],
+        )
+        self.branch_admin = make_user(
+            'branchadmin.coo@test.com', role=branch_admin_role, password='TestPass123!',
+            employee_id='EMPBCO001', full_name='Branch Admin', branch='Mumbai HQ',
+        )
+
+        # Mirrors the real production role exactly: can_manage_team=False.
+        coo_role = make_role(COO_ROLE_NAME, can_manage_team=False)
+        self.coo = make_user(
+            'coo@test.com', role=coo_role, password='TestPass123!',
+            employee_id='EMPCOO001', full_name='Chief Operating Officer', branch='Delhi HQ',
+        )
+
+        manager_role = make_role('manager_coo_test', can_manage_team=True)
+        self.manager = make_user(
+            'manager.coo@test.com', role=manager_role, password='TestPass123!',
+            employee_id='EMPMCO001', full_name='Branch Manager', branch='Mumbai HQ',
+        )
+        self.other_branch_manager = make_user(
+            'othermanager.coo@test.com', role=manager_role, password='TestPass123!',
+            employee_id='EMPOMC001', full_name='Other Branch Manager', branch='Delhi HQ',
+        )
+        self.other_manager = make_user(
+            'peer.coo@test.com', role=manager_role, password='TestPass123!',
+            employee_id='EMPPMC001', full_name='Peer Manager', branch='Mumbai HQ',
+        )
+
+        employee_role = make_role('employee_coo_test')
+        self.employee = make_user(
+            'employee.coo@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPECO001', full_name='Regular Employee', branch='Mumbai HQ',
+            reporting_manager=self.manager,
+        )
+
+    def _detail_url(self, employee):
+        return reverse('employee-detail', kwargs={'employee_id': employee.employee_id})
+
+    def _rm_url(self, employee):
+        return reverse('employee-reporting-manager', kwargs={'employee_id': employee.employee_id})
+
+    def _matrix_url(self, employee):
+        return reverse('employee-approval-matrix', kwargs={'employee_id': employee.employee_id})
+
+    # A — Manager can be assigned COO as Reporting Manager
+    def test_manager_can_be_assigned_coo_via_employee_detail(self):
+        _login(self.client, 'sysadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.put(self._detail_url(self.manager), {
+            'reporting_manager_id': str(self.coo.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.manager.refresh_from_db()
+        self.assertEqual(self.manager.reporting_manager_id, self.coo.pk)
+
+    def test_manager_can_be_assigned_coo_via_reporting_manager_endpoint(self):
+        _login(self.client, 'sysadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.patch(self._rm_url(self.manager), {
+            'reporting_manager_id': str(self.coo.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.manager.refresh_from_db()
+        self.assertEqual(self.manager.reporting_manager_id, self.coo.pk)
+
+    # B — Manager cannot be assigned an ordinary Manager as Reporting Manager
+    def test_manager_cannot_be_assigned_ordinary_manager(self):
+        _login(self.client, 'sysadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.put(self._detail_url(self.manager), {
+            'reporting_manager_id': str(self.other_manager.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Managers do not have a reporting manager', resp.data['message'])
+        self.manager.refresh_from_db()
+        self.assertIsNone(self.manager.reporting_manager)
+
+    def test_manager_cannot_be_assigned_ordinary_manager_via_dedicated_endpoint(self):
+        _login(self.client, 'sysadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.patch(self._rm_url(self.manager), {
+            'reporting_manager_id': str(self.other_manager.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.manager.refresh_from_db()
+        self.assertIsNone(self.manager.reporting_manager)
+
+    # C — COO appears in the Reporting Manager picker regardless of branch
+    def test_coo_appears_in_manager_picker_regardless_of_branch(self):
+        _login(self.client, 'sysadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.get(reverse('employee-manager-list'), {'branch': 'Mumbai HQ'})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        ids = {row['id'] for row in resp.data['data']}
+        self.assertIn(str(self.coo.pk), ids)
+        # Existing branch filtering for ordinary managers is untouched —
+        # a manager in a different branch must still be excluded.
+        self.assertNotIn(str(self.other_branch_manager.pk), ids)
+
+    # D — Manager's employee detail response includes reporting_manager = COO
+    def test_manager_detail_response_includes_coo_as_reporting_manager(self):
+        self.manager.reporting_manager = self.coo
+        self.manager.save(update_fields=['reporting_manager'])
+        _login(self.client, 'sysadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.get(self._detail_url(self.manager))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertIn('reporting_manager', resp.data['data'])
+        self.assertEqual(resp.data['data']['reporting_manager']['id'], self.coo.employee_id)
+
+    # E — Manager Approval Matrix display shows COO, not "Not assigned"
+    def test_manager_approval_matrix_displays_coo_as_l1_approver(self):
+        self.manager.reporting_manager = self.coo
+        self.manager.save(update_fields=['reporting_manager'])
+        _login(self.client, 'sysadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.get(self._matrix_url(self.manager), {'workflow_type': 'leave'})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        row = resp.data['data']
+        self.assertEqual(row['l1_approver_id'], str(self.coo.id))
+        self.assertEqual(row['l1_approver_name'], self.coo.full_name)
+
+    # F — real approval resolution for a Manager routes to COO
+    def test_manager_real_approval_resolution_routes_to_coo(self):
+        self.manager.reporting_manager = self.coo
+        self.manager.save(update_fields=['reporting_manager'])
+        ApprovalWorkflowRule.objects.update_or_create(
+            workflow_type=ApprovalWorkflowRule.WORKFLOW_LEAVE,
+            defaults={'l1_approver_role': self.manager.role},
+        )
+        from apps.accounts.services_approval import resolve_approval_chain
+        l1, _l2 = resolve_approval_chain(self.manager, ApprovalWorkflowRule.WORKFLOW_LEAVE)
+        self.assertEqual(l1, self.coo)
+
+    # G — Branch Admin can configure a Manager in their own branch to report to COO
+    def test_branch_admin_can_assign_coo_to_own_branch_manager(self):
+        _login(self.client, 'branchadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.patch(self._rm_url(self.manager), {
+            'reporting_manager_id': str(self.coo.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.manager.refresh_from_db()
+        self.assertEqual(self.manager.reporting_manager_id, self.coo.pk)
+
+    # H — Branch Admin cannot modify a Manager from another branch
+    def test_branch_admin_cannot_assign_coo_to_other_branch_manager(self):
+        _login(self.client, 'branchadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.patch(self._rm_url(self.other_branch_manager), {
+            'reporting_manager_id': str(self.coo.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 404)
+        self.other_branch_manager.refresh_from_db()
+        self.assertIsNone(self.other_branch_manager.reporting_manager)
+
+    # I — existing employee -> Manager reporting behavior unchanged
+    def test_regular_employee_reporting_manager_unaffected(self):
+        _login(self.client, 'sysadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.put(self._detail_url(self.employee), {
+            'reporting_manager_id': str(self.other_manager.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_manager_id, self.other_manager.pk)
+
+    # J — existing System Admin behavior unchanged (acts across branches freely)
+    def test_system_admin_can_assign_coo_across_branches(self):
+        _login(self.client, 'sysadmin.coo@test.com', password='TestPass123!')
+        resp = self.client.patch(self._rm_url(self.other_branch_manager), {
+            'reporting_manager_id': str(self.coo.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.other_branch_manager.refresh_from_db()
+        self.assertEqual(self.other_branch_manager.reporting_manager_id, self.coo.pk)
 
 
 class CompanyEmailWrapperFooterTests(SimpleTestCase):
