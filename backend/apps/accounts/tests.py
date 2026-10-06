@@ -10,7 +10,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import AuditLog, OTPVerification, User
+from apps.accounts.models import ApprovalWorkflowRule, AuditLog, EmployeeApprovalOverride, OTPVerification, User
 from apps.accounts.serializers import ForgotPasswordSerializer
 from config.test_runner import TEST_COMPANY_CODE
 
@@ -1108,6 +1108,151 @@ class EmployeeDetailsDateOfJoiningEditTests(TestCase):
         self.assertEqual(resp.status_code, 403)
         self.employee.refresh_from_db()
         self.assertEqual(str(self.employee.date_of_joining), '2024-01-10')
+
+
+class EmployeeApprovalMatrixBranchScopeTests(TestCase):
+    """EmployeeApprovalMatrixView checked employees.view/employees.edit but
+    never branch-scoped the target employee_id — unlike every comparable
+    endpoint in this file (EmployeeDetailView, the DOJ edit tests above).
+    Since Branch Admin's seeded role already holds employees.view/edit
+    (migration 0052), this meant a Branch Admin could read/write the
+    Approval Matrix override for an employee in ANY branch, not just their
+    own. Fixed by adding the same _employee_out_of_branch_scope() check
+    EmployeeDetailView already uses, to get()/_upsert()/delete() alike.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+
+        sysadmin_role = make_role('sysadmin_approval_matrix_test', permission_codenames=['settings.edit'])
+        self.sysadmin = make_user(
+            'sysadmin.apm@test.com', role=sysadmin_role, password='TestPass123!',
+            employee_id='EMPSAM001', full_name='Sys Admin', branch='Mumbai HQ',
+        )
+
+        branch_admin_role = make_role(
+            'branch_admin_approval_matrix_test', permission_codenames=['employees.view', 'employees.edit'],
+        )
+        self.branch_admin = make_user(
+            'branchadmin.apm@test.com', role=branch_admin_role, password='TestPass123!',
+            employee_id='EMPBAM001', full_name='Branch Admin', branch='Mumbai HQ',
+        )
+
+        employee_role = make_role('employee_approval_matrix_test')
+        self.employee = make_user(
+            'target.apm@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPTAM001', full_name='Target Employee', branch='Mumbai HQ',
+        )
+        self.other_branch_employee = make_user(
+            'otherbranch.apm@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPOAM001', full_name='Other Branch Employee', branch='Delhi HQ',
+        )
+        self.approver = make_user(
+            'approver.apm@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPAPM001', full_name='Approver Person', branch='Mumbai HQ',
+        )
+
+    def _url(self, employee):
+        return reverse('employee-approval-matrix', kwargs={'employee_id': employee.employee_id})
+
+    # ── Branch Admin + own-branch employee: must keep working ──────────────
+
+    def test_branch_admin_can_view_own_branch_employee_matrix(self):
+        _login(self.client, 'branchadmin.apm@test.com', password='TestPass123!')
+        resp = self.client.get(self._url(self.employee))
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    def test_branch_admin_can_update_own_branch_employee_matrix(self):
+        _login(self.client, 'branchadmin.apm@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(self.employee), {
+            'workflow_type': 'leave', 'l1_override_id': self.approver.id,
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(
+            EmployeeApprovalOverride.objects.filter(employee=self.employee, workflow_type='leave').exists()
+        )
+
+    def test_branch_admin_can_delete_own_branch_employee_override(self):
+        EmployeeApprovalOverride.objects.create(
+            employee=self.employee, workflow_type='leave', l1_override=self.approver,
+        )
+        _login(self.client, 'branchadmin.apm@test.com', password='TestPass123!')
+        resp = self.client.delete(self._url(self.employee) + '?workflow_type=leave')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertFalse(
+            EmployeeApprovalOverride.objects.filter(employee=self.employee, workflow_type='leave').exists()
+        )
+
+    # ── Branch Admin + different-branch employee: must now be denied ───────
+
+    def test_branch_admin_cannot_view_other_branch_employee_matrix(self):
+        _login(self.client, 'branchadmin.apm@test.com', password='TestPass123!')
+        resp = self.client.get(self._url(self.other_branch_employee))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_branch_admin_cannot_update_other_branch_employee_matrix(self):
+        _login(self.client, 'branchadmin.apm@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(self.other_branch_employee), {
+            'workflow_type': 'leave', 'l1_override_id': self.approver.id,
+        }, format='json')
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(
+            EmployeeApprovalOverride.objects.filter(
+                employee=self.other_branch_employee, workflow_type='leave',
+            ).exists()
+        )
+
+    def test_branch_admin_cannot_delete_other_branch_employee_override(self):
+        EmployeeApprovalOverride.objects.create(
+            employee=self.other_branch_employee, workflow_type='leave', l1_override=self.approver,
+        )
+        _login(self.client, 'branchadmin.apm@test.com', password='TestPass123!')
+        resp = self.client.delete(self._url(self.other_branch_employee) + '?workflow_type=leave')
+        self.assertEqual(resp.status_code, 404)
+        self.assertTrue(
+            EmployeeApprovalOverride.objects.filter(
+                employee=self.other_branch_employee, workflow_type='leave',
+            ).exists()
+        )
+
+    # ── System Admin: unchanged, still works across every branch ───────────
+
+    def test_system_admin_can_view_any_branch_employee_matrix(self):
+        _login(self.client, 'sysadmin.apm@test.com', password='TestPass123!')
+        resp = self.client.get(self._url(self.other_branch_employee))
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    def test_system_admin_can_update_any_branch_employee_matrix(self):
+        _login(self.client, 'sysadmin.apm@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(self.other_branch_employee), {
+            'workflow_type': 'leave', 'l1_override_id': self.approver.id,
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    # ── Existing employees.view/edit authorization: unchanged ──────────────
+
+    def test_unauthorized_user_cannot_view_matrix(self):
+        no_perm_role = make_role('no_perm_approval_matrix_test')
+        make_user(
+            'noperm.apm@test.com', role=no_perm_role, password='TestPass123!',
+            employee_id='EMPNPM001', full_name='No Perm', branch='Mumbai HQ',
+        )
+        _login(self.client, 'noperm.apm@test.com', password='TestPass123!')
+        resp = self.client.get(self._url(self.employee))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_unauthorized_user_cannot_update_matrix(self):
+        no_perm_role = make_role('no_perm_approval_matrix_edit_test')
+        make_user(
+            'noperm2.apm@test.com', role=no_perm_role, password='TestPass123!',
+            employee_id='EMPNPM002', full_name='No Perm Edit', branch='Mumbai HQ',
+        )
+        _login(self.client, 'noperm2.apm@test.com', password='TestPass123!')
+        resp = self.client.put(self._url(self.employee), {
+            'workflow_type': 'leave', 'l1_override_id': self.approver.id,
+        }, format='json')
+        self.assertEqual(resp.status_code, 403)
 
 
 class ManagerReportingManagerEditTests(TestCase):

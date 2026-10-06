@@ -4,6 +4,8 @@ import { useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { isUnrestrictedUser, getEffectiveBranch } from "@/lib/auth";
 import clientApi from "@/lib/clientApi";
 import Modal from "@/components/Modal";
 import type { WorkflowMatrixRow, ApprovalWorkflowType } from "@/types/approvalMatrix";
@@ -312,7 +314,23 @@ export function ApprovalMatrixTab({
   const [editingManager, setEditingManager] = useState(false);
   const [editingHr,      setEditingHr]      = useState(false);
 
-  const canEdit = usePermission("settings.edit");
+  // Reporting Manager / Branch HR editing (a separate feature — PATCHes the
+  // employee's own reporting_manager/hr FK, not the Approval Matrix —
+  // unchanged, left gated by settings.edit exactly as before this fix).
+  const canEditReportingRelationships = usePermission("settings.edit");
+
+  // Approval Matrix editing (EmployeeApprovalOverride rows): the backend
+  // (EmployeeApprovalMatrixView) actually gates this on employees.edit, not
+  // settings.edit — this was the whole reason Branch Admin never saw these
+  // controls despite already holding employees.edit. Backend also now
+  // enforces _employee_out_of_branch_scope() on every method (the
+  // authoritative check); this mirrors the same branch comparison
+  // client-side purely so the UI doesn't dangle an Override button that
+  // the backend would 404 anyway — never the only protection.
+  const currentUser = useCurrentUser();
+  const hasApprovalMatrixEditPermission = usePermission("employees.edit");
+  const isOwnBranchEmployee = isUnrestrictedUser(currentUser) || getEffectiveBranch(currentUser) === branch;
+  const canEditApprovalMatrix = hasApprovalMatrixEditPermission && isOwnBranchEmployee;
 
   function handleSaved(_updated: WorkflowMatrixRow) {
     refetch();
@@ -372,7 +390,7 @@ export function ApprovalMatrixTab({
                   <div style={{ fontSize: 13, color: "var(--outline)", fontStyle: "italic" }}>Not assigned</div>
                 )}
               </div>
-              {canEdit && (
+              {canEditReportingRelationships && (
                 <button
                   className="btn btn-ghost btn-sm"
                   style={{ padding: "3px 8px", fontSize: 12, flexShrink: 0 }}
@@ -401,7 +419,7 @@ export function ApprovalMatrixTab({
                   <div style={{ fontSize: 13, color: "var(--outline)", fontStyle: "italic" }}>Not assigned</div>
                 )}
               </div>
-              {canEdit && (
+              {canEditReportingRelationships && (
                 <button
                   className="btn btn-ghost btn-sm"
                   style={{ padding: "3px 8px", fontSize: 12, flexShrink: 0 }}
@@ -431,13 +449,13 @@ export function ApprovalMatrixTab({
                 <th style={{ textAlign: "left", padding: "10px 12px", color: "var(--on-variant)", fontWeight: 600, width: "25%" }}>Workflow</th>
                 <th style={{ textAlign: "left", padding: "10px 12px", color: "var(--on-variant)", fontWeight: 600 }}>L1 Approver</th>
                 <th style={{ textAlign: "left", padding: "10px 12px", color: "var(--on-variant)", fontWeight: 600 }}>L2 Approver</th>
-                {canEdit && <th style={{ width: 90 }} />}
+                {canEditApprovalMatrix && <th style={{ width: 90 }} />}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={canEdit ? 4 : 3} style={{ padding: "40px 12px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
+                  <td colSpan={canEditApprovalMatrix ? 4 : 3} style={{ padding: "40px 12px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
                     No approval matrix configured.
                   </td>
                 </tr>
@@ -464,7 +482,7 @@ export function ApprovalMatrixTab({
                       <span style={{ fontSize: 13, color: "var(--outline)", opacity: 0.6 }}>Single level</span>
                     )}
                   </td>
-                  {canEdit && (
+                  {canEditApprovalMatrix && (
                     <td style={{ padding: "14px 12px", textAlign: "right" }}>
                       <button
                         className="btn btn-ghost"

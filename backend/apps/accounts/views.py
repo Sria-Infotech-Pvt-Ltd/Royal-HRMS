@@ -6197,7 +6197,16 @@ def _build_matrix_row(rule: ApprovalWorkflowRule, override, employee=None) -> di
 
 
 class EmployeeApprovalMatrixView(APIView):
-   
+    """
+    Per-employee Approval Matrix (EmployeeApprovalOverride) — separate from
+    the global ApprovalWorkflowRuleView, gated by employees.view/employees.
+    edit rather than settings.edit. Every method pairs that permission check
+    with _employee_out_of_branch_scope() (same pattern as EmployeeDetailView)
+    so a Branch Admin — who already holds employees.view/edit — can only
+    read/write the matrix for employees inside their own branch, not any
+    employee_id passed in the URL.
+    """
+
     permission_classes = [IsAuthenticated]
     _valid_types = [c[0] for c in ApprovalWorkflowRule.WORKFLOW_CHOICES]
 
@@ -6223,7 +6232,7 @@ class EmployeeApprovalMatrixView(APIView):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
 
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         _ensure_default_rules()
@@ -6263,7 +6272,7 @@ class EmployeeApprovalMatrixView(APIView):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
 
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         workflow_type = request.data.get('workflow_type')
@@ -6312,7 +6321,7 @@ class EmployeeApprovalMatrixView(APIView):
             return error(err)
 
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         EmployeeApprovalOverride.objects.filter(
