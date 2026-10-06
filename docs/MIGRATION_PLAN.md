@@ -122,3 +122,17 @@ the `EmployeeCodeSettings` singleton are seeded via migration
 still issue every real employee code today** — the feature-flag-gated
 cutover and the parity test proving identical output under flag ON vs OFF
 are deferred to their own pass, not rushed here.
+
+## Phase 2 addendum — field/form/custom-object engine built, onboarding not yet cut over
+
+See `PHASE2_REPORT.md` for full detail. In short: `EntityDefinition`/
+`FieldDefinition`/`FormLayout`/`CustomRecord` and their services are built
+and tested, and 6 core entities (employee, branch, org_unit, position,
+legal_entity, candidate) are registered with working `attributes` storage.
+**The real onboarding wizard (`frontend/app/onboarding/`,
+`OnboardingFieldConfig`/`OnboardingSection`) has NOT been touched or
+migrated onto this engine** — that is Task J, explicitly deferred behind a
+future `forms.v2` feature flag, same reasoning as the Company/NumberSeries
+cutovers above: the highest-blast-radius item in the whole prompt (every
+new hire goes through it today) gets its own dedicated pass with the flag
+OFF by default, not a same-commit cutover.
