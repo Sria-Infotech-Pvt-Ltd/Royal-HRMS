@@ -314,23 +314,25 @@ export function ApprovalMatrixTab({
   const [editingManager, setEditingManager] = useState(false);
   const [editingHr,      setEditingHr]      = useState(false);
 
-  // Reporting Manager / Branch HR editing (a separate feature — PATCHes the
-  // employee's own reporting_manager/hr FK, not the Approval Matrix —
-  // unchanged, left gated by settings.edit exactly as before this fix).
-  const canEditReportingRelationships = usePermission("settings.edit");
-
-  // Approval Matrix editing (EmployeeApprovalOverride rows): the backend
-  // (EmployeeApprovalMatrixView) actually gates this on employees.edit, not
-  // settings.edit — this was the whole reason Branch Admin never saw these
-  // controls despite already holding employees.edit. Backend also now
-  // enforces _employee_out_of_branch_scope() on every method (the
-  // authoritative check); this mirrors the same branch comparison
-  // client-side purely so the UI doesn't dangle an Override button that
-  // the backend would 404 anyway — never the only protection.
+  // Reporting Manager, Branch HR, and Approval Matrix overrides are all
+  // gated by the exact same backend authorization shape: employees.edit +
+  // the target employee being in the requester's own branch.
+  //   - Reporting Manager -> EmployeeReportingManagerView.patch()
+  //   - Branch HR         -> EmployeeDetailView.patch()
+  //   - Approval Matrix   -> EmployeeApprovalMatrixView (get/_upsert/delete)
+  // All three now call _employee_out_of_branch_scope() server-side (the
+  // authoritative check) — this mirrors the same employees.edit + branch
+  // comparison client-side purely so the UI doesn't dangle a control the
+  // backend would reject/404 anyway, never the only protection. Previously
+  // Reporting Manager/Branch HR were incorrectly gated on settings.edit
+  // here, which is why Branch Admin — who deliberately doesn't have
+  // settings.edit — never saw those Edit buttons even for their own branch.
   const currentUser = useCurrentUser();
-  const hasApprovalMatrixEditPermission = usePermission("employees.edit");
+  const hasEmployeesEditPermission = usePermission("employees.edit");
   const isOwnBranchEmployee = isUnrestrictedUser(currentUser) || getEffectiveBranch(currentUser) === branch;
-  const canEditApprovalMatrix = hasApprovalMatrixEditPermission && isOwnBranchEmployee;
+  const canEditEmployeeScoped = hasEmployeesEditPermission && isOwnBranchEmployee;
+  const canEditReportingRelationships = canEditEmployeeScoped;
+  const canEditApprovalMatrix = canEditEmployeeScoped;
 
   function handleSaved(_updated: WorkflowMatrixRow) {
     refetch();
