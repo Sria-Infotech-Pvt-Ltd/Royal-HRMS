@@ -1,6 +1,6 @@
 from django.urls import path
 
-from apps.platform_core import views, views_meta
+from apps.platform_core import views, views_attachments, views_import_export, views_list_views, views_meta
 
 urlpatterns = [
     path('entities/', views_meta.EntityDefinitionListCreateView.as_view(), name='platform-entity-list'),
@@ -14,6 +14,22 @@ urlpatterns = [
 
     path('custom/<str:entity_code>/records/', views_meta.CustomRecordListCreateView.as_view(), name='platform-custom-record-list'),
     path('custom/<str:entity_code>/records/<uuid:pk>/', views_meta.CustomRecordDetailView.as_view(), name='platform-custom-record-detail'),
+
+    path('list-views/', views_list_views.ListViewDefinitionListCreateView.as_view(), name='platform-list-view-list'),
+    path('list-views/<int:pk>/', views_list_views.ListViewDefinitionDetailView.as_view(), name='platform-list-view-detail'),
+    path('entities/<str:entity_code>/default-list-view/', views_list_views.MyDefaultListViewView.as_view(), name='platform-default-list-view'),
+
+    path('attachments/<str:entity_code>/<str:record_id>/<str:field_code>/', views_attachments.AttachmentUploadView.as_view(), name='platform-attachment-upload'),
+    path('attachments/<str:entity_code>/<str:record_id>/<str:field_code>/list/', views_attachments.AttachmentListView.as_view(), name='platform-attachment-list'),
+    path('attachments/<int:pk>/', views_attachments.AttachmentDownloadView.as_view(), name='platform-attachment-detail'),
+
+    path('custom/<str:entity_code>/import-template/', views_import_export.ImportTemplateDownloadView.as_view(), name='platform-import-template'),
+    path('custom/<str:entity_code>/import-jobs/', views_import_export.ImportJobListCreateView.as_view(), name='platform-import-job-list'),
+    path('import-jobs/<uuid:job_id>/validate/', views_import_export.ImportJobValidateView.as_view(), name='platform-import-job-validate'),
+    path('import-jobs/<uuid:job_id>/commit/', views_import_export.ImportJobCommitView.as_view(), name='platform-import-job-commit'),
+    path('import-jobs/<uuid:job_id>/rollback/', views_import_export.ImportJobRollbackView.as_view(), name='platform-import-job-rollback'),
+    path('import-jobs/<uuid:job_id>/status/', views_import_export.ImportJobStatusView.as_view(), name='platform-import-job-status'),
+    path('custom/<str:entity_code>/export/', views_import_export.ExportView.as_view(), name='platform-export'),
 
     path('countries/', views.CountryListCreateView.as_view(), name='platform-country-list'),
     path('countries/<int:pk>/', views.CountryDetailView.as_view(), name='platform-country-detail'),

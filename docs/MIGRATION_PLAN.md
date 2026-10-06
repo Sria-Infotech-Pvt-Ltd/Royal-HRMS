@@ -123,16 +123,40 @@ still issue every real employee code today** — the feature-flag-gated
 cutover and the parity test proving identical output under flag ON vs OFF
 are deferred to their own pass, not rushed here.
 
-## Phase 2 addendum — field/form/custom-object engine built, onboarding not yet cut over
+## Phase 2 addendum — field/form/custom-object engine built; onboarding mirrored, not cut over
 
-See `PHASE2_REPORT.md` for full detail. In short: `EntityDefinition`/
-`FieldDefinition`/`FormLayout`/`CustomRecord` and their services are built
-and tested, and 6 core entities (employee, branch, org_unit, position,
-legal_entity, candidate) are registered with working `attributes` storage.
-**The real onboarding wizard (`frontend/app/onboarding/`,
-`OnboardingFieldConfig`/`OnboardingSection`) has NOT been touched or
-migrated onto this engine** — that is Task J, explicitly deferred behind a
-future `forms.v2` feature flag, same reasoning as the Company/NumberSeries
-cutovers above: the highest-blast-radius item in the whole prompt (every
-new hire goes through it today) gets its own dedicated pass with the flag
-OFF by default, not a same-commit cutover.
+See `PHASE2_REPORT.md` for full detail. `EntityDefinition`/`FieldDefinition`/
+`FormLayout`/`CustomRecord` and their services, list views, attachments,
+and the import/export framework are all built and tested. 6 core entities
+(employee, branch, org_unit, position, legal_entity, candidate) are
+registered with working `attributes` storage.
+
+**The real onboarding wizard (`frontend/app/onboarding/`) still renders
+from `OnboardingFieldConfig`/`OnboardingSection` exactly as before.**
+`services_onboarding_sync.py` mirrors every save onto the new engine
+(write-through, via `apps/accounts/signals.py`) behind feature flag
+`forms.v2`, seeded `enabled=False` — nothing reads the mirror for real
+rendering yet. Turning the flag on and actually switching the frontend
+wizard over to `resolve_layout()` is its own future cutover, same
+discipline as Company/NumberSeries above: highest-blast-radius item in the
+whole prompt, not a same-commit switch.
+
+### Task J field mapping (what the mirror does)
+
+| Legacy source | New engine target | Mapping rule |
+|---|---|---|
+| `OnboardingFieldConfig` (`is_custom=True`) | `FieldDefinition` (entity=`employee`) | `field_key`→`code`, `label`→`label`, `field_type`→`data_type` (table below), `required`→`required`, `allow_multiple`→`multiple`, `order`→`order`. Always `status=published`. |
+| `OnboardingFieldConfig` (`is_custom=False`) | *(not mirrored)* | Already a real `EmployeeProfile`/`User` column — no `FieldDefinition` created in this phase. |
+| `OnboardingFieldConfig.options` (dropdown) | Auto-created `LookupType` (`onboarding_<field_key>`) + `LookupValue` rows | Each option's text becomes one `LookupValue`; generated `UPPER_SNAKE` code, original text preserved as `attributes.legacy_value` so existing stored `custom_field_values` (which hold the raw text) still resolve without a data rewrite. |
+| `OnboardingFieldConfig.visible` | Presence/absence of a `FormFieldPlacement` | `visible=True` → placement exists; `visible=False` → no placement (matches the legacy behavior of not rendering the field at all, rather than a permanently-false `visible_when`). |
+| `OnboardingFieldConfig.step` (0-3) | `FormStep.order` under the mirrored `onboarding_v2_mirror` `FormLayout` | Fixed labels: 0=Personal Information, 1=Education & Experience, 2=Bank Details, 3=Emergency Contact. |
+| `OnboardingSection` (step ≥ 5) | `FormStep` (same layout) | 1:1 — `step`→`order`, `label`→`label`, `icon`→`icon`. |
+
+`field_type` → `data_type` table: `text`→`text`, `textarea`→`long_text`,
+`number`→`decimal`, `date`→`date`, `dropdown`→`lookup`, `checkbox`→`boolean`,
+`file`→`file`.
+
+**Not mirrored** (see `PHASE2_REPORT.md`'s Task J write-up for why):
+`EducationExperienceFieldConfig`-driven repeating sections,
+`DocumentTypeConfig`-driven documents section — both need a dedicated
+`EntityDefinition` this phase didn't register.

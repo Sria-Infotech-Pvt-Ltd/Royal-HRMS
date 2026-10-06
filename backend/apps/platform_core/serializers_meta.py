@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.platform_core.models import EntityDefinition, FieldDefinition, FormLayout
+from apps.platform_core.models import EntityDefinition, FieldDefinition, FormLayout, ListViewDefinition
 
 
 class EntityDefinitionSerializer(serializers.ModelSerializer):
@@ -51,4 +51,13 @@ class FormLayoutSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'code', 'entity', 'context', 'name', 'legal_entity', 'country',
             'employment_type', 'priority', 'status', 'version', 'created_at', 'updated_at',
+        ]
+
+
+class ListViewDefinitionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ListViewDefinition
+        fields = [
+            'id', 'entity', 'code', 'name', 'columns', 'default_filters', 'default_sort',
+            'visibility', 'role', 'owner', 'is_default', 'created_at', 'updated_at',
         ]

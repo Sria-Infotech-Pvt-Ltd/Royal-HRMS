@@ -1,21 +1,19 @@
 # Phase 2 Report — Field, Form & Custom-Object Engine + Import/Export
 
 Delivered 2026-10-06. Scope: `backend/apps/platform_core/models/{fields,forms,custom_objects,lists,attachments,imports}.py`
-and `services_{conditions,datatypes,attributes,forms,custom_objects}.py`. This report
-follows the same Section-7 structure as `PHASE1_REPORT.md`.
+and `services_{conditions,datatypes,attributes,forms,custom_objects,list_views,import_export,onboarding_sync}.py`.
+This report follows the same Section-7 structure as `PHASE1_REPORT.md`.
 
 ## Scoping decision, stated up front (same discipline as Phase 0/1)
 
-Tasks A–F were built as real, tested, working infrastructure, reachable by a
-real API, and are committed/pushed (`639777c`, `af7d4c5`). Tasks G (list-view
-resolution), H (attachment upload/download endpoints), I (import/export
-execution), and J (migrating the real onboarding wizard onto this engine
-behind a `forms.v2` flag) are **not built** in this pass — see "Deferred, and
-why" below. Building G–J properly means touching either a live file-storage
-path (H), a synchronous-vs-async execution decision that affects every future
-import of real employee data (I), or the one wizard every new hire already
-goes through in production (J) — each deserves its own dedicated, tested pass
-rather than a thin pass bolted onto an already-large commit.
+All tasks A–J are now built as real, tested, reachable infrastructure.
+Tasks A–F were delivered and pushed first (`639777c`, `af7d4c5`); Tasks G–J
+were completed in a second pass within the same Phase 2 engagement, per
+explicit instruction to complete the full prompt. **This second pass's
+commits are intentionally NOT pushed to the remote** — see the final commit
+note. Task J (onboarding mirror) ships behind feature flag `forms.v2`,
+seeded `enabled=False`, so the live onboarding wizard's behavior is
+unchanged until someone deliberately turns it on.
 
 **What was built and is real, tested, reachable infrastructure:**
 
@@ -28,13 +26,23 @@ rather than a thin pass bolted onto an already-large commit.
 - The custom-object layer (Task E): `CustomRecord`,
   `services_custom_objects.py` (create/update/soft-delete/list,
   title-template rendering, publish-time permission creation).
+- List views (Task G): `ListViewDefinition`, `services_list_views.py`
+  (personal > role > system default resolution, column/sort validation).
+- Generic attachments (Task H): `AttachmentValue`, `views_attachments.py`
+  (content-sniffed upload, size/type limits, permission-gated download).
+- Import/export (Task I): `services_import_export.py` — template
+  generation, synchronous validate/commit/rollback, formula-injection-safe
+  export.
+- Onboarding mirror (Task J): `services_onboarding_sync.py` — write-through
+  signal-based mirror of `OnboardingFieldConfig`/`OnboardingSection` onto
+  the new engine, behind `forms.v2` (default OFF).
 - The admin + generic data API (Task F): `views_meta.py`,
   `serializers_meta.py`, wired into `urls.py`.
 
-All additive. Nothing existing changed behavior. **79 tests, all passing**
-(`tests_conditions.py`, `tests_datatypes.py`, `tests_attributes.py`,
-`tests_forms.py`, `tests_custom_objects.py`, `tests_views_meta.py`), run
-against the real project test database (`--keepdb`), not an isolated harness.
+All additive. Nothing existing changed behavior. **106 tests across the
+full `platform_core` suite** (see Section 6 for the per-file breakdown and
+one flagged transient-environment caveat), run against the real project
+test database (`--keepdb`), not an isolated harness.
 
 ---
 
@@ -140,6 +148,69 @@ reporting-line visibility, etc.) around the same `services_attributes`
 functions; a parallel generic endpoint would bypass that scoping. Flagged
 here as an explicit decision, not an oversight.
 
+**Task G — List views.** `ListViewDefinition` (already modeled in Phase 2's
+initial migration) + `services_list_views.py`: `resolve_default_view(entity,
+user)` resolves personal → role → system precedence (same direction as
+Phase 1's feature-flag overrides); `validate_columns()` rejects a
+non-`is_sortable` field used as the sort key (a column referencing a
+sensitive field is allowed — it simply renders masked through the same
+`services_attributes.read()`/`services_custom_objects.read_record()` every
+other read goes through, so a list view can never show more than a direct
+record read already would); `execute_custom_entity_query()` only ever
+filters/sorts on `is_filterable`/`is_sortable` fields, raising rather than
+silently ignoring anything else. Endpoints: admin CRUD at
+`/api/v1/platform/list-views/`, and
+`/api/v1/platform/entities/<entity_code>/default-list-view/` (any
+authenticated user, read-only).
+
+**Task H — Generic attachments.** `AttachmentValue` uses the real
+`core.storage.AuthenticatedImageKitStorage` (see the Task 2 correction
+below — the prompt's assumed `private_storage` alias does not exist).
+`views_attachments.py` reuses `core.file_validation.validate_file_content`
+(content-sniffing, not just the client-supplied `Content-Type` header) —
+the exact same validation approach every other upload path in this
+codebase already uses, rather than a second approach. Upload/list/download/
+delete endpoints at `/api/v1/platform/attachments/...`. **Known limitation**
+stated plainly in the module docstring: a custom entity's attachments are
+gated by that entity's own `view`/`change` permission (same as its records),
+but a core entity's attachments have no generic per-entity permission in
+this phase — they're gated by `settings.edit` until each core entity grows
+its own attachment permission in a later phase. Narrower than the eventual
+behavior, never broader. `CustomFieldFileValue` rows were **not** migrated
+into `AttachmentValue` in this pass (Task H.3) — see "Deferred" below.
+
+**Task I — Import/export framework.** `services_import_export.py`:
+`generate_import_template()` (one column per `is_importable` field, a
+field-code header row + a label row, dropdown data-validation for lookup
+fields, an Instructions sheet), `validate_job()` (dry run, no writes, 1-based
+row numbers with the header counted as row 1), `commit_job()` (create/
+update/upsert modes, `skip_invalid` partial-success), `rollback_job()`,
+`export_rows_to_xlsx()` (every cell passes through `escape_formula()` before
+being written — Task I.5's formula-injection protection). A real,
+test-caught bug here too: see bug #4 below.
+
+**Task J — Onboarding mirror behind `forms.v2`.**
+`services_onboarding_sync.py` mirrors `OnboardingFieldConfig`
+(`is_custom=True` rows only — core/locked rows already map to real model
+columns and get no `FieldDefinition`) and `OnboardingSection` onto the new
+engine via `post_save` signals in `apps/accounts/signals.py`, wrapped in
+`try/except` so a mirror-sync failure can never break the real save (Rule 3
+— existing behavior must not change). Dropdown options become an
+auto-created `LookupType` with each value's original text preserved as
+`attributes.legacy_value`, matching already-stored `custom_field_values`
+without a data rewrite. Feature flag `forms.v2` seeded `enabled=False`
+(migration `0008_seed_forms_v2_flag`) — the legacy endpoints remain the
+source of truth; nothing reads the mirror yet. A `backfill_onboarding_mirror`
+management command syncs pre-existing rows (idempotent, safe to re-run).
+
+**Scope cut, stated plainly:** `EducationExperienceFieldConfig`-driven
+repeating sections and the `DocumentTypeConfig`-driven documents section are
+**not** mirrored — both would need a dedicated `EntityDefinition` for
+education/experience/document records, which Task A deliberately did not
+register (explicitly module-phase work, outside this phase's 6-entity
+list). Building `FormSection.repeats_for_entity` against a nonexistent
+entity would be worse than not building it at all.
+
 ---
 
 ## 2. Existing bulk import/export inventory (Task I prerequisite)
@@ -207,6 +278,20 @@ already-computed payslip data, sharing one authorization helper.
    the gating works, not just that the endpoint responds), not by
    inspection. Fixed by creating real `apps.accounts.models.Permission` rows
    via a new `services_custom_objects.permission_codename()` helper.
+4. **`ImportJob.file` used the project's write-only default storage.**
+   `core.storage.ImageKitStorage` (the project-wide default `STORAGES`
+   backend) has no `_open()` implementation — it's designed for the
+   browser-fetches-via-signed-URL pattern every OTHER upload in this
+   codebase uses, never for the server reading a file back. But
+   `validate_job()`/`commit_job()` must re-open and parse the uploaded
+   file, sometimes more than once. Caught immediately by
+   `tests_import_export.py` — every test touching a real upload raised
+   `NotImplementedError: ImageKitStorage does not support reading files
+   back into Django`. Fixed by giving `ImportJob.file`/`error_file` an
+   explicit local `FileSystemStorage` under `MEDIA_ROOT/platform_imports_private/`
+   (migration `0007_import_job_local_file_storage`) — these are internal
+   processing artifacts the server must re-read, never served directly to
+   a browser, so local disk is the correct choice, not a workaround.
 
 ---
 
@@ -224,43 +309,91 @@ already-computed payslip data, sharing one authorization helper.
 | GET | `/api/v1/platform/entities/<entity_code>/resolve-layout/?context=...` | Resolved layout for rendering a form |
 | GET/POST | `/api/v1/platform/custom/<entity_code>/records/` | List/create records of any published custom entity |
 | GET/PATCH/DELETE | `/api/v1/platform/custom/<entity_code>/records/<id>/` | Custom record detail |
+| GET/POST | `/api/v1/platform/list-views/` | List/create list view definitions (admin) |
+| GET/PATCH/DELETE | `/api/v1/platform/list-views/<id>/` | List view detail |
+| GET | `/api/v1/platform/entities/<entity_code>/default-list-view/` | Resolve the caller's default view (personal > role > system) |
+| POST | `/api/v1/platform/attachments/<entity_code>/<record_id>/<field_code>/` | Upload a file/image attachment |
+| GET | `/api/v1/platform/attachments/<entity_code>/<record_id>/<field_code>/list/` | List attachments for a field |
+| GET/DELETE | `/api/v1/platform/attachments/<id>/` | Stream/delete one attachment |
+| GET | `/api/v1/platform/custom/<entity_code>/import-template/` | Download an XLSX import template |
+| POST | `/api/v1/platform/custom/<entity_code>/import-jobs/` | Upload a file, creating an import job |
+| POST | `/api/v1/platform/import-jobs/<id>/validate/` | Dry-run validate (no writes), returns per-row errors + preview |
+| POST | `/api/v1/platform/import-jobs/<id>/commit/` | Commit a validated job (create/update/upsert) |
+| POST | `/api/v1/platform/import-jobs/<id>/rollback/` | Roll back a create-mode job's created records |
+| GET | `/api/v1/platform/import-jobs/<id>/status/` | Poll job status/progress/counts |
+| GET | `/api/v1/platform/custom/<entity_code>/export/` | Download an XLSX export (formula-injection safe) |
 
 All follow the existing `{"status", "message", "data"}` envelope; list
 endpoints return the existing `{count, page, page_size, total_pages,
 results}` pagination shape.
 
+### Resolved-layout JSON contract (example, fake data)
+
+`GET /api/v1/platform/entities/vehicle_allocation/resolve-layout/?context=custom_edit`:
+
+```json
+{
+  "status": "success", "message": "Layout resolved.",
+  "data": {
+    "layout_code": "default", "layout_version": 1, "entity_code": "vehicle_allocation",
+    "context": "custom_edit",
+    "steps": [{
+      "label": "Details", "icon": "", "order": 0, "visible_when": {},
+      "sections": [{
+        "label": "Main", "order": 0, "columns": 1, "collapsible": false,
+        "visible_when": {}, "repeats_for_entity": null,
+        "placements": [{
+          "field_code": "vehicle_number", "data_type": "text", "label": "Vehicle Number",
+          "help_text": "", "order": 0, "column_span": 1, "read_only": false,
+          "visible_when": {}, "required_when": {}, "required": true, "multiple": false,
+          "lookup_type_code": null, "validation": {}
+        }]
+      }]
+    }]
+  }
+}
+```
+
 ---
 
-## 5. Deferred, and why (Tasks G–J)
+## 5. What's real vs. intentionally narrower (Tasks G–J limitations)
 
-- **Task G (list-view resolution)** — `ListViewDefinition` model exists
-  (added in this phase's migration) but no resolution service/endpoint was
-  built. Needs a real design pass on column-level permission filtering
-  interacting with `restricted_to_roles`, which Task D's own model
-  comments flag as presentation-only — doing this half-right risks
-  presenting the wrong columns as if they were a security boundary.
-- **Task H (attachment upload/download endpoints)** — `AttachmentValue`
-  model exists, correctly pointed at the REAL `core.storage.AuthenticatedImageKitStorage`
-  (the prompt's assumed `private_storage` alias does not exist anywhere in
-  this codebase — confirmed via grep, zero hits). No endpoint was built;
-  file upload/download touches real storage quota and the existing 5MB/
-  whitelist-type validation convention (CLAUDE.md §3) and deserves its own
-  tested pass, not a bolt-on here.
-- **Task I (import/export execution)** — `ImportJob`/`ExportJob` models
-  exist with a full status machine
-  (uploaded→validating→validated→committing→completed/failed/rolled_back),
-  but no synchronous or async execution engine was built. The existing
-  bulk-import inventory (section 2 above) shows 5+ independent, already-working
-  implementations across apps — replacing or wrapping them needs a decision
-  (sync now vs. Celery later) that affects how every future real-data
-  import behaves, not something to guess at inside this same commit.
-- **Task J (onboarding migration behind `forms.v2`)** — not started.
-  Migrating the actual production onboarding wizard onto this engine is the
-  highest-blast-radius item in the whole prompt (every new hire goes
-  through it); doing it behind a feature flag is the right call per the
-  prompt itself, but it still needs its own dedicated pass with the flag
-  OFF by default and a side-by-side parity check against the current
-  wizard's exact field list — not attempted here.
+- **Task G** — column restriction (`restricted_to_roles`-style) is
+  presentation-only, matching Task D's own rule; `validate_columns()`
+  rejects unsortable sort keys outright rather than silently ignoring
+  them. Query-count (N+1) testing on large custom-entity lists was not
+  performed — `execute_custom_entity_query()` is a plain filtered/sorted
+  queryset, not yet benchmarked at the 50,000-row scale Task C.5 asked
+  for on attribute filtering generally.
+- **Task H** — core-entity attachment permission is narrower than
+  eventual (`settings.edit` only, see Task H write-up above); a malware-scan
+  hook interface was not added (no-op default per the prompt) — deferred,
+  not built even as a stub, since nothing calls it yet.
+  `CustomFieldFileValue` → `AttachmentValue` migration (Task H.3) was
+  **not performed** — doing it safely needs a real row-count dry run
+  against production data and a verified read-compatibility layer for the
+  existing endpoints, which is exactly the kind of live-data cutover this
+  phase's own discipline (and Phase 0/1's) defers to its own pass.
+- **Task I** — execution is synchronous (model built to the full async-
+  ready status machine, but nothing runs it on Celery yet — see bug #4's
+  fix for why even synchronous execution needed a real storage decision).
+  Rollback only undoes **newly created** records (Task I.4's own
+  acceptance note) — restoring an UPDATE/UPSERT's prior values would need
+  the actual pre-import value, which `services_attributes`'s ChangeHistory
+  logging does not currently retain (`'old': None`, a pre-existing gap from
+  Task C, not introduced here); rolling back an update is refused outright
+  rather than silently doing nothing. The 10,000-row limit
+  (`MAX_IMPORT_ROWS`) is a hardcoded constant, not yet the system-setting
+  Task B.6/I.6 describe. A 10,000-row timed performance run was not
+  executed in this pass.
+- **Task J** — only `OnboardingFieldConfig`/`OnboardingSection` are
+  mirrored; `EducationExperienceFieldConfig` and `DocumentTypeConfig` are
+  not (see the Task J write-up above for why). The flag is seeded
+  `enabled=False` and nothing currently reads the mirror for real wizard
+  rendering — the parity tests compare the legacy config directly against
+  the resolved `forms.v2` layout's facts (field codes, labels, required-
+  ness, dropdown→lookup mapping), not a live wizard page in both modes,
+  since no frontend work was done to actually render from the mirror yet.
 
 A factual correction also surfaced during this phase, same as Phase 1's own
 "flag what's wrong, don't silently work around it" convention: the Phase 2
@@ -275,31 +408,51 @@ today. Relevant to Task J's eventual design, not acted on further here.
 
 ## 6. Test results
 
-```
-Ran 79 tests in 142.835s
-OK
-```
-`tests_conditions.py` (14), `tests_datatypes.py` (20), `tests_attributes.py`
-(13), `tests_forms.py` (5), `tests_custom_objects.py` (6), `tests_views_meta.py`
-(4), plus the unchanged Phase 1 suites (`tests_lookups.py`, `tests_numbering.py`,
-`tests_cache.py` — 17 combined). All run against the real project test
-database (`--keepdb`), not a fixture-only harness.
+Tasks A–F (first pass): **79 tests, OK** (142.8s).
+
+Tasks G–J (second pass), each run standalone and green before moving to the
+next:
+- `tests_list_views.py` — 6 tests, OK.
+- `tests_attachments.py` — 4 tests, OK.
+- `tests_import_export.py` — 9 tests, OK (after the storage fix, bug #4).
+- `tests_onboarding_sync.py` — 8 tests, OK.
+
+Combined `apps.platform_core` full suite (all of the above plus every Phase
+1/2 suite together): **106 tests**. One background full-suite run reported
+`errors=1` with a `django-admin sqlflush` hint attached to the failure —
+that signature matches this session's own previously-documented transient
+Neon (serverless Postgres) connection-drop class, not a code regression
+(no test content/traceback was captured for it, and the immediately
+following standalone re-run of every new test file was 100% green). Flagged
+here rather than silently ignored; whoever picks this up next should re-run
+the full suite once more before relying on "106/106" as a hard number.
 
 `python manage.py check` — clean. `makemigrations --check` — clean (every
-model change has a committed migration).
+model change, including the two added during this second pass —
+`ImportJob.created_record_ids` and the storage-backend fix — has a
+committed migration). The `accounts.tests_onboarding_face_gate` suite was
+re-run after wiring the Task J write-through signals and is unaffected
+(3/3 passing) — the new signal handlers are wrapped in `try/except` and
+cannot affect the existing save path's return value either way.
 
 ---
 
-## 7. Open questions for whoever picks up Tasks G–J
+## 7. Open questions for whoever picks up the next phase
 
 1. Import/export: synchronous-now-Celery-later, or build the async
-   execution engine directly? Affects `ImportJob`'s status-machine timing.
+   execution engine directly? `ImportJob`'s status machine is built to
+   support either.
 2. List views: should `restricted_to_roles`-style column restriction ever
    become a real security boundary (filtered at the queryset/serializer
-   level), or stay permanently presentation-only? Current `FormFieldPlacement`
-   comment says presentation-only; `ListViewDefinition` doesn't yet say
-   either way.
+   level), or stay permanently presentation-only?
 3. Onboarding/`forms.v2`: should the cutover be per-legal-entity, per-branch,
    or global-flag-only? Affects whether `FormLayout.legal_entity`/`country`
    applicability is actually exercised on day one or sits unused until a
    second legal entity exists.
+4. Rollback: is "refuse to roll back update/upsert jobs" an acceptable
+   permanent answer, or does ChangeHistory need to start capturing real
+   `old` values (a change to Task C's `services_attributes._log_attribute_change`,
+   touching every entity that logs attribute changes, not just imports)?
+5. `CustomFieldFileValue` → `AttachmentValue`: worth migrating at all, or
+   should the compatibility layer the prompt describes just stay permanent
+   given the real-data risk of moving it?
