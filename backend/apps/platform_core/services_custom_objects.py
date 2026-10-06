@@ -11,12 +11,24 @@ from __future__ import annotations
 
 import re
 
-from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 
+from apps.accounts.models import Permission
 from apps.platform_core import services_attributes as attrs
 from apps.platform_core.models import CustomRecord, EntityDefinition, FieldDefinition
+
+PERMISSION_ACTIONS = ['view', 'add', 'change', 'delete']
+
+
+def permission_codename(entity_code: str, action: str) -> str:
+    """This codebase's own permission system (apps.accounts.models.Permission
+    + core.permissions.has_perm) is "module.action" codenames checked
+    against a user's Role — NOT Django's built-in auth Permission app,
+    which has_perm() never looks at. Every caller that needs to check a
+    custom entity's permission (views_meta.py, future import/export)
+    must go through this helper rather than hand-building the string."""
+    return f'custom_{entity_code}.{action}'
 
 
 class CustomObjectError(Exception):
@@ -39,12 +51,10 @@ def publish_entity(entity: EntityDefinition, *, actor=None) -> EntityDefinition:
     if entity.kind != EntityDefinition.KIND_CUSTOM:
         raise CustomObjectError('Only custom entities can be published through this service.')
 
-    content_type = ContentType.objects.get_for_model(CustomRecord)
-    for action, label in [('view', 'View'), ('add', 'Add'), ('change', 'Change'), ('delete', 'Delete')]:
-        codename = f'{action}_custom_{entity.code}'
+    for action in PERMISSION_ACTIONS:
         Permission.objects.get_or_create(
-            codename=codename, content_type=content_type,
-            defaults={'name': f'{label} custom records: {entity.label}'},
+            codename=permission_codename(entity.code, action),
+            defaults={'module': f'custom_{entity.code}', 'action': action},
         )
 
     entity.status = EntityDefinition.STATUS_PUBLISHED

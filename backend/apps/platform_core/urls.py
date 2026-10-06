@@ -1,8 +1,20 @@
 from django.urls import path
 
-from apps.platform_core import views
+from apps.platform_core import views, views_meta
 
 urlpatterns = [
+    path('entities/', views_meta.EntityDefinitionListCreateView.as_view(), name='platform-entity-list'),
+    path('entities/<int:pk>/', views_meta.EntityDefinitionDetailView.as_view(), name='platform-entity-detail'),
+    path('entities/<int:pk>/publish/', views_meta.EntityDefinitionPublishView.as_view(), name='platform-entity-publish'),
+    path('fields/', views_meta.FieldDefinitionListCreateView.as_view(), name='platform-field-list'),
+    path('fields/<int:pk>/', views_meta.FieldDefinitionDetailView.as_view(), name='platform-field-detail'),
+    path('form-layouts/', views_meta.FormLayoutListCreateView.as_view(), name='platform-form-layout-list'),
+    path('form-layouts/<int:pk>/', views_meta.FormLayoutDetailView.as_view(), name='platform-form-layout-detail'),
+    path('entities/<str:entity_code>/resolve-layout/', views_meta.ResolveLayoutView.as_view(), name='platform-resolve-layout'),
+
+    path('custom/<str:entity_code>/records/', views_meta.CustomRecordListCreateView.as_view(), name='platform-custom-record-list'),
+    path('custom/<str:entity_code>/records/<uuid:pk>/', views_meta.CustomRecordDetailView.as_view(), name='platform-custom-record-detail'),
+
     path('countries/', views.CountryListCreateView.as_view(), name='platform-country-list'),
     path('countries/<int:pk>/', views.CountryDetailView.as_view(), name='platform-country-detail'),
     path('currencies/', views.CurrencyListCreateView.as_view(), name='platform-currency-list'),

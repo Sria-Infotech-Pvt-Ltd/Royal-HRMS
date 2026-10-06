@@ -3,10 +3,10 @@ entity ("vehicle_allocation", the Master Prompt's own worked example)
 rather than a core one, to prove the no-runtime-DDL path end-to-end."""
 from __future__ import annotations
 
-from django.contrib.auth.models import Permission
 from django.core.cache import cache
 from django.test import TestCase
 
+from apps.accounts.models import Permission
 from apps.platform_core import services_custom_objects as custom_objects
 from apps.platform_core.models import EntityDefinition, FieldDefinition
 
@@ -57,12 +57,12 @@ class CustomObjectLifecycleTests(TestCase):
         custom_objects.publish_entity(self.entity)
         self.entity.refresh_from_db()
         self.assertEqual(self.entity.status, EntityDefinition.STATUS_PUBLISHED)
-        self.assertTrue(Permission.objects.filter(codename='view_custom_vehicle_allocation').exists())
-        self.assertTrue(Permission.objects.filter(codename='add_custom_vehicle_allocation').exists())
+        self.assertTrue(Permission.objects.filter(codename='custom_vehicle_allocation.view').exists())
+        self.assertTrue(Permission.objects.filter(codename='custom_vehicle_allocation.add').exists())
 
         # Calling again must not create duplicates or raise.
         custom_objects.publish_entity(self.entity)
-        self.assertEqual(Permission.objects.filter(codename='view_custom_vehicle_allocation').count(), 1)
+        self.assertEqual(Permission.objects.filter(codename='custom_vehicle_allocation.view').count(), 1)
 
     def test_publish_rejects_core_entity(self):
         core_entity = EntityDefinition.objects.get(code='branch')
