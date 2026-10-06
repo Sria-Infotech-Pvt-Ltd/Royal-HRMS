@@ -59,7 +59,15 @@ def _complete_profile(user) -> EmployeeProfile:
 
 
 def _upload_required_documents(user) -> None:
-    for doc_type in (EmployeeDocument.TYPE_PAN, EmployeeDocument.TYPE_AADHAAR, EmployeeDocument.TYPE_DEGREE):
+    # Reads the live, admin-configurable required list (DocumentTypeConfig)
+    # instead of a hardcoded PAN/Aadhaar/Degree trio — that hardcoded list
+    # was already stale (missing Cancelled Cheque/Signed Offer Letter,
+    # required since an earlier migration) and broke again the moment any
+    # further required type was added (10th/12th Certificate). This test
+    # only cares about the Face ID gate, not the document-required gate, so
+    # it should never need updating again when the required list changes.
+    from apps.accounts.models import DocumentTypeConfig
+    for doc_type in DocumentTypeConfig.objects.filter(visible=True, required=True).values_list('type_key', flat=True):
         EmployeeDocument.objects.create(
             user=user, document_type=doc_type,
             file='documents/2026/01/dummy.pdf', file_name='dummy.pdf', file_size=1024,

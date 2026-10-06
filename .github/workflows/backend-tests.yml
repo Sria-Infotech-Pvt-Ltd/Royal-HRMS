@@ -1,0 +1,70 @@
+name: Backend Tests
+
+# Phase 0 hygiene gap: this repo had a deploy workflow but nothing that
+# actually ran the test suite before merging/deploying. Runs on every push
+# and PR so a regression is caught before it reaches New-AI (and therefore
+# before deploy.yml ships it).
+
+on:
+  push:
+    branches: [New-AI, demo]
+  pull_request:
+    branches: [New-AI, demo]
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aira
+          POSTGRES_PASSWORD: aira
+          POSTGRES_DB: aira_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aira"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Test-only dummy values — never the real production secrets. Settings
+      # requires these to be present to boot at all; none of them are read
+      # from anywhere else in CI.
+      SECRET_KEY: ci-test-secret-key-not-for-production-use
+      DEBUG: "False"
+      FIELD_ENCRYPTION_KEY: PLKNukCgrZlA0FdDISEkbmOp6U912HDAXRmDacwioE8=
+      FIELD_INDEX_HMAC_KEY: ci-test-hmac-key-not-for-production-use
+      IMAGEKIT_PUBLIC_KEY: ci-test-public-key
+      IMAGEKIT_PRIVATE_KEY: ci-test-private-key
+      IMAGEKIT_URL_ENDPOINT: https://ik.imagekit.io/ci-test
+      DATABASE_URL: postgres://aira:aira@localhost:5432/aira_test
+      DB_SSL_MODE: disable
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Django system check
+        working-directory: backend
+        run: python manage.py check
+
+      - name: Check for missing migrations
+        working-directory: backend
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run test suite
+        working-directory: backend
+        run: python manage.py test --verbosity 2
