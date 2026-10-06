@@ -219,6 +219,9 @@ class LegalEntity(TimestampedModel):
     is_primary      = models.BooleanField(default=False)
     is_active       = models.BooleanField(default=True)
     updated_by      = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    # Phase 2 — admin-added custom field values, written only through
+    # services_attributes.py.
+    attributes      = models.JSONField(default=dict, blank=True)
 
     class Meta:
         db_table = 'platform_legal_entities'

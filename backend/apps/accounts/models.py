@@ -485,6 +485,9 @@ class OrgUnit(models.Model):
     is_active  = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Phase 2 (platform_core) — admin-added custom field values, written
+    # only through apps.platform_core.services_attributes.
+    attributes = models.JSONField(default=dict, blank=True)
 
     class Meta:
         db_table = 'hrms_org_units'
@@ -559,6 +562,9 @@ class Position(models.Model):
     is_active     = models.BooleanField(default=True)
     created_at    = models.DateTimeField(auto_now_add=True)
     updated_at    = models.DateTimeField(auto_now=True)
+    # Phase 2 (platform_core) — admin-added custom field values, written
+    # only through apps.platform_core.services_attributes.
+    attributes    = models.JSONField(default=dict, blank=True)
 
     class Meta:
         db_table = 'hrms_positions'

@@ -98,6 +98,11 @@ class Branch(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Phase 2 (platform_core) — admin-added custom field values for this
+    # entity, written only through apps.platform_core.services_attributes,
+    # never directly. See platform_core.registry.register_builtin_core_entities().
+    attributes = models.JSONField(default=dict, blank=True)
+
     class Meta:
         db_table = 'branch_branches'
         ordering = ['-created_at']

@@ -78,6 +78,9 @@ class Candidate(models.Model):
                        )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Phase 2 (platform_core) — admin-added custom field values, written
+    # only through apps.platform_core.services_attributes.
+    attributes = models.JSONField(default=dict, blank=True)
 
     class Meta:
         db_table = 'hrms_candidates'
