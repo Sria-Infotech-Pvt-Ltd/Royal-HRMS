@@ -6031,7 +6031,7 @@ class EmployeeReportingManagerView(APIView):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
 
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         if employee.role and employee.role.can_manage_team:

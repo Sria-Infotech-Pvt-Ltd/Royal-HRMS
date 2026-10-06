@@ -1255,6 +1255,93 @@ class EmployeeApprovalMatrixBranchScopeTests(TestCase):
         self.assertEqual(resp.status_code, 403)
 
 
+class EmployeeReportingManagerBranchScopeTests(TestCase):
+    """EmployeeReportingManagerView.patch() checked employees.edit and
+    looked up the employee via _get_employee() but never called
+    _employee_out_of_branch_scope() — the same gap already found and fixed
+    in EmployeeApprovalMatrixView. Since Branch Admin's seeded role already
+    holds employees.edit, this meant a Branch Admin could set the reporting
+    manager for an employee in ANY branch via direct API call. Fixed by
+    adding the same helper, same pattern as EmployeeDetailView.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+
+        sysadmin_role = make_role('sysadmin_reporting_mgr_test', permission_codenames=['settings.edit'])
+        self.sysadmin = make_user(
+            'sysadmin.rm@test.com', role=sysadmin_role, password='TestPass123!',
+            employee_id='EMPSRM001', full_name='Sys Admin', branch='Mumbai HQ',
+        )
+
+        branch_admin_role = make_role(
+            'branch_admin_reporting_mgr_test', permission_codenames=['employees.view', 'employees.edit'],
+        )
+        self.branch_admin = make_user(
+            'branchadmin.rm@test.com', role=branch_admin_role, password='TestPass123!',
+            employee_id='EMPBRM001', full_name='Branch Admin', branch='Mumbai HQ',
+        )
+
+        employee_role = make_role('employee_reporting_mgr_test')
+        self.employee = make_user(
+            'target.rm@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPTRM001', full_name='Target Employee', branch='Mumbai HQ',
+        )
+        self.other_branch_employee = make_user(
+            'otherbranch.rm@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPORM001', full_name='Other Branch Employee', branch='Delhi HQ',
+        )
+        self.manager = make_user(
+            'manager.rm@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPMRM001', full_name='Manager Person', branch='Mumbai HQ',
+        )
+
+    def _url(self, employee):
+        return reverse('employee-reporting-manager', kwargs={'employee_id': employee.employee_id})
+
+    def test_branch_admin_can_set_reporting_manager_for_own_branch_employee(self):
+        _login(self.client, 'branchadmin.rm@test.com', password='TestPass123!')
+        resp = self.client.patch(
+            self._url(self.employee), {'reporting_manager_id': str(self.manager.id)}, format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_manager_id, self.manager.id)
+
+    def test_branch_admin_cannot_set_reporting_manager_for_other_branch_employee(self):
+        _login(self.client, 'branchadmin.rm@test.com', password='TestPass123!')
+        resp = self.client.patch(
+            self._url(self.other_branch_employee), {'reporting_manager_id': str(self.manager.id)}, format='json',
+        )
+        self.assertEqual(resp.status_code, 404)
+        self.other_branch_employee.refresh_from_db()
+        self.assertIsNone(self.other_branch_employee.reporting_manager_id)
+
+    def test_system_admin_can_set_reporting_manager_for_other_branch_employee(self):
+        _login(self.client, 'sysadmin.rm@test.com', password='TestPass123!')
+        resp = self.client.patch(
+            self._url(self.other_branch_employee), {'reporting_manager_id': str(self.manager.id)}, format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.other_branch_employee.refresh_from_db()
+        self.assertEqual(self.other_branch_employee.reporting_manager_id, self.manager.id)
+
+    def test_unauthorized_user_cannot_set_reporting_manager(self):
+        no_perm_role = make_role('no_perm_reporting_mgr_test')
+        make_user(
+            'noperm.rm@test.com', role=no_perm_role, password='TestPass123!',
+            employee_id='EMPNRM001', full_name='No Perm', branch='Mumbai HQ',
+        )
+        _login(self.client, 'noperm.rm@test.com', password='TestPass123!')
+        resp = self.client.patch(
+            self._url(self.employee), {'reporting_manager_id': str(self.manager.id)}, format='json',
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.employee.refresh_from_db()
+        self.assertIsNone(self.employee.reporting_manager_id)
+
+
 class ManagerReportingManagerEditTests(TestCase):
     """Regression: EmployeeDetailView.put() rejected ANY edit to a Manager
     (even an unrelated field like DOB) with "Managers do not have a
