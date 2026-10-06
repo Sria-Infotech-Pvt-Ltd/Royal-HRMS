@@ -1,0 +1,84 @@
+{
+  "version": "1.0.0",
+  "source": "Manually transcribed from this codebase's own existing choices= lists (apps/accounts/models.py, apps/hrms/models.py, apps/announcements/models.py) on 2026-10-06 — every code/label pair here matches what is already stored today, for exact backward compatibility.",
+  "lookup_types": [
+    { "code": "GENDER", "name": "Gender", "module": "accounts", "is_system": true, "allow_custom_values": false },
+    { "code": "MARITAL_STATUS", "name": "Marital Status", "module": "accounts", "is_system": true, "allow_custom_values": false },
+    { "code": "BLOOD_GROUP", "name": "Blood Group", "module": "accounts", "is_system": true, "allow_custom_values": false },
+    { "code": "FAMILY_RELATIONSHIP", "name": "Family Relationship", "module": "accounts", "is_system": true, "allow_custom_values": true },
+    { "code": "ASSET_TYPE", "name": "Asset Type", "module": "accounts", "is_system": false, "allow_custom_values": true },
+    { "code": "ASSET_CONDITION", "name": "Asset Condition", "module": "accounts", "is_system": true, "allow_custom_values": false },
+    { "code": "HOLIDAY_TYPE", "name": "Holiday Type", "module": "hrms", "is_system": true, "allow_custom_values": false },
+    { "code": "ANNOUNCEMENT_CATEGORY", "name": "Announcement Category", "module": "announcements", "is_system": false, "allow_custom_values": true },
+    { "code": "HR_HELP_TOPIC", "name": "HR Help Topic", "module": "hrms", "is_system": false, "allow_custom_values": true },
+    { "code": "HR_HELP_PRIORITY", "name": "HR Help Priority", "module": "hrms", "is_system": true, "allow_custom_values": false }
+  ],
+  "lookup_values": {
+    "GENDER": [
+      { "code": "MALE", "label": "Male", "sort_order": 1, "attributes": { "legacy_value": "male" } },
+      { "code": "FEMALE", "label": "Female", "sort_order": 2, "attributes": { "legacy_value": "female" } },
+      { "code": "OTHER", "label": "Other / Prefer not to say", "sort_order": 3, "attributes": { "legacy_value": "other" } }
+    ],
+    "MARITAL_STATUS": [
+      { "code": "SINGLE", "label": "Single", "sort_order": 1, "attributes": { "legacy_value": "single" } },
+      { "code": "MARRIED", "label": "Married", "sort_order": 2, "attributes": { "legacy_value": "married" } },
+      { "code": "DIVORCED", "label": "Divorced", "sort_order": 3, "attributes": { "legacy_value": "divorced" } },
+      { "code": "WIDOWED", "label": "Widowed", "sort_order": 4, "attributes": { "legacy_value": "widowed" } }
+    ],
+    "BLOOD_GROUP": [
+      { "code": "A_POSITIVE", "label": "A+", "sort_order": 1, "attributes": { "legacy_value": "A+" } },
+      { "code": "A_NEGATIVE", "label": "A-", "sort_order": 2, "attributes": { "legacy_value": "A-" } },
+      { "code": "B_POSITIVE", "label": "B+", "sort_order": 3, "attributes": { "legacy_value": "B+" } },
+      { "code": "B_NEGATIVE", "label": "B-", "sort_order": 4, "attributes": { "legacy_value": "B-" } },
+      { "code": "O_POSITIVE", "label": "O+", "sort_order": 5, "attributes": { "legacy_value": "O+" } },
+      { "code": "O_NEGATIVE", "label": "O-", "sort_order": 6, "attributes": { "legacy_value": "O-" } },
+      { "code": "AB_POSITIVE", "label": "AB+", "sort_order": 7, "attributes": { "legacy_value": "AB+" } },
+      { "code": "AB_NEGATIVE", "label": "AB-", "sort_order": 8, "attributes": { "legacy_value": "AB-" } }
+    ],
+    "FAMILY_RELATIONSHIP": [
+      { "code": "FATHER", "label": "Father", "sort_order": 1, "attributes": { "legacy_value": "father" } },
+      { "code": "MOTHER", "label": "Mother", "sort_order": 2, "attributes": { "legacy_value": "mother" } },
+      { "code": "SPOUSE", "label": "Spouse", "sort_order": 3, "attributes": { "legacy_value": "spouse" } },
+      { "code": "CHILD", "label": "Child", "sort_order": 4, "attributes": { "legacy_value": "child" } },
+      { "code": "SIBLING", "label": "Sibling", "sort_order": 5, "attributes": { "legacy_value": "sibling" } }
+    ],
+    "ASSET_TYPE": [
+      { "code": "LAPTOP", "label": "Laptop", "sort_order": 1, "attributes": { "legacy_value": "laptop" } },
+      { "code": "MOBILE_PHONE", "label": "Mobile Phone", "sort_order": 2, "attributes": { "legacy_value": "mobile_phone" } },
+      { "code": "MONITOR", "label": "Monitor", "sort_order": 3, "attributes": { "legacy_value": "monitor" } },
+      { "code": "HEADSET", "label": "Headset", "sort_order": 4, "attributes": { "legacy_value": "headset" } },
+      { "code": "SIM_CARD", "label": "SIM Card", "sort_order": 5, "attributes": { "legacy_value": "sim_card" } }
+    ],
+    "ASSET_CONDITION": [
+      { "code": "NEW", "label": "New", "sort_order": 1, "attributes": { "legacy_value": "new" } },
+      { "code": "GOOD", "label": "Good", "sort_order": 2, "attributes": { "legacy_value": "good" } },
+      { "code": "REFURBISHED", "label": "Refurbished", "sort_order": 3, "attributes": { "legacy_value": "refurbished" } }
+    ],
+    "HOLIDAY_TYPE": [
+      { "code": "NATIONAL", "label": "National Holiday", "sort_order": 1, "is_default": true, "attributes": { "legacy_value": "national" } },
+      { "code": "REGIONAL", "label": "Regional Holiday", "sort_order": 2, "attributes": { "legacy_value": "regional" } },
+      { "code": "COMPANY", "label": "Company Holiday", "sort_order": 3, "attributes": { "legacy_value": "company" } }
+    ],
+    "ANNOUNCEMENT_CATEGORY": [
+      { "code": "GENERAL", "label": "General", "sort_order": 1, "attributes": { "legacy_value": "general" } },
+      { "code": "POLICY", "label": "Policy", "sort_order": 2, "attributes": { "legacy_value": "policy" } },
+      { "code": "EVENT", "label": "Event", "sort_order": 3, "attributes": { "legacy_value": "event" } },
+      { "code": "CELEBRATION", "label": "Celebration", "sort_order": 4, "attributes": { "legacy_value": "celebration" } }
+    ],
+    "HR_HELP_TOPIC": [
+      { "code": "PAYROLL_QUERY", "label": "Payroll query", "sort_order": 1, "attributes": { "legacy_value": "payroll_query" } },
+      { "code": "LEAVE_QUERY", "label": "Leave query", "sort_order": 2, "attributes": { "legacy_value": "leave_query" } },
+      { "code": "ATTENDANCE_QUERY", "label": "Attendance query", "sort_order": 3, "attributes": { "legacy_value": "attendance_query" } },
+      { "code": "DOCUMENT_REQUEST", "label": "Document request", "sort_order": 4, "attributes": { "legacy_value": "document_request" } },
+      { "code": "POLICY_QUESTION", "label": "Policy question", "sort_order": 5, "attributes": { "legacy_value": "policy_question" } },
+      { "code": "ASSET_REQUEST", "label": "Asset request", "sort_order": 6, "attributes": { "legacy_value": "asset_request" } },
+      { "code": "PROFILE_CORRECTION", "label": "Profile correction", "sort_order": 7, "attributes": { "legacy_value": "profile_correction" } },
+      { "code": "OTHER", "label": "Other", "sort_order": 8, "attributes": { "legacy_value": "other" } }
+    ],
+    "HR_HELP_PRIORITY": [
+      { "code": "LOW", "label": "Low", "sort_order": 1, "attributes": { "legacy_value": "low" } },
+      { "code": "NORMAL", "label": "Normal", "sort_order": 2, "is_default": true, "attributes": { "legacy_value": "normal" } },
+      { "code": "HIGH", "label": "High", "sort_order": 3, "attributes": { "legacy_value": "high" } }
+    ]
+  }
+}

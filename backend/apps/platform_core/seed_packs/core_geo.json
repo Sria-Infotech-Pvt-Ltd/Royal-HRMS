@@ -1,0 +1,5227 @@
+{
+  "version": "1.0.0",
+  "source": "pycountry 26.2.16 (ISO 3166-1 countries, ISO 4217 currencies) + Python zoneinfo.available_timezones() (IANA tzdata) - generated 2026-10-06",
+  "currencies": [
+    {
+      "code": "AED",
+      "name": "UAE Dirham",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "AFN",
+      "name": "Afghani",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "ALL",
+      "name": "Lek",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "AMD",
+      "name": "Armenian Dram",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "AOA",
+      "name": "Kwanza",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "ARS",
+      "name": "Argentine Peso",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "AUD",
+      "name": "Australian Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "AWG",
+      "name": "Aruban Florin",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "AZN",
+      "name": "Azerbaijan Manat",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BAM",
+      "name": "Convertible Mark",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BBD",
+      "name": "Barbados Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BDT",
+      "name": "Taka",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BHD",
+      "name": "Bahraini Dinar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BIF",
+      "name": "Burundi Franc",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BMD",
+      "name": "Bermudian Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BND",
+      "name": "Brunei Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BOB",
+      "name": "Boliviano",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BOV",
+      "name": "Mvdol",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BRL",
+      "name": "Brazilian Real",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BSD",
+      "name": "Bahamian Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BTN",
+      "name": "Ngultrum",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BWP",
+      "name": "Pula",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BYN",
+      "name": "Belarusian Ruble",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "BZD",
+      "name": "Belize Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CAD",
+      "name": "Canadian Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CDF",
+      "name": "Congolese Franc",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CHE",
+      "name": "WIR Euro",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CHF",
+      "name": "Swiss Franc",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CHW",
+      "name": "WIR Franc",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CLF",
+      "name": "Unidad de Fomento",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CLP",
+      "name": "Chilean Peso",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CNY",
+      "name": "Yuan Renminbi",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "COP",
+      "name": "Colombian Peso",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "COU",
+      "name": "Unidad de Valor Real",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CRC",
+      "name": "Costa Rican Colon",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CUP",
+      "name": "Cuban Peso",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CVE",
+      "name": "Cabo Verde Escudo",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "CZK",
+      "name": "Czech Koruna",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "DJF",
+      "name": "Djibouti Franc",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "DKK",
+      "name": "Danish Krone",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "DOP",
+      "name": "Dominican Peso",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "DZD",
+      "name": "Algerian Dinar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "EGP",
+      "name": "Egyptian Pound",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "ERN",
+      "name": "Nakfa",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "ETB",
+      "name": "Ethiopian Birr",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "EUR",
+      "name": "Euro",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "FJD",
+      "name": "Fiji Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "FKP",
+      "name": "Falkland Islands Pound",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "GBP",
+      "name": "Pound Sterling",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "GEL",
+      "name": "Lari",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "GHS",
+      "name": "Ghana Cedi",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "GIP",
+      "name": "Gibraltar Pound",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "GMD",
+      "name": "Dalasi",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "GNF",
+      "name": "Guinean Franc",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "GTQ",
+      "name": "Quetzal",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "GYD",
+      "name": "Guyana Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "HKD",
+      "name": "Hong Kong Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "HNL",
+      "name": "Lempira",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "HTG",
+      "name": "Gourde",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "HUF",
+      "name": "Forint",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "IDR",
+      "name": "Rupiah",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "ILS",
+      "name": "New Israeli Sheqel",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "INR",
+      "name": "Indian Rupee",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "IQD",
+      "name": "Iraqi Dinar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "IRR",
+      "name": "Iranian Rial",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "ISK",
+      "name": "Iceland Krona",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "JMD",
+      "name": "Jamaican Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "JOD",
+      "name": "Jordanian Dinar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "JPY",
+      "name": "Yen",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "KES",
+      "name": "Kenyan Shilling",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "KGS",
+      "name": "Som",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "KHR",
+      "name": "Riel",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "KMF",
+      "name": "Comorian Franc",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "KPW",
+      "name": "North Korean Won",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "KRW",
+      "name": "Won",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "KWD",
+      "name": "Kuwaiti Dinar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "KYD",
+      "name": "Cayman Islands Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "KZT",
+      "name": "Tenge",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "LAK",
+      "name": "Lao Kip",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "LBP",
+      "name": "Lebanese Pound",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "LKR",
+      "name": "Sri Lanka Rupee",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "LRD",
+      "name": "Liberian Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "LSL",
+      "name": "Loti",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "LYD",
+      "name": "Libyan Dinar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MAD",
+      "name": "Moroccan Dirham",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MDL",
+      "name": "Moldovan Leu",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MGA",
+      "name": "Malagasy Ariary",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MKD",
+      "name": "Denar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MMK",
+      "name": "Kyat",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MNT",
+      "name": "Tugrik",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MOP",
+      "name": "Pataca",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MRU",
+      "name": "Ouguiya",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MUR",
+      "name": "Mauritius Rupee",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MVR",
+      "name": "Rufiyaa",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MWK",
+      "name": "Malawi Kwacha",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MXN",
+      "name": "Mexican Peso",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MXV",
+      "name": "Mexican Unidad de Inversion (UDI)",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MYR",
+      "name": "Malaysian Ringgit",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "MZN",
+      "name": "Mozambique Metical",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "NAD",
+      "name": "Namibia Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "NGN",
+      "name": "Naira",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "NIO",
+      "name": "Cordoba Oro",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "NOK",
+      "name": "Norwegian Krone",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "NPR",
+      "name": "Nepalese Rupee",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "NZD",
+      "name": "New Zealand Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "OMR",
+      "name": "Rial Omani",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "PAB",
+      "name": "Balboa",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "PEN",
+      "name": "Sol",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "PGK",
+      "name": "Kina",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "PHP",
+      "name": "Philippine Peso",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "PKR",
+      "name": "Pakistan Rupee",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "PLN",
+      "name": "Zloty",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "PYG",
+      "name": "Guarani",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "QAR",
+      "name": "Qatari Rial",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "RON",
+      "name": "Romanian Leu",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "RSD",
+      "name": "Serbian Dinar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "RUB",
+      "name": "Russian Ruble",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "RWF",
+      "name": "Rwanda Franc",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SAR",
+      "name": "Saudi Riyal",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SBD",
+      "name": "Solomon Islands Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SCR",
+      "name": "Seychelles Rupee",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SDG",
+      "name": "Sudanese Pound",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SEK",
+      "name": "Swedish Krona",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SGD",
+      "name": "Singapore Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SHP",
+      "name": "Saint Helena Pound",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SLE",
+      "name": "Leone",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SOS",
+      "name": "Somali Shilling",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SRD",
+      "name": "Surinam Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SSP",
+      "name": "South Sudanese Pound",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "STN",
+      "name": "Dobra",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SVC",
+      "name": "El Salvador Colon",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SYP",
+      "name": "Syrian Pound",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "SZL",
+      "name": "Lilangeni",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "THB",
+      "name": "Baht",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "TJS",
+      "name": "Somoni",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "TMT",
+      "name": "Turkmenistan New Manat",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "TND",
+      "name": "Tunisian Dinar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "TOP",
+      "name": "Pa’anga",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "TRY",
+      "name": "Turkish Lira",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "TTD",
+      "name": "Trinidad and Tobago Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "TWD",
+      "name": "New Taiwan Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "TZS",
+      "name": "Tanzanian Shilling",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "UAH",
+      "name": "Hryvnia",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "UGX",
+      "name": "Uganda Shilling",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "USD",
+      "name": "US Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "USN",
+      "name": "US Dollar (Next day)",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "UYI",
+      "name": "Uruguay Peso en Unidades Indexadas (UI)",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "UYU",
+      "name": "Peso Uruguayo",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "UYW",
+      "name": "Unidad Previsional",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "UZS",
+      "name": "Uzbekistan Sum",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "VED",
+      "name": "Bolívar Soberano",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "VES",
+      "name": "Bolívar Soberano",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "VND",
+      "name": "Dong",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "VUV",
+      "name": "Vatu",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "WST",
+      "name": "Tala",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XAD",
+      "name": "Arab Accounting Dinar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XAF",
+      "name": "CFA Franc BEAC",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XAG",
+      "name": "Silver",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XAU",
+      "name": "Gold",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XBA",
+      "name": "Bond Markets Unit European Composite Unit (EURCO)",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XBB",
+      "name": "Bond Markets Unit European Monetary Unit (E.M.U.-6)",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XBC",
+      "name": "Bond Markets Unit European Unit of Account 9 (E.U.A.-9)",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XBD",
+      "name": "Bond Markets Unit European Unit of Account 17 (E.U.A.-17)",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XCD",
+      "name": "East Caribbean Dollar",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XCG",
+      "name": "Caribbean Guilder",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XDR",
+      "name": "SDR (Special Drawing Right)",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XOF",
+      "name": "CFA Franc BCEAO",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XPD",
+      "name": "Palladium",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XPF",
+      "name": "CFP Franc",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XPT",
+      "name": "Platinum",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XSU",
+      "name": "Sucre",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XTS",
+      "name": "Codes specifically reserved for testing purposes",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XUA",
+      "name": "ADB Unit of Account",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "XXX",
+      "name": "The codes assigned for transactions where no currency is involved",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "YER",
+      "name": "Yemeni Rial",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "ZAR",
+      "name": "Rand",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "ZMW",
+      "name": "Zambian Kwacha",
+      "symbol": "",
+      "minor_units": 2
+    },
+    {
+      "code": "ZWG",
+      "name": "Zimbabwe Gold",
+      "symbol": "",
+      "minor_units": 2
+    }
+  ],
+  "timezones": [
+    {
+      "name": "Africa/Abidjan"
+    },
+    {
+      "name": "Africa/Accra"
+    },
+    {
+      "name": "Africa/Addis_Ababa"
+    },
+    {
+      "name": "Africa/Algiers"
+    },
+    {
+      "name": "Africa/Asmara"
+    },
+    {
+      "name": "Africa/Asmera"
+    },
+    {
+      "name": "Africa/Bamako"
+    },
+    {
+      "name": "Africa/Bangui"
+    },
+    {
+      "name": "Africa/Banjul"
+    },
+    {
+      "name": "Africa/Bissau"
+    },
+    {
+      "name": "Africa/Blantyre"
+    },
+    {
+      "name": "Africa/Brazzaville"
+    },
+    {
+      "name": "Africa/Bujumbura"
+    },
+    {
+      "name": "Africa/Cairo"
+    },
+    {
+      "name": "Africa/Casablanca"
+    },
+    {
+      "name": "Africa/Ceuta"
+    },
+    {
+      "name": "Africa/Conakry"
+    },
+    {
+      "name": "Africa/Dakar"
+    },
+    {
+      "name": "Africa/Dar_es_Salaam"
+    },
+    {
+      "name": "Africa/Djibouti"
+    },
+    {
+      "name": "Africa/Douala"
+    },
+    {
+      "name": "Africa/El_Aaiun"
+    },
+    {
+      "name": "Africa/Freetown"
+    },
+    {
+      "name": "Africa/Gaborone"
+    },
+    {
+      "name": "Africa/Harare"
+    },
+    {
+      "name": "Africa/Johannesburg"
+    },
+    {
+      "name": "Africa/Juba"
+    },
+    {
+      "name": "Africa/Kampala"
+    },
+    {
+      "name": "Africa/Khartoum"
+    },
+    {
+      "name": "Africa/Kigali"
+    },
+    {
+      "name": "Africa/Kinshasa"
+    },
+    {
+      "name": "Africa/Lagos"
+    },
+    {
+      "name": "Africa/Libreville"
+    },
+    {
+      "name": "Africa/Lome"
+    },
+    {
+      "name": "Africa/Luanda"
+    },
+    {
+      "name": "Africa/Lubumbashi"
+    },
+    {
+      "name": "Africa/Lusaka"
+    },
+    {
+      "name": "Africa/Malabo"
+    },
+    {
+      "name": "Africa/Maputo"
+    },
+    {
+      "name": "Africa/Maseru"
+    },
+    {
+      "name": "Africa/Mbabane"
+    },
+    {
+      "name": "Africa/Mogadishu"
+    },
+    {
+      "name": "Africa/Monrovia"
+    },
+    {
+      "name": "Africa/Nairobi"
+    },
+    {
+      "name": "Africa/Ndjamena"
+    },
+    {
+      "name": "Africa/Niamey"
+    },
+    {
+      "name": "Africa/Nouakchott"
+    },
+    {
+      "name": "Africa/Ouagadougou"
+    },
+    {
+      "name": "Africa/Porto-Novo"
+    },
+    {
+      "name": "Africa/Sao_Tome"
+    },
+    {
+      "name": "Africa/Timbuktu"
+    },
+    {
+      "name": "Africa/Tripoli"
+    },
+    {
+      "name": "Africa/Tunis"
+    },
+    {
+      "name": "Africa/Windhoek"
+    },
+    {
+      "name": "America/Adak"
+    },
+    {
+      "name": "America/Anchorage"
+    },
+    {
+      "name": "America/Anguilla"
+    },
+    {
+      "name": "America/Antigua"
+    },
+    {
+      "name": "America/Araguaina"
+    },
+    {
+      "name": "America/Argentina/Buenos_Aires"
+    },
+    {
+      "name": "America/Argentina/Catamarca"
+    },
+    {
+      "name": "America/Argentina/ComodRivadavia"
+    },
+    {
+      "name": "America/Argentina/Cordoba"
+    },
+    {
+      "name": "America/Argentina/Jujuy"
+    },
+    {
+      "name": "America/Argentina/La_Rioja"
+    },
+    {
+      "name": "America/Argentina/Mendoza"
+    },
+    {
+      "name": "America/Argentina/Rio_Gallegos"
+    },
+    {
+      "name": "America/Argentina/Salta"
+    },
+    {
+      "name": "America/Argentina/San_Juan"
+    },
+    {
+      "name": "America/Argentina/San_Luis"
+    },
+    {
+      "name": "America/Argentina/Tucuman"
+    },
+    {
+      "name": "America/Argentina/Ushuaia"
+    },
+    {
+      "name": "America/Aruba"
+    },
+    {
+      "name": "America/Asuncion"
+    },
+    {
+      "name": "America/Atikokan"
+    },
+    {
+      "name": "America/Atka"
+    },
+    {
+      "name": "America/Bahia"
+    },
+    {
+      "name": "America/Bahia_Banderas"
+    },
+    {
+      "name": "America/Barbados"
+    },
+    {
+      "name": "America/Belem"
+    },
+    {
+      "name": "America/Belize"
+    },
+    {
+      "name": "America/Blanc-Sablon"
+    },
+    {
+      "name": "America/Boa_Vista"
+    },
+    {
+      "name": "America/Bogota"
+    },
+    {
+      "name": "America/Boise"
+    },
+    {
+      "name": "America/Buenos_Aires"
+    },
+    {
+      "name": "America/Cambridge_Bay"
+    },
+    {
+      "name": "America/Campo_Grande"
+    },
+    {
+      "name": "America/Cancun"
+    },
+    {
+      "name": "America/Caracas"
+    },
+    {
+      "name": "America/Catamarca"
+    },
+    {
+      "name": "America/Cayenne"
+    },
+    {
+      "name": "America/Cayman"
+    },
+    {
+      "name": "America/Chicago"
+    },
+    {
+      "name": "America/Chihuahua"
+    },
+    {
+      "name": "America/Ciudad_Juarez"
+    },
+    {
+      "name": "America/Coral_Harbour"
+    },
+    {
+      "name": "America/Cordoba"
+    },
+    {
+      "name": "America/Costa_Rica"
+    },
+    {
+      "name": "America/Coyhaique"
+    },
+    {
+      "name": "America/Creston"
+    },
+    {
+      "name": "America/Cuiaba"
+    },
+    {
+      "name": "America/Curacao"
+    },
+    {
+      "name": "America/Danmarkshavn"
+    },
+    {
+      "name": "America/Dawson"
+    },
+    {
+      "name": "America/Dawson_Creek"
+    },
+    {
+      "name": "America/Denver"
+    },
+    {
+      "name": "America/Detroit"
+    },
+    {
+      "name": "America/Dominica"
+    },
+    {
+      "name": "America/Edmonton"
+    },
+    {
+      "name": "America/Eirunepe"
+    },
+    {
+      "name": "America/El_Salvador"
+    },
+    {
+      "name": "America/Ensenada"
+    },
+    {
+      "name": "America/Fort_Nelson"
+    },
+    {
+      "name": "America/Fort_Wayne"
+    },
+    {
+      "name": "America/Fortaleza"
+    },
+    {
+      "name": "America/Glace_Bay"
+    },
+    {
+      "name": "America/Godthab"
+    },
+    {
+      "name": "America/Goose_Bay"
+    },
+    {
+      "name": "America/Grand_Turk"
+    },
+    {
+      "name": "America/Grenada"
+    },
+    {
+      "name": "America/Guadeloupe"
+    },
+    {
+      "name": "America/Guatemala"
+    },
+    {
+      "name": "America/Guayaquil"
+    },
+    {
+      "name": "America/Guyana"
+    },
+    {
+      "name": "America/Halifax"
+    },
+    {
+      "name": "America/Havana"
+    },
+    {
+      "name": "America/Hermosillo"
+    },
+    {
+      "name": "America/Indiana/Indianapolis"
+    },
+    {
+      "name": "America/Indiana/Knox"
+    },
+    {
+      "name": "America/Indiana/Marengo"
+    },
+    {
+      "name": "America/Indiana/Petersburg"
+    },
+    {
+      "name": "America/Indiana/Tell_City"
+    },
+    {
+      "name": "America/Indiana/Vevay"
+    },
+    {
+      "name": "America/Indiana/Vincennes"
+    },
+    {
+      "name": "America/Indiana/Winamac"
+    },
+    {
+      "name": "America/Indianapolis"
+    },
+    {
+      "name": "America/Inuvik"
+    },
+    {
+      "name": "America/Iqaluit"
+    },
+    {
+      "name": "America/Jamaica"
+    },
+    {
+      "name": "America/Jujuy"
+    },
+    {
+      "name": "America/Juneau"
+    },
+    {
+      "name": "America/Kentucky/Louisville"
+    },
+    {
+      "name": "America/Kentucky/Monticello"
+    },
+    {
+      "name": "America/Knox_IN"
+    },
+    {
+      "name": "America/Kralendijk"
+    },
+    {
+      "name": "America/La_Paz"
+    },
+    {
+      "name": "America/Lima"
+    },
+    {
+      "name": "America/Los_Angeles"
+    },
+    {
+      "name": "America/Louisville"
+    },
+    {
+      "name": "America/Lower_Princes"
+    },
+    {
+      "name": "America/Maceio"
+    },
+    {
+      "name": "America/Managua"
+    },
+    {
+      "name": "America/Manaus"
+    },
+    {
+      "name": "America/Marigot"
+    },
+    {
+      "name": "America/Martinique"
+    },
+    {
+      "name": "America/Matamoros"
+    },
+    {
+      "name": "America/Mazatlan"
+    },
+    {
+      "name": "America/Mendoza"
+    },
+    {
+      "name": "America/Menominee"
+    },
+    {
+      "name": "America/Merida"
+    },
+    {
+      "name": "America/Metlakatla"
+    },
+    {
+      "name": "America/Mexico_City"
+    },
+    {
+      "name": "America/Miquelon"
+    },
+    {
+      "name": "America/Moncton"
+    },
+    {
+      "name": "America/Monterrey"
+    },
+    {
+      "name": "America/Montevideo"
+    },
+    {
+      "name": "America/Montreal"
+    },
+    {
+      "name": "America/Montserrat"
+    },
+    {
+      "name": "America/Nassau"
+    },
+    {
+      "name": "America/New_York"
+    },
+    {
+      "name": "America/Nipigon"
+    },
+    {
+      "name": "America/Nome"
+    },
+    {
+      "name": "America/Noronha"
+    },
+    {
+      "name": "America/North_Dakota/Beulah"
+    },
+    {
+      "name": "America/North_Dakota/Center"
+    },
+    {
+      "name": "America/North_Dakota/New_Salem"
+    },
+    {
+      "name": "America/Nuuk"
+    },
+    {
+      "name": "America/Ojinaga"
+    },
+    {
+      "name": "America/Panama"
+    },
+    {
+      "name": "America/Pangnirtung"
+    },
+    {
+      "name": "America/Paramaribo"
+    },
+    {
+      "name": "America/Phoenix"
+    },
+    {
+      "name": "America/Port-au-Prince"
+    },
+    {
+      "name": "America/Port_of_Spain"
+    },
+    {
+      "name": "America/Porto_Acre"
+    },
+    {
+      "name": "America/Porto_Velho"
+    },
+    {
+      "name": "America/Puerto_Rico"
+    },
+    {
+      "name": "America/Punta_Arenas"
+    },
+    {
+      "name": "America/Rainy_River"
+    },
+    {
+      "name": "America/Rankin_Inlet"
+    },
+    {
+      "name": "America/Recife"
+    },
+    {
+      "name": "America/Regina"
+    },
+    {
+      "name": "America/Resolute"
+    },
+    {
+      "name": "America/Rio_Branco"
+    },
+    {
+      "name": "America/Rosario"
+    },
+    {
+      "name": "America/Santa_Isabel"
+    },
+    {
+      "name": "America/Santarem"
+    },
+    {
+      "name": "America/Santiago"
+    },
+    {
+      "name": "America/Santo_Domingo"
+    },
+    {
+      "name": "America/Sao_Paulo"
+    },
+    {
+      "name": "America/Scoresbysund"
+    },
+    {
+      "name": "America/Shiprock"
+    },
+    {
+      "name": "America/Sitka"
+    },
+    {
+      "name": "America/St_Barthelemy"
+    },
+    {
+      "name": "America/St_Johns"
+    },
+    {
+      "name": "America/St_Kitts"
+    },
+    {
+      "name": "America/St_Lucia"
+    },
+    {
+      "name": "America/St_Thomas"
+    },
+    {
+      "name": "America/St_Vincent"
+    },
+    {
+      "name": "America/Swift_Current"
+    },
+    {
+      "name": "America/Tegucigalpa"
+    },
+    {
+      "name": "America/Thule"
+    },
+    {
+      "name": "America/Thunder_Bay"
+    },
+    {
+      "name": "America/Tijuana"
+    },
+    {
+      "name": "America/Toronto"
+    },
+    {
+      "name": "America/Tortola"
+    },
+    {
+      "name": "America/Vancouver"
+    },
+    {
+      "name": "America/Virgin"
+    },
+    {
+      "name": "America/Whitehorse"
+    },
+    {
+      "name": "America/Winnipeg"
+    },
+    {
+      "name": "America/Yakutat"
+    },
+    {
+      "name": "America/Yellowknife"
+    },
+    {
+      "name": "Antarctica/Casey"
+    },
+    {
+      "name": "Antarctica/Davis"
+    },
+    {
+      "name": "Antarctica/DumontDUrville"
+    },
+    {
+      "name": "Antarctica/Macquarie"
+    },
+    {
+      "name": "Antarctica/Mawson"
+    },
+    {
+      "name": "Antarctica/McMurdo"
+    },
+    {
+      "name": "Antarctica/Palmer"
+    },
+    {
+      "name": "Antarctica/Rothera"
+    },
+    {
+      "name": "Antarctica/South_Pole"
+    },
+    {
+      "name": "Antarctica/Syowa"
+    },
+    {
+      "name": "Antarctica/Troll"
+    },
+    {
+      "name": "Antarctica/Vostok"
+    },
+    {
+      "name": "Arctic/Longyearbyen"
+    },
+    {
+      "name": "Asia/Aden"
+    },
+    {
+      "name": "Asia/Almaty"
+    },
+    {
+      "name": "Asia/Amman"
+    },
+    {
+      "name": "Asia/Anadyr"
+    },
+    {
+      "name": "Asia/Aqtau"
+    },
+    {
+      "name": "Asia/Aqtobe"
+    },
+    {
+      "name": "Asia/Ashgabat"
+    },
+    {
+      "name": "Asia/Ashkhabad"
+    },
+    {
+      "name": "Asia/Atyrau"
+    },
+    {
+      "name": "Asia/Baghdad"
+    },
+    {
+      "name": "Asia/Bahrain"
+    },
+    {
+      "name": "Asia/Baku"
+    },
+    {
+      "name": "Asia/Bangkok"
+    },
+    {
+      "name": "Asia/Barnaul"
+    },
+    {
+      "name": "Asia/Beirut"
+    },
+    {
+      "name": "Asia/Bishkek"
+    },
+    {
+      "name": "Asia/Brunei"
+    },
+    {
+      "name": "Asia/Calcutta"
+    },
+    {
+      "name": "Asia/Chita"
+    },
+    {
+      "name": "Asia/Choibalsan"
+    },
+    {
+      "name": "Asia/Chongqing"
+    },
+    {
+      "name": "Asia/Chungking"
+    },
+    {
+      "name": "Asia/Colombo"
+    },
+    {
+      "name": "Asia/Dacca"
+    },
+    {
+      "name": "Asia/Damascus"
+    },
+    {
+      "name": "Asia/Dhaka"
+    },
+    {
+      "name": "Asia/Dili"
+    },
+    {
+      "name": "Asia/Dubai"
+    },
+    {
+      "name": "Asia/Dushanbe"
+    },
+    {
+      "name": "Asia/Famagusta"
+    },
+    {
+      "name": "Asia/Gaza"
+    },
+    {
+      "name": "Asia/Harbin"
+    },
+    {
+      "name": "Asia/Hebron"
+    },
+    {
+      "name": "Asia/Ho_Chi_Minh"
+    },
+    {
+      "name": "Asia/Hong_Kong"
+    },
+    {
+      "name": "Asia/Hovd"
+    },
+    {
+      "name": "Asia/Irkutsk"
+    },
+    {
+      "name": "Asia/Istanbul"
+    },
+    {
+      "name": "Asia/Jakarta"
+    },
+    {
+      "name": "Asia/Jayapura"
+    },
+    {
+      "name": "Asia/Jerusalem"
+    },
+    {
+      "name": "Asia/Kabul"
+    },
+    {
+      "name": "Asia/Kamchatka"
+    },
+    {
+      "name": "Asia/Karachi"
+    },
+    {
+      "name": "Asia/Kashgar"
+    },
+    {
+      "name": "Asia/Kathmandu"
+    },
+    {
+      "name": "Asia/Katmandu"
+    },
+    {
+      "name": "Asia/Khandyga"
+    },
+    {
+      "name": "Asia/Kolkata"
+    },
+    {
+      "name": "Asia/Krasnoyarsk"
+    },
+    {
+      "name": "Asia/Kuala_Lumpur"
+    },
+    {
+      "name": "Asia/Kuching"
+    },
+    {
+      "name": "Asia/Kuwait"
+    },
+    {
+      "name": "Asia/Macao"
+    },
+    {
+      "name": "Asia/Macau"
+    },
+    {
+      "name": "Asia/Magadan"
+    },
+    {
+      "name": "Asia/Makassar"
+    },
+    {
+      "name": "Asia/Manila"
+    },
+    {
+      "name": "Asia/Muscat"
+    },
+    {
+      "name": "Asia/Nicosia"
+    },
+    {
+      "name": "Asia/Novokuznetsk"
+    },
+    {
+      "name": "Asia/Novosibirsk"
+    },
+    {
+      "name": "Asia/Omsk"
+    },
+    {
+      "name": "Asia/Oral"
+    },
+    {
+      "name": "Asia/Phnom_Penh"
+    },
+    {
+      "name": "Asia/Pontianak"
+    },
+    {
+      "name": "Asia/Pyongyang"
+    },
+    {
+      "name": "Asia/Qatar"
+    },
+    {
+      "name": "Asia/Qostanay"
+    },
+    {
+      "name": "Asia/Qyzylorda"
+    },
+    {
+      "name": "Asia/Rangoon"
+    },
+    {
+      "name": "Asia/Riyadh"
+    },
+    {
+      "name": "Asia/Saigon"
+    },
+    {
+      "name": "Asia/Sakhalin"
+    },
+    {
+      "name": "Asia/Samarkand"
+    },
+    {
+      "name": "Asia/Seoul"
+    },
+    {
+      "name": "Asia/Shanghai"
+    },
+    {
+      "name": "Asia/Singapore"
+    },
+    {
+      "name": "Asia/Srednekolymsk"
+    },
+    {
+      "name": "Asia/Taipei"
+    },
+    {
+      "name": "Asia/Tashkent"
+    },
+    {
+      "name": "Asia/Tbilisi"
+    },
+    {
+      "name": "Asia/Tehran"
+    },
+    {
+      "name": "Asia/Tel_Aviv"
+    },
+    {
+      "name": "Asia/Thimbu"
+    },
+    {
+      "name": "Asia/Thimphu"
+    },
+    {
+      "name": "Asia/Tokyo"
+    },
+    {
+      "name": "Asia/Tomsk"
+    },
+    {
+      "name": "Asia/Ujung_Pandang"
+    },
+    {
+      "name": "Asia/Ulaanbaatar"
+    },
+    {
+      "name": "Asia/Ulan_Bator"
+    },
+    {
+      "name": "Asia/Urumqi"
+    },
+    {
+      "name": "Asia/Ust-Nera"
+    },
+    {
+      "name": "Asia/Vientiane"
+    },
+    {
+      "name": "Asia/Vladivostok"
+    },
+    {
+      "name": "Asia/Yakutsk"
+    },
+    {
+      "name": "Asia/Yangon"
+    },
+    {
+      "name": "Asia/Yekaterinburg"
+    },
+    {
+      "name": "Asia/Yerevan"
+    },
+    {
+      "name": "Atlantic/Azores"
+    },
+    {
+      "name": "Atlantic/Bermuda"
+    },
+    {
+      "name": "Atlantic/Canary"
+    },
+    {
+      "name": "Atlantic/Cape_Verde"
+    },
+    {
+      "name": "Atlantic/Faeroe"
+    },
+    {
+      "name": "Atlantic/Faroe"
+    },
+    {
+      "name": "Atlantic/Jan_Mayen"
+    },
+    {
+      "name": "Atlantic/Madeira"
+    },
+    {
+      "name": "Atlantic/Reykjavik"
+    },
+    {
+      "name": "Atlantic/South_Georgia"
+    },
+    {
+      "name": "Atlantic/St_Helena"
+    },
+    {
+      "name": "Atlantic/Stanley"
+    },
+    {
+      "name": "Australia/ACT"
+    },
+    {
+      "name": "Australia/Adelaide"
+    },
+    {
+      "name": "Australia/Brisbane"
+    },
+    {
+      "name": "Australia/Broken_Hill"
+    },
+    {
+      "name": "Australia/Canberra"
+    },
+    {
+      "name": "Australia/Currie"
+    },
+    {
+      "name": "Australia/Darwin"
+    },
+    {
+      "name": "Australia/Eucla"
+    },
+    {
+      "name": "Australia/Hobart"
+    },
+    {
+      "name": "Australia/LHI"
+    },
+    {
+      "name": "Australia/Lindeman"
+    },
+    {
+      "name": "Australia/Lord_Howe"
+    },
+    {
+      "name": "Australia/Melbourne"
+    },
+    {
+      "name": "Australia/NSW"
+    },
+    {
+      "name": "Australia/North"
+    },
+    {
+      "name": "Australia/Perth"
+    },
+    {
+      "name": "Australia/Queensland"
+    },
+    {
+      "name": "Australia/South"
+    },
+    {
+      "name": "Australia/Sydney"
+    },
+    {
+      "name": "Australia/Tasmania"
+    },
+    {
+      "name": "Australia/Victoria"
+    },
+    {
+      "name": "Australia/West"
+    },
+    {
+      "name": "Australia/Yancowinna"
+    },
+    {
+      "name": "Brazil/Acre"
+    },
+    {
+      "name": "Brazil/DeNoronha"
+    },
+    {
+      "name": "Brazil/East"
+    },
+    {
+      "name": "Brazil/West"
+    },
+    {
+      "name": "Canada/Atlantic"
+    },
+    {
+      "name": "Canada/Central"
+    },
+    {
+      "name": "Canada/Eastern"
+    },
+    {
+      "name": "Canada/Mountain"
+    },
+    {
+      "name": "Canada/Newfoundland"
+    },
+    {
+      "name": "Canada/Pacific"
+    },
+    {
+      "name": "Canada/Saskatchewan"
+    },
+    {
+      "name": "Canada/Yukon"
+    },
+    {
+      "name": "Chile/Continental"
+    },
+    {
+      "name": "Chile/EasterIsland"
+    },
+    {
+      "name": "Etc/GMT"
+    },
+    {
+      "name": "Etc/GMT+0"
+    },
+    {
+      "name": "Etc/GMT+1"
+    },
+    {
+      "name": "Etc/GMT+10"
+    },
+    {
+      "name": "Etc/GMT+11"
+    },
+    {
+      "name": "Etc/GMT+12"
+    },
+    {
+      "name": "Etc/GMT+2"
+    },
+    {
+      "name": "Etc/GMT+3"
+    },
+    {
+      "name": "Etc/GMT+4"
+    },
+    {
+      "name": "Etc/GMT+5"
+    },
+    {
+      "name": "Etc/GMT+6"
+    },
+    {
+      "name": "Etc/GMT+7"
+    },
+    {
+      "name": "Etc/GMT+8"
+    },
+    {
+      "name": "Etc/GMT+9"
+    },
+    {
+      "name": "Etc/GMT-0"
+    },
+    {
+      "name": "Etc/GMT-1"
+    },
+    {
+      "name": "Etc/GMT-10"
+    },
+    {
+      "name": "Etc/GMT-11"
+    },
+    {
+      "name": "Etc/GMT-12"
+    },
+    {
+      "name": "Etc/GMT-13"
+    },
+    {
+      "name": "Etc/GMT-14"
+    },
+    {
+      "name": "Etc/GMT-2"
+    },
+    {
+      "name": "Etc/GMT-3"
+    },
+    {
+      "name": "Etc/GMT-4"
+    },
+    {
+      "name": "Etc/GMT-5"
+    },
+    {
+      "name": "Etc/GMT-6"
+    },
+    {
+      "name": "Etc/GMT-7"
+    },
+    {
+      "name": "Etc/GMT-8"
+    },
+    {
+      "name": "Etc/GMT-9"
+    },
+    {
+      "name": "Etc/GMT0"
+    },
+    {
+      "name": "Etc/Greenwich"
+    },
+    {
+      "name": "Etc/UCT"
+    },
+    {
+      "name": "Etc/UTC"
+    },
+    {
+      "name": "Etc/Universal"
+    },
+    {
+      "name": "Etc/Zulu"
+    },
+    {
+      "name": "Europe/Amsterdam"
+    },
+    {
+      "name": "Europe/Andorra"
+    },
+    {
+      "name": "Europe/Astrakhan"
+    },
+    {
+      "name": "Europe/Athens"
+    },
+    {
+      "name": "Europe/Belfast"
+    },
+    {
+      "name": "Europe/Belgrade"
+    },
+    {
+      "name": "Europe/Berlin"
+    },
+    {
+      "name": "Europe/Bratislava"
+    },
+    {
+      "name": "Europe/Brussels"
+    },
+    {
+      "name": "Europe/Bucharest"
+    },
+    {
+      "name": "Europe/Budapest"
+    },
+    {
+      "name": "Europe/Busingen"
+    },
+    {
+      "name": "Europe/Chisinau"
+    },
+    {
+      "name": "Europe/Copenhagen"
+    },
+    {
+      "name": "Europe/Dublin"
+    },
+    {
+      "name": "Europe/Gibraltar"
+    },
+    {
+      "name": "Europe/Guernsey"
+    },
+    {
+      "name": "Europe/Helsinki"
+    },
+    {
+      "name": "Europe/Isle_of_Man"
+    },
+    {
+      "name": "Europe/Istanbul"
+    },
+    {
+      "name": "Europe/Jersey"
+    },
+    {
+      "name": "Europe/Kaliningrad"
+    },
+    {
+      "name": "Europe/Kiev"
+    },
+    {
+      "name": "Europe/Kirov"
+    },
+    {
+      "name": "Europe/Kyiv"
+    },
+    {
+      "name": "Europe/Lisbon"
+    },
+    {
+      "name": "Europe/Ljubljana"
+    },
+    {
+      "name": "Europe/London"
+    },
+    {
+      "name": "Europe/Luxembourg"
+    },
+    {
+      "name": "Europe/Madrid"
+    },
+    {
+      "name": "Europe/Malta"
+    },
+    {
+      "name": "Europe/Mariehamn"
+    },
+    {
+      "name": "Europe/Minsk"
+    },
+    {
+      "name": "Europe/Monaco"
+    },
+    {
+      "name": "Europe/Moscow"
+    },
+    {
+      "name": "Europe/Nicosia"
+    },
+    {
+      "name": "Europe/Oslo"
+    },
+    {
+      "name": "Europe/Paris"
+    },
+    {
+      "name": "Europe/Podgorica"
+    },
+    {
+      "name": "Europe/Prague"
+    },
+    {
+      "name": "Europe/Riga"
+    },
+    {
+      "name": "Europe/Rome"
+    },
+    {
+      "name": "Europe/Samara"
+    },
+    {
+      "name": "Europe/San_Marino"
+    },
+    {
+      "name": "Europe/Sarajevo"
+    },
+    {
+      "name": "Europe/Saratov"
+    },
+    {
+      "name": "Europe/Simferopol"
+    },
+    {
+      "name": "Europe/Skopje"
+    },
+    {
+      "name": "Europe/Sofia"
+    },
+    {
+      "name": "Europe/Stockholm"
+    },
+    {
+      "name": "Europe/Tallinn"
+    },
+    {
+      "name": "Europe/Tirane"
+    },
+    {
+      "name": "Europe/Tiraspol"
+    },
+    {
+      "name": "Europe/Ulyanovsk"
+    },
+    {
+      "name": "Europe/Uzhgorod"
+    },
+    {
+      "name": "Europe/Vaduz"
+    },
+    {
+      "name": "Europe/Vatican"
+    },
+    {
+      "name": "Europe/Vienna"
+    },
+    {
+      "name": "Europe/Vilnius"
+    },
+    {
+      "name": "Europe/Volgograd"
+    },
+    {
+      "name": "Europe/Warsaw"
+    },
+    {
+      "name": "Europe/Zagreb"
+    },
+    {
+      "name": "Europe/Zaporozhye"
+    },
+    {
+      "name": "Europe/Zurich"
+    },
+    {
+      "name": "Indian/Antananarivo"
+    },
+    {
+      "name": "Indian/Chagos"
+    },
+    {
+      "name": "Indian/Christmas"
+    },
+    {
+      "name": "Indian/Cocos"
+    },
+    {
+      "name": "Indian/Comoro"
+    },
+    {
+      "name": "Indian/Kerguelen"
+    },
+    {
+      "name": "Indian/Mahe"
+    },
+    {
+      "name": "Indian/Maldives"
+    },
+    {
+      "name": "Indian/Mauritius"
+    },
+    {
+      "name": "Indian/Mayotte"
+    },
+    {
+      "name": "Indian/Reunion"
+    },
+    {
+      "name": "Mexico/BajaNorte"
+    },
+    {
+      "name": "Mexico/BajaSur"
+    },
+    {
+      "name": "Mexico/General"
+    },
+    {
+      "name": "Pacific/Apia"
+    },
+    {
+      "name": "Pacific/Auckland"
+    },
+    {
+      "name": "Pacific/Bougainville"
+    },
+    {
+      "name": "Pacific/Chatham"
+    },
+    {
+      "name": "Pacific/Chuuk"
+    },
+    {
+      "name": "Pacific/Easter"
+    },
+    {
+      "name": "Pacific/Efate"
+    },
+    {
+      "name": "Pacific/Enderbury"
+    },
+    {
+      "name": "Pacific/Fakaofo"
+    },
+    {
+      "name": "Pacific/Fiji"
+    },
+    {
+      "name": "Pacific/Funafuti"
+    },
+    {
+      "name": "Pacific/Galapagos"
+    },
+    {
+      "name": "Pacific/Gambier"
+    },
+    {
+      "name": "Pacific/Guadalcanal"
+    },
+    {
+      "name": "Pacific/Guam"
+    },
+    {
+      "name": "Pacific/Honolulu"
+    },
+    {
+      "name": "Pacific/Johnston"
+    },
+    {
+      "name": "Pacific/Kanton"
+    },
+    {
+      "name": "Pacific/Kiritimati"
+    },
+    {
+      "name": "Pacific/Kosrae"
+    },
+    {
+      "name": "Pacific/Kwajalein"
+    },
+    {
+      "name": "Pacific/Majuro"
+    },
+    {
+      "name": "Pacific/Marquesas"
+    },
+    {
+      "name": "Pacific/Midway"
+    },
+    {
+      "name": "Pacific/Nauru"
+    },
+    {
+      "name": "Pacific/Niue"
+    },
+    {
+      "name": "Pacific/Norfolk"
+    },
+    {
+      "name": "Pacific/Noumea"
+    },
+    {
+      "name": "Pacific/Pago_Pago"
+    },
+    {
+      "name": "Pacific/Palau"
+    },
+    {
+      "name": "Pacific/Pitcairn"
+    },
+    {
+      "name": "Pacific/Pohnpei"
+    },
+    {
+      "name": "Pacific/Ponape"
+    },
+    {
+      "name": "Pacific/Port_Moresby"
+    },
+    {
+      "name": "Pacific/Rarotonga"
+    },
+    {
+      "name": "Pacific/Saipan"
+    },
+    {
+      "name": "Pacific/Samoa"
+    },
+    {
+      "name": "Pacific/Tahiti"
+    },
+    {
+      "name": "Pacific/Tarawa"
+    },
+    {
+      "name": "Pacific/Tongatapu"
+    },
+    {
+      "name": "Pacific/Truk"
+    },
+    {
+      "name": "Pacific/Wake"
+    },
+    {
+      "name": "Pacific/Wallis"
+    },
+    {
+      "name": "Pacific/Yap"
+    },
+    {
+      "name": "US/Alaska"
+    },
+    {
+      "name": "US/Aleutian"
+    },
+    {
+      "name": "US/Arizona"
+    },
+    {
+      "name": "US/Central"
+    },
+    {
+      "name": "US/East-Indiana"
+    },
+    {
+      "name": "US/Eastern"
+    },
+    {
+      "name": "US/Hawaii"
+    },
+    {
+      "name": "US/Indiana-Starke"
+    },
+    {
+      "name": "US/Michigan"
+    },
+    {
+      "name": "US/Mountain"
+    },
+    {
+      "name": "US/Pacific"
+    },
+    {
+      "name": "US/Samoa"
+    }
+  ],
+  "countries": [
+    {
+      "iso2": "AW",
+      "iso3": "ABW",
+      "numeric_code": "533",
+      "name": "Aruba",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AF",
+      "iso3": "AFG",
+      "numeric_code": "004",
+      "name": "Afghanistan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AO",
+      "iso3": "AGO",
+      "numeric_code": "024",
+      "name": "Angola",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AI",
+      "iso3": "AIA",
+      "numeric_code": "660",
+      "name": "Anguilla",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AX",
+      "iso3": "ALA",
+      "numeric_code": "248",
+      "name": "Åland Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AL",
+      "iso3": "ALB",
+      "numeric_code": "008",
+      "name": "Albania",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AD",
+      "iso3": "AND",
+      "numeric_code": "020",
+      "name": "Andorra",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AE",
+      "iso3": "ARE",
+      "numeric_code": "784",
+      "name": "United Arab Emirates",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AR",
+      "iso3": "ARG",
+      "numeric_code": "032",
+      "name": "Argentina",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AM",
+      "iso3": "ARM",
+      "numeric_code": "051",
+      "name": "Armenia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AS",
+      "iso3": "ASM",
+      "numeric_code": "016",
+      "name": "American Samoa",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AQ",
+      "iso3": "ATA",
+      "numeric_code": "010",
+      "name": "Antarctica",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TF",
+      "iso3": "ATF",
+      "numeric_code": "260",
+      "name": "French Southern Territories",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AG",
+      "iso3": "ATG",
+      "numeric_code": "028",
+      "name": "Antigua and Barbuda",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AU",
+      "iso3": "AUS",
+      "numeric_code": "036",
+      "name": "Australia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AT",
+      "iso3": "AUT",
+      "numeric_code": "040",
+      "name": "Austria",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "AZ",
+      "iso3": "AZE",
+      "numeric_code": "031",
+      "name": "Azerbaijan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BI",
+      "iso3": "BDI",
+      "numeric_code": "108",
+      "name": "Burundi",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BE",
+      "iso3": "BEL",
+      "numeric_code": "056",
+      "name": "Belgium",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BJ",
+      "iso3": "BEN",
+      "numeric_code": "204",
+      "name": "Benin",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BQ",
+      "iso3": "BES",
+      "numeric_code": "535",
+      "name": "Bonaire, Sint Eustatius and Saba",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BF",
+      "iso3": "BFA",
+      "numeric_code": "854",
+      "name": "Burkina Faso",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BD",
+      "iso3": "BGD",
+      "numeric_code": "050",
+      "name": "Bangladesh",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BG",
+      "iso3": "BGR",
+      "numeric_code": "100",
+      "name": "Bulgaria",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BH",
+      "iso3": "BHR",
+      "numeric_code": "048",
+      "name": "Bahrain",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BS",
+      "iso3": "BHS",
+      "numeric_code": "044",
+      "name": "Bahamas",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BA",
+      "iso3": "BIH",
+      "numeric_code": "070",
+      "name": "Bosnia and Herzegovina",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BL",
+      "iso3": "BLM",
+      "numeric_code": "652",
+      "name": "Saint Barthélemy",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BY",
+      "iso3": "BLR",
+      "numeric_code": "112",
+      "name": "Belarus",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BZ",
+      "iso3": "BLZ",
+      "numeric_code": "084",
+      "name": "Belize",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BM",
+      "iso3": "BMU",
+      "numeric_code": "060",
+      "name": "Bermuda",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BO",
+      "iso3": "BOL",
+      "numeric_code": "068",
+      "name": "Bolivia, Plurinational State of",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BR",
+      "iso3": "BRA",
+      "numeric_code": "076",
+      "name": "Brazil",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BB",
+      "iso3": "BRB",
+      "numeric_code": "052",
+      "name": "Barbados",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BN",
+      "iso3": "BRN",
+      "numeric_code": "096",
+      "name": "Brunei Darussalam",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BT",
+      "iso3": "BTN",
+      "numeric_code": "064",
+      "name": "Bhutan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BV",
+      "iso3": "BVT",
+      "numeric_code": "074",
+      "name": "Bouvet Island",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "BW",
+      "iso3": "BWA",
+      "numeric_code": "072",
+      "name": "Botswana",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CF",
+      "iso3": "CAF",
+      "numeric_code": "140",
+      "name": "Central African Republic",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CA",
+      "iso3": "CAN",
+      "numeric_code": "124",
+      "name": "Canada",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CC",
+      "iso3": "CCK",
+      "numeric_code": "166",
+      "name": "Cocos (Keeling) Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CH",
+      "iso3": "CHE",
+      "numeric_code": "756",
+      "name": "Switzerland",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CL",
+      "iso3": "CHL",
+      "numeric_code": "152",
+      "name": "Chile",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CN",
+      "iso3": "CHN",
+      "numeric_code": "156",
+      "name": "China",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CI",
+      "iso3": "CIV",
+      "numeric_code": "384",
+      "name": "Côte d'Ivoire",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CM",
+      "iso3": "CMR",
+      "numeric_code": "120",
+      "name": "Cameroon",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CD",
+      "iso3": "COD",
+      "numeric_code": "180",
+      "name": "Congo, The Democratic Republic of the",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CG",
+      "iso3": "COG",
+      "numeric_code": "178",
+      "name": "Congo",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CK",
+      "iso3": "COK",
+      "numeric_code": "184",
+      "name": "Cook Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CO",
+      "iso3": "COL",
+      "numeric_code": "170",
+      "name": "Colombia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KM",
+      "iso3": "COM",
+      "numeric_code": "174",
+      "name": "Comoros",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CV",
+      "iso3": "CPV",
+      "numeric_code": "132",
+      "name": "Cabo Verde",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CR",
+      "iso3": "CRI",
+      "numeric_code": "188",
+      "name": "Costa Rica",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CU",
+      "iso3": "CUB",
+      "numeric_code": "192",
+      "name": "Cuba",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CW",
+      "iso3": "CUW",
+      "numeric_code": "531",
+      "name": "Curaçao",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CX",
+      "iso3": "CXR",
+      "numeric_code": "162",
+      "name": "Christmas Island",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KY",
+      "iso3": "CYM",
+      "numeric_code": "136",
+      "name": "Cayman Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CY",
+      "iso3": "CYP",
+      "numeric_code": "196",
+      "name": "Cyprus",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "CZ",
+      "iso3": "CZE",
+      "numeric_code": "203",
+      "name": "Czechia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "DE",
+      "iso3": "DEU",
+      "numeric_code": "276",
+      "name": "Germany",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "DJ",
+      "iso3": "DJI",
+      "numeric_code": "262",
+      "name": "Djibouti",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "DM",
+      "iso3": "DMA",
+      "numeric_code": "212",
+      "name": "Dominica",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "DK",
+      "iso3": "DNK",
+      "numeric_code": "208",
+      "name": "Denmark",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "DO",
+      "iso3": "DOM",
+      "numeric_code": "214",
+      "name": "Dominican Republic",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "DZ",
+      "iso3": "DZA",
+      "numeric_code": "012",
+      "name": "Algeria",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "EC",
+      "iso3": "ECU",
+      "numeric_code": "218",
+      "name": "Ecuador",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "EG",
+      "iso3": "EGY",
+      "numeric_code": "818",
+      "name": "Egypt",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "ER",
+      "iso3": "ERI",
+      "numeric_code": "232",
+      "name": "Eritrea",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "EH",
+      "iso3": "ESH",
+      "numeric_code": "732",
+      "name": "Western Sahara",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "ES",
+      "iso3": "ESP",
+      "numeric_code": "724",
+      "name": "Spain",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "EE",
+      "iso3": "EST",
+      "numeric_code": "233",
+      "name": "Estonia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "ET",
+      "iso3": "ETH",
+      "numeric_code": "231",
+      "name": "Ethiopia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "FI",
+      "iso3": "FIN",
+      "numeric_code": "246",
+      "name": "Finland",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "FJ",
+      "iso3": "FJI",
+      "numeric_code": "242",
+      "name": "Fiji",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "FK",
+      "iso3": "FLK",
+      "numeric_code": "238",
+      "name": "Falkland Islands (Malvinas)",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "FR",
+      "iso3": "FRA",
+      "numeric_code": "250",
+      "name": "France",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "FO",
+      "iso3": "FRO",
+      "numeric_code": "234",
+      "name": "Faroe Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "FM",
+      "iso3": "FSM",
+      "numeric_code": "583",
+      "name": "Micronesia, Federated States of",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GA",
+      "iso3": "GAB",
+      "numeric_code": "266",
+      "name": "Gabon",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GB",
+      "iso3": "GBR",
+      "numeric_code": "826",
+      "name": "United Kingdom",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GE",
+      "iso3": "GEO",
+      "numeric_code": "268",
+      "name": "Georgia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GG",
+      "iso3": "GGY",
+      "numeric_code": "831",
+      "name": "Guernsey",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GH",
+      "iso3": "GHA",
+      "numeric_code": "288",
+      "name": "Ghana",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GI",
+      "iso3": "GIB",
+      "numeric_code": "292",
+      "name": "Gibraltar",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GN",
+      "iso3": "GIN",
+      "numeric_code": "324",
+      "name": "Guinea",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GP",
+      "iso3": "GLP",
+      "numeric_code": "312",
+      "name": "Guadeloupe",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GM",
+      "iso3": "GMB",
+      "numeric_code": "270",
+      "name": "Gambia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GW",
+      "iso3": "GNB",
+      "numeric_code": "624",
+      "name": "Guinea-Bissau",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GQ",
+      "iso3": "GNQ",
+      "numeric_code": "226",
+      "name": "Equatorial Guinea",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GR",
+      "iso3": "GRC",
+      "numeric_code": "300",
+      "name": "Greece",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GD",
+      "iso3": "GRD",
+      "numeric_code": "308",
+      "name": "Grenada",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GL",
+      "iso3": "GRL",
+      "numeric_code": "304",
+      "name": "Greenland",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GT",
+      "iso3": "GTM",
+      "numeric_code": "320",
+      "name": "Guatemala",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GF",
+      "iso3": "GUF",
+      "numeric_code": "254",
+      "name": "French Guiana",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GU",
+      "iso3": "GUM",
+      "numeric_code": "316",
+      "name": "Guam",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GY",
+      "iso3": "GUY",
+      "numeric_code": "328",
+      "name": "Guyana",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "HK",
+      "iso3": "HKG",
+      "numeric_code": "344",
+      "name": "Hong Kong",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "HM",
+      "iso3": "HMD",
+      "numeric_code": "334",
+      "name": "Heard Island and McDonald Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "HN",
+      "iso3": "HND",
+      "numeric_code": "340",
+      "name": "Honduras",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "HR",
+      "iso3": "HRV",
+      "numeric_code": "191",
+      "name": "Croatia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "HT",
+      "iso3": "HTI",
+      "numeric_code": "332",
+      "name": "Haiti",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "HU",
+      "iso3": "HUN",
+      "numeric_code": "348",
+      "name": "Hungary",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "ID",
+      "iso3": "IDN",
+      "numeric_code": "360",
+      "name": "Indonesia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "IM",
+      "iso3": "IMN",
+      "numeric_code": "833",
+      "name": "Isle of Man",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "IN",
+      "iso3": "IND",
+      "numeric_code": "356",
+      "name": "India",
+      "phone_code": "+91",
+      "default_currency": "INR",
+      "default_timezone": "Asia/Kolkata",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "IO",
+      "iso3": "IOT",
+      "numeric_code": "086",
+      "name": "British Indian Ocean Territory",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "IE",
+      "iso3": "IRL",
+      "numeric_code": "372",
+      "name": "Ireland",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "IR",
+      "iso3": "IRN",
+      "numeric_code": "364",
+      "name": "Iran, Islamic Republic of",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "IQ",
+      "iso3": "IRQ",
+      "numeric_code": "368",
+      "name": "Iraq",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "IS",
+      "iso3": "ISL",
+      "numeric_code": "352",
+      "name": "Iceland",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "IL",
+      "iso3": "ISR",
+      "numeric_code": "376",
+      "name": "Israel",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "IT",
+      "iso3": "ITA",
+      "numeric_code": "380",
+      "name": "Italy",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "JM",
+      "iso3": "JAM",
+      "numeric_code": "388",
+      "name": "Jamaica",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "JE",
+      "iso3": "JEY",
+      "numeric_code": "832",
+      "name": "Jersey",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "JO",
+      "iso3": "JOR",
+      "numeric_code": "400",
+      "name": "Jordan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "JP",
+      "iso3": "JPN",
+      "numeric_code": "392",
+      "name": "Japan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KZ",
+      "iso3": "KAZ",
+      "numeric_code": "398",
+      "name": "Kazakhstan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KE",
+      "iso3": "KEN",
+      "numeric_code": "404",
+      "name": "Kenya",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KG",
+      "iso3": "KGZ",
+      "numeric_code": "417",
+      "name": "Kyrgyzstan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KH",
+      "iso3": "KHM",
+      "numeric_code": "116",
+      "name": "Cambodia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KI",
+      "iso3": "KIR",
+      "numeric_code": "296",
+      "name": "Kiribati",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KN",
+      "iso3": "KNA",
+      "numeric_code": "659",
+      "name": "Saint Kitts and Nevis",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KR",
+      "iso3": "KOR",
+      "numeric_code": "410",
+      "name": "Korea, Republic of",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KW",
+      "iso3": "KWT",
+      "numeric_code": "414",
+      "name": "Kuwait",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LA",
+      "iso3": "LAO",
+      "numeric_code": "418",
+      "name": "Lao People's Democratic Republic",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LB",
+      "iso3": "LBN",
+      "numeric_code": "422",
+      "name": "Lebanon",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LR",
+      "iso3": "LBR",
+      "numeric_code": "430",
+      "name": "Liberia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LY",
+      "iso3": "LBY",
+      "numeric_code": "434",
+      "name": "Libya",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LC",
+      "iso3": "LCA",
+      "numeric_code": "662",
+      "name": "Saint Lucia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LI",
+      "iso3": "LIE",
+      "numeric_code": "438",
+      "name": "Liechtenstein",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LK",
+      "iso3": "LKA",
+      "numeric_code": "144",
+      "name": "Sri Lanka",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LS",
+      "iso3": "LSO",
+      "numeric_code": "426",
+      "name": "Lesotho",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LT",
+      "iso3": "LTU",
+      "numeric_code": "440",
+      "name": "Lithuania",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LU",
+      "iso3": "LUX",
+      "numeric_code": "442",
+      "name": "Luxembourg",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "LV",
+      "iso3": "LVA",
+      "numeric_code": "428",
+      "name": "Latvia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MO",
+      "iso3": "MAC",
+      "numeric_code": "446",
+      "name": "Macao",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MF",
+      "iso3": "MAF",
+      "numeric_code": "663",
+      "name": "Saint Martin (French part)",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MA",
+      "iso3": "MAR",
+      "numeric_code": "504",
+      "name": "Morocco",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MC",
+      "iso3": "MCO",
+      "numeric_code": "492",
+      "name": "Monaco",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MD",
+      "iso3": "MDA",
+      "numeric_code": "498",
+      "name": "Moldova, Republic of",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MG",
+      "iso3": "MDG",
+      "numeric_code": "450",
+      "name": "Madagascar",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MV",
+      "iso3": "MDV",
+      "numeric_code": "462",
+      "name": "Maldives",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MX",
+      "iso3": "MEX",
+      "numeric_code": "484",
+      "name": "Mexico",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MH",
+      "iso3": "MHL",
+      "numeric_code": "584",
+      "name": "Marshall Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MK",
+      "iso3": "MKD",
+      "numeric_code": "807",
+      "name": "North Macedonia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "ML",
+      "iso3": "MLI",
+      "numeric_code": "466",
+      "name": "Mali",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MT",
+      "iso3": "MLT",
+      "numeric_code": "470",
+      "name": "Malta",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MM",
+      "iso3": "MMR",
+      "numeric_code": "104",
+      "name": "Myanmar",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "ME",
+      "iso3": "MNE",
+      "numeric_code": "499",
+      "name": "Montenegro",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MN",
+      "iso3": "MNG",
+      "numeric_code": "496",
+      "name": "Mongolia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MP",
+      "iso3": "MNP",
+      "numeric_code": "580",
+      "name": "Northern Mariana Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MZ",
+      "iso3": "MOZ",
+      "numeric_code": "508",
+      "name": "Mozambique",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MR",
+      "iso3": "MRT",
+      "numeric_code": "478",
+      "name": "Mauritania",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MS",
+      "iso3": "MSR",
+      "numeric_code": "500",
+      "name": "Montserrat",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MQ",
+      "iso3": "MTQ",
+      "numeric_code": "474",
+      "name": "Martinique",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MU",
+      "iso3": "MUS",
+      "numeric_code": "480",
+      "name": "Mauritius",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MW",
+      "iso3": "MWI",
+      "numeric_code": "454",
+      "name": "Malawi",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "MY",
+      "iso3": "MYS",
+      "numeric_code": "458",
+      "name": "Malaysia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "YT",
+      "iso3": "MYT",
+      "numeric_code": "175",
+      "name": "Mayotte",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NA",
+      "iso3": "NAM",
+      "numeric_code": "516",
+      "name": "Namibia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NC",
+      "iso3": "NCL",
+      "numeric_code": "540",
+      "name": "New Caledonia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NE",
+      "iso3": "NER",
+      "numeric_code": "562",
+      "name": "Niger",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NF",
+      "iso3": "NFK",
+      "numeric_code": "574",
+      "name": "Norfolk Island",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NG",
+      "iso3": "NGA",
+      "numeric_code": "566",
+      "name": "Nigeria",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NI",
+      "iso3": "NIC",
+      "numeric_code": "558",
+      "name": "Nicaragua",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NU",
+      "iso3": "NIU",
+      "numeric_code": "570",
+      "name": "Niue",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NL",
+      "iso3": "NLD",
+      "numeric_code": "528",
+      "name": "Netherlands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NO",
+      "iso3": "NOR",
+      "numeric_code": "578",
+      "name": "Norway",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NP",
+      "iso3": "NPL",
+      "numeric_code": "524",
+      "name": "Nepal",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NR",
+      "iso3": "NRU",
+      "numeric_code": "520",
+      "name": "Nauru",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "NZ",
+      "iso3": "NZL",
+      "numeric_code": "554",
+      "name": "New Zealand",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "OM",
+      "iso3": "OMN",
+      "numeric_code": "512",
+      "name": "Oman",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PK",
+      "iso3": "PAK",
+      "numeric_code": "586",
+      "name": "Pakistan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PA",
+      "iso3": "PAN",
+      "numeric_code": "591",
+      "name": "Panama",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PN",
+      "iso3": "PCN",
+      "numeric_code": "612",
+      "name": "Pitcairn",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PE",
+      "iso3": "PER",
+      "numeric_code": "604",
+      "name": "Peru",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PH",
+      "iso3": "PHL",
+      "numeric_code": "608",
+      "name": "Philippines",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PW",
+      "iso3": "PLW",
+      "numeric_code": "585",
+      "name": "Palau",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PG",
+      "iso3": "PNG",
+      "numeric_code": "598",
+      "name": "Papua New Guinea",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PL",
+      "iso3": "POL",
+      "numeric_code": "616",
+      "name": "Poland",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PR",
+      "iso3": "PRI",
+      "numeric_code": "630",
+      "name": "Puerto Rico",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "KP",
+      "iso3": "PRK",
+      "numeric_code": "408",
+      "name": "Korea, Democratic People's Republic of",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PT",
+      "iso3": "PRT",
+      "numeric_code": "620",
+      "name": "Portugal",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PY",
+      "iso3": "PRY",
+      "numeric_code": "600",
+      "name": "Paraguay",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PS",
+      "iso3": "PSE",
+      "numeric_code": "275",
+      "name": "Palestine, State of",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PF",
+      "iso3": "PYF",
+      "numeric_code": "258",
+      "name": "French Polynesia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "QA",
+      "iso3": "QAT",
+      "numeric_code": "634",
+      "name": "Qatar",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "RE",
+      "iso3": "REU",
+      "numeric_code": "638",
+      "name": "Réunion",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "RO",
+      "iso3": "ROU",
+      "numeric_code": "642",
+      "name": "Romania",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "RU",
+      "iso3": "RUS",
+      "numeric_code": "643",
+      "name": "Russian Federation",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "RW",
+      "iso3": "RWA",
+      "numeric_code": "646",
+      "name": "Rwanda",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SA",
+      "iso3": "SAU",
+      "numeric_code": "682",
+      "name": "Saudi Arabia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SD",
+      "iso3": "SDN",
+      "numeric_code": "729",
+      "name": "Sudan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SN",
+      "iso3": "SEN",
+      "numeric_code": "686",
+      "name": "Senegal",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SG",
+      "iso3": "SGP",
+      "numeric_code": "702",
+      "name": "Singapore",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "GS",
+      "iso3": "SGS",
+      "numeric_code": "239",
+      "name": "South Georgia and the South Sandwich Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SH",
+      "iso3": "SHN",
+      "numeric_code": "654",
+      "name": "Saint Helena, Ascension and Tristan da Cunha",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SJ",
+      "iso3": "SJM",
+      "numeric_code": "744",
+      "name": "Svalbard and Jan Mayen",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SB",
+      "iso3": "SLB",
+      "numeric_code": "090",
+      "name": "Solomon Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SL",
+      "iso3": "SLE",
+      "numeric_code": "694",
+      "name": "Sierra Leone",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SV",
+      "iso3": "SLV",
+      "numeric_code": "222",
+      "name": "El Salvador",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SM",
+      "iso3": "SMR",
+      "numeric_code": "674",
+      "name": "San Marino",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SO",
+      "iso3": "SOM",
+      "numeric_code": "706",
+      "name": "Somalia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "PM",
+      "iso3": "SPM",
+      "numeric_code": "666",
+      "name": "Saint Pierre and Miquelon",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "RS",
+      "iso3": "SRB",
+      "numeric_code": "688",
+      "name": "Serbia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SS",
+      "iso3": "SSD",
+      "numeric_code": "728",
+      "name": "South Sudan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "ST",
+      "iso3": "STP",
+      "numeric_code": "678",
+      "name": "Sao Tome and Principe",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SR",
+      "iso3": "SUR",
+      "numeric_code": "740",
+      "name": "Suriname",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SK",
+      "iso3": "SVK",
+      "numeric_code": "703",
+      "name": "Slovakia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SI",
+      "iso3": "SVN",
+      "numeric_code": "705",
+      "name": "Slovenia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SE",
+      "iso3": "SWE",
+      "numeric_code": "752",
+      "name": "Sweden",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SZ",
+      "iso3": "SWZ",
+      "numeric_code": "748",
+      "name": "Eswatini",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SX",
+      "iso3": "SXM",
+      "numeric_code": "534",
+      "name": "Sint Maarten (Dutch part)",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SC",
+      "iso3": "SYC",
+      "numeric_code": "690",
+      "name": "Seychelles",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "SY",
+      "iso3": "SYR",
+      "numeric_code": "760",
+      "name": "Syrian Arab Republic",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TC",
+      "iso3": "TCA",
+      "numeric_code": "796",
+      "name": "Turks and Caicos Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TD",
+      "iso3": "TCD",
+      "numeric_code": "148",
+      "name": "Chad",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TG",
+      "iso3": "TGO",
+      "numeric_code": "768",
+      "name": "Togo",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TH",
+      "iso3": "THA",
+      "numeric_code": "764",
+      "name": "Thailand",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TJ",
+      "iso3": "TJK",
+      "numeric_code": "762",
+      "name": "Tajikistan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TK",
+      "iso3": "TKL",
+      "numeric_code": "772",
+      "name": "Tokelau",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TM",
+      "iso3": "TKM",
+      "numeric_code": "795",
+      "name": "Turkmenistan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TL",
+      "iso3": "TLS",
+      "numeric_code": "626",
+      "name": "Timor-Leste",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TO",
+      "iso3": "TON",
+      "numeric_code": "776",
+      "name": "Tonga",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TT",
+      "iso3": "TTO",
+      "numeric_code": "780",
+      "name": "Trinidad and Tobago",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TN",
+      "iso3": "TUN",
+      "numeric_code": "788",
+      "name": "Tunisia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TR",
+      "iso3": "TUR",
+      "numeric_code": "792",
+      "name": "Türkiye",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TV",
+      "iso3": "TUV",
+      "numeric_code": "798",
+      "name": "Tuvalu",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TW",
+      "iso3": "TWN",
+      "numeric_code": "158",
+      "name": "Taiwan, Province of China",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "TZ",
+      "iso3": "TZA",
+      "numeric_code": "834",
+      "name": "Tanzania, United Republic of",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "UG",
+      "iso3": "UGA",
+      "numeric_code": "800",
+      "name": "Uganda",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "UA",
+      "iso3": "UKR",
+      "numeric_code": "804",
+      "name": "Ukraine",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "UM",
+      "iso3": "UMI",
+      "numeric_code": "581",
+      "name": "United States Minor Outlying Islands",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "UY",
+      "iso3": "URY",
+      "numeric_code": "858",
+      "name": "Uruguay",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "US",
+      "iso3": "USA",
+      "numeric_code": "840",
+      "name": "United States",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "UZ",
+      "iso3": "UZB",
+      "numeric_code": "860",
+      "name": "Uzbekistan",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "VA",
+      "iso3": "VAT",
+      "numeric_code": "336",
+      "name": "Holy See (Vatican City State)",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "VC",
+      "iso3": "VCT",
+      "numeric_code": "670",
+      "name": "Saint Vincent and the Grenadines",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "VE",
+      "iso3": "VEN",
+      "numeric_code": "862",
+      "name": "Venezuela, Bolivarian Republic of",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "VG",
+      "iso3": "VGB",
+      "numeric_code": "092",
+      "name": "Virgin Islands, British",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "VI",
+      "iso3": "VIR",
+      "numeric_code": "850",
+      "name": "Virgin Islands, U.S.",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "VN",
+      "iso3": "VNM",
+      "numeric_code": "704",
+      "name": "Viet Nam",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "VU",
+      "iso3": "VUT",
+      "numeric_code": "548",
+      "name": "Vanuatu",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "WF",
+      "iso3": "WLF",
+      "numeric_code": "876",
+      "name": "Wallis and Futuna",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "WS",
+      "iso3": "WSM",
+      "numeric_code": "882",
+      "name": "Samoa",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "YE",
+      "iso3": "YEM",
+      "numeric_code": "887",
+      "name": "Yemen",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "ZA",
+      "iso3": "ZAF",
+      "numeric_code": "710",
+      "name": "South Africa",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "ZM",
+      "iso3": "ZMB",
+      "numeric_code": "894",
+      "name": "Zambia",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    },
+    {
+      "iso2": "ZW",
+      "iso3": "ZWE",
+      "numeric_code": "716",
+      "name": "Zimbabwe",
+      "phone_code": "",
+      "default_currency": "",
+      "default_timezone": "",
+      "date_format": "DD/MM/YYYY"
+    }
+  ]
+}

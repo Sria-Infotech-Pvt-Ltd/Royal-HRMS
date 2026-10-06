@@ -17,6 +17,12 @@ urlpatterns = [
     path('api/payroll/',       include('apps.payroll.urls')),
     path('api/voice/',         include('apps.voice_commands.urls')),
     path('api/performance/',   include('apps.performance.urls')),
+    # New in Phase 1 — this is the only app in the whole backend namespaced
+    # under /api/v1/ rather than bare /api/ (every other app's URLs predate
+    # any versioning convention). Deliberate: platform_core is a brand new
+    # surface, so it starts correctly rather than needing a breaking move
+    # later; existing apps are untouched.
+    path('api/v1/platform/', include('apps.platform_core.urls')),
 ]
  
 if settings.DEBUG:

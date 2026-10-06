@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "source": "Entity identifier types this codebase's existing Company model already has columns for (apps/accounts/models.py) — listed here as lookup data ahead of the Company -> LegalEntity migration (deferred past this Phase 1 pass, see PHASE1_REPORT.md). VERIFY BEFORE GO-LIVE: this list is a transcription of existing field names, not independently verified against current Indian statutory requirements.",
+  "lookup_types": [
+    { "code": "ENTITY_IDENTIFIER_TYPE", "name": "Legal Entity Identifier Type", "module": "platform_core", "is_system": true, "allow_custom_values": true, "attribute_schema": { "type": "object", "properties": { "is_sensitive": { "type": "boolean" } } } },
+    { "code": "SIGNATORY_PURPOSE", "name": "Authorised Signatory Purpose", "module": "platform_core", "is_system": false, "allow_custom_values": true }
+  ],
+  "lookup_values": {
+    "ENTITY_IDENTIFIER_TYPE": [
+      { "code": "CIN", "label": "Corporate Identification Number (CIN)", "sort_order": 1, "country": "IN", "attributes": { "is_sensitive": false } },
+      { "code": "ROC_JURISDICTION", "label": "ROC Jurisdiction", "sort_order": 2, "country": "IN", "attributes": { "is_sensitive": false } },
+      { "code": "PAN", "label": "PAN", "sort_order": 3, "country": "IN", "attributes": { "is_sensitive": true } },
+      { "code": "TAN", "label": "TAN", "sort_order": 4, "country": "IN", "attributes": { "is_sensitive": false } },
+      { "code": "UDYAM_MSME", "label": "UDYAM / MSME Registration", "sort_order": 5, "country": "IN", "attributes": { "is_sensitive": false } },
+      { "code": "IEC", "label": "Import Export Code (IEC)", "sort_order": 6, "country": "IN", "attributes": { "is_sensitive": false } },
+      { "code": "EPFO_CODE", "label": "EPFO Establishment Code", "sort_order": 7, "country": "IN", "attributes": { "is_sensitive": false } },
+      { "code": "ESIC_CODE", "label": "ESIC Establishment Code", "sort_order": 8, "country": "IN", "attributes": { "is_sensitive": false } },
+      { "code": "PROFESSIONAL_TAX_REG", "label": "Professional Tax Registration", "sort_order": 9, "country": "IN", "attributes": { "is_sensitive": false } },
+      { "code": "NIC_CODE", "label": "NIC Code", "sort_order": 10, "country": "IN", "attributes": { "is_sensitive": false } },
+      { "code": "EIN", "label": "Employer Identification Number (EIN)", "sort_order": 11, "country": "US", "attributes": { "is_sensitive": false } },
+      { "code": "REGISTRATION_NUMBER", "label": "Generic Registration Number", "sort_order": 12, "attributes": { "is_sensitive": false } }
+    ],
+    "SIGNATORY_PURPOSE": [
+      { "code": "BANKING", "label": "Banking", "sort_order": 1 },
+      { "code": "STATUTORY", "label": "Statutory Filings", "sort_order": 2 },
+      { "code": "GENERAL", "label": "General", "sort_order": 3 }
+    ]
+  }
+}

@@ -65,6 +65,10 @@ jobs:
         working-directory: backend
         run: python manage.py makemigrations --check --dry-run
 
+      - name: Guard against new hardcoded choices= fields (Phase 1)
+        working-directory: backend
+        run: python scripts/check_no_new_choices.py
+
       - name: Run test suite
         working-directory: backend
         run: python manage.py test --verbosity 2
