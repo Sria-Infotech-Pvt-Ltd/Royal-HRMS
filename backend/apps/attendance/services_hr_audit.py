@@ -191,7 +191,6 @@ def get_unpunches(
     scope to exactly those employees instead of branch/department.
     """
     from apps.attendance.models import AttendanceCorrection, AttendanceRecord
-    from apps.attendance.services_unpunch import _expected_out_display, _get_settings
 
     employee_qs = User.objects.filter(is_active=True)
     if employee_ids is not None:
@@ -233,8 +232,14 @@ def get_unpunches(
         .values_list('employee_id', 'id')
     )
 
-    cfg          = _get_settings()
-    expected_out = _expected_out_display(cfg)
+    records = list(records)
+
+    # Per-employee expected clock-out (their own shift assignment, or the
+    # global default when unassigned) — one bulk query regardless of how many
+    # rows are on this page, so an SGT/ICT or UK employee shows their own
+    # shift's end time here instead of the global 18:00 default.
+    from core.cache_service import ShiftCacheService
+    shift_map = ShiftCacheService.get_effective_map([r.employee_id for r in records], target_date)
 
     return [
         {
@@ -243,7 +248,7 @@ def get_unpunches(
             'initials':           _initials(r.employee.full_name or ''),
             'date':               target_date.strftime('%Y-%m-%d'),
             'clock_in':           r.first_punch_in.strftime('%H:%M') if r.first_punch_in else '—',
-            'expected_out':       expected_out,
+            'expected_out':       shift_map[r.employee_id].end_time.strftime('%H:%M'),
             'branch':             r.employee.branch or '—',
             'correction_pending': r.employee_id in pending_employee_ids,
             'correction_id':      str(pending_correction_ids[r.employee_id])

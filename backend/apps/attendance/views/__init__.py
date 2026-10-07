@@ -53,6 +53,9 @@ from apps.attendance.views.hr_attendance import (
     WeeklyOffAssignmentListView,
     WeeklyOffAssignmentBulkView,
     WeeklyOffAssignmentHistoryView,
+    ShiftAssignmentListView,
+    ShiftAssignmentBulkView,
+    ShiftAssignmentHistoryView,
 )
 from apps.attendance.views.hr_audit_actions import (
     HRAttendanceAuditView,
@@ -115,6 +118,9 @@ __all__ = [
     'WeeklyOffAssignmentListView',
     'WeeklyOffAssignmentBulkView',
     'WeeklyOffAssignmentHistoryView',
+    'ShiftAssignmentListView',
+    'ShiftAssignmentBulkView',
+    'ShiftAssignmentHistoryView',
     # Audit + Invalid Punch Actions
     'HRAttendanceAuditView',
     'HRInvalidPunchAssignView',

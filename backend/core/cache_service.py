@@ -1,4 +1,5 @@
 import logging
+from collections import namedtuple
 from datetime import date
 
 from django.core.cache import cache
@@ -457,6 +458,101 @@ class AttendanceSettingsCacheService:
             cache.delete(cls._KEY)
         except Exception:
             logger.warning('Cache delete failed for attendance_settings')
+
+
+# ── Employee Shift (Working Hours) ───────────────────────────────────────────
+
+class ShiftCacheService:
+    """
+    Per-employee effective shift (start/end time + grace) resolver — mirrors
+    WeeklyOffCacheService's priority chain above, for the same reason: an
+    employee-specific override (EmployeeShiftAssignment -> WorkingHoursPolicy)
+    takes priority over the org-wide global AttendanceWorkingHours singleton
+    (Settings -> Attendance Rules page), so an employee with no assignment
+    sees zero behavior change from before this resolver existed.
+
+    Returns a normalized _Shift(start_time, end_time, grace_period_minutes)
+    namedtuple regardless of source — WorkingHoursPolicy.grace_period and
+    AttendanceWorkingHours.grace_period_minutes are different field names on
+    the two source models, so callers (services_attendance.py,
+    services_unpunch.py) never need to know which one actually resolved.
+
+    Not cached per-employee, same reasoning as WeeklyOffCacheService: the
+    assignment lookup is a single indexed query, cheap even during batch daily
+    processing; the global-default branch reuses
+    AttendanceSettingsCacheService's own 6h cache.
+    """
+
+    _Shift = namedtuple('_Shift', ['start_time', 'end_time', 'grace_period_minutes'])
+
+    @classmethod
+    def _global_default(cls):
+        cfg = AttendanceSettingsCacheService.get()
+        if cfg is not None and getattr(cfg, 'working_hours', None) is not None:
+            wh = cfg.working_hours
+            return cls._Shift(wh.shift_start, wh.shift_end, wh.grace_period_minutes)
+        from datetime import time as _time
+        return cls._Shift(_time(9, 0), _time(18, 0), 15)
+
+    @classmethod
+    def get_effective(cls, employee, for_date: date):
+        """Single-employee, single-date resolution. See get_effective_map()
+        for the bulk form used by the missing-clockout Celery task."""
+        if employee is not None:
+            from django.db.models import Q
+
+            from apps.attendance.models import EmployeeShiftAssignment
+            try:
+                assignment = (
+                    EmployeeShiftAssignment.objects
+                    .filter(employee=employee, effective_from__lte=for_date)
+                    .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=for_date))
+                    .select_related('policy')
+                    .order_by('-effective_from')
+                    .first()
+                )
+            except Exception:
+                logger.warning('Shift assignment lookup failed for employee=%s', getattr(employee, 'pk', None))
+                assignment = None
+            if assignment is not None:
+                p = assignment.policy
+                return cls._Shift(p.start_time, p.end_time, p.grace_period)
+        return cls._global_default()
+
+    @classmethod
+    def get_effective_map(cls, employee_ids: list, for_date: date) -> dict:
+        """
+        Bulk resolution for many employees on one date — ONE query regardless
+        of len(employee_ids), used by the missing-clockout Celery task to
+        avoid an N+1 per-employee lookup. Returns {employee_id: _Shift} for
+        EVERY id in employee_ids — employees with no covering assignment get
+        the same shared global-default _Shift instance.
+        """
+        if not employee_ids:
+            return {}
+        default = cls._global_default()
+        result = {eid: default for eid in employee_ids}
+        from django.db.models import Q
+
+        from apps.attendance.models import EmployeeShiftAssignment
+        try:
+            assignments = (
+                EmployeeShiftAssignment.objects
+                .filter(employee_id__in=employee_ids, effective_from__lte=for_date)
+                .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=for_date))
+                .select_related('policy')
+                .order_by('employee_id', '-effective_from')
+            )
+            seen = set()
+            for a in assignments:
+                if a.employee_id in seen:
+                    continue  # already kept the most-recently-started covering row for this employee
+                seen.add(a.employee_id)
+                p = a.policy
+                result[a.employee_id] = cls._Shift(p.start_time, p.end_time, p.grace_period)
+        except Exception:
+            logger.warning('Bulk shift assignment lookup failed for %d employee(s)', len(employee_ids))
+        return result
 
 
 # ── Branch ────────────────────────────────────────────────────────────────────

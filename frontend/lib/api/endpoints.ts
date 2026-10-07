@@ -324,6 +324,15 @@ export const API = {
     weeklyOffAssignments: "/attendance/weekly-off-assignments/",
     weeklyOffAssignmentsBulk: "/attendance/weekly-off-assignments/bulk/",
     weeklyOffAssignmentHistory: (employeeId: string) => `/attendance/weekly-off-assignments/${employeeId}/history/`,
+
+    // Working Hours / Shift Policies (Settings) — existing backend CRUD, newly exposed to the frontend
+    workingHoursPolicies: "/attendance/working-hours/",
+    workingHoursPolicy: (id: string) => `/attendance/working-hours/${id}/`,
+
+    // Shift Assignment (Attendance & Time tab) — mirrors Weekly Off Assignment above
+    shiftAssignments: "/attendance/shift-assignments/",
+    shiftAssignmentsBulk: "/attendance/shift-assignments/bulk/",
+    shiftAssignmentHistory: (employeeId: string) => `/attendance/shift-assignments/${employeeId}/history/`,
   },
 
   voice: {

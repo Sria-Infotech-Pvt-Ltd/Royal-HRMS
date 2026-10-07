@@ -24,18 +24,26 @@ from apps.attendance.serializers_hr import (
     HRAttendanceEditSerializer,
     HRAttendanceManualCreateSerializer,
     OvertimeWriteSerializer,
+    ShiftAssignmentFilterSerializer,
+    ShiftAssignmentWriteSerializer,
+    ShiftBulkAssignmentWriteSerializer,
     WeeklyOffAssignmentFilterSerializer,
     WeeklyOffAssignmentWriteSerializer,
     WeeklyOffBulkAssignmentWriteSerializer,
 )
 from apps.attendance.services_hr import (
+    assign_shift,
     assign_weekly_off,
+    build_shift_assignment_queryset,
     build_weekly_off_assignment_queryset,
+    bulk_assign_shift,
     bulk_assign_weekly_off,
     get_attendance_detail,
     get_attendance_list,
     get_dashboard_stats,
+    get_shift_assignment_history,
     get_weekly_off_assignment_history,
+    serialize_shift_assignment_row,
     serialize_weekly_off_assignment_row,
 )
 from apps.attendance.services_hr_audit import (
@@ -1022,3 +1030,137 @@ class WeeklyOffAssignmentHistoryView(APIView):
 
         history = get_weekly_off_assignment_history(employee_id)
         return success('Weekly off assignment history retrieved.', {'employee_id': employee_id, 'history': history})
+
+
+# ── Shift Assignment ──────────────────────────────────────────────────────────
+#
+# Assigns a WorkingHoursPolicy (configured under Settings -> Attendance Rules
+# -> Working Hours — the existing WorkingHoursPolicy CRUD at
+# /api/attendance/working-hours/, unchanged) to a specific employee. History
+# is preserved via services_hr.bulk_assign_shift()/assign_shift() — mirrors
+# the Weekly Off Assignment views above exactly. All actual attendance
+# calculations resolve the effective shift through the centralized
+# core.cache_service.ShiftCacheService, not through these views.
+
+def _get_shift_or_error(shift_id):
+    from apps.attendance.models import WorkingHoursPolicy
+    try:
+        return WorkingHoursPolicy.objects.get(pk=shift_id, is_active=True), None
+    except (WorkingHoursPolicy.DoesNotExist, ValueError):
+        return None, error('Shift not found.', http_status=404)
+
+
+class ShiftAssignmentListView(APIView):
+    """
+    GET  /api/attendance/shift-assignments/  — paginated list, one row per
+         active employee with their current shift assignment (if any)
+    POST /api/attendance/shift-assignments/  — assign a shift to a single
+         employee
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'attendance.view'):
+            return error('Permission denied.', http_status=403)
+
+        ser = ShiftAssignmentFilterSerializer(data=request.query_params)
+        if not ser.is_valid():
+            return error(first_error(ser.errors))
+
+        filters = ser.validated_data
+        filters['branch'] = _branch_scope(request.user, filters.get('branch', ''))
+        filters['employee_ids'] = _manager_scope_employee_ids(request.user)
+
+        qs = build_shift_assignment_queryset(filters)
+        page_obj, paginator = paginate(qs, request)
+        rows = [serialize_shift_assignment_row(u) for u in page_obj]
+        return success(
+            'Shift assignments retrieved.',
+            paginated_data(paginator, page_obj, rows),
+        )
+
+    def post(self, request):
+        if not _has_perm(request.user, 'attendance.create'):
+            return error('Permission denied.', http_status=403)
+
+        ser = ShiftAssignmentWriteSerializer(data=request.data)
+        if not ser.is_valid():
+            return error(first_error(ser.errors), data=ser.errors, http_status=422)
+
+        data = ser.validated_data
+        shift, err = _get_shift_or_error(data['shift'])
+        if err:
+            return err
+
+        assignment = assign_shift(data['employee_id'], shift, data['effective_from'], request.user)
+        if assignment is None:
+            return error('Employee not found.', http_status=404)
+
+        logger.info(
+            'Shift "%s" assigned to %s effective %s by %s',
+            shift.policy_code, data['employee_id'], data['effective_from'], request.user.email,
+        )
+        return success('Shift assigned.', {
+            'employee_id':    data['employee_id'],
+            'shift_id':       str(shift.pk),
+            'shift_name':     shift.name,
+            'effective_from': assignment.effective_from.strftime('%Y-%m-%d'),
+        }, http_status=201)
+
+
+class ShiftAssignmentBulkView(APIView):
+    """
+    POST /api/attendance/shift-assignments/bulk/ — assign a shift to many
+    employees at once (explicit id list, or branch/department filter resolved
+    server-side). O(1) queries regardless of how many are selected.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not _has_perm(request.user, 'attendance.create'):
+            return error('Permission denied.', http_status=403)
+
+        ser = ShiftBulkAssignmentWriteSerializer(data=request.data)
+        if not ser.is_valid():
+            return error(first_error(ser.errors), data=ser.errors, http_status=422)
+
+        data = ser.validated_data
+        shift, err = _get_shift_or_error(data['shift'])
+        if err:
+            return err
+
+        employee_ids = data.get('employee_ids') or []
+        if not employee_ids:
+            # Resolve branch/department filter server-side — the frontend
+            # never has to load all matching employees just to select them.
+            filters = {
+                'branch':     _branch_scope(request.user, data.get('branch', '')),
+                'department': data.get('department', ''),
+                'employee_ids': _manager_scope_employee_ids(request.user),
+            }
+            employee_ids = list(
+                build_shift_assignment_queryset(filters).values_list('employee_id', flat=True)
+            )
+
+        count = bulk_assign_shift(employee_ids, shift, data['effective_from'], request.user)
+        return success(f'Shift assigned to {count} employee(s).', {'count': count})
+
+
+class ShiftAssignmentHistoryView(APIView):
+    """GET /api/attendance/shift-assignments/<employee_id>/history/ — full timeline for one employee."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, employee_id: str):
+        if not _has_perm(request.user, 'attendance.view'):
+            return error('Permission denied.', http_status=403)
+
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        employee = User.objects.filter(employee_id=employee_id, is_active=True).first()
+        if not employee:
+            return error('Employee not found.', http_status=404)
+        if not _manager_can_access_employee(request.user, employee):
+            return error('Permission denied.', http_status=403)
+
+        history = get_shift_assignment_history(employee_id)
+        return success('Shift assignment history retrieved.', {'employee_id': employee_id, 'history': history})

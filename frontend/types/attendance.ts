@@ -9,6 +9,7 @@ export interface PunchEntry {
 
 export interface TodaySession {
   is_clocked_in:   boolean;
+  day_completed:   boolean;
   punches:         PunchEntry[];
   total_seconds:   number;
   session_seconds: number;

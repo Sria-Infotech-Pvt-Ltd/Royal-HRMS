@@ -58,8 +58,14 @@ export default function ClockWidget() {
   const MODE = (wfhData?.results ?? []).some(isTodayWithin) ? "wfh" : "office";
 
   const isClockedIn = session?.is_clocked_in ?? false;
+  // Daily punch limit (backend-enforced, see PunchService._validate_daily_punch_limit):
+  // one Clock In and one Clock Out per attendance day — once both exist, keep
+  // this button disabled rather than letting it revert to a clickable
+  // "Clock In" the backend would just reject.
+  const dayCompleted = session?.day_completed ?? false;
 
   async function handlePunch() {
+    if (dayCompleted) return;
     // Location is fetched and geofence-validated BEFORE face verification —
     // same order the voice clock-in/out flow enforces.
     const { ok, location } = await prepareLocation(MODE);
@@ -134,19 +140,21 @@ export default function ClockWidget() {
 
         <button
           onClick={handlePunch}
-          disabled={isPunching}
+          disabled={isPunching || dayCompleted}
           style={{
-            width: "100%", height: 44, borderRadius: 8, border: "none", cursor: isPunching ? "not-allowed" : "pointer",
-            background: isClockedIn ? "var(--error)" : "var(--success)",
-            color: "#fff", fontSize: 14, fontWeight: 700, marginBottom: 16,
+            width: "100%", height: 44, borderRadius: 8, border: "none", cursor: (isPunching || dayCompleted) ? "not-allowed" : "pointer",
+            background: dayCompleted ? "var(--bg-low)" : isClockedIn ? "var(--error)" : "var(--success)",
+            color: dayCompleted ? "var(--on-variant)" : "#fff", fontSize: 14, fontWeight: 700, marginBottom: 16,
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            opacity: isPunching ? 0.7 : 1, transition: "background 0.15s, opacity 0.15s",
+            opacity: (isPunching || dayCompleted) ? 0.7 : 1, transition: "background 0.15s, opacity 0.15s",
           }}
         >
           {isLocating
             ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Getting location…</>
             : isPunching
             ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Please wait…</>
+            : dayCompleted
+            ? <><i className="ti ti-circle-check" /> Attendance Completed</>
             : <><i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} /> {isClockedIn ? "Clock Out" : "Clock In"}</>}
         </button>
 

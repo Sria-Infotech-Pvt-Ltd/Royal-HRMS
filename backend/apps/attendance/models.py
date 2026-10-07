@@ -288,6 +288,91 @@ class EmployeeWeeklyOffAssignment(models.Model):
         return self.effective_from <= for_date and (self.effective_to is None or self.effective_to >= for_date)
 
 
+# ─── Employee Shift Assignment ────────────────────────────────────────────────
+
+class EmployeeShiftAssignment(models.Model):
+    """
+    Assigns a WorkingHoursPolicy (shift) to a specific employee, effective from
+    a given date — mirrors EmployeeWeeklyOffAssignment above exactly, for the
+    same reason: history is preserved, never overwritten. Assigning a new
+    shift closes out the employee's previously-open row (sets its
+    effective_to) instead of deleting or mutating it, so past attendance
+    calculations for historical dates keep resolving against whatever shift
+    was actually in effect on that date. See services_hr.py for the
+    create/close-out logic and core.cache_service.ShiftCacheService for the
+    centralized resolver every shift-dependent calculation (late arrival,
+    early exit, missing clock-out) must go through.
+
+    An employee with no assignment row at all is completely unaffected by this
+    model's existence — ShiftCacheService falls back to the existing global
+    AttendanceWorkingHours singleton exactly as every employee resolved before
+    this feature existed.
+
+    effective_to = null means "currently open" (in effect until superseded).
+    The partial unique constraint below guarantees at most one open row per
+    employee at the database level, in addition to the application-level
+    close-out-before-insert logic in services_hr.bulk_assign_shift() — the
+    same defense-in-depth pattern already used for
+    FaceRegistrationRequest.uniq_active_face_registration_per_employee.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='shift_assignments',
+    )
+    policy = models.ForeignKey(
+        WorkingHoursPolicy,
+        on_delete=models.PROTECT,
+        related_name='employee_assignments',
+        help_text='PROTECT — a shift actively assigned to an employee cannot be deleted out from under them.',
+    )
+
+    effective_from = models.DateField()
+    effective_to = models.DateField(
+        null=True, blank=True,
+        help_text='Null means this assignment is currently open (in effect until superseded).',
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='created_shift_assignments',
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='updated_shift_assignments',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'attendance_employee_shift_assignment'
+        ordering = ['-effective_from']
+        indexes = [
+            models.Index(fields=['employee', 'effective_from'], name='esa_emp_from_idx'),
+            models.Index(fields=['employee', 'effective_to'],   name='esa_emp_to_idx'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['employee'],
+                condition=models.Q(effective_to__isnull=True),
+                name='uniq_open_shift_assignment_per_employee',
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.employee_id} → {self.policy.policy_code} from {self.effective_from}'
+
+    def covers(self, for_date) -> bool:
+        return self.effective_from <= for_date and (self.effective_to is None or self.effective_to >= for_date)
+
+
 # ─── Punch Rules Policy ───────────────────────────────────────────────────────
 
 class PunchRulesPolicy(models.Model):

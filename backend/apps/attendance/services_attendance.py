@@ -117,15 +117,14 @@ class PunchService:
         source     = punch_data.get('source', AttendancePunch.SOURCE_WEB)
         mode       = punch_data.get('attendance_mode', AttendancePunch.MODE_OFFICE)
 
-        # ── Consecutive punch validation ──────────────────────────────────────
-        if punch_type == AttendancePunch.PUNCH_IN and cls._is_clocked_in(employee, today):
-            raise ValueError(
-                'You are already clocked in. Please clock out before clocking in again.'
-            )
-        if punch_type == AttendancePunch.PUNCH_OUT and not cls._is_clocked_in(employee, today):
-            raise ValueError(
-                'You are not currently clocked in. Please clock in first.'
-            )
+        # ── Daily punch limit validation (fast pre-check) ───────────────────────
+        # Hard cap: at most one successful Clock In and one successful Clock
+        # Out per employee per attendance day. This is only an optimistic
+        # early reject so a mis-ordered or repeat punch fails fast, before
+        # the user goes through GPS/face capture for nothing — the
+        # authoritative, race-safe re-check happens again immediately before
+        # the punch is persisted, below.
+        cls._validate_daily_punch_limit(employee, today, punch_type)
 
         # ── Geofence validation ───────────────────────────────────────────────
         # Runs BEFORE face verification (matches apps/voice_commands
@@ -162,7 +161,26 @@ class PunchService:
             raise PermissionError(face.rejection_message)
 
         # ── Persist punch with full audit trail ───────────────────────────────
+        # select_for_update().get_or_create() on the employee's (employee, date)
+        # AttendanceRecord row is the lock point: that row is protected by the
+        # pre-existing unique_together=('employee', 'date') constraint, so this
+        # is race-safe even for the very first punch of the day, when no
+        # AttendanceRecord exists yet — if two requests race to create it
+        # concurrently, Postgres serializes the conflicting inserts on that
+        # unique constraint, and Django's get_or_create() transparently
+        # retries the losing side's lookup once the winner commits (documented
+        # Django behavior for get_or_create() under a real DB uniqueness
+        # guarantee). Holding that row lock for the rest of this transaction
+        # means only one request at a time can re-validate the punch limit and
+        # insert the punch for this employee/day — a double-click, a client
+        # retry, or two genuinely concurrent requests all serialize through
+        # here instead of racing past _validate_daily_punch_limit's SELECT.
         with transaction.atomic():
+            AttendanceRecord.objects.select_for_update().get_or_create(
+                employee=employee, date=today,
+                defaults={'status': AttendanceRecord.STATUS_ABSENT},
+            )
+            cls._validate_daily_punch_limit(employee, today, punch_type)
             punch = AttendancePunch.objects.create(
                 employee=employee,
                 branch=geo.branch,
@@ -207,7 +225,7 @@ class PunchService:
     def get_today_session(cls, employee) -> dict:
         """
         Returns all data needed to render ClockWidget:
-          is_clocked_in, punches[], total_seconds, session_seconds
+          is_clocked_in, day_completed, punches[], total_seconds, session_seconds
         """
         now   = timezone.now()
         today = timezone.localdate()   # IST calendar date
@@ -220,6 +238,17 @@ class PunchService:
         )
 
         is_clocked_in = cls._is_clocked_in(employee, today)
+        # Under the daily punch-limit hard cap (_validate_daily_punch_limit),
+        # an employee has at most one IN and one OUT per day — once both
+        # exist, neither a further Clock In nor Clock Out is allowed until
+        # the next attendance day. Computed from the already-fetched
+        # `punches` list, no extra query. Distinct from is_clocked_in=False,
+        # which is also true for "hasn't clocked in yet today" — ClockWidget
+        # needs both to tell "ready to clock in" apart from "done for today".
+        day_completed = (
+            any(p.punch_type == AttendancePunch.PUNCH_IN for p in punches)
+            and any(p.punch_type == AttendancePunch.PUNCH_OUT for p in punches)
+        )
 
         punch_list = [
             {
@@ -238,6 +267,7 @@ class PunchService:
 
         return {
             'is_clocked_in':   is_clocked_in,
+            'day_completed':   day_completed,
             'punches':         punch_list,
             'total_seconds':   total_seconds,
             'session_seconds': session_seconds,
@@ -245,6 +275,46 @@ class PunchService:
         }
 
     # ── Private helpers ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _has_punch_today(employee, for_date: date, punch_type: str) -> bool:
+        return AttendancePunch.objects.filter(
+            employee=employee, punched_at__date=for_date, punch_type=punch_type,
+        ).exists()
+
+    @classmethod
+    def _validate_daily_punch_limit(cls, employee, today: date, punch_type: str) -> None:
+        """
+        Hard cap: at most one successful Clock In and one successful Clock Out
+        per employee per attendance day (today's IST calendar date) — once an
+        employee has both, no further Clock In or Clock Out is allowed until
+        the next attendance day. Raises ValueError (caught by the view as a
+        400) with a message specific to which rule was violated.
+
+        Called twice per punch: once as an optimistic fast pre-check (so a
+        mis-ordered or repeat punch fails before GPS/face capture), and once
+        again, authoritatively, inside the row-locked transaction right before
+        the punch is persisted (see record_punch()) — only that second call is
+        race-safe; this method itself does no locking.
+        """
+        has_in  = cls._has_punch_today(employee, today, AttendancePunch.PUNCH_IN)
+        has_out = cls._has_punch_today(employee, today, AttendancePunch.PUNCH_OUT)
+
+        if punch_type == AttendancePunch.PUNCH_IN:
+            if has_in and has_out:
+                raise ValueError(
+                    'You have already completed your attendance for today '
+                    '(Clock In and Clock Out). Please try again tomorrow.'
+                )
+            if has_in:
+                raise ValueError(
+                    'You are already clocked in. Please clock out before clocking in again.'
+                )
+        else:  # PUNCH_OUT
+            if not has_in:
+                raise ValueError('You are not currently clocked in. Please clock in first.')
+            if has_out:
+                raise ValueError('You have already clocked out today. Please try again tomorrow.')
 
     @staticmethod
     def _is_clocked_in(employee, for_date: date) -> bool:
@@ -347,7 +417,7 @@ class AttendanceProcessorService:
                 'note':                  'Weekly off',
             }
         else:
-            record_data = cls._calculate(punches, for_date, cfg)
+            record_data = cls._calculate(employee, punches, for_date, cfg)
 
         # work_mode is orthogonal to status (presence/absence) — a day can be
         # "present" and "wfh" at once — so it's derived here on every
@@ -402,7 +472,7 @@ class AttendanceProcessorService:
     # ── Calculation ───────────────────────────────────────────────────────────
 
     @classmethod
-    def _calculate(cls, punches: list, for_date: date, cfg) -> dict:
+    def _calculate(cls, employee, punches: list, for_date: date, cfg) -> dict:
         """
         Returns a dict suitable for AttendanceRecord.objects.update_or_create(defaults=...).
         """
@@ -447,8 +517,20 @@ class AttendanceProcessorService:
         # Determine status
         has_open_session    = any(out is None for _, out in pairs)
         has_complete_pair   = any(out is not None for _, out in pairs)
-        is_late             = cls._check_late(_ist_time(first_in), cfg)
-        is_early_exit       = cls._check_early_exit(_ist_time(last_out) if last_out else None, cfg)
+
+        # Resolve the employee's effective shift ONCE (their own assignment,
+        # if any, else the global default) — reused below for both the late
+        # and early-exit checks and the note text, instead of a separate
+        # lookup each. None exactly when cfg has no working_hours configured
+        # at all, preserving today's "nobody is ever late" behaviour for an
+        # org with no Attendance Settings configured yet.
+        shift = None
+        if cfg and hasattr(cfg, 'working_hours'):
+            from core.cache_service import ShiftCacheService
+            shift = ShiftCacheService.get_effective(employee, for_date)
+
+        is_late             = cls._check_late(_ist_time(first_in), shift)
+        is_early_exit       = cls._check_early_exit(_ist_time(last_out) if last_out else None, shift)
         status              = cls._resolve_status(
             net_minutes, is_late, cfg, has_open_session, has_complete_pair
         )
@@ -458,7 +540,7 @@ class AttendanceProcessorService:
 
         note = ''
         if is_late:
-            grace = cfg.working_hours.grace_period_minutes if cfg and hasattr(cfg, 'working_hours') else 0
+            grace = shift.grace_period_minutes if shift else 0
             note = 'Grace exceeded' if grace else 'Late arrival'
 
         return {
@@ -487,23 +569,30 @@ class AttendanceProcessorService:
         }
 
     @staticmethod
-    def _check_late(punch_in_time: time, cfg) -> bool:
-        if not cfg or not hasattr(cfg, 'working_hours'):
+    def _check_late(punch_in_time: time, shift) -> bool:
+        """shift is the employee's resolved ShiftCacheService._Shift (their own
+        assignment, or the global default) — see _calculate(). None means the
+        org has no AttendanceWorkingHours configured at all; preserved as
+        "never late", same as before shift resolution existed."""
+        if not shift:
             return False
-        wh = cfg.working_hours
         grace_end = (
-            datetime.combine(date.today(), wh.shift_start)
-            + timedelta(minutes=wh.grace_period_minutes)
+            datetime.combine(date.today(), shift.start_time)
+            + timedelta(minutes=shift.grace_period_minutes)
         ).time()
         return punch_in_time > grace_end
 
     @staticmethod
-    def _check_early_exit(punch_out_time: Optional[time], cfg) -> bool:
-        if not punch_out_time or not cfg or not hasattr(cfg, 'working_hours'):
+    def _check_early_exit(punch_out_time: Optional[time], shift) -> bool:
+        """shift is the employee's resolved ShiftCacheService._Shift — see
+        _check_late(). The 30-minute early-exit grace stays hardcoded here,
+        unchanged from before this method resolved a per-employee shift_end —
+        see PunchRulesPolicy.early_exit_grace_minutes, which this still does
+        not read (pre-existing, unrelated to shift support)."""
+        if not punch_out_time or not shift:
             return False
-        wh = cfg.working_hours
         early_threshold = (
-            datetime.combine(date.today(), wh.shift_end)
+            datetime.combine(date.today(), shift.end_time)
             - timedelta(minutes=30)
         ).time()
         return punch_out_time < early_threshold

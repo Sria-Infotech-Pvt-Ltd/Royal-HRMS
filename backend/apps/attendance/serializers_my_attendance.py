@@ -176,6 +176,7 @@ class TodayAttendanceSerializer(serializers.Serializer):
     Fields match ClockWidget's state variables exactly.
     """
     is_clocked_in   = serializers.BooleanField()
+    day_completed   = serializers.BooleanField()
     punches         = PunchEntrySerializer(many=True)
     total_seconds   = serializers.IntegerField()
     session_seconds = serializers.IntegerField()

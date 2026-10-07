@@ -38,8 +38,15 @@ def _get_settings():
 def _shift_end_deadline(cfg) -> time | None:
     """
     Returns the time (IST, naive) after which a missing clock-out becomes an
-    un-punch: shift_end + missing_punch_grace_minutes.
-    Returns None if settings are not configured (always run detection).
+    un-punch, using the org-wide default shift: shift_end +
+    missing_punch_grace_minutes. Returns None if settings are not configured
+    (always run detection).
+
+    This is the GLOBAL default deadline only — used as a display fallback
+    (_expected_out_display) and as one input to _earliest_possible_deadline()
+    below. The actual per-employee decision of who is overdue is made by
+    _resolve_deadlines() against each employee's own effective shift (their
+    assignment, or this same global default when they have none).
     """
     if not cfg or not hasattr(cfg, 'working_hours'):
         return None
@@ -51,8 +58,70 @@ def _shift_end_deadline(cfg) -> time | None:
     return deadline
 
 
+def _earliest_possible_deadline(cfg) -> time | None:
+    """
+    Lower bound used only to short-circuit the Celery run when NO employee's
+    shift could possibly have ended yet — cheap enough to compute every 5
+    minutes (one small, rarely-changing table). Must consider every
+    WorkingHoursPolicy's end_time, not just the global default, so an
+    SGT/ICT employee (16:30 end) is checked as soon as 16:30 + grace passes,
+    instead of being delayed until the global default's 18:00 + grace the way
+    a single global deadline would. The actual per-employee overdue decision
+    still happens later in _resolve_deadlines() / detect_and_mark_unpunches();
+    this only decides whether it's worth querying at all.
+
+    Deliberately NOT filtered by is_active: deactivating a policy (soft
+    delete) doesn't reassign or clear any EmployeeShiftAssignment still
+    pointing at it — PROTECT only blocks a hard delete, not deactivation —
+    so an employee can still be resolved against a now-inactive policy by
+    _resolve_deadlines()/ShiftCacheService. Excluding inactive policies here
+    would let this floor skip past such an employee's real deadline, delaying
+    detection until a later run. Including a stale/unused policy's end_time
+    only makes this floor more conservative (runs the real check slightly
+    more often) — never causes a miss, so there's no reason to filter here.
+    """
+    global_deadline = _shift_end_deadline(cfg)
+    if global_deadline is None:
+        return None
+    wh = cfg.working_hours
+    grace = getattr(wh, 'missing_punch_grace_minutes', _DEFAULT_GRACE_MINUTES)
+    end_times = [wh.shift_end]
+    try:
+        from apps.attendance.models import WorkingHoursPolicy
+        end_times += list(
+            WorkingHoursPolicy.objects.values_list('end_time', flat=True)
+        )
+    except Exception:
+        logger.warning('WorkingHoursPolicy lookup failed while computing earliest deadline')
+    earliest_end = min(end_times)
+    return (datetime.combine(date.today(), earliest_end) + timedelta(minutes=grace)).time()
+
+
+def _resolve_deadlines(employee_ids: list, cfg) -> dict:
+    """
+    Per-employee missing-clock-out deadline for target_date's open records —
+    ONE extra query regardless of len(employee_ids) (via
+    ShiftCacheService.get_effective_map), no N+1. The missing-punch grace
+    period itself stays the single global
+    AttendanceWorkingHours.missing_punch_grace_minutes value for everyone
+    (WorkingHoursPolicy has no equivalent field of its own) — only the shift
+    end time this grace is added to varies per employee.
+    """
+    from core.cache_service import ShiftCacheService
+    grace = _DEFAULT_GRACE_MINUTES
+    if cfg and hasattr(cfg, 'working_hours'):
+        grace = getattr(cfg.working_hours, 'missing_punch_grace_minutes', _DEFAULT_GRACE_MINUTES)
+    shift_map = ShiftCacheService.get_effective_map(employee_ids, date.today())
+    return {
+        eid: (datetime.combine(date.today(), shift.end_time) + timedelta(minutes=grace)).time()
+        for eid, shift in shift_map.items()
+    }
+
+
 def _expected_out_display(cfg) -> str:
-    """Shift end as 'HH:MM' for the API response."""
+    """Shift end as 'HH:MM' for the API response — global-default fallback.
+    See services_hr_audit.get_unpunches() for the per-employee version used
+    once a record is actually being displayed."""
     if cfg and hasattr(cfg, 'working_hours'):
         return cfg.working_hours.shift_end.strftime('%H:%M')
     return '18:00'
@@ -79,20 +148,27 @@ def detect_and_mark_unpunches(
     Returns: {'marked': int, 'notified': int, 'skipped': int, 'reason': str}
 
     Design:
-      - If current IST time <= deadline, return early (shift not ended yet).
+      - If current IST time is before the earliest deadline ANY shift could
+        possibly produce today, return early (nothing could be overdue yet).
+      - Each employee is then checked against their OWN effective shift's
+        deadline (their assignment, or the global default when unassigned) —
+        not a single global cutoff, so a UK-shift employee (12:00-21:00)
+        isn't wrongly flagged while still legitimately working, and an
+        SGT/ICT employee (07:30-16:30) is caught as soon as their own shift's
+        grace period elapses instead of waiting for everyone else's.
       - Employees on weekly_off / holiday / on_leave are excluded.
       - Already-incomplete records are excluded (idempotent re-runs).
     """
     from apps.attendance.models import AttendanceRecord
 
-    cfg           = _get_settings()
-    deadline      = _shift_end_deadline(cfg)
-    current_time  = _now_ist()
+    cfg              = _get_settings()
+    earliest_deadline = _earliest_possible_deadline(cfg)
+    current_time      = _now_ist()
 
-    if deadline is not None and current_time <= deadline:
+    if earliest_deadline is not None and current_time <= earliest_deadline:
         return {
             'marked': 0, 'notified': 0, 'skipped': 0,
-            'reason': f'shift_not_ended (deadline={deadline.strftime("%H:%M")})',
+            'reason': f'shift_not_ended (earliest_deadline={earliest_deadline.strftime("%H:%M")})',
         }
 
     employee_qs = User.objects.filter(is_active=True)
@@ -101,7 +177,10 @@ def detect_and_mark_unpunches(
     if department:
         employee_qs = employee_qs.filter(department=department)
 
-    # All open sessions not yet marked
+    # All open sessions not yet marked — same single query as before; the
+    # per-employee deadline filter below is applied in Python against this
+    # already-small result set (open sessions are rare), not pushed into a
+    # second query per employee.
     open_records = list(
         AttendanceRecord.objects
         .filter(
@@ -121,7 +200,18 @@ def detect_and_mark_unpunches(
     if not open_records:
         return {'marked': 0, 'notified': 0, 'skipped': 0, 'reason': 'none_found'}
 
-    record_ids    = [r.pk for r in open_records]
+    # One bulk query resolves every open record's employee-specific deadline
+    # (assignment or global default) — no N+1.
+    deadlines = _resolve_deadlines([r.employee_id for r in open_records], cfg)
+    overdue_records = [
+        r for r in open_records
+        if current_time > deadlines.get(r.employee_id, earliest_deadline)
+    ]
+
+    if not overdue_records:
+        return {'marked': 0, 'notified': 0, 'skipped': 0, 'reason': 'none_overdue_yet'}
+
+    record_ids    = [r.pk for r in overdue_records]
 
     # ── Bulk mark incomplete ───────────────────────────────────────────────────
     with transaction.atomic():
@@ -134,12 +224,12 @@ def detect_and_mark_unpunches(
     logger.info('Un-punch detection: marked %d records incomplete on %s', marked, target_date)
 
     # ── Notifications (one per employee per date per channel) ──────────────────
-    notified = _notify_employees(open_records, target_date)
+    notified = _notify_employees(overdue_records, target_date)
 
     return {
         'marked':   marked,
         'notified': notified,
-        'skipped':  len(open_records) - marked,
+        'skipped':  len(overdue_records) - marked,
         'reason':   'ok',
     }
 

@@ -43,6 +43,9 @@ from apps.attendance.views import (
     WeeklyOffAssignmentListView,
     WeeklyOffAssignmentBulkView,
     WeeklyOffAssignmentHistoryView,
+    ShiftAssignmentListView,
+    ShiftAssignmentBulkView,
+    ShiftAssignmentHistoryView,
     # Audit + Invalid Punch Actions
     HRAttendanceAuditView,
     HRInvalidPunchAssignView,
@@ -117,6 +120,9 @@ urlpatterns = [
     path('weekly-off-assignments/',                      WeeklyOffAssignmentListView.as_view(),    name='weekly-off-assignments-list'),
     path('weekly-off-assignments/bulk/',                  WeeklyOffAssignmentBulkView.as_view(),    name='weekly-off-assignments-bulk'),
     path('weekly-off-assignments/<str:employee_id>/history/', WeeklyOffAssignmentHistoryView.as_view(), name='weekly-off-assignments-history'),
+    path('shift-assignments/',                      ShiftAssignmentListView.as_view(),    name='shift-assignments-list'),
+    path('shift-assignments/bulk/',                  ShiftAssignmentBulkView.as_view(),    name='shift-assignments-bulk'),
+    path('shift-assignments/<str:employee_id>/history/', ShiftAssignmentHistoryView.as_view(), name='shift-assignments-history'),
 
     # ── Audit History ─────────────────────────────────────────────────────────
     path('records/<uuid:pk>/audit/',                    HRAttendanceAuditView.as_view(),         name='hr-attendance-audit'),

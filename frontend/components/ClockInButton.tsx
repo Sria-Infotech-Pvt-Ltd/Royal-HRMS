@@ -35,14 +35,20 @@ export default function ClockInButton({ onPunchSuccess }: Props) {
   const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
 
   const isClockedIn = session?.is_clocked_in ?? false;
+  // Daily punch limit (backend-enforced, see PunchService._validate_daily_punch_limit):
+  // one Clock In and one Clock Out per attendance day. Once both exist, the
+  // button must stay disabled rather than reverting to a clickable "Clock In" —
+  // the backend would reject it anyway, but this avoids a pointless GPS/face
+  // capture flow the user would only see fail at the last step.
+  const dayCompleted = session?.day_completed ?? false;
   // isLocating covers prepareLocation()'s GPS acquisition + geofence-check
   // call — without it here, the button stayed clickable during that window,
   // letting a repeated click start a second, fully independent punch flow
   // (GPS + geofence + face capture + punch) stacked on top of the first.
-  const isBusy      = isLoading || isPunching || isLocating || isLockedOut;
+  const isBusy      = isLoading || isPunching || isLocating || isLockedOut || dayCompleted;
 
   async function handlePunch() {
-    if (isLockedOut) return;
+    if (isLockedOut || dayCompleted) return;
     // Location is fetched and geofence-validated BEFORE face verification —
     // same order the voice clock-in/out flow enforces.
     const { ok, location } = await prepareLocation(MODE);
@@ -94,6 +100,11 @@ export default function ClockInButton({ onPunchSuccess }: Props) {
             <>
               <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />
               Please wait…
+            </>
+          ) : dayCompleted ? (
+            <>
+              <i className="ti ti-circle-check" style={{ fontSize: 14 }} />
+              Attendance Completed
             </>
           ) : (
             <>

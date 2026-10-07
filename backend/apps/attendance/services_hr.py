@@ -12,7 +12,9 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, OuterRef, Subquery, Q
 
-from apps.attendance.models import AttendanceRecord, AttendancePunch, EmployeeWeeklyOffAssignment
+from apps.attendance.models import (
+    AttendanceRecord, AttendancePunch, EmployeeShiftAssignment, EmployeeWeeklyOffAssignment,
+)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -558,6 +560,173 @@ def assign_weekly_off(employee_code: str, policy, effective_from: datetime.date,
         return None
     return (
         EmployeeWeeklyOffAssignment.objects
+        .filter(employee__employee_id=employee_code, effective_to__isnull=True)
+        .select_related('policy')
+        .first()
+    )
+
+
+# ─── Employee Shift Assignment ──────────────────────────────────────────────
+#
+# Assigns a WorkingHoursPolicy (configured under Settings -> Attendance Rules
+# -> Working Hours — the existing WorkingHoursPolicy CRUD at
+# /api/attendance/working-hours/, unchanged) to a specific employee, effective
+# from a given date. Mirrors the Weekly Off Assignment block above exactly —
+# same history-preserving close-out-before-insert logic, same query-count
+# guarantees. All actual attendance calculations (late arrival, early exit,
+# missing clock-out) resolve the effective shift through the centralized
+# core.cache_service.ShiftCacheService, not through this module directly.
+
+def _current_shift_subqueries(as_of: datetime.date) -> dict:
+    """Subquery annotations for each employee's shift assignment open as_of a date — one query, no N+1."""
+    current_qs = (
+        EmployeeShiftAssignment.objects
+        .filter(employee=OuterRef('pk'), effective_from__lte=as_of)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=as_of))
+        .order_by('-effective_from')
+    )
+    return {
+        '_esa_id':             Subquery(current_qs.values('id')[:1]),
+        '_esa_policy_id':      Subquery(current_qs.values('policy_id')[:1]),
+        '_esa_policy_name':    Subquery(current_qs.values('policy__name')[:1]),
+        '_esa_effective_from': Subquery(current_qs.values('effective_from')[:1]),
+        '_esa_effective_to':   Subquery(current_qs.values('effective_to')[:1]),
+    }
+
+
+def build_shift_assignment_queryset(filters: dict):
+    """
+    Filtered/annotated/ordered User queryset — one row per active employee,
+    with their CURRENT shift assignment (if any) as of today attached via
+    Subquery. NOT evaluated here — the caller pages it with core.pagination
+    before converting rows to dicts, so only one page of employees is ever
+    actually fetched from the database (safe for 2,000+ employees).
+
+    filters: branch, department, shift (policy id), status
+             ('assigned'|'unassigned'|''), search, employee_ids (manager scope)
+    """
+    branch       = filters.get('branch', '')
+    department   = filters.get('department', '')
+    shift_id     = filters.get('shift', '')
+    status_f     = filters.get('status', '')
+    search       = filters.get('search', '').strip()
+    employee_ids = filters.get('employee_ids')
+
+    today = datetime.date.today()
+    qs = User.objects.filter(is_active=True).exclude(employee_id='')
+    if employee_ids is not None:
+        qs = qs.filter(id__in=employee_ids)
+    elif branch:
+        qs = qs.filter(branch=branch)
+    if department:
+        qs = qs.filter(department=department)
+    if search:
+        qs = qs.filter(Q(full_name__icontains=search) | Q(employee_id__icontains=search))
+
+    qs = qs.annotate(**_current_shift_subqueries(today))
+
+    if shift_id:
+        qs = qs.filter(_esa_policy_id=shift_id)
+    if status_f == 'assigned':
+        qs = qs.exclude(_esa_id__isnull=True)
+    elif status_f == 'unassigned':
+        qs = qs.filter(_esa_id__isnull=True)
+
+    return qs.order_by('full_name')
+
+
+def serialize_shift_assignment_row(user) -> dict:
+    """Build one list row from a User instance annotated by build_shift_assignment_queryset()."""
+    return {
+        'employee_id':    user.employee_id or '',
+        'employee_name':  user.full_name or '',
+        'department':     user.department or '',
+        'branch':         user.branch or '',
+        'shift_id':       str(user._esa_policy_id) if user._esa_policy_id else None,
+        'shift_name':     user._esa_policy_name or None,
+        'effective_from': user._esa_effective_from.strftime('%Y-%m-%d') if user._esa_effective_from else None,
+        'effective_to':   user._esa_effective_to.strftime('%Y-%m-%d') if user._esa_effective_to else None,
+        'status':         'Assigned' if user._esa_policy_id else 'Not Assigned',
+    }
+
+
+def get_shift_assignment_history(employee_id: str) -> list[dict]:
+    """Full shift assignment history for one employee, newest first."""
+    rows = (
+        EmployeeShiftAssignment.objects
+        .filter(employee__employee_id=employee_id)
+        .select_related('policy')
+        .order_by('-effective_from')
+    )
+    return [
+        {
+            'id':             str(r.id),
+            'shift_id':       str(r.policy_id),
+            'shift_name':     r.policy.name,
+            'effective_from': r.effective_from.strftime('%Y-%m-%d'),
+            'effective_to':   r.effective_to.strftime('%Y-%m-%d') if r.effective_to else None,
+            'is_current':     r.effective_to is None,
+        }
+        for r in rows
+    ]
+
+
+@transaction.atomic
+def bulk_assign_shift(employee_codes: list, policy, effective_from: datetime.date, actor=None) -> int:
+    """
+    Assign `policy` (a WorkingHoursPolicy) to every employee whose
+    human-readable employee_id is in `employee_codes`, effective
+    `effective_from`. Preserves history exactly like bulk_assign_weekly_off()
+    above: each employee's currently-open assignment (if it started before
+    this new one) is closed out (effective_to = effective_from - 1 day),
+    never deleted or overwritten. An open row that starts on/after the new
+    effective_from is superseded outright (correcting a future-dated
+    assignment before it took effect).
+
+    Four queries total regardless of len(employee_codes) — safe for 2,000+.
+    """
+    if not employee_codes:
+        return 0
+
+    user_ids = list(
+        User.objects.filter(employee_id__in=employee_codes, is_active=True).values_list('id', flat=True)
+    )
+    if not user_ids:
+        return 0
+
+    day_before = effective_from - datetime.timedelta(days=1)
+
+    (
+        EmployeeShiftAssignment.objects
+        .filter(employee_id__in=user_ids, effective_to__isnull=True, effective_from__lt=effective_from)
+        .update(effective_to=day_before, updated_by=actor)
+    )
+    (
+        EmployeeShiftAssignment.objects
+        .filter(employee_id__in=user_ids, effective_to__isnull=True, effective_from__gte=effective_from)
+        .delete()
+    )
+    EmployeeShiftAssignment.objects.bulk_create([
+        EmployeeShiftAssignment(
+            employee_id=uid, policy=policy, effective_from=effective_from,
+            created_by=actor, updated_by=actor,
+        )
+        for uid in user_ids
+    ])
+    logger.info(
+        'Shift "%s" assigned to %d employee(s) effective %s by %s',
+        policy.policy_code, len(user_ids), effective_from, getattr(actor, 'email', 'system'),
+    )
+    return len(user_ids)
+
+
+def assign_shift(employee_code: str, policy, effective_from: datetime.date, actor=None):
+    """Single-employee convenience wrapper around bulk_assign_shift()."""
+    count = bulk_assign_shift([employee_code], policy, effective_from, actor)
+    if count == 0:
+        return None
+    return (
+        EmployeeShiftAssignment.objects
         .filter(employee__employee_id=employee_code, effective_to__isnull=True)
         .select_related('policy')
         .first()
