@@ -531,6 +531,10 @@ class OrgUnit(models.Model):
                      related_name='children',
                  )
     cost_center = models.CharField(max_length=30, blank=True)
+    # Phase 5A Task A.2 — additive FK to the new CostCenter master; the
+    # text column above is kept and NOT yet synced from this ref (Task L
+    # deferred, see PHASE5A_REPORT.md).
+    cost_center_ref = models.ForeignKey('CostCenter', on_delete=models.SET_NULL, null=True, blank=True, related_name='org_units')
     is_department_level = models.BooleanField(default=False)
     # Deactivate rather than delete once a unit has real history (positions,
     # placements) under it — deleting history is a compliance problem.
@@ -556,6 +560,8 @@ class JobTemplate(models.Model):
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name       = models.CharField(max_length=150, unique=True)
     band       = models.CharField(max_length=20, blank=True)
+    # Phase 5A Task A.2 — additive FK to the new Band master.
+    band_ref   = models.ForeignKey('Band', on_delete=models.SET_NULL, null=True, blank=True, related_name='job_templates')
     is_active  = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -587,6 +593,12 @@ class Position(models.Model):
                     )
     title         = models.CharField(max_length=150)
     grade         = models.CharField(max_length=20, blank=True)
+    # Phase 5A Task A.2/A.3 — additive FKs; text columns kept, not yet synced.
+    grade_ref     = models.ForeignKey('Grade', on_delete=models.SET_NULL, null=True, blank=True, related_name='positions')
+    designation_ref = models.ForeignKey('Designation', on_delete=models.SET_NULL, null=True, blank=True, related_name='positions')
+    job_family    = models.ForeignKey('JobFamily', on_delete=models.SET_NULL, null=True, blank=True, related_name='positions')
+    fte           = models.DecimalField(max_digits=3, decimal_places=2, default=1, help_text='Full-time-equivalent fraction for this seat.')
+    headcount_budget = models.PositiveSmallIntegerField(default=1)
     is_chief      = models.BooleanField(default=False)
     # Optional — which Role a person placed into this seat should get.
     # Only ever *suggested* to HR at Create Employee time (prefills the Role
@@ -627,6 +639,16 @@ class Position(models.Model):
 
     def __str__(self) -> str:
         return f'{self.title} — {self.org_unit.name}'
+
+    @property
+    def is_vacant(self) -> bool:
+        """Phase 5A Task A.3 — derived, not stored: true if no current
+        (open-ended or today-covering) Placement exists for this seat."""
+        from django.utils import timezone
+        today = timezone.localdate()
+        return not self.placements.filter(effective_from__lte=today).filter(
+            Q(effective_to__isnull=True) | Q(effective_to__gte=today)
+        ).exists()
 
 
 class Placement(models.Model):
@@ -2388,6 +2410,17 @@ class EducationRecord(models.Model):
     start_date          = models.DateField(null=True, blank=True)
     end_date            = models.DateField(null=True, blank=True)
     order               = models.PositiveSmallIntegerField(default=0)
+    # Phase 5A Task G.1 — structured score, parsed best-effort from
+    # `percentage` where possible; `percentage` itself is untouched.
+    SCORE_TYPE_PERCENTAGE = 'percentage'
+    SCORE_TYPE_CGPA = 'cgpa'
+    SCORE_TYPE_GRADE = 'grade'
+    SCORE_TYPE_CHOICES = [(SCORE_TYPE_PERCENTAGE, 'Percentage'), (SCORE_TYPE_CGPA, 'CGPA'), (SCORE_TYPE_GRADE, 'Grade')]
+    score_type          = models.CharField(max_length=20, choices=SCORE_TYPE_CHOICES, blank=True)
+    score_value         = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    score_scale         = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, help_text='e.g. 10 for a CGPA out of 10.')
+    is_highest          = models.BooleanField(default=False, help_text='Derived by EDUCATION_LEVEL_RANK, admin-overridable.')
+    is_completed        = models.BooleanField(default=True)
     created_at          = models.DateTimeField(auto_now_add=True)
     updated_at          = models.DateTimeField(auto_now=True)
 
@@ -2440,6 +2473,13 @@ class WorkExperienceRecord(models.Model):
     responsibilities    = models.TextField(blank=True)
     reason_for_leaving  = models.TextField(blank=True)
     order               = models.PositiveSmallIntegerField(default=0)
+    # Phase 5A Task G.2 — `country` is new; `employment_type` itself is
+    # NOT touched here (converting it to the shared EMPLOYMENT_TYPE
+    # lookup is explicitly coordinated with Phase 5B, which owns
+    # User.employee_type's conversion — not done in this pass).
+    country             = models.ForeignKey('platform_core.Country', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    is_verified         = models.BooleanField(default=False)
+    verified_by         = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     created_at          = models.DateTimeField(auto_now_add=True)
     updated_at          = models.DateTimeField(auto_now=True)
 
@@ -2479,6 +2519,11 @@ class FamilyMember(models.Model):
     blood_group  = models.CharField(max_length=5, blank=True)
     is_dependent = models.BooleanField(default=False)
     order        = models.PositiveSmallIntegerField(default=0)
+    # Phase 5A Task F.1 — best-effort split of `name`, original preserved.
+    first_name   = models.CharField(max_length=100, blank=True)
+    last_name    = models.CharField(max_length=100, blank=True)
+    is_nominee_eligible = models.BooleanField(default=True)
+    occupation   = models.CharField(max_length=150, blank=True)
     created_at   = models.DateTimeField(auto_now_add=True)
     updated_at   = models.DateTimeField(auto_now=True)
 
@@ -2969,3 +3014,17 @@ class EmailTemplateAttachment(models.Model):
 
     def __str__(self) -> str:
         return self.filename
+
+
+# ─── Phase 5A — structured employee master data (additive) ─────────────────
+# Split into separate files purely to respect this project's ~300-line
+# file guideline; re-exported here so `from apps.accounts.models import X`
+# keeps working for every new model, same convention as platform_core's
+# own models/ package split in Phase 2.
+from apps.accounts.models_org_masters import Band, Grade, JobFamily, Designation, CostCenter  # noqa: E402,F401
+from apps.accounts.models_contact_address import ContactMethod, Address  # noqa: E402,F401
+from apps.accounts.models_identity_bank import IdentityDocumentType, IdentityDocument, BankAccount  # noqa: E402,F401
+from apps.accounts.models_family_skills import (  # noqa: E402,F401
+    EmergencyContact, Nomination, SkillMaster, EmployeeSkill, EmployeeCertification,
+    EmployeeLanguage, StatutoryEnrolment,
+)
