@@ -280,7 +280,17 @@ class LeavePolicy(models.Model):
 class LeaveBalance(models.Model):
     id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     employee         = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='leave_balances')
-    leave_type       = models.CharField(max_length=20, choices=LEAVE_TYPE_CHOICES)
+    # Phase 6A Task A.3 — widened from CharField(20, choices=LEAVE_TYPE_CHOICES)
+    # to match LeavePolicy.leave_type's own CharField(50), no choices. The old
+    # 20-char/8-fixed-code constraint meant an admin-created LeavePolicy whose
+    # key wasn't one of the 8 built-ins could never get a LeaveBalance row —
+    # this is the actual defect fix. Existing values are untouched (all 8
+    # legacy codes fit within 50 chars). leave_type_ref below is the new,
+    # preferred FK; this CharField stays as the compatibility column.
+    leave_type       = models.CharField(max_length=50)
+    leave_type_ref   = models.ForeignKey(
+        'hrms.LeaveType', on_delete=models.PROTECT, null=True, blank=True, related_name='balances',
+    )
     year             = models.PositiveIntegerField()
     total_days                = models.DecimalField(max_digits=5, decimal_places=1, default=0)
     used_days                 = models.DecimalField(max_digits=5, decimal_places=1, default=0)
@@ -697,7 +707,11 @@ class SeparationActivity(models.Model):
 class LeaveRequest(models.Model):
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     employee   = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='leave_requests')
-    leave_type = models.CharField(max_length=20, choices=LEAVE_TYPE_CHOICES)
+    # Phase 6A Task A.3 — same widening as LeaveBalance.leave_type above.
+    leave_type = models.CharField(max_length=50)
+    leave_type_ref = models.ForeignKey(
+        'hrms.LeaveType', on_delete=models.PROTECT, null=True, blank=True, related_name='requests',
+    )
     duration   = models.CharField(max_length=20, choices=DURATION_CHOICES, default=DURATION_FULL)
     start_date = models.DateField()
     end_date   = models.DateField()
@@ -993,3 +1007,10 @@ class EmployeeDocumentSubmission(models.Model):
 
     def __str__(self) -> str:
         return f'{self.file_name} ({self.get_category_display()}) — {self.employee_id}'
+
+
+# ─── Phase 6A — leave ledger and holiday calendars (additive) ──────────────
+from apps.hrms.models_leave_ledger import LeaveType, LeaveTransaction  # noqa: E402,F401
+from apps.hrms.models_holiday_calendar import (  # noqa: E402,F401
+    HolidayCalendar, HolidayCalendarEntry, HolidayCalendarAssignment,
+)

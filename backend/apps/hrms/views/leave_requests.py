@@ -28,6 +28,7 @@ from ..models import (
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
 )
+from ..services_leave_ledger import is_unpaid_lwp
 from ..serializers import (
     CarryForwardInputSerializer,
     CarryForwardLogSerializer,
@@ -179,7 +180,7 @@ class LeaveRequestListCreateView(APIView):
                     'Cancel or wait for it to resolve before applying for leave on the same dates.'
                 )
 
-            if leave_type != LEAVE_LWP:
+            if not is_unpaid_lwp(leave_type):
                 balance = (
                     LeaveBalance.objects
                     .select_for_update()
@@ -225,7 +226,7 @@ class LeaveRequestListCreateView(APIView):
                 handover_to=data.get('handover_to', ''),
                 handover_notes=data.get('handover_notes', ''),
                 document=data.get('document'),
-                is_lwp=(leave_type == LEAVE_LWP),
+                is_lwp=is_unpaid_lwp(leave_type),
                 l1_approver=l1_approver,
                 l2_approver=l2_approver,
                 status=initial_status,

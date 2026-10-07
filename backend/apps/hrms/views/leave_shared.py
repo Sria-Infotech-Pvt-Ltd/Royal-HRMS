@@ -28,6 +28,7 @@ from ..models import (
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
 )
+from ..services_leave_ledger import is_unpaid_lwp
 from ..serializers import (
     CarryForwardInputSerializer,
     CarryForwardLogSerializer,
@@ -442,7 +443,7 @@ def _validate_leave_policy(policy, employee, duration, total_days, start, end, d
 
 
 def _deduct_balance(employee, leave_type: str, days: float, year: int) -> None:
-    if leave_type == LEAVE_LWP:
+    if is_unpaid_lwp(leave_type):
         return
     LeaveBalance.objects.filter(
         employee=employee, leave_type=leave_type, year=year
@@ -498,14 +499,14 @@ def _leave_preview(request):
 
     available      = 0.0
     convert_to_lop = getattr(policy, 'convert_to_lop', False)
-    if leave_type and leave_type != LEAVE_LWP:
+    if leave_type and not is_unpaid_lwp(leave_type):
         bal = LeaveBalance.objects.filter(
             employee=request.user, leave_type=leave_type, year=start.year
         ).first()
         if bal:
             available = float(bal.total_days - bal.used_days)
 
-    lop_days        = round(max(0.0, actual_days - available), 1) if convert_to_lop and leave_type != LEAVE_LWP else 0.0
+    lop_days        = round(max(0.0, actual_days - available), 1) if convert_to_lop and not is_unpaid_lwp(leave_type) else 0.0
     leave_days_used = round(actual_days - lop_days, 1)
 
     warning = None
@@ -929,7 +930,7 @@ def _build_leave_request(user, lt_code: str, from_d, to_d, days_val, remarks: st
         duration=DURATION_FULL,
         l1_status=APPROVAL_APPROVED,
         l1_actioned_at=timezone.now(),
-        is_lwp=(lt_code == LEAVE_LWP),
+        is_lwp=is_unpaid_lwp(lt_code),
     )
 
 

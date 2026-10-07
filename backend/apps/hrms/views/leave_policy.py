@@ -204,7 +204,7 @@ class LeaveBalanceView(APIView):
 
         for emp in employees:
             for lt, policy in policies.items():
-                if lt == LEAVE_LWP:
+                if is_unpaid_lwp(lt):
                     continue
                 balance, created = LeaveBalance.objects.get_or_create(
                     employee=emp, leave_type=lt, year=year,
