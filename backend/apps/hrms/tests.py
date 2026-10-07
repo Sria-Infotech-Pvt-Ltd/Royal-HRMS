@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
 from apps.accounts.models import ApprovalWorkflowRule
+from apps.accounts.views import COO_ROLE_NAME
 from apps.hrms.models import Expense, LeaveBalance, LeavePolicy, LeaveRequest
 from config.test_runner import TEST_COMPANY_CODE
 
@@ -898,6 +899,179 @@ class LeaveRequestFlowTests(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
         self.assertIn('cannot approve', resp.data['message'].lower())
+
+
+class ManagerCooLeaveApprovalTests(TestCase):
+    """Two independent bugs, both keying off can_manage_team as a proxy for
+    "is this person in an approval relationship" instead of checking the
+    actual resolved/assigned relationship:
+
+    1. LeaveRequestListCreateView.post() discarded a correctly-resolved L1
+       approver whenever the SUBMITTER was a Manager, even when l1 resolved
+       to a real approver (Manager -> COO, see apps.accounts.views._is_coo).
+       Fixed to key on `l1 is None` only, not the submitter's own role.
+    2. _approval_scope_filter() only ever added the L1 scope
+       (l1_approver=user) when the VIEWER's own role had can_manage_team —
+       hiding a Manager's request from the COO even though the COO was
+       correctly stored as l1_approver. Fixed to check the actual
+       l1_approver relationship unconditionally.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+
+        hr_role = make_role('hr_coo_leave_test', permission_codenames=['leave.approve'])
+        self.hr = make_user(
+            'hr.coo.leave@test.com', role=hr_role, password='TestPass123!',
+            employee_id='EMPHCL001', full_name='HR Person', branch='Mumbai HQ',
+        )
+
+        # Mirrors the real production role: can_manage_team=False, unchanged.
+        coo_role = make_role(COO_ROLE_NAME, permission_codenames=['leave.approve'], can_manage_team=False)
+        self.coo = make_user(
+            'coo.leave@test.com', role=coo_role, password='TestPass123!',
+            employee_id='EMPCCL001', full_name='Chief Operating Officer', branch='Delhi HQ',
+        )
+
+        manager_role = make_role(
+            'manager_coo_leave_test', permission_codenames=['leave.approve'], can_manage_team=True,
+        )
+        self.manager = make_user(
+            'manager.coo.leave@test.com', role=manager_role, password='TestPass123!',
+            employee_id='EMPMCL001', full_name='Branch Manager', branch='Mumbai HQ',
+            reporting_manager=self.coo, hr=self.hr,
+        )
+        self.manager_no_reporting = make_user(
+            'manager2.coo.leave@test.com', role=manager_role, password='TestPass123!',
+            employee_id='EMPMCL002', full_name='Manager No RM', branch='Mumbai HQ',
+            hr=self.hr,
+        )
+
+        employee_role = make_role('employee_coo_leave_test')
+        self.employee = make_user(
+            'employee.coo.leave@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPECL001', full_name='Regular Employee', branch='Mumbai HQ',
+            reporting_manager=self.manager,
+        )
+
+        # A migration already seeds a default 'leave' rule — update in place.
+        ApprovalWorkflowRule.objects.update_or_create(
+            workflow_type=ApprovalWorkflowRule.WORKFLOW_LEAVE,
+            defaults={'l1_approver_role': manager_role, 'l2_approver_role': hr_role},
+        )
+        LeavePolicy.objects.update_or_create(
+            leave_type='casual',
+            defaults={'leave_type_label': 'Casual Leave', 'annual_days': Decimal('12.0'), 'is_active': True},
+        )
+        self.leave_date = _future_monday()
+        for emp in (self.manager, self.manager_no_reporting, self.employee):
+            LeaveBalance.objects.create(
+                employee=emp, leave_type='casual', year=self.leave_date.year,
+                total_days=Decimal('12.0'), used_days=Decimal('0'),
+            )
+
+    def _submit(self, client):
+        return client.post(
+            reverse('leave-request-list'),
+            {
+                'leave_type': 'casual', 'duration': 'full_day',
+                'start_date': self.leave_date.isoformat(), 'end_date': self.leave_date.isoformat(),
+                'reason': 'Personal work to attend to.',
+            },
+            format='json',
+        )
+
+    def _team_queue(self, email):
+        client = APIClient()
+        _login(client, email, password='TestPass123!')
+        return client.get(reverse('leave-request-list'), {'scope': 'team'})
+
+    # 1. Manager -> COO leave request
+    def test_manager_with_coo_reporting_manager_routes_to_coo_as_l1(self):
+        _login(self.client, 'manager.coo.leave@test.com', password='TestPass123!')
+        resp = self._submit(self.client)
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data['data']['status'], 'pending')
+        lr = LeaveRequest.objects.get(id=resp.data['data']['id'])
+        self.assertEqual(lr.l1_approver_id, self.coo.id)
+        self.assertEqual(lr.l2_approver_id, self.hr.id)
+        self.assertEqual(lr.status, 'pending')
+
+    # 2. Manager WITHOUT reporting manager — old behavior preserved exactly
+    def test_manager_without_reporting_manager_still_skips_to_l2(self):
+        _login(self.client, 'manager2.coo.leave@test.com', password='TestPass123!')
+        resp = self._submit(self.client)
+        self.assertEqual(resp.status_code, 201, resp.data)
+        lr = LeaveRequest.objects.get(id=resp.data['data']['id'])
+        self.assertIsNone(lr.l1_approver_id)
+        self.assertEqual(lr.l2_approver_id, self.hr.id)
+        self.assertEqual(lr.status, 'l2_pending')
+
+    # 3. COO Team Approvals visibility
+    def test_coo_sees_manager_request_in_team_approvals(self):
+        _login(self.client, 'manager.coo.leave@test.com', password='TestPass123!')
+        self._submit(self.client)
+
+        resp = self._team_queue('coo.leave@test.com')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        employee_ids = {r['employee_code'] for r in resp.data['data']['results']}
+        self.assertIn(self.manager.employee_id, employee_ids)
+
+    # 4. COO approval action
+    def test_coo_can_approve_manager_leave_request(self):
+        _login(self.client, 'manager.coo.leave@test.com', password='TestPass123!')
+        create_resp = self._submit(self.client)
+        request_id = create_resp.data['data']['id']
+
+        coo_client = APIClient()
+        _login(coo_client, 'coo.leave@test.com', password='TestPass123!')
+        approve_resp = coo_client.post(
+            reverse('leave-request-approve', kwargs={'request_id': request_id}),
+            {'action': 'approve'}, format='json',
+        )
+        self.assertEqual(approve_resp.status_code, 200, approve_resp.data)
+        # This fixture's workflow has a real L2 stage (hr_role), so COO's L1
+        # approval correctly advances to l2_pending (awaiting HR) rather than
+        # jumping straight to 'approved' — proves the two-stage chain works
+        # normally once the COO's L1 action is accepted, not just that the
+        # single action returns 200.
+        self.assertEqual(approve_resp.data['data']['status'], 'l2_pending')
+        lr = LeaveRequest.objects.get(id=request_id)
+        self.assertEqual(lr.l1_status, 'approved')
+
+    # 5. Normal Employee -> Manager flow unaffected
+    def test_normal_employee_to_manager_flow_unaffected(self):
+        _login(self.client, 'employee.coo.leave@test.com', password='TestPass123!')
+        resp = self._submit(self.client)
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data['data']['status'], 'pending')
+        lr = LeaveRequest.objects.get(id=resp.data['data']['id'])
+        self.assertEqual(lr.l1_approver_id, self.manager.id)
+
+        resp2 = self._team_queue('manager.coo.leave@test.com')
+        self.assertEqual(resp2.status_code, 200, resp2.data)
+        employee_ids = {r['employee_code'] for r in resp2.data['data']['results']}
+        self.assertIn(self.employee.employee_id, employee_ids)
+
+    # 6. Existing Manager L1 queue unchanged
+    def test_ordinary_manager_still_sees_own_l1_queue(self):
+        _login(self.client, 'employee.coo.leave@test.com', password='TestPass123!')
+        self._submit(self.client)
+
+        resp = self._team_queue('manager.coo.leave@test.com')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertGreaterEqual(resp.data['data']['count'], 1)
+
+    # 7. Existing L2 behavior unchanged
+    def test_l2_hr_still_sees_l2_pending_requests(self):
+        _login(self.client, 'manager2.coo.leave@test.com', password='TestPass123!')
+        self._submit(self.client)  # no reporting manager -> routes straight to L2/HR
+
+        resp = self._team_queue('hr.coo.leave@test.com')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        employee_ids = {r['employee_code'] for r in resp.data['data']['results']}
+        self.assertIn(self.manager_no_reporting.employee_id, employee_ids)
 
 
 class ExpenseSelfApprovalTests(TestCase):

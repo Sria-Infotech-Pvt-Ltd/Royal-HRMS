@@ -140,7 +140,18 @@ def _can_approve_at_stage(user, leave_request, stage: str) -> bool:
 def _approval_scope_filter(user) -> 'Q':
     """
     Scope filter for the approval queue — enforces both permission and status visibility.
-    can_manage_team  → REQ_PENDING requests where they are the designated L1 approver.
+    L1 visibility    → REQ_PENDING requests where `user` is the designated
+                       l1_approver, unconditionally — based on the actual
+                       LeaveRequest relationship, not on whether the viewer's
+                       role has can_manage_team. A Manager is normally the
+                       one who ends up assigned as l1_approver for their
+                       direct reports, which is why this used to look like a
+                       can_manage_team check — but the COO (can_manage_team=
+                       False) can also be explicitly assigned as l1_approver
+                       via the Manager -> COO reporting exception, and must
+                       see those requests too. is_manager below is kept only
+                       for the existing L2 orphan-fallback decision, which is
+                       deliberately unrelated to this.
     leave.approve    → REQ_L2_PENDING requests where they are the designated l2_approver
                        (an employee's specifically assigned HR — see User.hr), plus —
                        for non-manager approvers only — orphaned requests (no HR
@@ -172,7 +183,7 @@ def _approval_scope_filter(user) -> 'Q':
         return branch_q & Q(status__in=[REQ_PENDING, REQ_L2_PENDING]) & ~Q(employee=user)
 
     is_manager = bool(user.role and user.role.can_manage_team)
-    scope = Q(l1_approver=user, status=REQ_PENDING) if is_manager else None
+    scope = Q(l1_approver=user, status=REQ_PENDING)
 
     if _has_perm(user, 'leave.approve'):
         l2_scope = Q(l2_approver=user, status=REQ_L2_PENDING)
@@ -979,10 +990,19 @@ class LeaveRequestListCreateView(APIView):
 
             l1, l2 = _resolve_approval_chain(request.user)
 
-            # Managers skip L1 — their leave routes directly to HR (L2).
-            # Also escalate to L2 when the employee has no reporting manager set,
-            # so the request is never orphaned with no one to act on it.
-            if (request.user.role and request.user.role.can_manage_team) or l1 is None:
+            # A Manager normally has no reporting_manager, so l1 naturally
+            # resolves to None and this escalates straight to L2 (HR) — the
+            # original reason for this branch. One exception now exists:
+            # a Manager whose reporting_manager is the COO (an explicit,
+            # narrow exception — see _is_coo() in apps/accounts/views.py)
+            # DOES get a real l1 back from _resolve_approval_chain(), and
+            # that resolved approver must be honored rather than discarded
+            # just because the submitter happens to be a Manager. Gating on
+            # "l1 is None" alone (not the submitter's own can_manage_team)
+            # covers both cases correctly: no reporting manager -> l1 is
+            # None -> skip to L2 exactly as before; reporting_manager = COO
+            # -> l1 is the COO -> routes to L1 like any other employee.
+            if l1 is None:
                 initial_status = REQ_L2_PENDING
                 l1_approver    = None
                 l2_approver    = l2
