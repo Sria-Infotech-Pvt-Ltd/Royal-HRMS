@@ -93,6 +93,50 @@ def send_onboarding_submitted_notification_task(self, user_id):
         raise self.retry(exc=exc)
 
 
+@shared_task
+def apply_scheduled_employment_actions():
+    """
+    Phase 5B Task F.1 — the daily job that applies due `EmploymentAction`
+    rows (status approved/scheduled, effective_date <= today). Idempotent
+    by construction: `apply_employment_action()` itself no-ops on an
+    already-`applied` action, so re-running this task (or running it twice
+    concurrently) never double-applies an effect. Oldest effective_date
+    first, so a run that catches up after downtime applies missed days in
+    the order they actually happened, not newest-first.
+
+    One action's failure (e.g. a conflict raised by validate_employment_action)
+    is logged and skipped rather than aborting the whole batch — a bad
+    action blocking every other employee's due action would be worse than
+    reporting it and moving on.
+    """
+    from apps.accounts.models_actions import EmploymentAction
+    from apps.accounts.services_actions import apply_employment_action
+    from django.utils import timezone
+
+    due = (
+        EmploymentAction.objects
+        .filter(
+            status__in=[EmploymentAction.STATUS_APPROVED, EmploymentAction.STATUS_SCHEDULED],
+            effective_date__lte=timezone.localdate(),
+        )
+        .select_related('employee', 'action_type')
+        .order_by('effective_date', 'created_at')
+    )
+
+    applied, failed = 0, []
+    for action in due:
+        try:
+            apply_employment_action(action)
+            applied += 1
+        except Exception as exc:
+            logger.error('apply_scheduled_employment_actions: action %s failed: %s', action.id, exc, exc_info=True)
+            failed.append({'action_id': str(action.id), 'error': str(exc)})
+
+    result = {'checked': due.count(), 'applied': applied, 'failed': failed}
+    logger.info('apply_scheduled_employment_actions completed: %s', result)
+    return result
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
 def send_onboarding_approved_notification_task(self, user_id, assigned_assessment_ids=None, has_pending=False):
     """

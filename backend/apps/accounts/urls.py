@@ -131,6 +131,7 @@ from apps.accounts.views import (
     EmailTemplatePreviewView,
     ResolveTemplateVariablesView,
 )
+from apps.accounts.views_lifecycle import EmployeeAsOfView, EmployeeLifecycleTimelineView
 from apps.accounts.views_profile_photo import ProfilePhotoView
 from apps.accounts.views_pincode import PincodeLookupView
 from apps.accounts.views_ifsc import IfscLookupView
@@ -161,6 +162,8 @@ urlpatterns = [
     path('employees/managers/',                                  ManagerListView.as_view(),              name='employee-manager-list'),
     path('employees/<str:employee_id>/promotions/',               EmployeePromotionHistoryView.as_view(), name='employee-promotion-history'),
     path('employees/<str:employee_id>/action-history/',           EmployeeActionHistoryView.as_view(), name='employee-action-history'),
+    path('employees/<str:employee_id>/as-of/',                    EmployeeAsOfView.as_view(),             name='employee-as-of'),
+    path('employees/<str:employee_id>/lifecycle-timeline/',       EmployeeLifecycleTimelineView.as_view(), name='employee-lifecycle-timeline'),
     path('employees/<str:employee_id>/audit-trail/',              EmployeeAuditTrailView.as_view(), name='employee-audit-trail'),
     path('employees/<str:employee_id>/reporting-manager/',       EmployeeReportingManagerView.as_view(), name='employee-reporting-manager'),
     path('employees/<str:employee_id>/approval-matrix/',         EmployeeApprovalMatrixView.as_view(),   name='employee-approval-matrix'),

@@ -24,6 +24,7 @@ EXISTING_CELERY_BEAT_JOBS = [
     {'code': 'carry_forward_expiry', 'name': 'Carry-forward expiry', 'task_path': 'apps.hrms.tasks.expire_carry_forward', 'default_schedule': '10 0 * * *', 'safe_to_run_concurrently': False},
     {'code': 'payroll_approval_reminders', 'name': 'Payroll approval reminders', 'task_path': 'apps.payroll.tasks.send_approval_reminders', 'default_schedule': '0 10 * * *', 'safe_to_run_concurrently': True},
     {'code': 'review_cycle_closing', 'name': 'Review cycle closing', 'task_path': 'apps.performance.tasks.close_expired_review_cycles', 'default_schedule': '15 0 * * *', 'safe_to_run_concurrently': False},
+    {'code': 'apply_scheduled_employment_actions', 'name': 'Apply scheduled employment actions', 'task_path': 'apps.accounts.tasks.apply_scheduled_employment_actions', 'default_schedule': '20 0 * * *', 'safe_to_run_concurrently': True},
 ]
 
 NEW_JOB_TYPES = [

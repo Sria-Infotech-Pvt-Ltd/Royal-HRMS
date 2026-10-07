@@ -361,6 +361,13 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.performance.tasks.close_expired_review_cycles',
         'schedule': crontab(hour=0, minute=15),
     },
+    # Phase 5B Task F.1 — runs daily at 00:20 IST (after close-review-cycles,
+    # 00:15), applying any approved/scheduled EmploymentAction whose
+    # effective_date has arrived. Idempotent — safe to re-run or run twice.
+    'apply-scheduled-employment-actions': {
+        'task':     'apps.accounts.tasks.apply_scheduled_employment_actions',
+        'schedule': crontab(hour=0, minute=20),
+    },
 }
 
 # ─── DRF ─────────────────────────────────────────────────────────────────────
@@ -579,3 +586,4 @@ LOGGING = {
         'level': 'WARNING',
     },
 }
+ 
