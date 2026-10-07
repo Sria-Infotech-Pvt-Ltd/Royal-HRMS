@@ -12,6 +12,7 @@ from __future__ import annotations
 import uuid
 
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
 
@@ -333,7 +334,15 @@ class ChangeHistory(models.Model):
         (ACTION_DEACTIVATE, 'Deactivate'), (ACTION_RESTORE, 'Restore'), (ACTION_CUSTOM, 'Custom'),
     ]
     action        = models.CharField(max_length=20, choices=ACTION_CHOICES)
-    changes       = models.JSONField(default=list, blank=True, help_text='[{field, old, new}] — sensitive values masked before storage.')
+    # encoder=DjangoJSONEncoder (not plain JSONField's default encoder) —
+    # tracked field values captured by history.py can be date/datetime/
+    # Decimal/UUID (e.g. Policy.effective_from, RuleDefinition.published_at),
+    # none of which plain json.JSONEncoder can serialize. This was a
+    # latent bug since Phase 1 that never surfaced because no
+    # Phase 1/2-registered model's tests happened to save() a tracked
+    # date/Decimal field directly; Phase 3A's RuleDefinition/Policy/
+    # PolicyAssignment registrations hit it immediately.
+    changes       = models.JSONField(default=list, blank=True, encoder=DjangoJSONEncoder, help_text='[{field, old, new}] — sensitive values masked before storage.')
     reason        = models.TextField(blank=True)
     legal_entity  = models.ForeignKey(LegalEntity, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
 

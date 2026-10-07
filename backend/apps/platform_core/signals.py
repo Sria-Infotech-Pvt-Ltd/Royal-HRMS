@@ -8,7 +8,7 @@ from apps.platform_core import cache as metadata_cache
 from apps.platform_core.models import (
     Country, Currency, ExchangeRate, FeatureFlag, FeatureFlagOverride,
     LegalEntity, LookupType, LookupValue, ModuleToggle, NumberSeries, Timezone,
-    Translation,
+    Translation, Policy, PolicyAssignment, RuleVersion,
 )
 
 _NAMESPACE_BY_MODEL = {
@@ -17,6 +17,10 @@ _NAMESPACE_BY_MODEL = {
     LegalEntity: 'entities',
     NumberSeries: 'numbering',
     FeatureFlag: 'flags', FeatureFlagOverride: 'flags', ModuleToggle: 'flags',
+    # Task D.4 — ANY policy/assignment/rule-version write invalidates every
+    # cached resolution at once (see services_policies.py's own docstring
+    # for why coarse-but-correct beats fine-grained-but-risky here).
+    Policy: 'policies', PolicyAssignment: 'policies', RuleVersion: 'policies',
 }
 
 

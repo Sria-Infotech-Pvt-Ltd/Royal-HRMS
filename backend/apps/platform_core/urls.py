@@ -1,6 +1,6 @@
 from django.urls import path
 
-from apps.platform_core import views, views_attachments, views_import_export, views_list_views, views_meta
+from apps.platform_core import views, views_attachments, views_import_export, views_list_views, views_meta, views_rules
 
 urlpatterns = [
     path('entities/', views_meta.EntityDefinitionListCreateView.as_view(), name='platform-entity-list'),
@@ -62,4 +62,28 @@ urlpatterns = [
     path('module-toggles/<int:pk>/', views.ModuleToggleDetailView.as_view(), name='platform-module-toggle-detail'),
 
     path('history/', views.ChangeHistoryListView.as_view(), name='platform-change-history-list'),
+
+    # ─── Phase 3A: rules ─────────────────────────────────────────────────
+    path('rules/', views_rules.RuleDefinitionListCreateView.as_view(), name='platform-rule-list'),
+    path('rules/<int:pk>/', views_rules.RuleDefinitionDetailView.as_view(), name='platform-rule-detail'),
+    path('rules/<int:pk>/validate/', views_rules.RuleValidateView.as_view(), name='platform-rule-validate'),
+    path('rules/<int:pk>/test-run/', views_rules.RuleTestRunView.as_view(), name='platform-rule-test-run'),
+    path('rules/<int:pk>/publish/', views_rules.RulePublishView.as_view(), name='platform-rule-publish'),
+    path('rules/<int:pk>/retire/', views_rules.RuleRetireView.as_view(), name='platform-rule-retire'),
+    path('rules/<int:pk>/where-used/', views_rules.RuleWhereUsedView.as_view(), name='platform-rule-where-used'),
+    path('rules/<int:pk>/versions/', views_rules.RuleVersionListView.as_view(), name='platform-rule-versions'),
+    path('rule-test-cases/', views_rules.RuleTestCaseListCreateView.as_view(), name='platform-rule-test-case-list'),
+    path('rule-test-cases/<int:pk>/', views_rules.RuleTestCaseDetailView.as_view(), name='platform-rule-test-case-detail'),
+    path('rule-tables/', views_rules.RuleTableListCreateView.as_view(), name='platform-rule-table-list'),
+    path('rule-tables/<int:pk>/', views_rules.RuleTableDetailView.as_view(), name='platform-rule-table-detail'),
+    path('rule-table-versions/', views_rules.RuleTableVersionListCreateView.as_view(), name='platform-rule-table-version-list'),
+
+    # ─── Phase 3A: policies ──────────────────────────────────────────────
+    path('policy-types/', views_rules.PolicyTypeListView.as_view(), name='platform-policy-type-list'),
+    path('policies/', views_rules.PolicyListCreateView.as_view(), name='platform-policy-list'),
+    path('policies/<int:pk>/', views_rules.PolicyDetailView.as_view(), name='platform-policy-detail'),
+    path('policies/<int:pk>/affected-employees/', views_rules.PolicyAffectedEmployeesView.as_view(), name='platform-policy-affected-employees'),
+    path('policy-assignments/', views_rules.PolicyAssignmentListCreateView.as_view(), name='platform-policy-assignment-list'),
+    path('policy-assignments/<int:pk>/', views_rules.PolicyAssignmentDetailView.as_view(), name='platform-policy-assignment-detail'),
+    path('policies/effective/', views_rules.PolicyExplainerView.as_view(), name='platform-policy-explainer'),
 ]

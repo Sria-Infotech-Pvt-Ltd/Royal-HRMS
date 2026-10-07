@@ -9,6 +9,12 @@ def _sync_entity_registry(sender, **kwargs):
     call_command('sync_entity_registry', verbosity=0)
 
 
+def _sync_policy_types(sender, **kwargs):
+    """Same pattern, Phase 3A's PolicyType rows (Task D.1)."""
+    from django.core.management import call_command
+    call_command('sync_policy_types', verbosity=0)
+
+
 class PlatformCoreConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.platform_core'
@@ -21,12 +27,13 @@ class PlatformCoreConfig(AppConfig):
 
         from django.db.models.signals import post_migrate
         post_migrate.connect(_sync_entity_registry, sender=self)
+        post_migrate.connect(_sync_policy_types, sender=self)
 
         from apps.platform_core import history
         from apps.platform_core.models import (
             AuthorisedSignatory, CustomRecord, EntityBankAccount, EntityDefinition,
             EntityIdentifier, FeatureFlag, FieldDefinition, FormLayout, LegalEntity,
-            LookupType, LookupValue, NumberSeries,
+            LookupType, LookupValue, NumberSeries, Policy, PolicyAssignment, RuleDefinition,
         )
         # Registered on platform_core's own models only, as a proof the
         # capture mechanism works end-to-end — NOT yet on any existing
@@ -51,3 +58,7 @@ class PlatformCoreConfig(AppConfig):
         history.register(FieldDefinition)
         history.register(FormLayout)
         history.register(CustomRecord, exclude=['data'])  # data's own field-level changes are logged by services_attributes/services_custom_objects instead of a whole-blob diff
+        # Phase 3A additions (Task C.6):
+        history.register(RuleDefinition)
+        history.register(Policy)
+        history.register(PolicyAssignment)

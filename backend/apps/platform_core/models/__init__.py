@@ -11,3 +11,5 @@ from .custom_objects import *  # noqa: F401,F403
 from .lists import *  # noqa: F401,F403
 from .attachments import *  # noqa: F401,F403
 from .imports import *  # noqa: F401,F403
+from .rules import *  # noqa: F401,F403
+from .policies import *  # noqa: F401,F403

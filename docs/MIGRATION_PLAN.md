@@ -160,3 +160,42 @@ whole prompt, not a same-commit switch.
 `EducationExperienceFieldConfig`-driven repeating sections,
 `DocumentTypeConfig`-driven documents section — both need a dedicated
 `EntityDefinition` this phase didn't register.
+
+## Phase 3A addendum — rule/policy engine built; per-user policy-output fields (Task G.3)
+
+See `PHASE3A_REPORT.md`, `docs/RULES.md`, `docs/POLICIES.md` for full
+detail. The rule engine (`services_rules.py`) and policy engine
+(`services_policies.py`, `PolicyType`/`Policy`/`PolicyAssignment`) are
+built and tested. 7 attendance `PolicyType`s are registered with full
+parameter schemas documenting the System1/System2 field mapping —
+**no data migration, no call-site rewiring, and no "identical
+resolution" verification report were executed** (same deferral class as
+the Company→LegalEntity and NumberSeries cutovers above — the highest-
+blast-radius item, attendance processing for every employee, needs its
+own dedicated pass with the parity discipline those cutovers used).
+
+Per Task G.3, every per-user field that is really a policy output,
+and the phase in which it becomes policy-resolved with a per-employee
+override:
+
+| Field | Target phase | Notes |
+|---|---|---|
+| `User.attendance_scheme` | Phase 3A follow-up (attendance consolidation) | The 7 `ATT_*` `PolicyType`s registered this phase are exactly what this field should resolve through once the consolidation itself is done. |
+| `User.pay_group` | Phase 7 (Payroll) | Becomes a `PAY_GROUP` policy type once payroll formulas/statutory tables are built. |
+| `User.leave_plan` | Phase 6 (Leave) | `LEAVE_PLAN` policy type is already registered (read-only, Task G.2) — this phase explicitly does not change leave behavior; Phase 6 is where it becomes a real, writable, policy-resolved assignment. |
+| `User.work_mode` | Phase 5 (Core HR) | Already flagged in Phase 0's inventory as a hardcoded-choices field with no branching logic found — low risk, but still a per-user field that conceptually belongs in a policy once Phase 5 does its HR-identity pass. |
+| `HireAction.employment_type`-derived `probation_period_months`/`notice_period_days` | Phase 5 (Core HR) | Currently plain fields on `User`/`HireAction`; Phase 5's own plan (see PHASE2_REPORT.md's referenced hire-wizard plan) already lists these as candidates for policy-driven defaults by employment type/legal entity. |
+
+### Known gaps carried from Phase 1 (unrelated to Phase 3A's own scope, found while registering history on new models)
+
+`ChangeHistory.changes` was missing `encoder=DjangoJSONEncoder` since
+Phase 1 — any tracked field value that's a `date`/`datetime`/`Decimal`/
+`UUID` crashed `_capture_update_or_create()`'s `ChangeHistory.objects.create()`
+call with a `TypeError: Object of type date is not JSON serializable`.
+This never surfaced in Phase 1/2 because no registered model's tests
+happened to `.save()` a tracked date/Decimal field directly; Phase 3A's
+`RuleDefinition`/`Policy`/`PolicyAssignment` history registrations hit it
+immediately via their own `effective_from`/`published_at` fields. Fixed
+in migration `0011_change_history_json_encoder_fix` — a real, general fix
+(not scoped to Phase 3A's own models), so every future `history.register()`
+call on any model with a date/Decimal/UUID field is now safe by default.
