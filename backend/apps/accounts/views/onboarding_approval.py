@@ -253,10 +253,13 @@ class OnboardingApprovalView(APIView):
 
             needs_conversion = not target.role and not target.employee_id
             if needs_conversion:
+                # Phase 4 Task B.3 — was Role.objects.get(name='employee');
+                # the default role for new hires is now an explicit
+                # attribute, not a hardcoded role name.
                 try:
-                    employee_role = Role.objects.get(name='employee')
+                    employee_role = Role.objects.get(is_default_employee_role=True)
                 except Role.DoesNotExist:
-                    return error('Role "employee" not found. Create it in Roles settings first.')
+                    return error('No role is marked as the default employee role. Set one in Roles settings first.')
                 target.role = employee_role
                 if not target.date_of_joining:
                     from django.utils import timezone as tz

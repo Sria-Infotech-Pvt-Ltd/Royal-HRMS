@@ -394,7 +394,10 @@ class SettingsOverviewView(APIView):
         from apps.accounts.models import AuditLog, Role
 
         today = timezone.localdate()
-        admin_roles = Role.objects.filter(is_active=True).exclude(name='employee').count()
+        # Phase 4 Task B.3 — was .exclude(name='employee'); "admin-ish
+        # roles" now means "every active role except the default
+        # employee role," by attribute rather than hardcoded name.
+        admin_roles = Role.objects.filter(is_active=True).exclude(is_default_employee_role=True).count()
         audit_events_30d = AuditLog.objects.filter(created_at__date__gte=today - datetime.timedelta(days=30)).count()
 
         return success('Settings overview retrieved.', {

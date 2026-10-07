@@ -41,3 +41,15 @@ def on_onboarding_section_change(sender, instance, **kwargs):
         services_onboarding_sync.sync_section(instance)
     except Exception:
         logger.warning('forms.v2 mirror sync failed for OnboardingSection %s', instance.pk, exc_info=True)
+
+
+# ─── Phase 4 Task K.1: bump the new authz effective-permissions cache ──────
+# whenever a role's granted permissions change — RoleAssignment/
+# FieldPermission changes bump it from apps/platform_core/signals.py;
+# this covers RolePermission (lives in apps.accounts).
+
+@receiver(post_save, sender='accounts.RolePermission')
+@receiver(post_delete, sender='accounts.RolePermission')
+def on_role_permission_change(sender, instance, **kwargs):
+    from apps.platform_core import cache as metadata_cache
+    metadata_cache.bump_version('authz')

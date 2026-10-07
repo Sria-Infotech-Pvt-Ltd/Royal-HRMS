@@ -69,6 +69,10 @@ jobs:
         working-directory: backend
         run: python scripts/check_no_new_choices.py
 
+      - name: Guard against new permission-granting migrations (Phase 4)
+        working-directory: backend
+        run: python scripts/check_no_permission_migrations.py
+
       - name: Run test suite
         working-directory: backend
         run: python manage.py test --verbosity 2

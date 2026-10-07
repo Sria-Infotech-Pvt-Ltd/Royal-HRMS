@@ -8,7 +8,7 @@ from apps.platform_core import cache as metadata_cache
 from apps.platform_core.models import (
     Country, Currency, ExchangeRate, FeatureFlag, FeatureFlagOverride,
     LegalEntity, LookupType, LookupValue, ModuleToggle, NumberSeries, Timezone,
-    Translation, Policy, PolicyAssignment, RuleVersion,
+    Translation, Policy, PolicyAssignment, RuleVersion, RoleAssignment, FieldPermission,
 )
 
 _NAMESPACE_BY_MODEL = {
@@ -21,6 +21,10 @@ _NAMESPACE_BY_MODEL = {
     # cached resolution at once (see services_policies.py's own docstring
     # for why coarse-but-correct beats fine-grained-but-risky here).
     Policy: 'policies', PolicyAssignment: 'policies', RuleVersion: 'policies',
+    # Phase 4 Task K.1 — same coarse-but-correct invalidation for cached
+    # effective permissions. RolePermission (apps.accounts) also bumps
+    # this namespace — see apps/accounts/signals.py.
+    RoleAssignment: 'authz', FieldPermission: 'authz',
 }
 
 

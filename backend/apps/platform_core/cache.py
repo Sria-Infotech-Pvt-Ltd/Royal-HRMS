@@ -20,7 +20,7 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
-NAMESPACES = ('lookups', 'geo', 'flags', 'numbering', 'entities', 'policies')
+NAMESPACES = ('lookups', 'geo', 'flags', 'numbering', 'entities', 'policies', 'authz')
 
 _DEFAULT_TTL = 300  # generous base TTL — the version bump is what actually
                     # invalidates on change, this is just a cap so a

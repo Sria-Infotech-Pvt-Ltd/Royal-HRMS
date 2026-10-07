@@ -328,7 +328,9 @@ def _eligible_employees_qs(cycle: PayrollCycle):
     _run_payroll_processing() and CycleEligibleEmployeesView so the
     "who will this touch" preview the frontend shows can never drift from
     what actually gets processed."""
-    active_qs = User.objects.filter(is_active=True).exclude(role__name__in=['system_admin'])
+    # Phase 4 Task B.3 — was .exclude(role__name__in=['system_admin']);
+    # payroll-exclusion is now an explicit role attribute.
+    active_qs = User.objects.filter(is_active=True).exclude(role__exclude_from_payroll=True)
 
     # Mid-cycle leavers: an employee deactivated before this cycle is
     # processed was previously excluded outright by is_active=True above —
@@ -341,7 +343,7 @@ def _eligible_employees_qs(cycle: PayrollCycle):
     leaver_ids = (
         AttendanceRecord.objects
         .filter(employee__is_active=False, date__range=(cycle.cycle_start, cycle.cycle_end))
-        .exclude(employee__role__name__in=['system_admin'])
+        .exclude(employee__role__exclude_from_payroll=True)  # Phase 4 Task B.3 — was role__name__in=['system_admin']
         .values_list('employee_id', flat=True)
         .distinct()
     )

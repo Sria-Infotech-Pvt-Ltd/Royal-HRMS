@@ -57,11 +57,53 @@ class Role(models.Model):
             'roles exist.'
         ),
     )
+
+    # Phase 4 Task B.3 — explicit attributes replacing hardcoded role-NAME
+    # string comparisons elsewhere in the codebase (CLAUDE.md-style: a role's
+    # NAME is just a label; behaviour should never depend on matching it).
+    # Additive only in this phase — see PHASE4_REPORT.md for which of the
+    # 4 known hardcoded usages were actually migrated to read these instead.
+    is_full_access = models.BooleanField(
+        default=False,
+        help_text=(
+            'Explicit, audited "can do everything" attribute (Task D) — replaces '
+            'the hidden settings.edit bypass in core.permissions.has_perm(). Set '
+            'automatically (once, at migration time) for every role that held '
+            'settings.edit; editable afterwards only by another full-access user, '
+            'with a mandatory reason.'
+        ),
+    )
+    is_default_employee_role = models.BooleanField(
+        default=False,
+        help_text='Exactly one role should have this set — the role new hires/self-service users get by default. Replaces hardcoded role__name="employee" checks.',
+    )
+    exclude_from_payroll = models.BooleanField(
+        default=False,
+        help_text='Users holding this role are excluded from payroll processing (e.g. a pure system/API role). Replaces hardcoded role__name="system_admin" exclusions in payroll views.',
+    )
+    exclude_from_headcount = models.BooleanField(
+        default=False,
+        help_text='Users holding this role are excluded from headcount-style dashboard counts.',
+    )
+    is_assignable = models.BooleanField(
+        default=True,
+        help_text='False hides this role from normal admins\' role-assignment UI (e.g. a system/break-glass role) without preventing it from existing.',
+    )
+
     created_at   = models.DateTimeField(auto_now_add=True, null=True)
     updated_at   = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'hrms_roles'
+        constraints = [
+            # "Exactly one" (Task B.3) — enforce the "at most one" half at
+            # the DB level; application code is responsible for ensuring
+            # at least one exists (seed data / admin UI).
+            models.UniqueConstraint(
+                fields=['is_default_employee_role'], condition=Q(is_default_employee_role=True),
+                name='uniq_default_employee_role',
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.display_name
@@ -71,6 +113,14 @@ class Permission(models.Model):
     module   = models.CharField(max_length=50)
     action   = models.CharField(max_length=20)
     codename = models.CharField(max_length=100, unique=True)
+
+    # Phase 4 Task A — code-registry-generated metadata. Additive; the
+    # registry (apps/accounts/permissions_registry.py) is the source of
+    # truth, synced idempotently — never hand-edited to drift from it.
+    description = models.TextField(blank=True)
+    is_sensitive = models.BooleanField(default=False, help_text='Granting this warrants extra scrutiny (e.g. bank/PAN visibility) — shown in admin UI and SoD checks.')
+    implies = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='implied_by', help_text='e.g. x.edit implies x.view — holding this codename also grants every implied one.')
+    is_deprecated = models.BooleanField(default=False, help_text='No longer created by the registry, but never deleted while still granted to any role (Task A.2).')
 
     class Meta:
         db_table = 'hrms_permissions'
@@ -117,10 +167,12 @@ class UserManager(BaseUserManager):
         if not extra_fields.get('is_superuser'):
             raise ValueError('Superuser must have is_superuser=True.')
         if 'role' not in extra_fields:
-            try:
-                extra_fields['role'] = Role.objects.get(name='system_admin')
-            except Role.DoesNotExist:
-                pass
+            # Phase 4 Task B.3 — was Role.objects.get(name='system_admin');
+            # a superuser account should get a full-access role regardless
+            # of what it's named, not one hardcoded name.
+            role = Role.objects.filter(is_full_access=True, is_active=True).order_by('id').first()
+            if role is not None:
+                extra_fields['role'] = role
         return self.create_user(email, password, **extra_fields)
 
 
@@ -997,12 +1049,64 @@ class ExternalAPIKey(models.Model):
     created_at    = models.DateTimeField(auto_now_add=True)
     last_used_at  = models.DateTimeField(null=True, blank=True)
 
+    # Phase 4 Task J — additive scoping. Existing keys get
+    # scope_codenames=[] (meaning "no explicit scope recorded yet" — see
+    # the migration note in PHASE4_REPORT.md: this phase does NOT attempt
+    # to reverse-engineer which endpoints each existing key currently
+    # calls into an equivalent scope set, since getting that wrong would
+    # either silently break a live integration or silently widen it).
+    # Enforcement of scope_codenames is NOT wired into the existing
+    # external-API views in this phase — see PHASE4_REPORT.md.
+    scope_codenames = models.JSONField(default=list, blank=True, help_text='Permission codenames this key is restricted to. Empty = unrestricted (legacy behaviour, unchanged).')
+    legal_entity  = models.ForeignKey('platform_core.LegalEntity', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    ip_allowlist  = models.JSONField(default=list, blank=True, help_text='CIDR strings. Empty = no IP restriction (legacy behaviour, unchanged).')
+    expires_at    = models.DateTimeField(null=True, blank=True)
+    rotated_from  = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='rotated_to')
+    rate_limit_tier = models.CharField(max_length=20, blank=True, default='', help_text='Free-text tier label consumed by the throttle layer; empty = today\'s existing throttle behaviour, unchanged.')
+
     class Meta:
         db_table = 'accounts_external_api_keys'
         ordering = ['name']
 
     def __str__(self):
         return f'{self.name} ({"active" if self.is_active else "revoked"})'
+
+    def is_expired(self) -> bool:
+        return bool(self.expires_at and self.expires_at <= timezone.now())
+
+    def allows_scope(self, codename: str) -> bool:
+        """Empty scope_codenames = unrestricted, matching every existing
+        key's current (unscoped) behaviour exactly — Task J.2's "existing
+        keys keep working" requirement."""
+        return not self.scope_codenames or codename in self.scope_codenames
+
+    def allows_ip(self, ip_address: str) -> bool:
+        if not self.ip_allowlist:
+            return True
+        import ipaddress
+        try:
+            addr = ipaddress.ip_address(ip_address)
+        except ValueError:
+            return False
+        return any(addr in ipaddress.ip_network(cidr, strict=False) for cidr in self.ip_allowlist)
+
+
+class APIKeyUsageLog(models.Model):
+    """Task J.1's usage log — endpoint, status, timestamp, IP. NEVER a
+    payload (Rule 6 — never log sensitive values)."""
+    api_key    = models.ForeignKey(ExternalAPIKey, on_delete=models.CASCADE, related_name='usage_logs')
+    endpoint   = models.CharField(max_length=255)
+    status_code = models.PositiveSmallIntegerField()
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    occurred_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'accounts_api_key_usage_logs'
+        ordering = ['-occurred_at']
+        indexes = [models.Index(fields=['api_key', 'occurred_at'], name='akul_key_time_idx')]
+
+    def __str__(self):
+        return f'{self.api_key_id}:{self.endpoint} ({self.status_code})'
 
 
 # ─── Audit Log ────────────────────────────────────────────────────────────────
