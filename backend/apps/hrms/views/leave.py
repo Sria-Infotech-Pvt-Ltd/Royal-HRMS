@@ -1062,10 +1062,21 @@ class LeaveRequestDetailView(APIView):
         except LeaveRequest.DoesNotExist:
             return None, error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
 
+        # The owner can always view their own request, full stop — even when
+        # they separately hold leave.approve (e.g. a manager viewing their
+        # own submitted leave). Without this check running first, such an
+        # owner would fall through to the has_approve branch below, which
+        # evaluates _can_hr_access_request() against THEIR OWN request as if
+        # they were the HR/approver reviewing someone else's — that check has
+        # no reason to recognise them (they're not their own l1/l2 approver),
+        # so it would wrongly 403 a manager out of their own leave request.
+        if leave_request.employee_id == user.id:
+            return leave_request, None
+
         has_approve = _has_perm(user, 'leave.approve')
-        if not has_approve and leave_request.employee_id != user.id:
+        if not has_approve:
             return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
-        if has_approve and not _can_hr_access_request(user, leave_request):
+        if not _can_hr_access_request(user, leave_request):
             return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         return leave_request, None

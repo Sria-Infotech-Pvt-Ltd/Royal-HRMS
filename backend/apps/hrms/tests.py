@@ -1264,6 +1264,21 @@ class LeaveRequestDetailL1AccessTests(TestCase):
 
         resp = self._view('coo.detail@test.com', request_id)
         self.assertEqual(resp.status_code, 200, resp.data)
+
+    # 10. The request owner can view their own request even when they also
+    # hold leave.approve (e.g. a manager submitting their own leave). Without
+    # an owner short-circuit ahead of the has_approve branch, this falls
+    # through to _can_hr_access_request() — which has no reason to recognize
+    # someone as their own l1/l2 approver — and wrongly 403s them out of
+    # their own request once it moves past L1 to L2/HR.
+    def test_manager_owner_with_leave_approve_can_view_own_request_at_l2_pending(self):
+        create_resp = self._submit('manager.detail@test.com')  # Manager -> reporting_manager=COO
+        request_id = create_resp.data['data']['id']
+        self._approve('coo.detail@test.com', request_id)
+
+        resp = self._view('manager.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data['data']['status'], 'l2_pending')
         self.assertEqual(resp.data['data']['status'], 'l2_pending')
 
         # COO must NOT become able to approve an unrelated request they
