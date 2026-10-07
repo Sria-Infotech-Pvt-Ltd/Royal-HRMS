@@ -153,9 +153,24 @@ def assign_position(
                 .exclude(pk=getattr(prior_on_seat, 'pk', None))
                 .first()
             )
-            if prior_for_employee is not None and prior_for_employee.effective_from < effective_from:
-                prior_for_employee.effective_to = day_before
-                prior_for_employee.save(update_fields=['effective_to', 'updated_at'])
+            if prior_for_employee is not None:
+                if prior_for_employee.effective_from < effective_from:
+                    prior_for_employee.effective_to = day_before
+                    prior_for_employee.save(update_fields=['effective_to', 'updated_at'])
+                else:
+                    # New assignment starts on or before the prior
+                    # placement's own start date (a same-day move to a
+                    # different seat, or a back-dated override) — the prior
+                    # placement never had any active days before being
+                    # superseded, so it is removed outright rather than
+                    # given an effective_to earlier than its own
+                    # effective_from (which placement_effective_to_gte_from
+                    # forbids). Phase 5B Task J fix: the old `< effective_from`
+                    # -only check left this branch unhandled, so a same-day
+                    # reassignment to a vacant seat fell through to creating
+                    # a second open placement for the same employee and hit
+                    # placement_employee_no_overlap.
+                    prior_for_employee.delete()
 
             placement = Placement(
                 position=position, employee=employee,

@@ -26,6 +26,9 @@ CORE_EVENT_TYPES = [
     {'code': 'attendance.absent_streak', 'module': 'attendance', 'description': 'An employee has an absence streak.'},
     {'code': 'attendance.missing_clockout', 'module': 'attendance', 'description': 'A missing clock-out was detected.'},
     {'code': 'payroll.approval_pending', 'module': 'payroll', 'description': 'A payroll cycle is awaiting approval.'},
+    {'code': 'employment_action.applied', 'module': 'accounts', 'description': 'An employment action\'s effects were applied.'},
+    {'code': 'employment_action.backdated', 'module': 'accounts', 'description': 'A back-dated employment action was applied; dependent data may need recalculation.'},
+    {'code': 'employee.promoted', 'module': 'accounts', 'description': 'A promotion employment action was applied.'},
 ]
 
 # Named by the prompt's own catalogue (Section 2) but NOT instrumented in

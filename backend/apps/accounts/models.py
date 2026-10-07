@@ -3028,3 +3028,7 @@ from apps.accounts.models_family_skills import (  # noqa: E402,F401
     EmergencyContact, Nomination, SkillMaster, EmployeeSkill, EmployeeCertification,
     EmployeeLanguage, StatutoryEnrolment,
 )
+
+# ─── Phase 5B — employment lifecycle: actions, relationships (additive) ────
+from apps.accounts.models_relationships import EmployeeRelationship  # noqa: E402,F401
+from apps.accounts.models_actions import ActionType, EmploymentAction  # noqa: E402,F401
