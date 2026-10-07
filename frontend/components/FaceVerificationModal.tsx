@@ -34,7 +34,7 @@ interface FaceVerificationModalProps {
 const VERIFICATION_FRAMES_TO_CAPTURE = 3;
 
 export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: FaceVerificationModalProps) {
-  const { phase, errorMessage, videoRef, canvasRef, start, retry, stop } = useFaceLivenessCapture({
+  const { phase, errorMessage, modelProgress, videoRef, canvasRef, start, retry, stop } = useFaceLivenessCapture({
     // Release the camera the instant we have a descriptor — don't wait for the
     // parent to close the modal. The parent flips isOpen straight to false
     // once it has the embedding, which never re-runs the isOpen effect below
@@ -108,7 +108,7 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
           {(phase === "idle" || phase === "loading_models") && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)" spinning
-              title="Preparing face verification" message="Loading models…"
+              title="Preparing face verification" message="Downloading face models (first time only)…" progress={modelProgress}
             />
           )}
 

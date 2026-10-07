@@ -20,7 +20,7 @@ interface FaceRegistrationModalProps {
 }
 
 export default function FaceRegistrationModal({ onClose, mode = "register" }: FaceRegistrationModalProps) {
-  const { phase, errorMessage, submittedRequest, videoRef, canvasRef, start, retry, stop } = useFaceRegistrationCapture();
+  const { phase, errorMessage, submittedRequest, modelProgress, videoRef, canvasRef, start, retry, stop } = useFaceRegistrationCapture();
   // Gates everything below — the camera never opens (start() is never
   // called) until this is true. Reset per modal open (no persisted "don't
   // ask again"), since mode="update" is a materially new capture, not a
@@ -98,7 +98,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
           {phase === "loading_models" && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)" spinning
-              title="Preparing face recognition" message="Loading models…"
+              title="Preparing face recognition" message="Downloading face models (first time only)…" progress={modelProgress}
             />
           )}
 

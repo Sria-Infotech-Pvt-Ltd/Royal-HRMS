@@ -9,13 +9,19 @@
 import type { PixelBuffer } from './clahe';
 
 /** Draws the video's current frame into `workingCanvas` (resized to match
- *  the video's native resolution if needed) and returns its pixel data. */
-export function grabVideoFrame(video: HTMLVideoElement, workingCanvas: HTMLCanvasElement): ImageData {
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-  if (width === 0 || height === 0) {
+ *  the video's native resolution if needed) and returns its pixel data.
+ *  When `maxWidth` is given and the video is wider, the frame is downscaled
+ *  (aspect ratio kept) — CLAHE and the pixel scans scale with pixel count, and
+ *  the detector only looks at a 224px input anyway, so full webcam resolution
+ *  is wasted work. Callers must then use the returned ImageData's own
+ *  width/height (not the video's) for any ratio against the frame. */
+export function grabVideoFrame(video: HTMLVideoElement, workingCanvas: HTMLCanvasElement, maxWidth?: number): ImageData {
+  if (video.videoWidth === 0 || video.videoHeight === 0) {
     throw new Error('grabVideoFrame: video has no dimensions yet.');
   }
+  const scale = maxWidth && video.videoWidth > maxWidth ? maxWidth / video.videoWidth : 1;
+  const width = Math.round(video.videoWidth * scale);
+  const height = Math.round(video.videoHeight * scale);
   if (workingCanvas.width !== width) workingCanvas.width = width;
   if (workingCanvas.height !== height) workingCanvas.height = height;
 

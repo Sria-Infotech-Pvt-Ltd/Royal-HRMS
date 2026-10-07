@@ -43,6 +43,7 @@ interface UseHRFaceCapture {
   phase:             HRCapturePhase;
   errorMessage:      string | null;
   registeredRequest: FaceRegistrationRequest | null;
+  modelProgress:     number;
   videoRef:          ReturnType<typeof useFaceLivenessCapture>["videoRef"];
   canvasRef:         ReturnType<typeof useFaceLivenessCapture>["canvasRef"];
   /** No-op (does not open the camera) if consentAcknowledged is false — see
@@ -141,7 +142,7 @@ export function useHRFaceCapture(employeeUuid: string | null): UseHRFaceCapture 
   const errorMessage = submitPhase === "error" ? submitError : capture.errorMessage;
 
   return {
-    phase, errorMessage, registeredRequest,
+    phase, errorMessage, registeredRequest, modelProgress: capture.modelProgress,
     videoRef: capture.videoRef, canvasRef: capture.canvasRef,
     start, retry, stop,
   };

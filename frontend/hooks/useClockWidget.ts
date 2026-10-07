@@ -6,8 +6,36 @@ import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
 import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
+import { loadFaceApiModels } from "@/lib/faceApi/loadModels";
 import type { TodaySession, AttendanceMode, PunchLocation } from "@/types/attendance";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
+
+// A recent-enough, reasonably precise fix is good enough for the geofence
+// check (the backend widens the branch radius by the reported accuracy, capped —
+// see services_geofencing.py), and is far quicker than forcing a fresh
+// high-accuracy GPS lock on every punch (which can take the full timeout on
+// desktops/laptops with no GPS chip).
+const GEO_CACHE_MAX_AGE_MS     = 30_000;
+const GEO_FAST_TIMEOUT_MS      = 5_000;
+const GEO_PRECISE_TIMEOUT_MS   = 10_000;
+const GEO_ACCEPTABLE_ACCURACY_M = 100;
+
+function getPosition(options: PositionOptions): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, options));
+}
+
+/** Fast path first (cached / network-based fix); only falls back to a fresh
+ *  high-accuracy lock if that fix is missing or too imprecise to trust. A
+ *  permission denial is surfaced immediately — retrying can't change it. */
+async function acquirePosition(): Promise<GeolocationPosition> {
+  try {
+    const fast = await getPosition({ enableHighAccuracy: false, timeout: GEO_FAST_TIMEOUT_MS, maximumAge: GEO_CACHE_MAX_AGE_MS });
+    if (fast.coords.accuracy <= GEO_ACCEPTABLE_ACCURACY_M) return fast;
+  } catch (err: unknown) {
+    if ((err as GeolocationPositionError).code === 1) throw err;
+  }
+  return getPosition({ enableHighAccuracy: true, timeout: GEO_PRECISE_TIMEOUT_MS, maximumAge: 0 });
+}
 
 const _REGISTRATION_MESSAGES: Record<string, string> = {
   pending:  "Your face ID registration is pending HR approval. You can clock in once it's approved.",
@@ -101,6 +129,22 @@ export function useClockWidget() {
     return () => window.removeEventListener("attendance:updated", handleAttendanceUpdate);
   }, [refetch]);
 
+  // Warm the face models in the background as soon as we know this employee
+  // will be asked for a face check, so the ~7 MB download isn't spent while
+  // they stare at "Preparing face verification" after clicking Clock In.
+  // Deferred to idle time so it never competes with the dashboard's own load;
+  // errors are swallowed here — start() retries the load when it's actually needed.
+  useEffect(() => {
+    if (!faceVerificationRequired) return;
+    const run = () => { void loadFaceApiModels().catch(() => undefined); };
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(run, { timeout: 3000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(run, 500);
+    return () => window.clearTimeout(id);
+  }, [faceVerificationRequired]);
+
   const isClockedIn = session?.is_clocked_in ?? false;
 
   useEffect(() => {
@@ -134,9 +178,7 @@ export function useClockWidget() {
       setIsLocating(true);
       let location: PunchLocation;
       try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
-        });
+        const pos = await acquirePosition();
         location = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
       } catch (geoErr: unknown) {
         const isPermissionDenied = (geoErr as GeolocationPositionError).code === 1;

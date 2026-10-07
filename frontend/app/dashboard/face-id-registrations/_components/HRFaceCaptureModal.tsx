@@ -24,7 +24,7 @@ interface HRFaceCaptureModalProps {
 export default function HRFaceCaptureModal({
   employeeUuid, employeeName, isUpdate, onClose, onRegistered,
 }: HRFaceCaptureModalProps) {
-  const { phase, errorMessage, registeredRequest, videoRef, canvasRef, start, retry, stop } =
+  const { phase, errorMessage, registeredRequest, modelProgress, videoRef, canvasRef, start, retry, stop } =
     useHRFaceCapture(employeeUuid);
   const [consentAcknowledged, setConsentAcknowledged] = useState(false);
 
@@ -106,7 +106,7 @@ export default function HRFaceCaptureModal({
           {phase === "loading_models" && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)" spinning
-              title="Preparing face recognition" message="Loading models…"
+              title="Preparing face recognition" message="Downloading face models (first time only)…" progress={modelProgress}
             />
           )}
 

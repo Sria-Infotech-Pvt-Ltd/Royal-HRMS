@@ -7,7 +7,7 @@
 // registration approval, or verify it against an approved one at clock-in) is
 // entirely up to the caller — this hook knows nothing about either.
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { faceapi, loadFaceApiModels } from "@/lib/faceApi/loadModels";
+import { faceapi, loadFaceApiModels, getModelLoadProgress, subscribeModelLoadProgress } from "@/lib/faceApi/loadModels";
 import { LivenessTracker } from "@/lib/faceApi/liveness";
 import { syncCanvasSize, drawDetectionBox, clearOverlay, OVERLAY_COLOR } from "@/lib/faceApi/overlay";
 import { grabVideoFrame, putImageData, meanLuminanceOfBox, assessEyeOcclusion } from "@/lib/faceApi/frameCapture";
@@ -56,6 +56,11 @@ const DETECTOR_OPTIONS = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, s
 // instant to the person holding a pose. Irrelevant when framesToCapture is 1
 // (no sleep happens before the first, only, attempt).
 const MULTI_FRAME_INTERVAL_MS = 350;
+// Frames are downscaled to this width before CLAHE/detection — a 720p/1080p
+// webcam frame is several times the pixels the 224px detector input and the
+// 150px descriptor crop can use, and CLAHE (plain JS, per pixel) runs on every
+// sampled frame.
+const CAPTURE_MAX_FRAME_WIDTH = 800;
 // Frames can fail the quality gate (blink, micro-movement, momentary
 // shadow) without the whole capture failing — this bounds how many EXTRA
 // attempts are allowed before giving up and asking for a full retry, rather
@@ -151,6 +156,8 @@ function generateCaptureSessionId(): string {
 interface UseFaceLivenessCapture {
   phase:        LivenessCapturePhase;
   errorMessage: string | null;
+  /** 0–1 download/parse progress of the face models; meaningful in "loading_models". */
+  modelProgress: number;
   videoRef:     RefObject<HTMLVideoElement | null>;
   canvasRef:    RefObject<HTMLCanvasElement | null>;
   start:        () => void;
@@ -163,6 +170,9 @@ export function useFaceLivenessCapture(
 ): UseFaceLivenessCapture {
   const [phase, setPhase] = useState<LivenessCapturePhase>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [modelProgress, setModelProgress] = useState(getModelLoadProgress);
+
+  useEffect(() => subscribeModelLoadProgress(setModelProgress), []);
 
   const videoRef  = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -222,7 +232,7 @@ export function useFaceLivenessCapture(
 
     let imageData: ImageData;
     try {
-      imageData = grabVideoFrame(video, workingCanvas);
+      imageData = grabVideoFrame(video, workingCanvas, CAPTURE_MAX_FRAME_WIDTH);
     } catch {
       return { descriptor: null, reasons: [] }; // video not ready this instant — try again next attempt
     }
@@ -240,7 +250,7 @@ export function useFaceLivenessCapture(
     const nose = result.landmarks.getNose();
     const metrics: FrameQualityMetrics = {
       detectionScore: result.detection.score,
-      faceWidthRatio: result.detection.box.width / video.videoWidth,
+      faceWidthRatio: result.detection.box.width / imageData.width,
       frontality: computeFrontality(result.landmarks.getLeftEye(), result.landmarks.getRightEye(), nose[3]),
       meanLuminance: meanLuminanceOfBox(imageData, result.detection.box),
     };
@@ -444,5 +454,5 @@ export function useFaceLivenessCapture(
     livenessTrackerRef.current.reset();
   }, [stopCamera]);
 
-  return { phase, errorMessage, videoRef, canvasRef, start, retry, stop };
+  return { phase, errorMessage, modelProgress, videoRef, canvasRef, start, retry, stop };
 }

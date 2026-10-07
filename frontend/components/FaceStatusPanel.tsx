@@ -19,10 +19,12 @@ interface FaceStatusPanelProps {
   message:         string;
   action?:         StatusAction;
   secondaryAction?: StatusAction;
+  /** 0–1; renders a progress bar under the message when set. */
+  progress?:       number;
 }
 
 export default function FaceStatusPanel({
-  icon, iconColor, iconBg, spinning, title, message, action, secondaryAction,
+  icon, iconColor, iconBg, spinning, title, message, action, secondaryAction, progress,
 }: FaceStatusPanelProps) {
   return (
     <div className="flex flex-col items-center text-center py-6 px-2">
@@ -34,6 +36,17 @@ export default function FaceStatusPanel({
       </div>
       <h3 className="text-base font-bold mb-1.5" style={{ color: "var(--on-bg)" }}>{title}</h3>
       <p className="text-sm mb-5 leading-relaxed" style={{ color: "var(--on-variant)", maxWidth: 320 }}>{message}</p>
+      {progress !== undefined && (
+        <div className="mb-5 w-full" style={{ maxWidth: 260 }}>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(30,78,140,0.12)" }}>
+            <div
+              className="h-full rounded-full transition-all duration-200"
+              style={{ width: `${Math.round(progress * 100)}%`, background: "var(--primary)" }}
+            />
+          </div>
+          <p className="text-xs mt-1.5" style={{ color: "var(--on-variant)" }}>{Math.round(progress * 100)}%</p>
+        </div>
+      )}
       {(action || secondaryAction) && (
         <div className="flex gap-3">
           {secondaryAction && (

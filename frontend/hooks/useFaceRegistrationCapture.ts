@@ -26,6 +26,7 @@ interface UseFaceRegistrationCapture {
   phase:            CapturePhase;
   errorMessage:     string | null;
   submittedRequest: FaceRegistrationRequest | null;
+  modelProgress:    number;
   videoRef:         ReturnType<typeof useFaceLivenessCapture>["videoRef"];
   canvasRef:        ReturnType<typeof useFaceLivenessCapture>["canvasRef"];
   /** No-ops (does not open the camera) if consentAcknowledged is false —
@@ -124,7 +125,7 @@ export function useFaceRegistrationCapture(): UseFaceRegistrationCapture {
   const errorMessage = submitPhase === "error" ? submitError : capture.errorMessage;
 
   return {
-    phase, errorMessage, submittedRequest,
+    phase, errorMessage, submittedRequest, modelProgress: capture.modelProgress,
     videoRef: capture.videoRef, canvasRef: capture.canvasRef,
     start, retry, stop,
   };

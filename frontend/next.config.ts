@@ -34,6 +34,17 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Face-api.js weights (~7 MB) are pinned to a specific commit (see
+        // public/models/README.md) and never change in place, so let browsers
+        // and any CDN/proxy keep them instead of re-validating on every page
+        // load (Next's default for public/ files is max-age=0). If the weights
+        // are ever replaced, rename the files or shorten this.
+        source: "/models/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=2592000, stale-while-revalidate=86400" },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           { key: "X-Frame-Options",           value: "DENY" },
