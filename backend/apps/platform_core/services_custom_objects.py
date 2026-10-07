@@ -59,6 +59,12 @@ def publish_entity(entity: EntityDefinition, *, actor=None) -> EntityDefinition:
 
     entity.status = EntityDefinition.STATUS_PUBLISHED
     entity.save(update_fields=['status', 'updated_at'])
+
+    # Phase 3B Task E.1 — publishing a custom entity always gets its
+    # created/updated/status_changed event types, no manual step.
+    from apps.platform_core import event_types_registry
+    event_types_registry.sync_custom_entity_events(entity)
+
     return entity
 
 

@@ -15,6 +15,18 @@ def _sync_policy_types(sender, **kwargs):
     call_command('sync_policy_types', verbosity=0)
 
 
+def _sync_event_types(sender, **kwargs):
+    """Same pattern, Phase 3B's EventType rows (Task E.1)."""
+    from django.core.management import call_command
+    call_command('sync_event_types', verbosity=0)
+
+
+def _sync_job_types(sender, **kwargs):
+    """Same pattern, Phase 3B's JobType rows (Task G.2)."""
+    from django.core.management import call_command
+    call_command('sync_job_types', verbosity=0)
+
+
 class PlatformCoreConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.platform_core'
@@ -28,6 +40,8 @@ class PlatformCoreConfig(AppConfig):
         from django.db.models.signals import post_migrate
         post_migrate.connect(_sync_entity_registry, sender=self)
         post_migrate.connect(_sync_policy_types, sender=self)
+        post_migrate.connect(_sync_event_types, sender=self)
+        post_migrate.connect(_sync_job_types, sender=self)
 
         from apps.platform_core import history
         from apps.platform_core.models import (

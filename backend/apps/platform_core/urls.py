@@ -1,6 +1,9 @@
 from django.urls import path
 
-from apps.platform_core import views, views_attachments, views_import_export, views_list_views, views_meta, views_rules
+from apps.platform_core import (
+    views, views_attachments, views_events_notifications, views_import_export, views_list_views,
+    views_meta, views_rules, views_scheduler, views_workflow,
+)
 
 urlpatterns = [
     path('entities/', views_meta.EntityDefinitionListCreateView.as_view(), name='platform-entity-list'),
@@ -86,4 +89,43 @@ urlpatterns = [
     path('policy-assignments/', views_rules.PolicyAssignmentListCreateView.as_view(), name='platform-policy-assignment-list'),
     path('policy-assignments/<int:pk>/', views_rules.PolicyAssignmentDetailView.as_view(), name='platform-policy-assignment-detail'),
     path('policies/effective/', views_rules.PolicyExplainerView.as_view(), name='platform-policy-explainer'),
+
+    # ─── Phase 3B: workflow definitions ──────────────────────────────────
+    path('workflow-definitions/', views_workflow.WorkflowDefinitionListCreateView.as_view(), name='platform-workflow-definition-list'),
+    path('workflow-definitions/<int:pk>/', views_workflow.WorkflowDefinitionDetailView.as_view(), name='platform-workflow-definition-detail'),
+    path('workflow-definitions/<int:pk>/validate/', views_workflow.WorkflowDefinitionValidateView.as_view(), name='platform-workflow-definition-validate'),
+    path('workflow-definitions/<int:pk>/publish/', views_workflow.WorkflowDefinitionPublishView.as_view(), name='platform-workflow-definition-publish'),
+    path('workflow-definitions/<int:pk>/impact-preview/', views_workflow.WorkflowDefinitionImpactPreviewView.as_view(), name='platform-workflow-definition-impact-preview'),
+    path('workflow-steps/', views_workflow.WorkflowStepListCreateView.as_view(), name='platform-workflow-step-list'),
+    path('workflow-steps/<int:pk>/', views_workflow.WorkflowStepDetailView.as_view(), name='platform-workflow-step-detail'),
+    path('workflow-approver-overrides/', views_workflow.WorkflowApproverOverrideListCreateView.as_view(), name='platform-workflow-approver-override-list'),
+    path('workflow-approver-overrides/<int:pk>/', views_workflow.WorkflowApproverOverrideDetailView.as_view(), name='platform-workflow-approver-override-detail'),
+    path('delegations/', views_workflow.DelegationListCreateView.as_view(), name='platform-delegation-list'),
+
+    # ─── Phase 3B: inbox and runtime actions ─────────────────────────────
+    path('workflow/tasks/', views_workflow.MyApprovalsInboxView.as_view(), name='platform-workflow-tasks'),
+    path('workflow/tasks/counts/', views_workflow.MyApprovalsCountsView.as_view(), name='platform-workflow-task-counts'),
+    path('workflow/tasks/<uuid:task_id>/action/', views_workflow.WorkflowTaskActionView.as_view(), name='platform-workflow-task-action'),
+    path('workflow/tasks/<uuid:task_id>/reassign/', views_workflow.WorkflowTaskReassignView.as_view(), name='platform-workflow-task-reassign'),
+    path('workflow/tasks/bulk-action/', views_workflow.WorkflowTaskBulkActionView.as_view(), name='platform-workflow-task-bulk-action'),
+    path('workflow/instances/<uuid:instance_id>/withdraw/', views_workflow.WorkflowInstanceWithdrawView.as_view(), name='platform-workflow-instance-withdraw'),
+    path('workflow/instances/<str:content_type>/<str:object_id>/', views_workflow.WorkflowInstanceDetailView.as_view(), name='platform-workflow-instance-detail'),
+
+    # ─── Phase 3B: events and notifications ──────────────────────────────
+    path('event-types/', views_events_notifications.EventTypeListView.as_view(), name='platform-event-type-list'),
+    path('message-templates/', views_events_notifications.MessageTemplateListCreateView.as_view(), name='platform-message-template-list'),
+    path('message-templates/<int:pk>/', views_events_notifications.MessageTemplateDetailView.as_view(), name='platform-message-template-detail'),
+    path('message-templates/<int:pk>/preview/', views_events_notifications.MessageTemplatePreviewView.as_view(), name='platform-message-template-preview'),
+    path('message-templates/<int:pk>/test-send/', views_events_notifications.MessageTemplateTestSendView.as_view(), name='platform-message-template-test-send'),
+    path('notification-rules/', views_events_notifications.NotificationRuleListCreateView.as_view(), name='platform-notification-rule-list'),
+    path('notification-rules/<int:pk>/', views_events_notifications.NotificationRuleDetailView.as_view(), name='platform-notification-rule-detail'),
+    path('notification-deliveries/', views_events_notifications.NotificationDeliveryListView.as_view(), name='platform-notification-delivery-list'),
+    path('my-notification-preferences/', views_events_notifications.MyNotificationPreferencesView.as_view(), name='platform-my-notification-preferences'),
+
+    # ─── Phase 3B: scheduler ──────────────────────────────────────────────
+    path('job-types/', views_scheduler.JobTypeListView.as_view(), name='platform-job-type-list'),
+    path('scheduled-jobs/', views_scheduler.ScheduledJobListCreateView.as_view(), name='platform-scheduled-job-list'),
+    path('scheduled-jobs/<int:pk>/', views_scheduler.ScheduledJobDetailView.as_view(), name='platform-scheduled-job-detail'),
+    path('scheduled-jobs/<int:pk>/run-now/', views_scheduler.ScheduledJobRunNowView.as_view(), name='platform-scheduled-job-run-now'),
+    path('scheduled-jobs/<int:pk>/runs/', views_scheduler.JobRunListView.as_view(), name='platform-scheduled-job-runs'),
 ]

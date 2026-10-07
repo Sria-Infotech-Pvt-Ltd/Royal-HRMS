@@ -199,3 +199,49 @@ immediately via their own `effective_from`/`published_at` fields. Fixed
 in migration `0011_change_history_json_encoder_fix` — a real, general fix
 (not scoped to Phase 3A's own models), so every future `history.register()`
 call on any model with a date/Decimal/UUID field is now safe by default.
+
+## Phase 3B addendum — workflow/approval engine built; legacy approvals NOT migrated
+
+See `PHASE3B_REPORT.md`, `docs/WORKFLOWS.md`, `docs/EVENTS_AND_NOTIFICATIONS.md`,
+`docs/SCHEDULER.md` for full detail. The workflow runtime
+(`WorkflowDefinition`/`WorkflowStep`/`WorkflowInstance`/`WorkflowTask`/
+`WorkflowHistory`), the domain-event catalogue + outbox, notification
+rules/templates/delivery/preferences, and the scheduler models are built
+and tested — proven end to end against a Phase 2 custom entity (the
+"Vehicle Allocation" 2-step approval, Acceptance Criterion 2), which needs
+no legacy `l1_*`/`l2_*` column compatibility at all.
+
+**Task C (migrating leave/WFH/attendance-correction/expense approvals onto
+this engine, behind `workflow.v2`) was NOT executed** — same deferral
+class as Phase 3A's attendance consolidation: the full parity-test matrix
+(L1-only, L1+L2, override present, approver-is-requester, approver
+missing, reject-at-L1, reject-at-L2, withdraw, concurrent-clicks, each
+compared OFF vs ON) and the `l1_*`/`l2_*` column sync-back hook are a
+dedicated, high-blast-radius pass of their own — every existing leave/
+WFH/attendance-correction/expense approval in production goes through
+the legacy path unchanged.
+
+### Approvals explicitly out of scope for Phase 3B (per the prompt), with target phase
+
+| Approval | Current model | Target phase |
+|---|---|---|
+| Separation | `SeparationApprovalStage` | Not yet assigned — own dedicated migration pass, same discipline as leave/WFH/attendance/expense would need |
+| Payroll cycle (attendance L1/L2) | `PayrollCycle`, `PayrollSettings.approval_levels` | Phase 7 (Payroll) |
+| Onboarding and hire approvals | `HireAction`, onboarding wizard approval step | Phase 5 (Core HR) |
+| Tax declaration | `EmployeeTaxDeclaration` | Phase 9 (per the Phase 2-era functional-spec plan already in this repo) |
+| Overtime | Attendance overtime approval fields | Phase 3A follow-up (attendance consolidation) or its own pass |
+| Face registration | Face verification approval flow | Not yet assigned |
+| Bank-change | `EmployeeProfile.bank_change_status` | Not yet assigned |
+
+### Resolver parity catalogue (Task 3's "how roles were resolved to people, before vs after")
+
+| Legacy (`apps/accounts/services_approval.py`) | New resolver (`approver_resolvers.py`) | Parity |
+|---|---|---|
+| `resolve_approver(role, employee)` — `can_manage_team` branch | `reporting_manager_level_n` (level=1) | Real — same field (`employee.reporting_manager`), generalised to level N per Task A.2's own ask |
+| `resolve_approver(role, employee)` — else branch | `hr_business_partner` | Real — same field (`employee.hr`) |
+| `resolve_employee_org_unit_chief(employee)` | `org_unit_chief` | Real — calls the EXACT existing function, not a reimplementation |
+| `resolve_approval_chain` (override lookup) | `WorkflowApproverOverride` + `_apply_overrides_and_delegation()` | Real — same override-first-then-role-default precedence, generalised from 4 fixed workflow types to any (definition, step) |
+| N/A (no legacy equivalent) | `role_scoped` (branch/org_unit/legal_entity/global scope) | New capability |
+| N/A | `dotted_line_manager` | New — real field, never used as a resolver before |
+| N/A | `specific_user`, `position_holder`, `record_field`, `rule_expression` | New capability |
+| "branch admin of the employee's branch" (named by the prompt) | **Not implemented** | No single existing function defines "branch admin" unambiguously — registering a guessed resolver would risk silently disagreeing with whatever the real intended definition turns out to be |
