@@ -1074,6 +1074,215 @@ class ManagerCooLeaveApprovalTests(TestCase):
         self.assertIn(self.manager_no_reporting.employee_id, employee_ids)
 
 
+class LeaveRequestDetailL1AccessTests(TestCase):
+    """_can_hr_access_request() (the gate behind LeaveRequestDetailView's
+    GET/PATCH) only ever checked l2_approver_id, branch-admin scope, and a
+    branch fallback — never l1_approver_id, even though _can_approve_at_stage()
+    already recognizes a designated L1 approver for the approve/reject
+    action itself. A legitimate L1 approver (an ordinary Manager, or the
+    COO via the Manager -> COO reporting exception) could therefore act on
+    a request but get "Permission denied" re-opening its details once it
+    moved past L1 to L2/HR. Fixed by adding an l1_approver_id == hr_user.id
+    check — additive only, every existing branch/L2/owner condition is
+    unchanged.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+
+        hr_role = make_role('hr_detail_test', permission_codenames=['leave.approve'])
+        self.hr = make_user(
+            'hr.detail@test.com', role=hr_role, password='TestPass123!',
+            employee_id='EMPHDT001', full_name='HR Person', branch='Mumbai HQ',
+        )
+        self.other_hr = make_user(
+            'otherhr.detail@test.com', role=hr_role, password='TestPass123!',
+            employee_id='EMPOHD001', full_name='Other HR', branch='Delhi HQ',
+        )
+
+        coo_role = make_role(COO_ROLE_NAME, permission_codenames=['leave.approve'], can_manage_team=False)
+        self.coo = make_user(
+            'coo.detail@test.com', role=coo_role, password='TestPass123!',
+            employee_id='EMPCDT001', full_name='Chief Operating Officer', branch='Delhi HQ',
+        )
+
+        manager_role = make_role(
+            'manager_detail_test', permission_codenames=['leave.approve'], can_manage_team=True,
+        )
+        self.manager = make_user(
+            'manager.detail@test.com', role=manager_role, password='TestPass123!',
+            employee_id='EMPMDT001', full_name='Branch Manager', branch='Mumbai HQ',
+            reporting_manager=self.coo, hr=self.hr,
+        )
+
+        employee_role = make_role('employee_detail_test')
+        self.employee = make_user(
+            'employee.detail@test.com', role=employee_role, password='TestPass123!',
+            employee_id='EMPEDT001', full_name='Regular Employee', branch='Mumbai HQ',
+            reporting_manager=self.manager, hr=self.hr,
+        )
+
+        branch_admin_role = make_role(
+            'branch_admin_detail_test', permission_codenames=['leave.approve', 'employees.view'],
+        )
+        branch_admin_role.can_manage_branch = True
+        branch_admin_role.save(update_fields=['can_manage_branch'])
+        self.branch_admin = make_user(
+            'branchadmin.detail@test.com', role=branch_admin_role, password='TestPass123!',
+            employee_id='EMPBDT001', full_name='Branch Admin', branch='Mumbai HQ',
+        )
+
+        no_perm_role = make_role('no_perm_detail_test')
+        make_user(
+            'noperm.detail@test.com', role=no_perm_role, password='TestPass123!',
+            employee_id='EMPNDT001', full_name='No Perm', branch='Mumbai HQ',
+        )
+
+        ApprovalWorkflowRule.objects.update_or_create(
+            workflow_type=ApprovalWorkflowRule.WORKFLOW_LEAVE,
+            defaults={'l1_approver_role': manager_role, 'l2_approver_role': hr_role},
+        )
+        LeavePolicy.objects.update_or_create(
+            leave_type='casual',
+            defaults={'leave_type_label': 'Casual Leave', 'annual_days': Decimal('12.0'), 'is_active': True},
+        )
+        self.leave_date = _future_monday()
+        for emp in (self.manager, self.employee):
+            LeaveBalance.objects.create(
+                employee=emp, leave_type='casual', year=self.leave_date.year,
+                total_days=Decimal('12.0'), used_days=Decimal('0'),
+            )
+
+    def _submit(self, email):
+        client = APIClient()
+        _login(client, email, password='TestPass123!')
+        return client.post(
+            reverse('leave-request-list'),
+            {
+                'leave_type': 'casual', 'duration': 'full_day',
+                'start_date': self.leave_date.isoformat(), 'end_date': self.leave_date.isoformat(),
+                'reason': 'Personal work to attend to.',
+            },
+            format='json',
+        )
+
+    def _view(self, email, request_id):
+        client = APIClient()
+        _login(client, email, password='TestPass123!')
+        return client.get(reverse('leave-request-detail', kwargs={'request_id': request_id}))
+
+    def _approve(self, email, request_id):
+        client = APIClient()
+        _login(client, email, password='TestPass123!')
+        return client.post(
+            reverse('leave-request-approve', kwargs={'request_id': request_id}),
+            {'action': 'approve'}, format='json',
+        )
+
+    def _reject(self, email, request_id):
+        client = APIClient()
+        _login(client, email, password='TestPass123!')
+        return client.post(
+            reverse('leave-request-approve', kwargs={'request_id': request_id}),
+            {'action': 'reject', 'remarks': 'Not approved.'}, format='json',
+        )
+
+    # 1. L1 approver can view while REQ_PENDING
+    def test_l1_approver_can_view_while_pending(self):
+        create_resp = self._submit('employee.detail@test.com')
+        request_id = create_resp.data['data']['id']
+        resp = self._view('manager.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    # 2. L1 approver can still view after it moves to REQ_L2_PENDING
+    def test_l1_approver_can_view_after_moving_to_l2_pending(self):
+        create_resp = self._submit('employee.detail@test.com')
+        request_id = create_resp.data['data']['id']
+        self._approve('manager.detail@test.com', request_id)
+        resp = self._view('manager.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data['data']['status'], 'l2_pending')
+
+    # 3. L1 approver can view after the request reaches an approved state
+    def test_l1_approver_can_view_after_approved(self):
+        create_resp = self._submit('employee.detail@test.com')
+        request_id = create_resp.data['data']['id']
+        self._approve('manager.detail@test.com', request_id)
+        self._approve('hr.detail@test.com', request_id)
+        resp = self._view('manager.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data['data']['status'], 'approved')
+
+    # 4. L1 approver can view after the request reaches a rejected state
+    def test_l1_approver_can_view_after_rejected(self):
+        create_resp = self._submit('employee.detail@test.com')
+        request_id = create_resp.data['data']['id']
+        self._reject('manager.detail@test.com', request_id)
+        resp = self._view('manager.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data['data']['status'], 'rejected')
+
+    # 5. L2 approver access unchanged
+    def test_l2_approver_can_still_view(self):
+        create_resp = self._submit('employee.detail@test.com')
+        request_id = create_resp.data['data']['id']
+        self._approve('manager.detail@test.com', request_id)
+        resp = self._view('hr.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    # 6. Request owner access unchanged
+    def test_request_owner_can_still_view_own_request(self):
+        create_resp = self._submit('employee.detail@test.com')
+        request_id = create_resp.data['data']['id']
+        resp = self._view('employee.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    # 7. Non-designated approver still 403
+    def test_non_designated_approver_still_gets_403(self):
+        create_resp = self._submit('employee.detail@test.com')
+        request_id = create_resp.data['data']['id']
+        resp = self._view('otherhr.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 403)
+
+    # 8. Branch Admin existing access unchanged
+    def test_branch_admin_can_view_own_branch_request(self):
+        create_resp = self._submit('employee.detail@test.com')
+        request_id = create_resp.data['data']['id']
+        resp = self._view('branchadmin.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    # 9. COO as L1 approver can view after approving and the request moving to L2/HR
+    def test_coo_as_l1_approver_can_view_after_approving(self):
+        create_resp = self._submit('manager.detail@test.com')  # Manager -> reporting_manager=COO
+        request_id = create_resp.data['data']['id']
+        self.assertEqual(create_resp.data['data']['status'], 'pending')
+
+        approve_resp = self._approve('coo.detail@test.com', request_id)
+        self.assertEqual(approve_resp.status_code, 200, approve_resp.data)
+        self.assertEqual(approve_resp.data['data']['status'], 'l2_pending')
+
+        resp = self._view('coo.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data['data']['status'], 'l2_pending')
+
+        # COO must NOT become able to approve an unrelated request they
+        # aren't assigned to.
+        other_resp = self._submit('employee.detail@test.com')
+        other_id = other_resp.data['data']['id']
+        coo_approve_other = self._approve('coo.detail@test.com', other_id)
+        self.assertEqual(coo_approve_other.status_code, 403)
+
+    # 10. Existing normal Employee -> Manager leave flow unaffected
+    def test_normal_employee_to_manager_flow_unaffected(self):
+        create_resp = self._submit('employee.detail@test.com')
+        request_id = create_resp.data['data']['id']
+        resp = self._view('manager.detail@test.com', request_id)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        approve_resp = self._approve('manager.detail@test.com', request_id)
+        self.assertEqual(approve_resp.status_code, 200, approve_resp.data)
+
+
 class ExpenseSelfApprovalTests(TestCase):
     """Regression/critical-path test: an approver can never approve their
     own expense claim, even if they hold expenses.approve.

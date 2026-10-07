@@ -84,10 +84,26 @@ def _can_hr_access_request(hr_user, leave_request) -> bool:
     _approval_scope_filter and _can_approve_at_stage: a branch can have several HR
     users, but each should only reach requests for their own assigned employees.
 
+    Also true when hr_user is the request's designated L1 approver
+    (l1_approver_id) — the same relationship _can_approve_at_stage() already
+    recognizes for the approve/reject action itself, but this view-access
+    check previously had no equivalent: an L1 approver (Manager, or COO via
+    the Manager -> COO reporting exception) could act on a request yet get
+    "Permission denied" trying to re-open/refresh its details once it moved
+    on to L2/HR — a real authorization gap, not a deliberate restriction.
+    Does not affect this function's other caller, _can_approve_at_stage()'s
+    L2 fallback branch — that branch is only ever reached when
+    l2_approver_id is None, and by construction (see
+    LeaveRequestListCreateView.post()) l1_approver_id is always None
+    whenever l2_approver_id is None, so this new check can never change
+    that path's outcome.
+
     branch_admin bypasses the assignment check entirely — unconditional access
     to every request in their own branch, same as they get for employees/
     expenses/documents.
     """
+    if leave_request.l1_approver_id == hr_user.id:
+        return True
     if _is_branch_admin(hr_user):
         return _branch_admin_covers(hr_user, leave_request.employee)
     if leave_request.l2_approver_id:
