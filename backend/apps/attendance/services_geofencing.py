@@ -44,6 +44,16 @@ GPS_REQUIRED_MESSAGE = (
     'Please allow location access in your browser and try again.'
 )
 
+# UK Shift's immutable WorkingHoursPolicy.policy_code (seeded by
+# migrations.0045_seed_sgt_ict_and_uk_shifts) — identified by this code, never
+# by the editable display name, same reasoning as every other shift-aware
+# check added for the shift-timing feature. UK Shift employees can
+# legitimately punch from anywhere (see _validate_office's early branch
+# below), so branch geofence DISTANCE is not enforced for them — GPS capture
+# and the "coordinates are required" rule are NOT relaxed, only the distance
+# comparison against a branch is skipped.
+UK_SHIFT_POLICY_CODE = 'WH-UK'
+
 
 # ── Data structures ────────────────────────────────────────────────────────────
 
@@ -190,6 +200,46 @@ class GeofencingService:
 
 # ── Mode validators ────────────────────────────────────────────────────────────
 
+def _validate_uk_shift_bypass(
+    employee,
+    employee_lat: Optional[float],
+    employee_lon: Optional[float],
+) -> Optional[GeofenceResult]:
+    """
+    Returns a GeofenceResult if `employee` is currently assigned to UK Shift
+    (identified by the immutable policy_code, never the editable name) — the
+    caller (_validate_office) returns it immediately without running any
+    branch-distance logic. Returns None for every other employee, meaning
+    "not UK Shift, continue the normal office geofence flow unchanged".
+
+    GPS is NOT relaxed: UK Shift only exempts the branch DISTANCE comparison,
+    not the "coordinates are required" rule — a punch with no lat/lon is
+    still rejected, same GPS_REQUIRED_MESSAGE as the regular office flow.
+    Branch is still resolved (same as the field/client/remote modes'
+    _validate_no_geofence) purely for audit/display context — it never gates
+    the punch.
+    """
+    from django.utils import timezone
+
+    from core.cache_service import ShiftCacheService
+
+    shift = ShiftCacheService.get_effective(employee, timezone.localdate())
+    if shift.policy_code != UK_SHIFT_POLICY_CODE:
+        return None
+
+    branch = _resolve_employee_branch(employee)
+    if employee_lat is None or employee_lon is None:
+        return GeofenceResult(
+            is_allowed=False, is_inside_geofence=False,
+            calculated_distance=None, branch=branch,
+            rejection_message=GPS_REQUIRED_MESSAGE,
+        )
+    return GeofenceResult(
+        is_allowed=True, is_inside_geofence=None,
+        calculated_distance=None, branch=branch, rejection_message=None,
+    )
+
+
 def _validate_office(
     employee,
     employee_lat: Optional[float],
@@ -200,6 +250,9 @@ def _validate_office(
     Office mode: validate GPS against the employee's allowed branch geofences.
 
     Decision tree:
+    0. UK Shift employee (WorkingHoursPolicy.policy_code == UK_SHIFT_POLICY_CODE,
+       resolved via ShiftCacheService) → GPS still required, but branch
+       distance is never checked — see _validate_uk_shift_bypass below.
     1. Resolve allowed branches (EmployeeBranchAccess if present, else User.branch).
     2. No branches resolved → allow punch (unassigned, log warning).
     3. None of the branches have geofencing enabled + coordinates → allow.
@@ -210,6 +263,10 @@ def _validate_office(
        inside reading isn't hard-rejected. Allow if within ANY one of them;
        reject if outside all.
     """
+    uk_bypass_result = _validate_uk_shift_bypass(employee, employee_lat, employee_lon)
+    if uk_bypass_result is not None:
+        return uk_bypass_result
+
     tolerance_m = min(employee_accuracy, _MAX_ACCURACY_TOLERANCE_M) if employee_accuracy else 0
     allowed_branches = _resolve_all_allowed_branches(employee)
 

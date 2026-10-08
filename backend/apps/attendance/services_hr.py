@@ -340,7 +340,7 @@ def get_attendance_detail(
     if employee_ids is not None and str(record.employee_id) not in {str(i) for i in employee_ids}:
         return None
 
-    punches = (
+    punches = list(
         AttendancePunch.objects
         .filter(employee=record.employee, punched_at__date=record.date)
         .order_by('punched_at')
@@ -358,24 +358,41 @@ def get_attendance_detail(
         for p in punches
     ]
 
+    # Actual Clock In / Clock Out GPS location, for authorized HR/Admin
+    # viewers of this detail endpoint only (same permission gate as the rest
+    # of this response — see HRAttendanceDetailView). At most one IN and one
+    # OUT punch exist per day (the daily punch-limit hard cap), so these map
+    # 1:1 onto record.clock_in/clock_out above. None when that punch doesn't
+    # exist yet, or when no coordinates were captured for it (e.g. a mode
+    # that never required GPS) — never a guessed/invented location.
+    clock_in_punch  = next((p for p in punches if p.punch_type == AttendancePunch.PUNCH_IN),  None)
+    clock_out_punch = next((p for p in punches if p.punch_type == AttendancePunch.PUNCH_OUT), None)
+
+    def _coord(value) -> float | None:
+        return float(value) if value is not None else None
+
     user = record.employee
     return {
-        'record_id':     str(record.id),
-        'employee_id':   user.employee_id or '',
-        'name':          user.full_name or '',
-        'department':    user.department or '',
-        'branch':        user.branch or '',
-        'date':          record.date,
-        'status':        record.status_display,
-        'status_key':    record.status,
-        'clock_in':      _fmt_time(record.first_punch_in),
-        'clock_out':     _fmt_time(record.last_punch_out),
-        'total_hours':   record.total_hours_display,
-        'overtime':      _fmt_minutes(record.overtime_minutes),
-        'is_late':       record.is_late,
-        'is_early_exit': record.is_early_exit,
-        'note':          record.note or '',
-        'punches':       punch_list,
+        'record_id':           str(record.id),
+        'employee_id':         user.employee_id or '',
+        'name':                user.full_name or '',
+        'department':          user.department or '',
+        'branch':              user.branch or '',
+        'date':                record.date,
+        'status':              record.status_display,
+        'status_key':          record.status,
+        'clock_in':            _fmt_time(record.first_punch_in),
+        'clock_out':           _fmt_time(record.last_punch_out),
+        'clock_in_latitude':   _coord(clock_in_punch.latitude) if clock_in_punch else None,
+        'clock_in_longitude':  _coord(clock_in_punch.longitude) if clock_in_punch else None,
+        'clock_out_latitude':  _coord(clock_out_punch.latitude) if clock_out_punch else None,
+        'clock_out_longitude': _coord(clock_out_punch.longitude) if clock_out_punch else None,
+        'total_hours':         record.total_hours_display,
+        'overtime':            _fmt_minutes(record.overtime_minutes),
+        'is_late':             record.is_late,
+        'is_early_exit':       record.is_early_exit,
+        'note':                record.note or '',
+        'punches':             punch_list,
     }
 
 

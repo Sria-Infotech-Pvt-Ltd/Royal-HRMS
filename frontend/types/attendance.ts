@@ -159,6 +159,10 @@ export interface AttendanceDetail {
   status_key:    string;
   clock_in:      string;
   clock_out:     string;
+  clock_in_latitude:   number | null;
+  clock_in_longitude:  number | null;
+  clock_out_latitude:  number | null;
+  clock_out_longitude: number | null;
   total_hours:   string;
   overtime:      string;
   is_late:       boolean;

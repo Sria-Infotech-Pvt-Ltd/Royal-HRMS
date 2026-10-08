@@ -471,11 +471,21 @@ class ShiftCacheService:
     (Settings -> Attendance Rules page), so an employee with no assignment
     sees zero behavior change from before this resolver existed.
 
-    Returns a normalized _Shift(start_time, end_time, grace_period_minutes)
-    namedtuple regardless of source — WorkingHoursPolicy.grace_period and
-    AttendanceWorkingHours.grace_period_minutes are different field names on
-    the two source models, so callers (services_attendance.py,
-    services_unpunch.py) never need to know which one actually resolved.
+    Returns a normalized _Shift(start_time, end_time, grace_period_minutes,
+    policy_code) namedtuple regardless of source — WorkingHoursPolicy.
+    grace_period and AttendanceWorkingHours.grace_period_minutes are
+    different field names on the two source models, so callers
+    (services_attendance.py, services_unpunch.py) never need to know which
+    one actually resolved.
+
+    policy_code identifies WHICH named shift resolved (e.g. 'WH-UK') — None
+    when resolved from the global AttendanceWorkingHours fallback, which has
+    no policy identity of its own. Added so callers that need to branch on a
+    specific shift (e.g. UK Shift's geofence exemption — see
+    services_geofencing.py's _validate_office) can do so by this immutable
+    code rather than the editable display name. Trailing field with a
+    default so existing positional/partial-keyword construction (tests)
+    keeps working unchanged.
 
     Not cached per-employee, same reasoning as WeeklyOffCacheService: the
     assignment lookup is a single indexed query, cheap even during batch daily
@@ -483,16 +493,19 @@ class ShiftCacheService:
     AttendanceSettingsCacheService's own 6h cache.
     """
 
-    _Shift = namedtuple('_Shift', ['start_time', 'end_time', 'grace_period_minutes'])
+    _Shift = namedtuple(
+        '_Shift', ['start_time', 'end_time', 'grace_period_minutes', 'policy_code'],
+        defaults=[None],
+    )
 
     @classmethod
     def _global_default(cls):
         cfg = AttendanceSettingsCacheService.get()
         if cfg is not None and getattr(cfg, 'working_hours', None) is not None:
             wh = cfg.working_hours
-            return cls._Shift(wh.shift_start, wh.shift_end, wh.grace_period_minutes)
+            return cls._Shift(wh.shift_start, wh.shift_end, wh.grace_period_minutes, None)
         from datetime import time as _time
-        return cls._Shift(_time(9, 0), _time(18, 0), 15)
+        return cls._Shift(_time(9, 0), _time(18, 0), 15, None)
 
     @classmethod
     def get_effective(cls, employee, for_date: date):
@@ -516,7 +529,7 @@ class ShiftCacheService:
                 assignment = None
             if assignment is not None:
                 p = assignment.policy
-                return cls._Shift(p.start_time, p.end_time, p.grace_period)
+                return cls._Shift(p.start_time, p.end_time, p.grace_period, p.policy_code)
         return cls._global_default()
 
     @classmethod
@@ -549,7 +562,7 @@ class ShiftCacheService:
                     continue  # already kept the most-recently-started covering row for this employee
                 seen.add(a.employee_id)
                 p = a.policy
-                result[a.employee_id] = cls._Shift(p.start_time, p.end_time, p.grace_period)
+                result[a.employee_id] = cls._Shift(p.start_time, p.end_time, p.grace_period, p.policy_code)
         except Exception:
             logger.warning('Bulk shift assignment lookup failed for %d employee(s)', len(employee_ids))
         return result

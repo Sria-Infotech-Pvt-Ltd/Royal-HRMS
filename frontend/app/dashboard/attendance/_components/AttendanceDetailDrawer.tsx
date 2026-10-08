@@ -217,6 +217,56 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
 
               {/* Punch history + location */}
               <SectionTitle icon="ti-map-pin" title="Punch History & Location" />
+
+              {(data.clock_in_latitude !== null || data.clock_out_latitude !== null) && (
+                <div className="form-row cols-2" style={{ marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 2 }}>Clock In Location</div>
+                    {data.clock_in_latitude !== null && data.clock_in_longitude !== null ? (
+                      <>
+                        <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>
+                          Latitude: {data.clock_in_latitude.toFixed(8)}
+                        </div>
+                        <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>
+                          Longitude: {data.clock_in_longitude.toFixed(8)}
+                        </div>
+                        <a
+                          href={`https://www.google.com/maps?q=${data.clock_in_latitude},${data.clock_in_longitude}`}
+                          target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4, marginTop: 2 }}
+                        >
+                          <i className="ti ti-map-pin" style={{ fontSize: 11 }} /> View on map
+                        </a>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 12, color: "var(--on-variant)" }}>—</div>
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 2 }}>Clock Out Location</div>
+                    {data.clock_out_latitude !== null && data.clock_out_longitude !== null ? (
+                      <>
+                        <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>
+                          Latitude: {data.clock_out_latitude.toFixed(8)}
+                        </div>
+                        <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>
+                          Longitude: {data.clock_out_longitude.toFixed(8)}
+                        </div>
+                        <a
+                          href={`https://www.google.com/maps?q=${data.clock_out_latitude},${data.clock_out_longitude}`}
+                          target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4, marginTop: 2 }}
+                        >
+                          <i className="ti ti-map-pin" style={{ fontSize: 11 }} /> View on map
+                        </a>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 12, color: "var(--on-variant)" }}>—</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {data.punches.map((p, idx) => (
                   <div key={idx} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--outline-v)", borderRadius: 8 }}>
