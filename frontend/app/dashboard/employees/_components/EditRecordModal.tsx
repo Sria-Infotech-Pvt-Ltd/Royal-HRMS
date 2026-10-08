@@ -16,8 +16,10 @@
 //   1 Employment             EmploymentStep (real import)           User fields (role/branch/reporting
 //                                                                   lines/work setup) — see note below
 //                                                                   on fields with no write path yet
-//   2 Basic pay              SalaryTab (NOT BasicPayStep)           real EmployeeSalaryConfig system —
-//                                                                   see note below
+//   2 Basic pay              BasicPayStep (real import)              computed live via the real
+//                                                                   estimate_salary_breakdown() preview
+//                                                                   endpoint (API.payroll.salaryPreview),
+//                                                                   same as Hire — see note below on saving
 //   3 Statutory & accounts   StatutoryAccountsStep (real import)    EmployeeProfile (PAN/Aadhaar/PF/ESI/bank)
 //   4 Family & nomination    FamilyNominationStep (real import)     /onboarding/employees/<uuid>/family,nominees
 //   5 Education & experience EducationChecklist + ExperienceList    /onboarding/employees/<uuid>/education,experience
@@ -26,14 +28,17 @@
 //   6 Documents               DocumentsChecklistStep (real import)  existing employee documents endpoint
 //   7 Assets                 AssetsList (real import)               /onboarding/employees/<uuid>/assets
 //
-// Note on Basic pay: BasicPayStep is NOT reused here. It computes purely
-// from local draft state (employment.annual_ctc/salary_structure) with no
-// save endpoint of its own — at hire completion those numbers are only
-// ever persisted as part of the whole-hire payload. For an ALREADY-HIRED
-// employee the real, live equivalent is the existing EmployeeSalaryConfig
-// system (SalaryTab), which already has its own working fetch/save this
-// modal reuses instead of re-deriving numbers from a field that doesn't
-// exist post-hire.
+// Note on Basic pay: BasicPayStep itself only ever displays a live PREVIEW
+// breakdown (it calls estimate_salary_breakdown(), not the real payroll
+// engine) — it has no save endpoint of its own in either Hire or here.
+// employment.annual_ctc/salary_structure are seeded from this employee's
+// current active EmployeeSalaryConfig (the same history
+// API.payroll.employeeSalaryHistory(uuid) the full Salary tab reads) and,
+// on Save changes, a new EmployeeSalaryConfig revision is POSTed via
+// API.payroll.employeeSalary — the SAME write path the full Salary tab
+// uses — but ONLY when the CTC/structure actually changed from what was
+// loaded, so opening this section without editing it never creates a
+// spurious revision row (see the save handler below for the exact check).
 //
 // Note on Employment: EmploymentStep itself fetches its own dropdown data
 // (roles/branches/people/policies) — passed through here unchanged. Some
@@ -57,7 +62,7 @@ import type { HireDocument } from "@/components/DocUploadButton";
 import type { DetailValues, Employee } from "../_data";
 import Avatar from "./Avatar";
 import { apiToEmployee, type ApiEmployee } from "../[id]/_apiMapping";
-import SalaryTab from "../[id]/_components/SalaryTab";
+import BasicPayStep, { EMPTY_BASIC_PAY, type BasicPayDraft } from "../../hire/[hireActionId]/_components/BasicPayStep";
 import { STEPS as HIRE_STEPS } from "../../hire/[hireActionId]/_components/_wizardData";
 import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "../../hire/[hireActionId]/_components/StatutoryAccountsStep";
 import EmploymentStep, { EMPTY_EMPLOYMENT, type EmploymentDraft } from "../../hire/[hireActionId]/_components/EmploymentStep";
@@ -68,6 +73,7 @@ import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/Assets
 import EducationChecklist, { type EducationEntry } from "@/app/onboarding/_components/EducationChecklist";
 import ExperienceList, { type ExperienceEntry } from "@/app/onboarding/_components/ExperienceList";
 import type { EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
+import type { EmployeeSalaryConfig } from "@/types/payroll";
 
 const STEPS = HIRE_STEPS.slice(0, -1); // drop "Review" — not applicable to editing an existing record
 
@@ -149,6 +155,12 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContactEntry[]>([]);
 
   const [employment, setEmployment] = useState<EmploymentDraft>(EMPTY_EMPLOYMENT);
+  const [basicPay, setBasicPay] = useState<BasicPayDraft>(EMPTY_BASIC_PAY);
+  // Baseline CTC/structure as loaded — a new EmployeeSalaryConfig revision
+  // is only created on save if these actually changed, so opening and
+  // closing Basic pay without editing anything never creates a spurious
+  // revision row.
+  const baselineCtc = useRef({ annualCtc: "", salaryStructure: "" });
   const [positionTitle, setPositionTitle] = useState("");
   const [orgUnitName, setOrgUnitName] = useState("");
 
@@ -285,6 +297,13 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     clientApi.get<{ data: ExperienceEntry[] }>(API.onboarding.employees.experience(uuid)).then(r => setExperienceEntries(r.data?.data ?? [])).catch(() => {});
     clientApi.get<{ data: EducationExperienceFieldConfigResponse }>(API.onboarding.educationExperienceFieldConfig)
       .then(r => setEduExpFieldConfig(r.data?.data ?? { education: [], experience: [] })).catch(() => {});
+    clientApi.get<{ data: EmployeeSalaryConfig[] }>(API.payroll.employeeSalaryHistory(uuid)).then(r => {
+      const current = (r.data?.data ?? []).find(h => h.is_active) ?? null;
+      const annualCtc = current ? String(Math.round(Number(current.annual_ctc))) : "";
+      const salaryStructure = current?.salary_structure ?? "";
+      baselineCtc.current = { annualCtc, salaryStructure };
+      setEmployment(e => ({ ...e, annual_ctc: annualCtc, salary_structure: salaryStructure }));
+    }).catch(() => {});
   }, [uuid]);
 
   const saveFamilyAndNominees = useCallback(async () => {
@@ -472,12 +491,38 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       };
       await clientApi.put(API.employees.detail(employee.id), payload);
 
+      // Basic pay — only create a new EmployeeSalaryConfig revision if the
+      // CTC/structure actually changed from what was loaded, so opening
+      // and closing this section without editing it never creates a
+      // spurious revision row. A real CTC change needs a reason on this
+      // model (it's a revision, not a plain field edit) — "other" with a
+      // fixed note is used here since this modal has no dedicated
+      // reason/effective-date picker the way the full Salary tab does.
+      let ctcOk = true;
+      if (employment.annual_ctc && (
+        employment.annual_ctc !== baselineCtc.current.annualCtc || employment.salary_structure !== baselineCtc.current.salaryStructure
+      )) {
+        try {
+          await clientApi.post(API.payroll.employeeSalary, {
+            employee: uuid, annual_ctc: employment.annual_ctc,
+            effective_from: new Date().toISOString().split("T")[0],
+            salary_structure: employment.salary_structure || null,
+            reason: "other", reason_note: "Updated via Edit record",
+          });
+          baselineCtc.current = { annualCtc: employment.annual_ctc, salaryStructure: employment.salary_structure };
+        } catch (err: unknown) {
+          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+          setSaveError(msg ?? "Failed to save the CTC change.");
+          ctcOk = false;
+        }
+      }
+
       const familyOk = await saveFamilyAndNominees();
       const assetsOk = await saveAssets();
       const eduExpOk = await saveEducationAndExperience();
 
-      setSavedMsg(familyOk && assetsOk && eduExpOk);
-      if (!familyOk || !assetsOk || !eduExpOk) setSaveError("Some sections could not be saved — see the errors above.");
+      setSavedMsg(familyOk && assetsOk && eduExpOk && ctcOk);
+      if (!familyOk || !assetsOk || !eduExpOk || !ctcOk) setSaveError(prev => prev ?? "Some sections could not be saved — see the errors above.");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setSaveError(msg ?? "Failed to save changes. Please try again.");
@@ -668,7 +713,12 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                 />
               )}
 
-              {step === 2 && <SalaryTab employeeId={uuid} employeeCode={employee.code} />}
+              {step === 2 && (
+                <BasicPayStep
+                  annualCtc={employment.annual_ctc} salaryStructureId={employment.salary_structure}
+                  branchName={employment.branch} value={basicPay} onChange={setBasicPay}
+                />
+              )}
 
               {step === 3 && (
                 <StatutoryAccountsStep
