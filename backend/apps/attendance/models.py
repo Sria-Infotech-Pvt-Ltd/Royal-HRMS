@@ -1225,6 +1225,20 @@ class AttendanceRecord(models.Model):
     created_at             = models.DateTimeField(auto_now_add=True)
     updated_at             = models.DateTimeField(auto_now=True)
 
+    # Phase 6B Task B.3 — additive, not yet populated by
+    # AttendanceProcessorService._calculate() (which still writes only the
+    # fields above it). `first_punch_in`/`last_punch_out` stay the live
+    # TimeFields every existing reader uses; these datetime-aware twins
+    # exist so a future cross-midnight-correct processor has somewhere
+    # real to write once built — see PHASE6B_REPORT.md's Task D notes.
+    shift                  = models.ForeignKey('attendance.Shift', on_delete=models.SET_NULL, null=True, blank=True, related_name='attendance_records')
+    scheduled_start        = models.DateTimeField(null=True, blank=True)
+    scheduled_end          = models.DateTimeField(null=True, blank=True)
+    first_in_at            = models.DateTimeField(null=True, blank=True)
+    last_out_at            = models.DateTimeField(null=True, blank=True)
+    break_minutes          = models.PositiveIntegerField(default=0)
+    status_reason          = models.CharField(max_length=100, blank=True, default='')
+
     class Meta:
         db_table        = 'attendance_records'
         unique_together = [('employee', 'date')]
@@ -1963,3 +1977,9 @@ class WeeklyTimesheetSubmission(models.Model):
 
     def __str__(self) -> str:
         return f'{self.employee_id} — week of {self.week_start}'
+
+
+# ─── Phase 6B — shifts, devices, geofences (additive) ──────────────────────
+from apps.attendance.models_shift import Shift  # noqa: E402,F401
+from apps.attendance.models_device import AttendanceDevice, DevicePunchLog  # noqa: E402,F401
+from apps.attendance.models_geofence import Geofence  # noqa: E402,F401

@@ -143,6 +143,25 @@ def create_overtime(data: dict, created_by, employee_ids: list[str] | None = Non
             status=AttendanceOvertime.STATUS_APPROVED if approved_by else AttendanceOvertime.STATUS_PENDING,
             created_by=created_by,
         )
+
+        # Phase 6B Task G.3 — approved OT worked on a weekly off or holiday
+        # earns a 6A comp-off ledger lot. Regular-day OT does not (matches
+        # the prompt's own "work on a weekly off, or work on a holiday"
+        # trigger list — ordinary overtime on a normal working day isn't
+        # one of them). ot_amount/multiplier logic above is completely
+        # untouched — this only ADDS a ledger side effect after it.
+        if ot_entry.status == AttendanceOvertime.STATUS_APPROVED and data['ot_type'] in (
+            AttendanceOvertime.OT_TYPE_HOLIDAY, AttendanceOvertime.OT_TYPE_WEEKLY_OFF,
+        ):
+            from apps.hrms.services_comp_off import CompOffError, grant_comp_off
+            try:
+                grant_comp_off(
+                    employee, work_date=data['date'], hours_worked=ot_minutes / 60,
+                    reason=f'Comp-off for {ot_entry.get_ot_type_display()} OT on {data["date"]}.',
+                    created_by=created_by,
+                )
+            except CompOffError as exc:
+                logger.info('Comp-off not granted for OT entry %s: %s', ot_entry.id, exc)
     return ot_entry
 
 

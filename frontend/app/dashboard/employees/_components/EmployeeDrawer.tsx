@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { fullName, initials, avatarColor, type Employee } from "../_data";
 import Avatar from "./Avatar";
 import EmployeeFullRecordBody from "./EmployeeFullRecordBody";
+import EditRecordModal from "./EditRecordModal";
 
 interface Props {
   employee: Employee;
@@ -23,6 +24,7 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
   const isAdmin = mode === "admin";
   const isSelf  = mode === "self";
   const mouseDownOnOverlay = useRef(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   return (
     <div
@@ -60,13 +62,15 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <button className="btn btn-ghost" onClick={onClose}>Close</button>
             {isAdmin && (
-              <button className="btn btn-filled" onClick={() => router.push(`/dashboard/employees/${employee.id}`)}>
+              <button className="btn btn-filled" onClick={() => setEditOpen(true)}>
                 Edit full record
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {editOpen && <EditRecordModal employee={employee} onClose={() => setEditOpen(false)} />}
     </div>
   );
 }

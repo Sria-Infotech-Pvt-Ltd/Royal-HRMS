@@ -1,6 +1,7 @@
 
 from django.urls import path
 
+from apps.attendance.views_device import DevicePunchPushView
 from apps.attendance.views import (
     AbsenceAlertPolicyDetailView,
     AbsenceAlertPolicyListCreateView,
@@ -143,4 +144,7 @@ urlpatterns = [
     path('face-registration/register/',                              FaceRegistrationHRRegisterView.as_view(),    name='face-registration-hr-register'),
     path('face-registration/employees/',                             FaceRegistrationEmployeePickerView.as_view(), name='face-registration-employee-picker'),
     path('face-registration/employees/<uuid:employee_uuid>/status/', FaceRegistrationEmployeeStatusView.as_view(), name='face-registration-employee-status'),
+
+    # ── Phase 6B Task E.3 — device punch push ──────────────────────────────
+    path('devices/push/', DevicePunchPushView.as_view(), name='attendance-device-push'),
 ]

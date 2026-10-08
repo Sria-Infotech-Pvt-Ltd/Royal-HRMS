@@ -152,6 +152,12 @@ _PROFILE_FIELD_KEYS = frozenset({
     # normal Edit flow. Only writable here going forward via
     # OnboardingApprovalView (HR approval time) or bulk import before this.
     'uan_number', 'name_as_per_aadhar', 'esi_number',
+    # Same bug, same fix, for the "Edit full record" modal's Statutory &
+    # accounts section (Phase 6B frontend work) — these are already real
+    # EmployeeProfileSerializer fields (used by the Hire Wizard's pre-employee
+    # draft) but had no post-hire write path at all until now.
+    'pan_number', 'aadhaar_number', 'pf_covered', 'pf_number', 'esi_covered',
+    'passport_number', 'passport_expiry',
     'custom_field_values',
 })
 
