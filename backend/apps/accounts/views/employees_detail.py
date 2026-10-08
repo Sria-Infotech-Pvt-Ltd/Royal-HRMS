@@ -158,6 +158,7 @@ _PROFILE_FIELD_KEYS = frozenset({
     # draft) but had no post-hire write path at all until now.
     'pan_number', 'aadhaar_number', 'pf_covered', 'pf_number', 'esi_covered',
     'passport_number', 'passport_expiry',
+    'core_skills', 'certifications',
     'custom_field_values',
 })
 
@@ -284,6 +285,47 @@ class EmployeeDetailView(APIView):
                 changes['work_location'] = {'from': employee.work_location, 'to': work_location}
             employee.work_location = work_location
             update_fields.append('work_location')
+
+        # work_mode/probation_period_months/notice_period_days/
+        # dotted_line_manager_id — same "Edit full record" modal fix as
+        # work_location above. These are real User columns (added for the
+        # Hire Wizard's Employment step) with no post-hire write path
+        # through this view until now.
+        if 'work_mode' in data:
+            work_mode = (data.get('work_mode') or '').strip()
+            if employee.work_mode != work_mode:
+                changes['work_mode'] = {'from': employee.work_mode, 'to': work_mode}
+            employee.work_mode = work_mode
+            update_fields.append('work_mode')
+
+        if 'probation_period_months' in data:
+            probation = data.get('probation_period_months') or None
+            if employee.probation_period_months != probation:
+                changes['probation_period_months'] = {'from': employee.probation_period_months, 'to': probation}
+            employee.probation_period_months = probation
+            update_fields.append('probation_period_months')
+
+        if 'notice_period_days' in data:
+            notice = data.get('notice_period_days') or None
+            if employee.notice_period_days != notice:
+                changes['notice_period_days'] = {'from': employee.notice_period_days, 'to': notice}
+            employee.notice_period_days = notice
+            update_fields.append('notice_period_days')
+
+        if 'dotted_line_manager_id' in data:
+            dotted_val = data.get('dotted_line_manager_id')
+            if dotted_val:
+                try:
+                    dotted_user = User.objects.get(pk=dotted_val, is_active=True)
+                except (User.DoesNotExist, Exception):
+                    return error('Dotted-line manager not found or is inactive.')
+                if dotted_user.pk == employee.pk:
+                    return error('An employee cannot be their own dotted-line manager.')
+                employee.dotted_line_manager = dotted_user
+            else:
+                employee.dotted_line_manager = None
+            if 'dotted_line_manager' not in update_fields:
+                update_fields.append('dotted_line_manager')
 
         if 'employee_type' in data:
             employee_type = (data.get('employee_type') or '').strip()

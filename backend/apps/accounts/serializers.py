@@ -1519,6 +1519,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             'aadhaar_number', 'pf_covered', 'pf_number', 'esi_covered',
             'is_disabled', 'disability_type', 'disability_percentage', 'disability_certificate_number',
             'is_international_worker', 'international_worker_country', 'passport_number', 'passport_expiry',
+            'core_skills', 'certifications',
             'custom_field_values',
             'updated_at',
         ]
