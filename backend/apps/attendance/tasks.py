@@ -178,7 +178,17 @@ def reverse_geocode_punch_task(schema_name: str, punch_id: str) -> None:
     """
     Best-effort background enrichment: resolves AttendancePunch.location_label
     from that punch's own already-stored latitude/longitude via OpenStreetMap
-    Nominatim (apps.attendance.services_geocoding.reverse_geocode).
+    Nominatim (apps.attendance.services_geocoding.reverse_geocode) — EXCEPT
+    for a UK Shift employee's punch made from inside their own branch
+    geofence (is_inside_geofence is True, resolved display-only by
+    services_geofencing._validate_uk_shift_bypass — it never rejects on
+    this), which gets "Office – <Branch Name>" directly with no HTTP call at
+    all, per the explicit "don't reverse-geocode office coordinates
+    unnecessarily" requirement. A UK Shift punch made from anywhere else, and
+    every punch from every non-UK employee (SGT/ICT, the global default —
+    regardless of their own is_inside_geofence value), falls through to the
+    unconditional reverse-geocode call exactly as before this distinction
+    existed — the office shortcut is deliberately scoped to UK Shift only.
 
     Dispatched fire-and-forget from PunchService.record_punch() via
     transaction.on_commit() — only AFTER the punch is already committed, so
@@ -195,12 +205,23 @@ def reverse_geocode_punch_task(schema_name: str, punch_id: str) -> None:
     """
     from apps.attendance.models import AttendancePunch
     from apps.attendance.services_geocoding import reverse_geocode
+    from apps.attendance.services_geofencing import UK_SHIFT_POLICY_CODE
     from apps.tenants.utils import run_in_tenant
 
     def _do_geocode():
-        punch = AttendancePunch.objects.filter(pk=punch_id).first()
+        from core.cache_service import ShiftCacheService
+
+        punch = AttendancePunch.objects.select_related('branch', 'employee').filter(pk=punch_id).first()
         if punch is None or punch.latitude is None or punch.longitude is None:
             return
+
+        if punch.is_inside_geofence is True and punch.branch is not None:
+            shift = ShiftCacheService.get_effective(punch.employee, punch.punch_date)
+            if shift.policy_code == UK_SHIFT_POLICY_CODE:
+                punch.location_label = f'Office – {punch.branch.branch_name}'
+                punch.save(update_fields=['location_label'])
+                return
+
         label = reverse_geocode(float(punch.latitude), float(punch.longitude))
         if label:
             punch.location_label = label

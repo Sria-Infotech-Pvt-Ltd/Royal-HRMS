@@ -131,15 +131,27 @@ class UKShiftGeofenceBypassTests(TestCase):
         self.assertAlmostEqual(float(punch.longitude), FAR_LON, places=5)
 
     # 5. UK Shift does not incorrectly mark the punch as inside the branch geofence.
-    def test_uk_employee_punch_not_marked_inside_geofence(self):
+    def test_uk_employee_punch_from_office_is_genuinely_marked_inside(self):
+        """
+        Superseded design note: this originally asserted is_inside_geofence
+        stays None even from the branch's own coordinates, to guarantee the
+        bypass never FABRICATES a false "inside" reading. That guarantee
+        still holds (nothing is fabricated) — but a later, explicitly
+        approved refinement (see tests_uk_office_location_label.py) made
+        UK Shift genuinely COMPUTE office-vs-outside via the same
+        Haversine-distance-vs-radius check _validate_office uses for real
+        enforcement, purely so apps.attendance.tasks.reverse_geocode_punch_task
+        can show "Office – <Branch Name>" instead of reverse-geocoding
+        coordinates that are already known to be the office. is_allowed is
+        still unconditionally True for UK Shift regardless of this result —
+        see test_uk_employee_can_clock_in_outside_geofence below for that.
+        """
         client = APIClient()
         _login(client, 'ukgeo@test.com')
-        # Even from right at the branch's own coordinates — the bypass must
-        # not fabricate a "yes, inside" result either; it should stay neutral.
         _punch(client, 'IN', OFFICE_LAT, OFFICE_LON)
         punch = AttendancePunch.objects.get(employee=self.uk_emp, punch_type='IN')
-        self.assertIsNone(punch.is_inside_geofence)
-        self.assertIsNone(punch.calculated_distance)
+        self.assertTrue(punch.is_inside_geofence)
+        self.assertIsNotNone(punch.calculated_distance)
 
     # 6. Normal (unassigned, global 09:00-18:00) employee: geofence unchanged.
     def test_default_shift_employee_geofence_unchanged(self):

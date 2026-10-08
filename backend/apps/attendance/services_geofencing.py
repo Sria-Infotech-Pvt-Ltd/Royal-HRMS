@@ -200,24 +200,63 @@ class GeofencingService:
 
 # ── Mode validators ────────────────────────────────────────────────────────────
 
+def _match_branch_within_radius(
+    employee_coord: GpsCoordinate,
+    validated_branches: list,
+    tolerance_m: float,
+):
+    """
+    Shared by _validate_office (real enforcement — rejects when nothing
+    matches) and _validate_uk_shift_bypass (display-only office detection —
+    never rejects regardless of the result) so both resolve "is this
+    employee at one of their geofenced branches" via the exact same
+    Haversine-distance-vs-radius algorithm, never two independently
+    maintained copies that could drift apart.
+
+    Returns (branch, distance_m) for the NEAREST branch (among
+    validated_branches — already filtered to has_coordinates and
+    geofencing_enabled) the employee is within radius + tolerance of, or
+    (None, None) if none match.
+    """
+    best_branch: object = None
+    best_distance: Optional[float] = None
+    for branch in validated_branches:
+        branch_coord = GpsCoordinate(
+            latitude=float(branch.latitude), longitude=float(branch.longitude),
+        )
+        distance_m = haversine_distance(employee_coord, branch_coord)
+        if distance_m <= branch.allowed_radius_meters + tolerance_m:
+            if best_distance is None or distance_m < best_distance:
+                best_branch = branch
+                best_distance = round(distance_m, 2)
+    return best_branch, best_distance
+
+
 def _validate_uk_shift_bypass(
     employee,
     employee_lat: Optional[float],
     employee_lon: Optional[float],
+    employee_accuracy: Optional[float] = None,
 ) -> Optional[GeofenceResult]:
     """
     Returns a GeofenceResult if `employee` is currently assigned to UK Shift
     (identified by the immutable policy_code, never the editable name) — the
-    caller (_validate_office) returns it immediately without running any
-    branch-distance logic. Returns None for every other employee, meaning
+    caller (_validate_office) returns it immediately without ever rejecting
+    on branch distance. Returns None for every other employee, meaning
     "not UK Shift, continue the normal office geofence flow unchanged".
 
-    GPS is NOT relaxed: UK Shift only exempts the branch DISTANCE comparison,
-    not the "coordinates are required" rule — a punch with no lat/lon is
-    still rejected, same GPS_REQUIRED_MESSAGE as the regular office flow.
-    Branch is still resolved (same as the field/client/remote modes'
-    _validate_no_geofence) purely for audit/display context — it never gates
-    the punch.
+    GPS is NOT relaxed: UK Shift only exempts the branch DISTANCE comparison
+    from REJECTING the punch, not the "coordinates are required" rule — a
+    punch with no lat/lon is still rejected, same GPS_REQUIRED_MESSAGE as the
+    regular office flow.
+
+    is_inside_geofence/calculated_distance/branch ARE still computed here,
+    via the exact same _match_branch_within_radius() algorithm
+    _validate_office uses for real enforcement — but purely as a DISPLAY
+    signal for apps.attendance.tasks.reverse_geocode_punch_task to decide
+    between "Office – <Branch Name>" and an actual reverse-geocoded place
+    name. is_allowed is unconditionally True once coordinates are present;
+    the match result never gates the punch, only what it shows HR afterward.
     """
     from django.utils import timezone
 
@@ -227,16 +266,40 @@ def _validate_uk_shift_bypass(
     if shift.policy_code != UK_SHIFT_POLICY_CODE:
         return None
 
-    branch = _resolve_employee_branch(employee)
     if employee_lat is None or employee_lon is None:
         return GeofenceResult(
             is_allowed=False, is_inside_geofence=False,
-            calculated_distance=None, branch=branch,
+            calculated_distance=None, branch=_resolve_employee_branch(employee),
             rejection_message=GPS_REQUIRED_MESSAGE,
         )
+
+    tolerance_m = min(employee_accuracy, _MAX_ACCURACY_TOLERANCE_M) if employee_accuracy else 0
+    allowed_branches = _resolve_all_allowed_branches(employee)
+    validated_branches = [b for b in allowed_branches if b.has_coordinates and b.geofencing_enabled]
+
+    if not validated_branches:
+        # No branch has geofencing configured (or none resolved at all) —
+        # can't evaluate inside/outside at all; same "not evaluated" meaning
+        # _validate_office uses for this identical case.
+        return GeofenceResult(
+            is_allowed=True, is_inside_geofence=None,
+            calculated_distance=None, branch=_resolve_employee_branch(employee), rejection_message=None,
+        )
+
+    employee_coord = GpsCoordinate(latitude=float(employee_lat), longitude=float(employee_lon))
+    matched_branch, matched_distance = _match_branch_within_radius(employee_coord, validated_branches, tolerance_m)
+
+    if matched_branch is not None:
+        return GeofenceResult(
+            is_allowed=True, is_inside_geofence=True,
+            calculated_distance=matched_distance, branch=matched_branch, rejection_message=None,
+        )
+
+    # Genuinely outside every geofenced branch — still allowed (UK Shift is
+    # never rejected on distance); resolve SOME branch for audit context only.
     return GeofenceResult(
-        is_allowed=True, is_inside_geofence=None,
-        calculated_distance=None, branch=branch, rejection_message=None,
+        is_allowed=True, is_inside_geofence=False,
+        calculated_distance=None, branch=_resolve_employee_branch(employee), rejection_message=None,
     )
 
 
@@ -263,7 +326,7 @@ def _validate_office(
        inside reading isn't hard-rejected. Allow if within ANY one of them;
        reject if outside all.
     """
-    uk_bypass_result = _validate_uk_shift_bypass(employee, employee_lat, employee_lon)
+    uk_bypass_result = _validate_uk_shift_bypass(employee, employee_lat, employee_lon, employee_accuracy)
     if uk_bypass_result is not None:
         return uk_bypass_result
 
@@ -305,26 +368,14 @@ def _validate_office(
 
     employee_coord = GpsCoordinate(latitude=float(employee_lat), longitude=float(employee_lon))
 
-    # Find the nearest allowed branch the employee is within
-    best_branch:   object        = None
-    best_distance: Optional[float] = None
-
-    for branch in validated_branches:
-        branch_coord = GpsCoordinate(
-            latitude=float(branch.latitude),
-            longitude=float(branch.longitude),
-        )
-        distance_m = haversine_distance(employee_coord, branch_coord)
-        if distance_m <= branch.allowed_radius_meters + tolerance_m:
-            if best_distance is None or distance_m < best_distance:
-                best_branch   = branch
-                best_distance = distance_m
+    # Find the nearest allowed branch the employee is within.
+    best_branch, best_distance = _match_branch_within_radius(employee_coord, validated_branches, tolerance_m)
 
     if best_branch is not None:
         return GeofenceResult(
             is_allowed=True,
             is_inside_geofence=True,
-            calculated_distance=round(best_distance, 2),
+            calculated_distance=best_distance,
             branch=best_branch,
             rejection_message=None,
         )
