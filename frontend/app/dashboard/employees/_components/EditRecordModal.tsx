@@ -68,7 +68,7 @@ import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "../
 import EmploymentStep, { EMPTY_EMPLOYMENT, type EmploymentDraft } from "../../hire/[hireActionId]/_components/EmploymentStep";
 import DocumentsChecklistStep, { EMPTY_VERIFICATION, type VerificationDraft } from "../../hire/[hireActionId]/_components/DocumentsChecklistStep";
 import EmergencyContactsList, { type EmergencyContactEntry } from "../../hire/[hireActionId]/_components/EmergencyContactsList";
-import FamilyNominationStep, { type FamilyEntry, type NomineeEntry } from "@/app/onboarding/_components/FamilyNominationStep";
+import { type FamilyEntry, type NomineeEntry } from "@/app/onboarding/_components/FamilyNominationStep";
 import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/AssetsList";
 import EducationChecklist, { type EducationEntry } from "@/app/onboarding/_components/EducationChecklist";
 import ExperienceList, { type ExperienceEntry } from "@/app/onboarding/_components/ExperienceList";
@@ -76,6 +76,20 @@ import type { EducationExperienceFieldConfigResponse } from "@/types/onboardingF
 import type { EmployeeSalaryConfig } from "@/types/payroll";
 
 const STEPS = HIRE_STEPS.slice(0, -1); // drop "Review" — not applicable to editing an existing record
+
+// Same backend-accepted values as the real FamilyNominationStep
+// (app/onboarding/_components/FamilyNominationStep.tsx) — only this
+// section's layout/card styling/Guardian block differ from that
+// component, per explicit reference-image feedback; the underlying data
+// contract (codes sent to /onboarding/employees/<uuid>/family,nominees)
+// is unchanged.
+const FAMILY_RELATIONSHIPS = ["father", "mother", "spouse", "child", "sibling"];
+const FAMILY_RELATIONSHIP_LABELS: Record<string, string> = {
+  father: "Father", mother: "Mother", spouse: "Spouse", child: "Child", sibling: "Sibling",
+};
+const NOMINATION_SCHEMES = [
+  { value: "epf_eps", label: "EPF + EPS" }, { value: "gratuity", label: "Gratuity" }, { value: "both", label: "Both" },
+];
 
 let tempId = 0;
 const nextTempId = () => `temp-${++tempId}`;
@@ -153,6 +167,10 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
 
   const [personal, setPersonal] = useState<PersonalIdentityDraft>(EMPTY_PERSONAL);
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContactEntry[]>([]);
+  // Guardian (Family & nomination step) — local-only, same as Personal
+  // identity's extra fields: no backend column exists for this today, so
+  // it's rendered for field parity but not sent on save.
+  const [guardian, setGuardian] = useState({ name: "", relationship: "", address: "" });
 
   const [employment, setEmployment] = useState<EmploymentDraft>(EMPTY_EMPLOYMENT);
   const [basicPay, setBasicPay] = useState<BasicPayDraft>(EMPTY_BASIC_PAY);
@@ -733,17 +751,136 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
               )}
 
               {step === 4 && (
-                <FamilyNominationStep
-                  familyEntries={familyEntries}
-                  nomineeEntries={nomineeEntries}
-                  onAddFamily={() => setFamilyEntries(p => [...p, { id: nextTempId(), name: "", relationship: "child", date_of_birth: "", gender: "", blood_group: "", is_dependent: false }])}
-                  onFamilyFieldChange={(id, field, value) => setFamilyEntries(p => p.map(e => (e.id === id ? { ...e, [field]: value } : e)))}
-                  onRemoveFamily={id => { if (!id.startsWith("temp-")) deletedFamilyIds.current.add(id); setFamilyEntries(p => p.filter(e => e.id !== id)); setNomineeEntries(p => p.filter(n => n.family_member !== id)); }}
-                  onAddNominee={() => setNomineeEntries(p => [...p, { id: nextTempId(), family_member: "", scheme: "epf_eps", share_percentage: "" }])}
-                  onNomineeFieldChange={(id, field, value) => setNomineeEntries(p => p.map(e => (e.id === id ? { ...e, [field]: value } : e)))}
-                  onRemoveNominee={id => { if (!id.startsWith("temp-")) deletedNomineeIds.current.add(id); setNomineeEntries(p => p.filter(e => e.id !== id)); }}
-                  error={familyErr}
-                />
+                <div className="mstep on">
+                  {familyErr && <div className="alert alert-error" style={{ marginBottom: 16 }}>{familyErr}</div>}
+
+                  <div className="sechead">FAMILY MEMBERS</div>
+                  <div className="hint" style={{ marginBottom: 14 }}>
+                    Nominees are chosen from this list, and the parents&apos; names on step 1 are filled from it. Add family before setting nominations.
+                  </div>
+                  {familyEntries.map(entry => (
+                    <div key={entry.id} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                        <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>Family member</span>
+                        <button className="btn btn-ghost btn-sm" type="button" style={{ color: "var(--error)" }}
+                          onClick={() => { if (!entry.id.startsWith("temp-")) deletedFamilyIds.current.add(entry.id); setFamilyEntries(p => p.filter(e => e.id !== entry.id)); setNomineeEntries(p => p.filter(n => n.family_member !== entry.id)); }}>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="g3">
+                        <div className="f"><label>Name</label><input className="finput" placeholder="Full name" value={entry.name} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, name: e.target.value } : x))} /></div>
+                        <div className="f">
+                          <label>Relationship</label>
+                          <select className="finput field-select" value={entry.relationship} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, relationship: e.target.value } : x))}>
+                            <option value="">Select</option>
+                            {FAMILY_RELATIONSHIPS.map(r => <option key={r} value={r}>{FAMILY_RELATIONSHIP_LABELS[r]}</option>)}
+                          </select>
+                        </div>
+                        <div className="f"><label>Date of birth</label><input className="finput" type="date" value={entry.date_of_birth} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, date_of_birth: e.target.value } : x))} /></div>
+                        <div className="f">
+                          <label>Gender</label>
+                          <select className="finput field-select" value={entry.gender} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, gender: e.target.value } : x))}>
+                            <option value="">Select</option>
+                            <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+                          </select>
+                        </div>
+                        <div className="f"><label>Blood group</label><input className="finput" placeholder="e.g. O+" value={entry.blood_group} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, blood_group: e.target.value } : x))} /></div>
+                        <div className="f">
+                          <label>Dependent</label>
+                          <select className="finput field-select" value={entry.is_dependent ? "yes" : "no"} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, is_dependent: e.target.value === "yes" } : x))}>
+                            <option value="yes">Yes</option><option value="no">No</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button className="add" type="button" onClick={() => setFamilyEntries(p => [...p, { id: nextTempId(), name: "", relationship: "", date_of_birth: "", gender: "", blood_group: "", is_dependent: false }])}>
+                    + Add family member
+                  </button>
+
+                  <div className="divider" />
+                  <div className="sechead">NOMINATION</div>
+                  <div className="hint" style={{ marginBottom: 14 }}>
+                    Required for EPF Form 2. Nominees are picked from the family list, so a name is only typed once. Each scheme should total 100%.
+                  </div>
+                  {familyEntries.length === 0 && (
+                    <div className="hint" style={{ color: "var(--warn)", marginBottom: 14 }}>Add a family member above before adding a nominee.</div>
+                  )}
+                  {nomineeEntries.map(entry => {
+                    const familyMember = familyEntries.find(f => f.id === entry.family_member);
+                    return (
+                      <div key={entry.id} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                          <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>Nominee</span>
+                          <button className="btn btn-ghost btn-sm" type="button" style={{ color: "var(--error)" }}
+                            onClick={() => { if (!entry.id.startsWith("temp-")) deletedNomineeIds.current.add(entry.id); setNomineeEntries(p => p.filter(e => e.id !== entry.id)); }}>
+                            Remove
+                          </button>
+                        </div>
+                        <div className="g3">
+                          <div className="f">
+                            <label>Nominee</label>
+                            <select className="finput field-select" value={entry.family_member} onChange={e => setNomineeEntries(p => p.map(x => x.id === entry.id ? { ...x, family_member: e.target.value } : x))}>
+                              <option value="">{familyEntries.length === 0 ? "Add family members first" : "Select from family"}</option>
+                              {familyEntries.map(f => <option key={f.id} value={f.id}>{f.name}{f.relationship ? ` (${FAMILY_RELATIONSHIP_LABELS[f.relationship] ?? f.relationship})` : ""}</option>)}
+                            </select>
+                          </div>
+                          <div className="f">
+                            <label>Relationship <span className="tag">AUTO</span></label>
+                            <input className="finput" readOnly style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} value={familyMember ? (FAMILY_RELATIONSHIP_LABELS[familyMember.relationship] ?? familyMember.relationship) : "From family record"} />
+                          </div>
+                          <div className="f">
+                            <label>Scheme</label>
+                            <select className="finput field-select" value={entry.scheme} onChange={e => setNomineeEntries(p => p.map(x => x.id === entry.id ? { ...x, scheme: e.target.value } : x))}>
+                              {NOMINATION_SCHEMES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            </select>
+                          </div>
+                          <div className="f"><label>Share %</label><input className="finput" type="number" min={0} max={100} value={entry.share_percentage} onChange={e => setNomineeEntries(p => p.map(x => x.id === entry.id ? { ...x, share_percentage: e.target.value.replace(/[^0-9]/g, "") } : x))} /></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button className="add" type="button" disabled={familyEntries.length === 0} onClick={() => setNomineeEntries(p => [...p, { id: nextTempId(), family_member: "", scheme: "epf_eps", share_percentage: "" }])}>
+                    + Add nominee
+                  </button>
+                  {nomineeEntries.length > 0 && (
+                    <div className="flex justify-end mt-2">
+                      <span className={`text-[12px] font-semibold ${NOMINATION_SCHEMES.filter(s => s.value !== "both").every(s => {
+                        const total = nomineeEntries.filter(n => n.scheme === s.value || n.scheme === "both").reduce((sum, n) => sum + (Number(n.share_percentage) || 0), 0);
+                        return total === 100 || total === 0;
+                      }) ? "text-emerald-600" : "text-red-500"}`}>
+                        {NOMINATION_SCHEMES.filter(s => s.value !== "both").map(s => {
+                          const total = nomineeEntries.filter(n => n.scheme === s.value || n.scheme === "both").reduce((sum, n) => sum + (Number(n.share_percentage) || 0), 0);
+                          return `${s.label} ${total}%`;
+                        }).join(" · ")}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="divider" />
+                  <div className="sechead">GUARDIAN</div>
+                  <div className="hint" style={{ marginBottom: 14 }}>Only required if a nominee above is under 18.</div>
+                  <div className="g3">
+                    <div className="f">
+                      <label>Guardian name <span className="tag">OPTIONAL</span></label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input className="finput" value={guardian.name} onChange={e => setGuardian(g => ({ ...g, name: e.target.value }))} />
+                        <button type="button" className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}
+                          onClick={() => { const primary = emergencyContacts.find(c => c.is_primary) ?? emergencyContacts[0]; if (primary) setGuardian(g => ({ ...g, name: primary.name, relationship: primary.relationship })); }}>
+                          + Suggest
+                        </button>
+                      </div>
+                    </div>
+                    <div className="f">
+                      <label>Relationship <span className="tag">OPTIONAL</span></label>
+                      <input className="finput" value={guardian.relationship} onChange={e => setGuardian(g => ({ ...g, relationship: e.target.value }))} />
+                    </div>
+                    <div className="f">
+                      <label>Guardian address <span className="tag">OPTIONAL</span></label>
+                      <input className="finput" placeholder="Optional" value={guardian.address} onChange={e => setGuardian(g => ({ ...g, address: e.target.value }))} />
+                    </div>
+                  </div>
+                </div>
               )}
 
               {step === 5 && (
