@@ -890,7 +890,24 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
               )}
 
               {step === 5 && (
-                <div className="mstep on">
+                <div className="mstep on edit-record-eduexp">
+                  {/* EducationChecklist/ExperienceList's own "+ Add..." button
+                      is a small, left-aligned "btn btn-ghost" (correct for
+                      their other real callers — self-service and HR
+                      onboarding wizards) — scoped override here only, to
+                      match this modal's full-width centered "+ Add..." bar
+                      style used everywhere else (Family & nomination,
+                      Assets). :not(.btn-sm) excludes each entry's small
+                      "Remove" button, which shares the btn-ghost class. */}
+                  <style jsx>{`
+                    .edit-record-eduexp :global(button.btn.btn-ghost:not(.btn-sm)) {
+                      display: block;
+                      width: 100%;
+                      text-align: center;
+                      padding: 10px 16px;
+                      margin-bottom: 20px;
+                    }
+                  `}</style>
                   <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg px-3.5 py-2.5 mb-3" style={{ background: "var(--brand-tint)" }}>
                     {[
                       ["Qualifications", String(educationEntries.length)],
