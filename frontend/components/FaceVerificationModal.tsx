@@ -75,15 +75,21 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
   if (!isOpen) return null;
 
   const showCameraPreview = phase === "detecting" || phase === "liveness_checking" || phase === "capturing_multi";
-  // Dim room: the screen itself becomes the light. A phone/laptop display is a
-  // soft frontal light source, so turn the dark backdrop white while the camera
-  // is live. (Browsers cannot raise device brightness themselves, hence the tip.)
-  const fillLight = FACE_FLOW_V2 && lowLight && showCameraPreview;
+  // The screen itself is the light. A phone/laptop display is a soft frontal light source, so while
+  // the camera is live the dark backdrop fades to white (gradually - see the transition below - so the
+  // camera's auto-exposure follows smoothly instead of jumping) and fades back when capture ends or
+  // the modal closes. Browsers cannot raise the device's real brightness, hence the tip when dim.
+  const screenLight = FACE_FLOW_V2 && showCameraPreview;
+  const fillLight = screenLight && lowLight;
 
   const overlay = (
     <div
       className="fixed inset-0 flex items-center justify-center p-6"
-      style={{ background: fillLight ? "#ffffff" : "rgba(0,0,0,0.55)", zIndex: 9999, transition: "background 0.25s" }}
+      style={{
+        background: screenLight ? "#ffffff" : "rgba(0,0,0,0.55)",
+        zIndex: 9999,
+        transition: screenLight ? "background 1.6s ease-in" : "background 0.4s ease-out",
+      }}
       onClick={handleClose}
     >
       <div

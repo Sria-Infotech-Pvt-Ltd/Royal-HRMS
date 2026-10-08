@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useClockWidget } from "@/hooks/useClockWidget";
 import CorrectionModal from "@/app/dashboard/my-attendance/_components/CorrectionModal";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
@@ -33,6 +33,8 @@ export default function ClockInButton({ onPunchSuccess }: Props) {
   const [showModal, setShowModal] = useState(false);
   const [showFaceModal, setShowFaceModal] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
+  // In-flight GPS + geofence check started alongside the face check (see handlePunch).
+  const locationCheckRef = useRef<Promise<{ ok: boolean; location: PunchLocation | null }> | null>(null);
 
   const isClockedIn = session?.is_clocked_in ?? false;
   // Daily punch limit (backend-enforced, see PunchService._validate_daily_punch_limit):
@@ -49,23 +51,39 @@ export default function ClockInButton({ onPunchSuccess }: Props) {
 
   async function handlePunch() {
     if (isLockedOut || dayCompleted) return;
-    // Location is fetched and geofence-validated BEFORE face verification —
+    if (faceVerificationRequired) {
+      // Open the face check (and its camera permission prompt) immediately; GPS + the geofence
+      // check run alongside it instead of in front of it. The punch is still impossible until the
+      // geofence passes: a failed check closes the modal (the toast is shown by prepareLocation),
+      // and handleFaceCaptured waits for the same result before punching.
+      const locationCheck = prepareLocation(MODE);
+      locationCheckRef.current = locationCheck;
+      setShowFaceModal(true);
+      const { ok, location } = await locationCheck;
+      if (!ok) {
+        setShowFaceModal(false);
+        locationCheckRef.current = null;
+        return;
+      }
+      setPendingLocation(location);
+      return;
+    }
+    // Location is fetched and geofence-validated BEFORE the punch —
     // same order the voice clock-in/out flow enforces.
     const { ok, location } = await prepareLocation(MODE);
     if (!ok) return;
-
-    if (faceVerificationRequired) {
-      setPendingLocation(location);
-      setShowFaceModal(true);
-      return;
-    }
     const punchOk = await punch(isClockedIn ? "OUT" : "IN", MODE, location);
     if (punchOk) onPunchSuccess?.();
   }
 
   async function handleFaceCaptured(embedding: number[], livenessScore: number, captureSessionId: string) {
     setShowFaceModal(false);
-    const ok = await punch(isClockedIn ? "OUT" : "IN", MODE, pendingLocation, embedding, livenessScore, captureSessionId);
+    // The geofence check started when the camera opened - wait for its verdict (usually already in).
+    const check = locationCheckRef.current;
+    locationCheckRef.current = null;
+    const verdict = check ? await check : { ok: true, location: pendingLocation };
+    if (!verdict.ok) return;
+    const ok = await punch(isClockedIn ? "OUT" : "IN", MODE, verdict.location, embedding, livenessScore, captureSessionId);
     if (ok) onPunchSuccess?.();
   }
 

@@ -79,6 +79,37 @@ async function prefetchAll(): Promise<void> {
 }
 
 /**
+ * Runs each network once on a tiny dummy input. The first inference after load
+ * compiles the WebGL shaders (typically 1-3 seconds), which would otherwise be
+ * spent while the employee is already standing in front of the camera. Never
+ * throws — a failed warm-up only means that cost is paid on first real use.
+ */
+async function warmUpModels(): Promise<void> {
+  try {
+    const make = (size: number) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        // Not a flat colour: a gradient avoids degenerate-input shortcuts in the first pass.
+        const g = ctx.createLinearGradient(0, 0, size, size);
+        g.addColorStop(0, "#808080");
+        g.addColorStop(1, "#c0c0c0");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, size, size);
+      }
+      return canvas;
+    };
+    await faceapi.tinyFaceDetector(make(224), new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }));
+    await faceapi.nets.faceLandmark68Net.detectLandmarks(make(112));
+    await faceapi.nets.faceRecognitionNet.computeFaceDescriptor(make(150));
+  } catch {
+    // Warm-up is an optimisation only.
+  }
+}
+
+/**
  * Idempotent — safe to call from every mount; the network fetch happens once
  * per success. On failure the cached promise is cleared so the next call
  * (e.g. the user clicking "Try Again") actually re-issues the network
@@ -96,6 +127,7 @@ export function loadFaceApiModels(): Promise<void> {
         faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
         faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
       ]))
+      .then(() => warmUpModels())
       .then(() => { setProgress(1); })
       .catch((err) => {
         modelsPromise = null;

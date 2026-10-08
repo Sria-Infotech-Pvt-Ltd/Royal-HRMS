@@ -14,6 +14,7 @@ import { grabVideoFrame, putImageData, meanLuminanceOfBox, assessEyeOcclusion, s
 import { assessLiveReadiness } from "@/lib/faceApi/readiness";
 import { CaptureTelemetry, type CapturePurpose } from "@/lib/faceApi/telemetry";
 import { FACE_FLOW_V2 } from "@/lib/faceApi/flowConfig";
+import { pickBoostControl, nextBoostValue, type BoostCaps, type BoostControl, type RangeCaps } from "@/lib/faceApi/cameraBoost";
 import { applyClahe } from "@/lib/faceApi/clahe";
 import {
   assessFrameQuality, computeFrontality, assessCaptureConsistency, averageDescriptors,
@@ -45,11 +46,15 @@ export type LivenessCapturePhase =
 
 // ~0.3–0.5s of a consistently detected face before the liveness challenge starts —
 // avoids kicking it off on a single lucky frame while the user is still settling in.
-const STABLE_FRAMES_TO_START_LIVENESS = 10;
+// 5 (not 10) with the framing gate on: the readiness check below already insists the face is
+// well framed, so half as many steady frames is enough to rule out a lucky single detection.
+const STABLE_FRAMES_TO_START_LIVENESS = FACE_FLOW_V2 ? 5 : 10;
 // Widened from 9000ms now that LivenessTracker.getResult() requires BOTH a
 // blink and a head turn (see lib/faceApi/liveness.ts) rather than either —
 // two distinct deliberate motions need more room than one did.
-const LIVENESS_TIMEOUT_MS = 12000;
+// 9s per window with the flow-v2 prompts ("now blink" / "now turn") telling the person exactly what
+// is still missing, plus one automatic restart (MAX_AUTO_RESUMES_LIVENESS) before a failure screen.
+const LIVENESS_TIMEOUT_MS = FACE_FLOW_V2 ? 9000 : 12000;
 const DETECTOR_OPTIONS = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
 // Used ONLY by the live preview loop (framing + liveness landmarks) on devices
 // that cannot keep up - see LOW_FPS_THRESHOLD. Capture-time detection (the frames
@@ -67,7 +72,7 @@ const MAX_AUTO_RESUMES_LIVENESS = 1;
 // Pre-liveness framing check (readiness.ts) blocks the liveness start only for
 // this long; after that the flow proceeds exactly as it did before the check
 // existed, so a camera that can never satisfy it is never stuck.
-const READINESS_FALLBACK_MS = 8000;
+const READINESS_FALLBACK_MS = 2000;
 // Consecutive dim preview frames before the screen fill light turns on (latched
 // for the rest of the camera session so it cannot flicker as the light it adds
 // lifts the reading back above the threshold).
@@ -81,7 +86,9 @@ const LUMINANCE_SAMPLE_EVERY_N_FRAMES = 4;
 // multiple moments), short enough that the whole capture still feels
 // instant to the person holding a pose. Irrelevant when framesToCapture is 1
 // (no sleep happens before the first, only, attempt).
-const MULTI_FRAME_INTERVAL_MS = 350;
+const MULTI_FRAME_INTERVAL_MS = FACE_FLOW_V2 ? 250 : 350;
+// Camera brightness (cameraBoost.ts) is nudged at most this often so the image brightens smoothly.
+const CAMERA_BOOST_INTERVAL_MS = 400;
 // Frames are downscaled to this width before CLAHE/detection — a 720p/1080p
 // webcam frame is several times the pixels the 224px detector input and the
 // 150px descriptor crop can use, and CLAHE (plain JS, per pixel) runs on every
@@ -252,6 +259,8 @@ export function useFaceLivenessCapture(
   const fpsTimesRef         = useRef<number[]>([]);
   const liveOptionsRef      = useRef(DETECTOR_OPTIONS);
   const wakeLockRef         = useRef<WakeLockSentinelLike | null>(null);
+  const sessionRef          = useRef(0);          // bumped by start()/stop(): a late camera/model result for a closed session is discarded
+  const boostRef            = useRef<{ track: MediaStreamTrack; control: BoostControl; range: RangeCaps; original: number; value: number; lastAt: number } | null>(null);
   const loopRef             = useRef<() => void>(() => undefined); // always the latest runDetectionLoop, for resumeDetecting
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -259,8 +268,22 @@ export function useFaceLivenessCapture(
 
   const stopCamera = useCallback(() => {
     if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    streamRef.current?.getTracks().forEach(track => track.stop());
+    const tracks = streamRef.current?.getTracks() ?? [];
     streamRef.current = null;
+    const boost = boostRef.current;
+    boostRef.current = null;
+    if (boost && boost.value !== boost.original) {
+      // Put the camera's own brightness back first - some drivers keep the setting after the page
+      // closes. The timeout guarantees the camera is released even if the restore never settles.
+      const release = () => tracks.forEach(track => track.stop());
+      void boost.track
+        .applyConstraints({ advanced: [{ [boost.control]: boost.original } as unknown as MediaTrackConstraintSet] })
+        .catch(() => undefined)
+        .finally(release);
+      window.setTimeout(release, 500);
+    } else {
+      tracks.forEach(track => track.stop());
+    }
     void wakeLockRef.current?.release().catch(() => undefined);
     wakeLockRef.current = null;
   }, []);
@@ -327,6 +350,23 @@ export function useFaceLivenessCapture(
   // detected, multiple faces, quality-gate rejection, or suspected
   // occlusion) — callers retry rather than treating this as fatal. `reasons`
   // carries the specific, user-facing cause when one is known.
+  // Dim face -> raise the CAMERA's own exposure/brightness one small step (see cameraBoost.ts); a
+  // no-op on cameras that expose neither control. Restored in stopCamera().
+  const maybeBoostCamera = useCallback((faceLuminance: number) => {
+    const boost = boostRef.current;
+    if (!boost) return;
+    const now = Date.now();
+    if (now - boost.lastAt < CAMERA_BOOST_INTERVAL_MS) return;
+    const next = nextBoostValue(boost.value, boost.range, faceLuminance);
+    if (next === null) return;
+    boost.lastAt = now;
+    boost.value = next;
+    void boost.track
+      .applyConstraints({ advanced: [{ [boost.control]: next } as unknown as MediaTrackConstraintSet] })
+      .catch(() => undefined);
+    telemetryRef.current.recordFlag("camera_boost", boost.control);
+  }, []);
+
   const captureOneQualityGatedFrame = useCallback(async (): Promise<QualityGatedFrameAttempt> => {
     const video = videoRef.current;
     if (!video) return { descriptor: null, reasons: [], codes: [] };
@@ -461,18 +501,22 @@ export function useFaceLivenessCapture(
     const nativeSize = { width: video.videoWidth, height: video.videoHeight };
     const box = result.detection.box;
 
+    if (FACE_FLOW_V2 && (currentPhase === "detecting" || currentPhase === "liveness_checking")) {
+      frameTickRef.current += 1;
+      if (frameTickRef.current % LUMINANCE_SAMPLE_EVERY_N_FRAMES === 1) {
+        try {
+          if (!sampleCanvasRef.current) sampleCanvasRef.current = document.createElement("canvas");
+          lumaRef.current = sampleFaceAndFrameLuminance(video, sampleCanvasRef.current, box);
+          maybeBoostCamera(lumaRef.current.face);
+        } catch { /* video not ready this instant - keep the last reading */ }
+      }
+    }
+
     if (currentPhase === "detecting") {
       let ready = true;
       if (FACE_FLOW_V2) {
         // Tell the employee what to fix NOW - before liveness + capture have
         // run and failed - and only start liveness once geometry is right.
-        frameTickRef.current += 1;
-        if (frameTickRef.current % LUMINANCE_SAMPLE_EVERY_N_FRAMES === 1) {
-          try {
-            if (!sampleCanvasRef.current) sampleCanvasRef.current = document.createElement("canvas");
-            lumaRef.current = sampleFaceAndFrameLuminance(video, sampleCanvasRef.current, box);
-          } catch { /* video not ready this instant - keep the last reading */ }
-        }
         const readiness = assessLiveReadiness({
           faceWidthRatio: box.width / nativeSize.width,
           frontality: computeFrontality(
@@ -541,7 +585,7 @@ export function useFaceLivenessCapture(
       }
     }
     return true;
-  }, [captureAndFinish, resumeDetecting, resetProgress, showHint]);
+  }, [captureAndFinish, resumeDetecting, resetProgress, showHint, maybeBoostCamera]);
 
   const runDetectionLoop = useCallback(() => {
     const video = videoRef.current;
@@ -599,68 +643,56 @@ export function useFaceLivenessCapture(
     setLowLight(false);
     resetProgress();
 
-    setPhase("loading_models");
-    try {
-      await loadFaceApiModels();
-    } catch (err: unknown) {
-      // Logged (not just surfaced as a generic banner) because this failure
-      // mode has more than one real cause in practice — e.g. a proxy/rewrite
-      // rule intercepting /models/* and returning HTML instead of the actual
-      // weight files, not just a genuine network drop — and the console is
-      // the only place that distinction is visible.
-      console.error("[useFaceLivenessCapture] failed to load face-api models:", err);
-      setErrorMessage("Could not load face-recognition models. Check your connection and try again.");
-      telemetryRef.current.recordFailure("models_failed");
-      telemetryRef.current.finish("error");
-      setPhase("error");
-      return;
-    }
+    const session = ++sessionRef.current;
+    const isStale = () => sessionRef.current !== session;
 
-    let backend = "";
-    try { backend = faceapi.tf.getBackend() ?? ""; } catch { /* diagnostics only */ }
-    telemetryRef.current.setTfBackend(backend);
-    // No WebGL means every detection runs on the CPU - start the preview on the
-    // cheaper detector input rather than waiting for the fps check to notice.
-    if (FACE_FLOW_V2 && backend && backend !== "webgl") liveOptionsRef.current = FAST_DETECTOR_OPTIONS;
-
+    // Ask for the camera at once and load the models alongside it: the permission prompt
+    // appears the moment Clock In is clicked, and the person can be allowing it while any
+    // remaining model/warm-up work finishes (normally already done - see FaceModelPreloader).
     setPhase("requesting_camera");
-    try {
+    const modelsOutcome: Promise<unknown> = loadFaceApiModels().then(() => null, (err: unknown) => err ?? new Error("models"));
+
+    const openCamera = async (): Promise<MediaStream> => {
+      if (!FACE_FLOW_V2) return navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      // 640x480 @ 30fps preferred: the same 4:3 frame most webcams already default to
+      // (so the face-size ratio the quality gate checks is unchanged), but stops
+      // phones/hi-res cameras from handing back 1080p they cannot process quickly.
+      // Falls back to the unconstrained request on cameras that refuse it.
       let stream: MediaStream;
-      if (FACE_FLOW_V2) {
-        // 640x480 @ 30fps preferred: the same 4:3 frame most webcams already default to
-        // (so the face-size ratio the quality gate checks is unchanged), but stops
-        // phones/hi-res cameras from handing back 1080p they cannot process quickly.
-        // Falls back to the unconstrained request on cameras that refuse it.
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
-          });
-        } catch (constraintErr: unknown) {
-          if ((constraintErr as { name?: string })?.name !== "OverconstrainedError") throw constraintErr;
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-        }
-        // Best effort: ask for continuous auto-exposure where the camera exposes it.
-        try {
-          const track = stream.getVideoTracks()[0];
-          const caps = track?.getCapabilities?.() as { exposureMode?: string[] } | undefined;
-          if (caps?.exposureMode?.includes("continuous")) {
-            await track.applyConstraints({ advanced: [{ exposureMode: "continuous" } as unknown as MediaTrackConstraintSet] });
-          }
-        } catch { /* unsupported - harmless */ }
-      } else {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+        });
+      } catch (constraintErr: unknown) {
+        if ((constraintErr as { name?: string })?.name !== "OverconstrainedError") throw constraintErr;
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
       }
-      streamRef.current = stream;
-      // Keep the screen awake (and from dimming) while the camera is in use.
+      // Best effort: continuous auto-exposure where the camera exposes it, and note which
+      // brightness control (if any) the camera offers for the dim-room boost.
       try {
-        const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> } };
-        wakeLockRef.current = (await nav.wakeLock?.request("screen")) ?? null;
-      } catch { /* unsupported or denied - harmless */ }
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+        const track = stream.getVideoTracks()[0];
+        const caps = track?.getCapabilities?.() as (BoostCaps & { exposureMode?: string[] }) | undefined;
+        if (track && caps?.exposureMode?.includes("continuous")) {
+          await track.applyConstraints({ advanced: [{ exposureMode: "continuous" } as unknown as MediaTrackConstraintSet] });
+        }
+        const picked = pickBoostControl(caps);
+        if (track && picked) {
+          const settings = track.getSettings?.() as unknown as Record<string, number | undefined> | undefined;
+          const current = settings?.[picked.control];
+          const original = typeof current === "number"
+            ? current
+            : picked.control === "exposureCompensation" ? 0 : (picked.range.min + picked.range.max) / 2;
+          boostRef.current = { track, control: picked.control, range: picked.range, original, value: original, lastAt: 0 };
+        }
+      } catch { /* unsupported - harmless */ }
+      return stream;
+    };
+
+    let stream: MediaStream;
+    try {
+      stream = await openCamera();
     } catch (err: unknown) {
+      if (isStale()) return;
       const name = (err as { name?: string })?.name;
       telemetryRef.current.recordFailure(name === "NotAllowedError" || name === "PermissionDeniedError" ? "camera_denied" : "camera_error");
       telemetryRef.current.finish("error");
@@ -672,11 +704,59 @@ export function useFaceLivenessCapture(
       }
       return;
     }
+    if (isStale()) { stream.getTracks().forEach(track => track.stop()); boostRef.current = null; return; }
+
+    try {
+      streamRef.current = stream;
+      // Keep the screen awake (and from dimming) while the camera is in use.
+      try {
+        const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> } };
+        wakeLockRef.current = (await nav.wakeLock?.request("screen")) ?? null;
+      } catch { /* unsupported or denied - harmless */ }
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+    } catch {
+      if (isStale()) return;
+      telemetryRef.current.recordFailure("camera_error");
+      telemetryRef.current.finish("error");
+      stopCamera();
+      setErrorMessage("Could not access the camera. Please check it isn't in use by another app.");
+      setPhase("error");
+      return;
+    }
+
+    // Camera is live; only now wait for the models (usually already loaded, so this is instant).
+    if (getModelLoadProgress() < 1) setPhase("loading_models");
+    const modelsError = await modelsOutcome;
+    if (isStale()) return;
+    if (modelsError) {
+      // Logged (not just surfaced as a generic banner) because this failure
+      // mode has more than one real cause in practice - e.g. a proxy/rewrite
+      // rule intercepting /models/* and returning HTML instead of the actual
+      // weight files, not just a genuine network drop - and the console is
+      // the only place that distinction is visible.
+      console.error("[useFaceLivenessCapture] failed to load face-api models:", modelsError);
+      setErrorMessage("Could not load face-recognition models. Check your connection and try again.");
+      telemetryRef.current.recordFailure("models_failed");
+      telemetryRef.current.finish("error");
+      stopCamera();
+      setPhase("error");
+      return;
+    }
+
+    let backend = "";
+    try { backend = faceapi.tf.getBackend() ?? ""; } catch { /* diagnostics only */ }
+    telemetryRef.current.setTfBackend(backend);
+    // No WebGL means every detection runs on the CPU - start the preview on the
+    // cheaper detector input rather than waiting for the fps check to notice.
+    if (FACE_FLOW_V2 && backend && backend !== "webgl") liveOptionsRef.current = FAST_DETECTOR_OPTIONS;
 
     detectingSinceRef.current = Date.now();
     setPhase("detecting");
     rafRef.current = requestAnimationFrame(runDetectionLoop);
-  }, [runDetectionLoop, resetProgress]);
+  }, [runDetectionLoop, resetProgress, stopCamera]);
 
   const retry = useCallback(() => {
     setErrorMessage(null);
@@ -702,6 +782,7 @@ export function useFaceLivenessCapture(
   }, [phase, runDetectionLoop, start, resetProgress, showHint]);
 
   const stop = useCallback(() => {
+    sessionRef.current += 1; // any start() still awaiting the camera/models must not resume
     const endedOn = phaseRef.current;
     telemetryRef.current.finish(
       endedOn === "quality_failed" || endedOn === "liveness_failed" ? "failed"
