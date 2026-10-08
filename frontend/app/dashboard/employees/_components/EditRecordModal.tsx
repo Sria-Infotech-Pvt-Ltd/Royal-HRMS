@@ -83,7 +83,7 @@ const nextTempId = () => `temp-${++tempId}`;
 // no required-count badges.
 function EditRecordSidebar({ currentStep, onStepClick, hasMissing }: { currentStep: number; onStepClick: (i: number) => void; hasMissing: boolean }) {
   return (
-    <div className="wiz-nav">
+    <div className="wiz-nav" style={{ overflowY: "visible" }}>
       {STEPS.map((s, i) => (
         <div key={s.label}>
           {s.group && <div className="navgrp">{s.group}</div>}
@@ -547,8 +547,12 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       <div className="text-[11px] mb-1.5" style={{ color: "var(--on-variant)" }}>
                         Square JPG or PNG, at least 400×400px. Cropped to a circle on ID cards and reports.
                       </div>
-                      <label className="btn btn-sm" style={{ cursor: uploadingPhoto ? "wait" : "pointer", display: "inline-flex" }}>
-                        {uploadingPhoto ? "Uploading…" : "Upload file"}
+                      {/* Same "btn btn-ghost btn-sm" small outline button DocUploadButton
+                          uses for every other inline attach control in the Hire flow
+                          (PAN/Aadhaar/Passport cards, Documents step, certificates) —
+                          reusing that exact class combination, not a new style. */}
+                      <label className="btn btn-ghost btn-sm" style={{ cursor: uploadingPhoto ? "wait" : "pointer", display: "inline-flex" }}>
+                        {uploadingPhoto ? <><i className="ti ti-loader-2 animate-spin" /> Uploading…</> : <><i className="ti ti-upload" /> Upload file</>}
                         <input
                           type="file" accept="image/jpeg,image/png" className="sr-only" disabled={uploadingPhoto}
                           onChange={e => { const file = e.target.files?.[0]; if (file) onUploadPhoto(file); e.target.value = ""; }}
