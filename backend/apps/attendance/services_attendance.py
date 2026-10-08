@@ -17,7 +17,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 _IST = ZoneInfo('Asia/Kolkata')
@@ -202,6 +202,25 @@ class PunchService:
                 face_verified=face.is_match if face.required else False,
                 face_match_distance=face.distance,
             )
+
+        # Best-effort, non-blocking: resolve a human-readable location_label
+        # for this punch's own GPS coordinates in the background — never on
+        # this request's critical path. transaction.on_commit() (same
+        # pattern as apps/assessments/views/admin.py's email dispatch) means
+        # the task only fires once the punch above is truly committed; a
+        # queue failure here is caught and logged, never raised, so it can
+        # never turn a successful punch into a failed request.
+        if punch.latitude is not None and punch.longitude is not None:
+            def _queue_geocode(schema_name=connection.schema_name, punch_id=str(punch.id)):
+                try:
+                    from apps.attendance.tasks import reverse_geocode_punch_task
+                    reverse_geocode_punch_task.apply_async(
+                        args=[schema_name, punch_id], retry=False, ignore_result=True,
+                    )
+                except Exception as exc:
+                    logger.warning('Failed to queue reverse_geocode_punch_task for punch=%s: %s', punch_id, exc)
+
+            transaction.on_commit(_queue_geocode)
 
         # WFH-mode punches already resolved WorkFromHomeRequest.approved_for()
         # once above (via GeofencingService._validate_wfh) — passed straight

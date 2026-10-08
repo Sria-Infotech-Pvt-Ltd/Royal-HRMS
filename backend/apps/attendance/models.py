@@ -1214,6 +1214,17 @@ class AttendancePunch(models.Model):
                    'descriptors. Null when face verification did not apply.',
     )
 
+    # ── Human-readable location (best-effort, async) ──────────────────────────
+    location_label = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text='Reverse-geocoded "City, State, Country" (or finer, when '
+                  'available) for this punch\'s own latitude/longitude — '
+                  'never the employee\'s assigned branch. Resolved by a '
+                  'best-effort background task after the punch is already '
+                  'saved (see apps.attendance.tasks.reverse_geocode_punch_task); '
+                  'empty when not yet resolved or when geocoding failed.',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

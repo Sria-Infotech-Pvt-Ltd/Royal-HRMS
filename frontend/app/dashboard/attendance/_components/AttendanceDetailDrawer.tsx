@@ -224,6 +224,13 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
                     <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 2 }}>Clock In Location</div>
                     {data.clock_in_latitude !== null && data.clock_in_longitude !== null ? (
                       <>
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
+                          {data.clock_in_location_label ?? (
+                            <span style={{ fontWeight: 400, fontStyle: "italic", color: "var(--on-variant)" }}>
+                              Location name unavailable
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>
                           Latitude: {data.clock_in_latitude.toFixed(8)}
                         </div>
@@ -246,6 +253,13 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
                     <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 2 }}>Clock Out Location</div>
                     {data.clock_out_latitude !== null && data.clock_out_longitude !== null ? (
                       <>
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
+                          {data.clock_out_location_label ?? (
+                            <span style={{ fontWeight: 400, fontStyle: "italic", color: "var(--on-variant)" }}>
+                              Location name unavailable
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>
                           Latitude: {data.clock_out_latitude.toFixed(8)}
                         </div>

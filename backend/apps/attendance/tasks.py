@@ -171,3 +171,42 @@ def reprocess_attendance_task(self, schema_name, target_date_iso, branch, depart
     except Exception as exc:
         logger.error('reprocess_attendance_task failed: %s', exc, exc_info=True)
         raise self.retry(exc=exc)
+
+
+@shared_task
+def reverse_geocode_punch_task(schema_name: str, punch_id: str) -> None:
+    """
+    Best-effort background enrichment: resolves AttendancePunch.location_label
+    from that punch's own already-stored latitude/longitude via OpenStreetMap
+    Nominatim (apps.attendance.services_geocoding.reverse_geocode).
+
+    Dispatched fire-and-forget from PunchService.record_punch() via
+    transaction.on_commit() — only AFTER the punch is already committed, so
+    this never sits on the employee's clock-in/out request. `schema_name` is
+    the dispatching company's schema (see apps.tenants.utils.run_in_tenant),
+    captured at dispatch time the same way process_attendance_import/
+    reprocess_attendance_task above do it.
+
+    No retry: this is a nice-to-have enrichment, not a correctness-critical
+    operation — a failure (timeout, rate limit, no result) just leaves
+    location_label empty, which the HR UI already handles gracefully
+    ("Location name unavailable"), and retrying against a free, rate-limited
+    public API would risk making the situation worse, not better.
+    """
+    from apps.attendance.models import AttendancePunch
+    from apps.attendance.services_geocoding import reverse_geocode
+    from apps.tenants.utils import run_in_tenant
+
+    def _do_geocode():
+        punch = AttendancePunch.objects.filter(pk=punch_id).first()
+        if punch is None or punch.latitude is None or punch.longitude is None:
+            return
+        label = reverse_geocode(float(punch.latitude), float(punch.longitude))
+        if label:
+            punch.location_label = label
+            punch.save(update_fields=['location_label'])
+
+    try:
+        run_in_tenant(schema_name, _do_geocode)
+    except Exception as exc:
+        logger.warning('reverse_geocode_punch_task failed (non-blocking, punch_id=%s): %s', punch_id, exc)
