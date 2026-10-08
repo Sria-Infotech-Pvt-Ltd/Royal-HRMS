@@ -10,6 +10,10 @@ interface FaceCaptureStageProps {
   // clock-in verification, ...), each with its own extra phases layered on
   // top of the common "detecting"/"liveness_checking" pair used below.
   phase: string;
+  /** Live framing/lighting guidance ("Move closer", an auto-retry notice, ...). Overrides the default line while framing. */
+  hint?: string | null;
+  /** Which liveness signals were already seen — turns "blink AND turn" into "now turn your head". */
+  progress?: { blink: boolean; turn: boolean } | null;
 }
 
 const INSTRUCTION: Partial<Record<string, string>> = {
@@ -26,7 +30,17 @@ const INSTRUCTION: Partial<Record<string, string>> = {
 // modal that uses it (see FaceRegistrationModal / FaceVerificationModal) so
 // their refs exist before the very first getUserMedia call resolves — this
 // component just controls what's shown over them once the stream is live.
-export default function FaceCaptureStage({ videoRef, canvasRef, phase }: FaceCaptureStageProps) {
+function instructionFor(phase: string, hint?: string | null, progress?: { blink: boolean; turn: boolean } | null): string | undefined {
+  if (phase === "liveness_checking" && progress) {
+    if (progress.blink && !progress.turn) return "Blink \u2713 \u2014 now turn your head slightly";
+    if (progress.turn && !progress.blink) return "Head turn \u2713 \u2014 now blink naturally";
+  }
+  if (phase === "detecting" && hint) return hint;
+  return INSTRUCTION[phase];
+}
+
+export default function FaceCaptureStage({ videoRef, canvasRef, phase, hint, progress }: FaceCaptureStageProps) {
+  const instruction = instructionFor(phase, hint, progress);
   return (
     <div
       className="relative rounded-2xl overflow-hidden mx-auto"
@@ -45,12 +59,12 @@ export default function FaceCaptureStage({ videoRef, canvasRef, phase }: FaceCap
         className="absolute inset-0 w-full h-full pointer-events-none"
         style={{ transform: "scaleX(-1)" }}
       />
-      {INSTRUCTION[phase] && (
+      {instruction && (
         <div
           className="absolute bottom-0 left-0 right-0 text-center text-white text-xs py-2 px-3"
           style={{ background: "rgba(0,0,0,0.6)" }}
         >
-          {INSTRUCTION[phase]}
+          {instruction}
         </div>
       )}
     </div>

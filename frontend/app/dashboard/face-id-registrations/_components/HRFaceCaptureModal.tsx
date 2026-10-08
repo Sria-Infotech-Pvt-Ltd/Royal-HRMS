@@ -24,7 +24,7 @@ interface HRFaceCaptureModalProps {
 export default function HRFaceCaptureModal({
   employeeUuid, employeeName, isUpdate, onClose, onRegistered,
 }: HRFaceCaptureModalProps) {
-  const { phase, errorMessage, registeredRequest, modelProgress, videoRef, canvasRef, start, retry, stop } =
+  const { phase, errorMessage, registeredRequest, modelProgress, liveHint, livenessProgress, videoRef, canvasRef, start, retry, stop } =
     useHRFaceCapture(employeeUuid);
   const [consentAcknowledged, setConsentAcknowledged] = useState(false);
 
@@ -87,7 +87,7 @@ export default function HRFaceCaptureModal({
           {consentAcknowledged && (
           <>
           <div style={{ display: showCameraPreview ? "block" : "none" }}>
-            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} />
+            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} hint={liveHint} progress={livenessProgress} />
           </div>
 
           {phase === "idle" && (

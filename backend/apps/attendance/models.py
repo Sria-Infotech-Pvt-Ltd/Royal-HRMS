@@ -2022,3 +2022,69 @@ class FaceVerificationAttempt(models.Model):
     def __str__(self) -> str:
         outcome = 'matched' if self.is_match else (self.rejection_reason or 'mismatch')
         return f'{self.employee_id} — {self.source} face attempt ({outcome})'
+
+
+class FaceCaptureTelemetry(models.Model):
+    """
+    One row per client-side face-capture camera session (punch-time
+    verification or registration) — numbers only, never images or embeddings.
+
+    FaceVerificationAttempt only sees captures that already cleared every
+    client-side gate and reached the backend, so it cannot say WHY employees
+    needed several tries: liveness timeouts, quality-gate rejections and
+    cancelled sessions all happen entirely in the browser. This table is that
+    missing view — which gate failed, how often, on which device/browser, how
+    long a session took — and is what the retry-reduction work is measured
+    against (see the face_clockin_report management command).
+
+    Written by FaceCaptureTelemetryView; a failed write must never affect
+    clock-in, so the client sends it fire-and-forget.
+    """
+
+    PURPOSE_VERIFY   = 'verify'
+    PURPOSE_REGISTER = 'register'
+    PURPOSE_CHOICES  = [(PURPOSE_VERIFY, 'Punch verification'), (PURPOSE_REGISTER, 'Registration')]
+
+    OUTCOME_CAPTURED  = 'captured'
+    OUTCOME_CANCELLED = 'cancelled'
+    OUTCOME_FAILED    = 'failed'
+    OUTCOME_ERROR     = 'error'
+    OUTCOME_CHOICES   = [
+        (OUTCOME_CAPTURED, 'Captured'),
+        (OUTCOME_CANCELLED, 'Cancelled by user'),
+        (OUTCOME_FAILED, 'Ended on a failure screen'),
+        (OUTCOME_ERROR, 'Camera/model error'),
+    ]
+
+    id                 = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee           = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='face_capture_telemetry',
+    )
+    capture_session_id = models.CharField(max_length=64, blank=True, default='', db_index=True)
+    purpose            = models.CharField(max_length=10, choices=PURPOSE_CHOICES, default=PURPOSE_VERIFY)
+    outcome            = models.CharField(max_length=10, choices=OUTCOME_CHOICES)
+    duration_ms        = models.PositiveIntegerField(default=0, help_text='Camera open → session end.')
+    liveness_attempts  = models.PositiveSmallIntegerField(default=0)
+    quality_failures   = models.PositiveSmallIntegerField(default=0)
+    auto_resumes       = models.PositiveSmallIntegerField(default=0)
+    manual_retries     = models.PositiveSmallIntegerField(default=0)
+    tf_backend         = models.CharField(max_length=16, blank=True, default='')
+    avg_fps            = models.FloatField(null=True, blank=True)
+    user_agent         = models.CharField(max_length=255, blank=True, default='')
+    details            = models.JSONField(
+        default=dict, blank=True,
+        help_text='Bounded diagnostics: failure-reason counts, liveness signals seen, '
+                  'last quality metrics, lighting hints shown, flow version.',
+    )
+    created_at         = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'attendance_face_capture_telemetry'
+        ordering = ['-created_at']
+        indexes  = [
+            models.Index(fields=['employee', 'created_at'], name='fct_emp_time_idx'),
+            models.Index(fields=['purpose', 'outcome', 'created_at'], name='fct_purpose_outcome_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.employee_id} — {self.purpose} capture ({self.outcome})'

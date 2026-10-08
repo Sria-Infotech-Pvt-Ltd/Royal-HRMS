@@ -15,6 +15,7 @@ from apps.attendance.models import (
     AttendanceSettings,
     AttendanceWeeklyOff,
     AttendanceWorkingHours,
+    FaceCaptureTelemetry,
     FaceVerificationAttempt,
     InvalidPunch,
     LateMarkLOPPolicy,
@@ -233,3 +234,19 @@ class InvalidPunchAdmin(admin.ModelAdmin):
     list_display  = ('punch', 'issue_type', 'issue', 'status', 'assigned_to', 'created_at')
     list_filter   = ('status', 'issue_type')
     readonly_fields = ('id', 'created_at', 'updated_at')
+
+
+@admin.register(FaceCaptureTelemetry)
+class FaceCaptureTelemetryAdmin(admin.ModelAdmin):
+    """Read-only client-side face-capture diagnostics (numbers only)."""
+    list_display    = ('employee', 'purpose', 'outcome', 'duration_ms', 'liveness_attempts', 'quality_failures', 'tf_backend', 'avg_fps', 'created_at')
+    list_filter     = ('purpose', 'outcome', 'tf_backend')
+    search_fields   = ('employee__email', 'employee__employee_id', 'capture_session_id')
+    readonly_fields = [f.name for f in FaceCaptureTelemetry._meta.fields]
+    date_hierarchy  = 'created_at'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

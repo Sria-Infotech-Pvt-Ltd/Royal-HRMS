@@ -30,6 +30,19 @@ const EAR_BLINK_RATIO   = 0.78; // EAR must dip below 78% of the observed "open"
 const EAR_RECOVER_RATIO = 0.92; // ...then rise back above 92% of that baseline to count as re-opening
 const HEAD_TURN_RATIO   = 0.12; // nose-vs-eye-center lateral shift, normalized by inter-eye width
 const BASELINE_SAMPLES  = 5;    // frames averaged before the "eyes open" / "centered" baseline is trusted
+const EAR_HISTORY_SIZE  = 40;   // rolling window the "eyes open" baseline is read from
+const EAR_BASELINE_PCT  = 0.9;  // baseline = 90th percentile of that window, not its single maximum
+
+/** Value at fraction `p` (0-1) of the sorted samples — nearest-rank, no interpolation. */
+function percentile(samples: number[], p: number): number {
+  if (samples.length === 0) return 0;
+  const sorted = [...samples].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+}
+
+function median(samples: number[]): number {
+  return percentile(samples, 0.5);
+}
 
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -58,11 +71,13 @@ export interface LivenessResult {
 export class LivenessTracker {
   private earBaseline = 0;
   private earSamples: number[] = [];
+  private earHistory: number[] = [];
   private eyeClosed = false;
   private blinkDetected = false;
   private minEarDuringBlink = 1;
 
   private noseBaselineX: number | null = null;
+  private noseBaselineSamples: number[] = [];
   private maxHeadTurnRatio = 0;
   private headTurnDetected = false;
 
@@ -74,14 +89,23 @@ export class LivenessTracker {
   private trackBlink(landmarks: Landmarks68): void {
     const ear = (eyeAspectRatio(landmarks.getLeftEye()) + eyeAspectRatio(landmarks.getRightEye())) / 2;
 
+    this.earHistory.push(ear);
+    if (this.earHistory.length > EAR_HISTORY_SIZE) this.earHistory.shift();
+
     if (this.earSamples.length < BASELINE_SAMPLES) {
       this.earSamples.push(ear);
-      this.earBaseline = Math.max(this.earBaseline, ear);
+      this.earBaseline = percentile(this.earHistory, EAR_BASELINE_PCT);
       return;
     }
-    // Keep tracking the running max — a well-lit, eyes-open frame is the
-    // best baseline available and can arrive at any point in the window.
-    this.earBaseline = Math.max(this.earBaseline, ear);
+    // "Eyes open" baseline = 90th percentile of the recent window rather than
+    // its single maximum. A running max let one noisy/over-wide frame inflate
+    // the baseline permanently, after which ordinary open-eye frames read as
+    // "closed" — a FALSE blink that a jittery static image could trigger, and
+    // a blink threshold that moved around for real users. A percentile keeps
+    // the baseline at a genuinely open-eye level (still near the maximum, so
+    // a real blink — EAR falling to roughly a third of open — is just as
+    // detectable) while ignoring isolated spikes.
+    this.earBaseline = percentile(this.earHistory, EAR_BASELINE_PCT);
     if (this.earBaseline === 0) return;
 
     const ratio = ear / this.earBaseline;
@@ -108,7 +132,12 @@ export class LivenessTracker {
     if (interEyeWidth === 0) return;
 
     if (this.noseBaselineX === null) {
-      this.noseBaselineX = noseTip.x;
+      // Median of the first few frames, not frame 1 alone — a single frame
+      // caught mid-motion would otherwise mis-centre every later comparison.
+      this.noseBaselineSamples.push(noseTip.x);
+      if (this.noseBaselineSamples.length >= BASELINE_SAMPLES) {
+        this.noseBaselineX = median(this.noseBaselineSamples);
+      }
       return;
     }
 
@@ -117,6 +146,12 @@ export class LivenessTracker {
     if (this.maxHeadTurnRatio > HEAD_TURN_RATIO) {
       this.headTurnDetected = true;
     }
+  }
+
+  /** Which of the two required signals have been observed so far — for live
+   *  on-screen guidance only; passing still requires getResult().passed. */
+  getProgress(): { blink: boolean; turn: boolean } {
+    return { blink: this.blinkDetected, turn: this.headTurnDetected };
   }
 
   getResult(): LivenessResult {
@@ -135,10 +170,12 @@ export class LivenessTracker {
   reset(): void {
     this.earBaseline = 0;
     this.earSamples = [];
+    this.earHistory = [];
     this.eyeClosed = false;
     this.blinkDetected = false;
     this.minEarDuringBlink = 1;
     this.noseBaselineX = null;
+    this.noseBaselineSamples = [];
     this.maxHeadTurnRatio = 0;
     this.headTurnDetected = false;
   }

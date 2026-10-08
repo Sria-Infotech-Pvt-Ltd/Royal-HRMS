@@ -44,6 +44,8 @@ interface UseHRFaceCapture {
   errorMessage:      string | null;
   registeredRequest: FaceRegistrationRequest | null;
   modelProgress:     number;
+  liveHint:          string | null;
+  livenessProgress:  { blink: boolean; turn: boolean };
   videoRef:          ReturnType<typeof useFaceLivenessCapture>["videoRef"];
   canvasRef:         ReturnType<typeof useFaceLivenessCapture>["canvasRef"];
   /** No-op (does not open the camera) if consentAcknowledged is false — see
@@ -104,6 +106,7 @@ export function useHRFaceCapture(employeeUuid: string | null): UseHRFaceCapture 
     onCaptured: handleCaptured,
     framesToCapture: REGISTRATION_FRAMES_TO_CAPTURE,
     normalizeLighting: REGISTRATION_NORMALIZE_LIGHTING,
+    purpose: "register",
   });
   useEffect(() => { stopCaptureRef.current = capture.stop; }, [capture.stop]);
 
@@ -143,6 +146,7 @@ export function useHRFaceCapture(employeeUuid: string | null): UseHRFaceCapture 
 
   return {
     phase, errorMessage, registeredRequest, modelProgress: capture.modelProgress,
+    liveHint: capture.liveHint, livenessProgress: capture.livenessProgress,
     videoRef: capture.videoRef, canvasRef: capture.canvasRef,
     start, retry, stop,
   };

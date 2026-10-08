@@ -297,6 +297,8 @@ export const API = {
     myCorrections: "/attendance/corrections/my/",
     employeeCalendar: (employeeId: string, month: string) => `/attendance/employee-calendar/?employee_id=${employeeId}&month=${month}`,
 
+    faceCaptureTelemetry: "/attendance/face-capture-telemetry/",
+
     faceRegistration: {
       submit:  "/attendance/face-registration/",
       me:      "/attendance/face-registration/me/",

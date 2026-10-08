@@ -66,6 +66,35 @@ export function meanLuminanceOfBox(
   return count === 0 ? 0 : sum / count;
 }
 
+/** Cheap luminance read of the live preview for framing/lighting HINTS only —
+ *  draws the video at a tiny width and returns the mean luminance of the face
+ *  box and of the whole frame. `box` is in the video's native pixel space.
+ *  Not used for any accept/reject decision (that is the CLAHE-normalized
+ *  capture gate), so a small sample is fine. */
+export function sampleFaceAndFrameLuminance(
+  video: HTMLVideoElement, canvas: HTMLCanvasElement,
+  box: { x: number; y: number; width: number; height: number }, sampleWidth = 128,
+): { face: number; frame: number } {
+  if (video.videoWidth === 0 || video.videoHeight === 0) {
+    throw new Error('sampleFaceAndFrameLuminance: video has no dimensions yet.');
+  }
+  const scale = sampleWidth / video.videoWidth;
+  const width = sampleWidth;
+  const height = Math.max(1, Math.round(video.videoHeight * scale));
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('sampleFaceAndFrameLuminance: 2D canvas context unavailable.');
+  ctx.drawImage(video, 0, 0, width, height);
+  const img = ctx.getImageData(0, 0, width, height);
+
+  const face = meanLuminanceOfBox(img, {
+    x: box.x * scale, y: box.y * scale, width: box.width * scale, height: box.height * scale,
+  });
+  const frame = meanLuminanceOfBox(img, { x: 0, y: 0, width, height });
+  return { face, frame };
+}
+
 // ─── Best-effort eye-occlusion (sunglasses/obstruction) heuristic ─────────
 // face-api.js 0.22.2 exposes landmark POSITIONS only — no per-landmark or
 // per-region confidence/visibility score exists to read a "the eyes are

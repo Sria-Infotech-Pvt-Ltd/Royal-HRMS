@@ -60,6 +60,7 @@ from apps.attendance.views import (
     FaceRegistrationEmployeePickerView,
     FaceRegistrationEmployeeStatusView,
     FaceRegistrationHRRegisterView,
+    FaceCaptureTelemetryView,
 )
 
 urlpatterns = [
@@ -140,6 +141,9 @@ urlpatterns = [
 
     # ── Face Verification — org-wide toggle status (Attendance Settings) ────────
     path('face-verification/status/', FaceVerificationStatusView.as_view(), name='face-verification-status'),
+
+    # ── Face capture telemetry — client-side retry diagnostics (numbers only) ───
+    path('face-capture-telemetry/', FaceCaptureTelemetryView.as_view(), name='face-capture-telemetry'),
 
     # ── Face Registration — HR-initiated (register/update on someone's behalf) ─
     path('face-registration/register/',                              FaceRegistrationHRRegisterView.as_view(),    name='face-registration-hr-register'),

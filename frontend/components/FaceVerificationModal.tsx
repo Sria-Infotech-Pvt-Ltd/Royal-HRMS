@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { useFaceLivenessCapture } from "@/hooks/useFaceLivenessCapture";
 import FaceStatusPanel from "@/components/FaceStatusPanel";
 import FaceCaptureStage from "@/components/FaceCaptureStage";
+import { FACE_FLOW_V2 } from "@/lib/faceApi/flowConfig";
 
 interface FaceVerificationModalProps {
   isOpen:     boolean;
@@ -34,7 +35,7 @@ interface FaceVerificationModalProps {
 const VERIFICATION_FRAMES_TO_CAPTURE = 3;
 
 export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: FaceVerificationModalProps) {
-  const { phase, errorMessage, modelProgress, videoRef, canvasRef, start, retry, stop } = useFaceLivenessCapture({
+  const { phase, errorMessage, liveHint, lowLight, livenessProgress, modelProgress, videoRef, canvasRef, start, retry, stop } = useFaceLivenessCapture({
     // Release the camera the instant we have a descriptor — don't wait for the
     // parent to close the modal. The parent flips isOpen straight to false
     // once it has the embedding, which never re-runs the isOpen effect below
@@ -74,11 +75,15 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
   if (!isOpen) return null;
 
   const showCameraPreview = phase === "detecting" || phase === "liveness_checking" || phase === "capturing_multi";
+  // Dim room: the screen itself becomes the light. A phone/laptop display is a
+  // soft frontal light source, so turn the dark backdrop white while the camera
+  // is live. (Browsers cannot raise device brightness themselves, hence the tip.)
+  const fillLight = FACE_FLOW_V2 && lowLight && showCameraPreview;
 
   const overlay = (
     <div
       className="fixed inset-0 flex items-center justify-center p-6"
-      style={{ background: "rgba(0,0,0,0.55)", zIndex: 9999 }}
+      style={{ background: fillLight ? "#ffffff" : "rgba(0,0,0,0.55)", zIndex: 9999, transition: "background 0.25s" }}
       onClick={handleClose}
     >
       <div
@@ -102,7 +107,12 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
 
         <div className="p-6" style={{ minHeight: 260, overflowY: "auto" }}>
           <div style={{ display: showCameraPreview ? "block" : "none" }}>
-            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} />
+            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} hint={liveHint} progress={livenessProgress} />
+            {fillLight && (
+              <p className="text-center text-[12px] mt-3" style={{ color: "#475569" }}>
+                Low light detected — your screen is now acting as a light. Raising your screen brightness helps.
+              </p>
+            )}
           </div>
 
           {(phase === "idle" || phase === "loading_models") && (

@@ -20,7 +20,7 @@ interface FaceRegistrationModalProps {
 }
 
 export default function FaceRegistrationModal({ onClose, mode = "register" }: FaceRegistrationModalProps) {
-  const { phase, errorMessage, submittedRequest, modelProgress, videoRef, canvasRef, start, retry, stop } = useFaceRegistrationCapture();
+  const { phase, errorMessage, submittedRequest, modelProgress, liveHint, livenessProgress, videoRef, canvasRef, start, retry, stop } = useFaceRegistrationCapture();
   // Gates everything below — the camera never opens (start() is never
   // called) until this is true. Reset per modal open (no persisted "don't
   // ask again"), since mode="update" is a materially new capture, not a
@@ -83,7 +83,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
           {consentAcknowledged && (
           <>
           <div style={{ display: showCameraPreview ? "block" : "none" }}>
-            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} />
+            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} hint={liveHint} progress={livenessProgress} />
           </div>
 
           {phase === "idle" && (
