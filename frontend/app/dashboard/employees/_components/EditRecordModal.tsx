@@ -171,6 +171,11 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   // identity's extra fields: no backend column exists for this today, so
   // it's rendered for field parity but not sent on save.
   const [guardian, setGuardian] = useState({ name: "", relationship: "", address: "" });
+  // Access card (Assets step) — same local-only situation as Guardian:
+  // no CompanyAsset/access-card model or endpoint exists in this codebase
+  // today (confirmed by Explore — AssetsList's own real entries are the
+  // only persisted part of this step).
+  const [accessCard, setAccessCard] = useState({ cardNumber: "", validFrom: "", validTill: "" });
 
   const [employment, setEmployment] = useState<EmploymentDraft>(EMPTY_EMPLOYMENT);
   const [basicPay, setBasicPay] = useState<BasicPayDraft>(EMPTY_BASIC_PAY);
@@ -301,6 +306,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
 
       setCoreSkills(typeof rawRecord.core_skills === "string" ? rawRecord.core_skills : "");
       setCertifications(typeof rawRecord.certifications === "string" ? rawRecord.certifications : "");
+      setAccessCard(c => ({ ...c, validFrom: c.validFrom || emp.details.dateOfJoining || "" }));
 
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -885,6 +891,21 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
 
               {step === 5 && (
                 <div className="mstep on">
+                  <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg px-3.5 py-2.5 mb-3" style={{ background: "var(--brand-tint)" }}>
+                    {[
+                      ["Qualifications", String(educationEntries.length)],
+                      ["Highest", educationEntries.find(e => e.is_highest)?.level || "—"],
+                      ["Institution", educationEntries.find(e => e.is_highest)?.institution || "—"],
+                      ["Specialization", educationEntries.find(e => e.is_highest)?.specialization || "—"],
+                      ["Grade", educationEntries.find(e => e.is_highest)?.percentage || "—"],
+                      ["Completed", educationEntries.find(e => e.is_highest)?.end_date || "—"],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <div className="text-[9px] font-bold tracking-wider uppercase" style={{ color: "var(--primary)" }}>{label}</div>
+                        <div className="text-[12.5px] font-semibold" style={{ color: "var(--on-bg)" }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
                   <EducationChecklist
                     entries={educationEntries} fieldConfig={eduExpFieldConfig.education}
                     onAdd={() => setEducationEntries(p => [...p, { id: nextTempId(), level: "", custom_level_label: "", institution: "", specialization: "", percentage: "", start_date: "", end_date: "", is_highest: false }])}
@@ -894,6 +915,18 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                     documents={hireDocs} uploading={uploadingDocType} onUploadDoc={onUploadDocument}
                     error={null}
                   />
+                  <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg px-3.5 py-2.5 mb-3 mt-5" style={{ background: "var(--brand-tint)" }}>
+                    {[
+                      ["Employers", String(experienceEntries.length)],
+                      ["Most recent", experienceEntries[0] ? `${experienceEntries[0].designation} · ${experienceEntries[0].employer_name}` : "—"],
+                      ["Last working day", experienceEntries[0]?.end_date || "—"],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <div className="text-[9px] font-bold tracking-wider uppercase" style={{ color: "var(--primary)" }}>{label}</div>
+                        <div className="text-[12.5px] font-semibold" style={{ color: "var(--on-bg)" }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
                   <ExperienceList
                     totalExperienceYears={totalExperienceYears} entries={experienceEntries} fieldConfig={eduExpFieldConfig.experience}
                     onAdd={() => setExperienceEntries(p => [...p, { id: nextTempId(), employer_name: "", designation: "", employment_type: "full_time", start_date: "", end_date: "", is_current: false, responsibilities: "", reason_for_leaving: "" }])}
@@ -931,13 +964,31 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
               )}
 
               {step === 7 && (
-                <AssetsList
-                  entries={assetEntries}
-                  onAdd={() => setAssetEntries(p => [...p, { id: nextTempId(), asset_type: "", tag_number: "", condition: "new" }])}
-                  onFieldChange={(id, field, value) => setAssetEntries(p => p.map(e => (e.id === id ? { ...e, [field]: value } : e)))}
-                  onRemove={id => { if (!id.startsWith("temp-")) deletedAssetIds.current.add(id); setAssetEntries(p => p.filter(e => e.id !== id)); }}
-                  error={assetErr}
-                />
+                <div className="mstep on">
+                  <AssetsList
+                    entries={assetEntries}
+                    onAdd={() => setAssetEntries(p => [...p, { id: nextTempId(), asset_type: "", tag_number: "", condition: "new" }])}
+                    onFieldChange={(id, field, value) => setAssetEntries(p => p.map(e => (e.id === id ? { ...e, [field]: value } : e)))}
+                    onRemove={id => { if (!id.startsWith("temp-")) deletedAssetIds.current.add(id); setAssetEntries(p => p.filter(e => e.id !== id)); }}
+                    error={assetErr}
+                  />
+                  <div className="divider" />
+                  <div className="sechead">ACCESS CARD</div>
+                  <div className="g3">
+                    <div className="f">
+                      <label>Card number <span className="tag">OPTIONAL</span></label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input className="finput" placeholder="Auto-generated if left blank" value={accessCard.cardNumber} onChange={e => setAccessCard(c => ({ ...c, cardNumber: e.target.value }))} />
+                        <button type="button" className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}
+                          onClick={() => setAccessCard(c => ({ ...c, cardNumber: `AC-${Math.floor(Math.random() * 90000 + 10000)}` }))}>
+                          + Suggest
+                        </button>
+                      </div>
+                    </div>
+                    <div className="f"><label>Valid from</label><input className="finput" type="date" value={accessCard.validFrom} onChange={e => setAccessCard(c => ({ ...c, validFrom: e.target.value }))} /></div>
+                    <div className="f"><label>Valid till</label><input className="finput" type="date" value={accessCard.validTill} onChange={e => setAccessCard(c => ({ ...c, validTill: e.target.value }))} /></div>
+                  </div>
+                </div>
               )}
             </div>
           </div>
