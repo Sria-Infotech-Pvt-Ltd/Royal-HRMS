@@ -906,6 +906,11 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       text-align: center;
                       padding: 10px 16px;
                       margin-bottom: 20px;
+                      border: 1.5px dashed var(--line, var(--outline-v));
+                      background: var(--sunken, var(--brand-tint));
+                      color: var(--brand-ink, var(--primary));
+                      border-radius: 12px;
+                      font-weight: 700;
                     }
                   `}</style>
                   <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg px-3.5 py-2.5 mb-3" style={{ background: "var(--brand-tint)" }}>
@@ -981,7 +986,25 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
               )}
 
               {step === 7 && (
-                <div className="mstep on">
+                <div className="mstep on edit-record-assets">
+                  {/* Same scoped override as Education & experience above —
+                      AssetsList's own "+ Issue an Asset" button is a small,
+                      left-aligned "btn btn-ghost" (correct for its other
+                      real caller, the self-service onboarding wizard). */}
+                  <style jsx>{`
+                    .edit-record-assets :global(button.btn.btn-ghost:not(.btn-sm)) {
+                      display: block;
+                      width: 100%;
+                      text-align: center;
+                      padding: 10px 16px;
+                      margin-bottom: 20px;
+                      border: 1.5px dashed var(--line, var(--outline-v));
+                      background: var(--sunken, var(--brand-tint));
+                      color: var(--brand-ink, var(--primary));
+                      border-radius: 12px;
+                      font-weight: 700;
+                    }
+                  `}</style>
                   <AssetsList
                     entries={assetEntries}
                     onAdd={() => setAssetEntries(p => [...p, { id: nextTempId(), asset_type: "", tag_number: "", condition: "new" }])}
