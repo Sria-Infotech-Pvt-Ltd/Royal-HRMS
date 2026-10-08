@@ -133,6 +133,7 @@ from apps.accounts.views import (
 )
 from apps.accounts.views_lifecycle import EmployeeAsOfView, EmployeeLifecycleTimelineView
 from apps.accounts.views_profile_photo import ProfilePhotoView
+from apps.accounts.views_employee_photo import EmployeePhotoView
 from apps.accounts.views_pincode import PincodeLookupView
 from apps.accounts.views_ifsc import IfscLookupView
 
@@ -168,6 +169,7 @@ urlpatterns = [
     path('employees/<str:employee_id>/reporting-manager/',       EmployeeReportingManagerView.as_view(), name='employee-reporting-manager'),
     path('employees/<str:employee_id>/approval-matrix/',         EmployeeApprovalMatrixView.as_view(),   name='employee-approval-matrix'),
     path('employees/<str:employee_id>/documents/',               EmployeeProfileDocumentView.as_view(),  name='employee-documents'),
+    path('employees/<str:employee_id>/photo/',                   EmployeePhotoView.as_view(),             name='employee-photo'),
     path('employees/<str:employee_id>/custom-file-fields/',      EmployeeCustomFieldFileValueView.as_view(), name='employee-custom-file-fields'),
     path('employees/<str:employee_id>/reveal-sensitive/',        EmployeeRevealSensitiveView.as_view(),  name='employee-reveal-sensitive'),
     path('employees/<str:employee_id>/confirm/',                  EmployeeConfirmView.as_view(),          name='employee-confirm'),

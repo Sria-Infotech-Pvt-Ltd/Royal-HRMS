@@ -71,6 +71,7 @@ export const API = {
     hr: (id: string) => `/employees/${id}/hr/`,
     approvalMatrix: (id: string) => `/employees/${id}/approval-matrix/`,
     documents: (id: string) => `/employees/${id}/documents/`,
+    photo: (id: string) => `/employees/${id}/photo/`,
     customFileFields: (id: string) => `/employees/${id}/custom-file-fields/`,
     resetPassword: (id: string) => `/employees/${id}/reset-password/`,
     resendInvite: (id: string) => `/employees/${id}/resend-invite/`,

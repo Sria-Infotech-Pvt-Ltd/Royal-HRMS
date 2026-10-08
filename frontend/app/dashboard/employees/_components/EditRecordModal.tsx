@@ -168,6 +168,28 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
   const [docUploadError, setDocUploadError] = useState("");
 
+  const [photoUrl, setPhotoUrl] = useState<string | null | undefined>(employee.photoUrl);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+
+  async function onUploadPhoto(file: File) {
+    setPhotoError("");
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("photo", file);
+      const { data } = await clientApi.post<{ data: { profile_photo_url: string | null } }>(
+        API.employees.photo(employee.id), formData, { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      setPhotoUrl(data.data.profile_photo_url ?? undefined);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setPhotoError(msg || "Failed to upload photo. Please try again.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   const [familyErr, setFamilyErr] = useState<string | null>(null);
   const [assetErr, setAssetErr] = useState<string | null>(null);
   const deletedFamilyIds = useRef<Set<string>>(new Set());
@@ -515,19 +537,24 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
               </div>
             </div>
 
-            <div style={{ padding: 24 }}>
+            <div className="wiz-body">
               {step === 0 && (
                 <div className="mstep on">
                   <div className="flex items-center gap-4 mb-5">
-                    <Avatar text={`${personal.firstName} ${personal.lastName}`.trim() || employee.code} size={64} photoUrl={employee.photoUrl} />
+                    <Avatar text={`${personal.firstName} ${personal.lastName}`.trim() || employee.code} size={64} photoUrl={photoUrl} />
                     <div>
                       <div className="text-[12.5px] font-semibold mb-1">Employee photo</div>
                       <div className="text-[11px] mb-1.5" style={{ color: "var(--on-variant)" }}>
                         Square JPG or PNG, at least 400×400px. Cropped to a circle on ID cards and reports.
                       </div>
-                      <div className="text-[11px]" style={{ color: "var(--on-variant)" }}>
-                        Employees upload their own photo from their profile — HR can&apos;t change it on their behalf here.
-                      </div>
+                      <label className="btn btn-sm" style={{ cursor: uploadingPhoto ? "wait" : "pointer", display: "inline-flex" }}>
+                        {uploadingPhoto ? "Uploading…" : "Upload file"}
+                        <input
+                          type="file" accept="image/jpeg,image/png" className="sr-only" disabled={uploadingPhoto}
+                          onChange={e => { const file = e.target.files?.[0]; if (file) onUploadPhoto(file); e.target.value = ""; }}
+                        />
+                      </label>
+                      {photoError && <div className="text-[11px] mt-1" style={{ color: "var(--error)" }}>{photoError}</div>}
                     </div>
                   </div>
 
