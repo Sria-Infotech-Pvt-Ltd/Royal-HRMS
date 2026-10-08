@@ -55,9 +55,9 @@ import PhoneInput from "@/components/PhoneInput";
 import CountrySelect from "@/components/CountrySelect";
 import type { HireDocument } from "@/components/DocUploadButton";
 import type { DetailValues, Employee } from "../_data";
+import Avatar from "./Avatar";
 import { apiToEmployee, type ApiEmployee } from "../[id]/_apiMapping";
 import SalaryTab from "../[id]/_components/SalaryTab";
-import HireWizardSidebar from "../../hire/[hireActionId]/_components/HireWizardSidebar";
 import { STEPS as HIRE_STEPS } from "../../hire/[hireActionId]/_components/_wizardData";
 import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "../../hire/[hireActionId]/_components/StatutoryAccountsStep";
 import EmploymentStep, { EMPTY_EMPLOYMENT, type EmploymentDraft } from "../../hire/[hireActionId]/_components/EmploymentStep";
@@ -73,6 +73,42 @@ const STEPS = HIRE_STEPS.slice(0, -1); // drop "Review" — not applicable to ed
 
 let tempId = 0;
 const nextTempId = () => `temp-${++tempId}`;
+
+// Flat section nav for this modal — deliberately NOT HireWizardSidebar.
+// That component is built for linear wizard progress (numbered circles,
+// a per-step "N fields still required" count badge from each step's
+// static STEPS[i].required) — correct for a one-way hire flow, wrong for
+// an edit view where every section is already complete and any section
+// can be opened in any order. Same label/sub/group/tag data, no numbers,
+// no required-count badges.
+function EditRecordSidebar({ currentStep, onStepClick, hasMissing }: { currentStep: number; onStepClick: (i: number) => void; hasMissing: boolean }) {
+  return (
+    <div className="wiz-nav">
+      {STEPS.map((s, i) => (
+        <div key={s.label}>
+          {s.group && <div className="navgrp">{s.group}</div>}
+          <button type="button" onClick={() => onStepClick(i)} className={`step${i === currentStep ? " on" : ""}`} style={{ paddingLeft: 12 }}>
+            <div className="tx">
+              <div className="t1">
+                {s.label}
+                {s.tag && <span className={`tag ${s.tag.tone}`}>{s.tag.label}</span>}
+              </div>
+              <div className="t2">{s.sub}</div>
+            </div>
+          </button>
+        </div>
+      ))}
+
+      <div
+        className="mt-4 rounded-lg p-3 text-[11.5px]"
+        style={hasMissing ? { background: "var(--warn-c)", color: "var(--warn)" } : { background: "var(--ok-bg)", color: "var(--ok)" }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 2 }}>{hasMissing ? "A few required fields are empty" : "Nothing outstanding"}</div>
+        <div>{hasMissing ? "Fill in the required fields marked with *." : "All required fields are complete. Optional sections can be finished after joining."}</div>
+      </div>
+    </div>
+  );
+}
 
 // ── Personal-identity local state — same fields/order/labels as
 // HireWizardClient's own step-0 JSX (it has no separate component file to
@@ -95,6 +131,16 @@ const EMPTY_PERSONAL: PersonalIdentityDraft = {
 };
 
 export default function EditRecordModal({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+  // The shared Modal component doesn't lock body scroll on its own — with
+  // tall content (this modal has a lot), the page behind it could also
+  // scroll, showing a second scrollbar at the viewport edge alongside the
+  // modal's own internal one. Lock it while this modal is mounted.
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+
   const [uuid, setUuid] = useState("");
   const [loading, setLoading] = useState(true);
   const [values, setValues] = useState<DetailValues>({});
@@ -459,7 +505,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         </div>
       ) : (
         <div className="wiz">
-          <HireWizardSidebar steps={STEPS} currentStep={step} highestSaved={-1} onStepClick={setStep} missingByStep={{}} />
+          <EditRecordSidebar currentStep={step} onStepClick={setStep} hasMissing={!personal.firstName.trim() || !personal.lastName.trim() || !statutory.account_holder_name.trim()} />
 
           <div className="wiz-main">
             <div className="stephead" style={{ padding: "20px 24px 0" }}>
@@ -472,6 +518,19 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
             <div style={{ padding: 24 }}>
               {step === 0 && (
                 <div className="mstep on">
+                  <div className="flex items-center gap-4 mb-5">
+                    <Avatar text={`${personal.firstName} ${personal.lastName}`.trim() || employee.code} size={64} photoUrl={employee.photoUrl} />
+                    <div>
+                      <div className="text-[12.5px] font-semibold mb-1">Employee photo</div>
+                      <div className="text-[11px] mb-1.5" style={{ color: "var(--on-variant)" }}>
+                        Square JPG or PNG, at least 400×400px. Cropped to a circle on ID cards and reports.
+                      </div>
+                      <div className="text-[11px]" style={{ color: "var(--on-variant)" }}>
+                        Employees upload their own photo from their profile — HR can&apos;t change it on their behalf here.
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Identity</div>
                   <div className="grid grid-cols-3 gap-3 mb-3">
                     <div>
