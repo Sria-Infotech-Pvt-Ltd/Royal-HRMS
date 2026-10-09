@@ -1463,3 +1463,262 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICtAGEq4cTLoKEycfWO6O5rsTuCysVO3IQosEEJAR+W3
 **As of this entry, the application code above is committed to GitHub but
 has not yet been pulled onto this server** — update this note once the
 deploy key is added and the pull/build/restart has actually happened.
+
+------------------------------------------------------------------------
+
+# 27. Application change log (production support, 2026-10-07 → 2026-10-08)
+
+Continuation of section 26's ongoing production-support engagement. Every
+change below was implemented and test-validated locally first (the same
+isolated local Postgres test setup as before — a Docker container on
+`localhost:15432`, never the production/Neon-style database) before being
+committed. **Deployment status is called out explicitly per item below —
+several of these commits are confirmed pushed to GitHub but this document
+does not have confirmation that `migrate_schemas` + service restart were
+actually run on this server for every one of them.** Treat any item marked
+"restart/migration not confirmed" as needing a fresh `showmigrations`
+check on the server before assuming it's live.
+
+## Leave request detail — owner-with-approve-permission wrongly blocked
+
+A manager/COO who also holds `leave.approve` got "Permission denied"
+re-opening their **own** submitted leave request once it moved past their
+own approval to L2/HR. Root cause: `LeaveRequestDetailView._get_request()`
+(`backend/apps/hrms/views/leave.py`) only exempted the request owner from
+its *first* rejection branch (no-`leave.approve` case); an owner who also
+holds `leave.approve` fell into the second branch, which runs
+`_can_hr_access_request()` — a check with no reason to recognize someone as
+their own l1/l2 approver, since the request is theirs, not one they're
+reviewing for someone else. Fixed by making the owner check short-circuit
+unconditionally, before either branch. Regression test added. Committed
+`0b1af51`. No migration.
+
+## Employee-wise shift timing (SGT/ICT, UK, global default)
+
+New requirement: two additional named shifts — **SGT/ICT 07:30–16:30** and
+**UK 12:00–21:00** — assignable per employee, while every employee with no
+assignment keeps the existing global **09:00–18:00** fallback byte-for-byte
+unchanged.
+
+-   Reused the existing `WorkingHoursPolicy` model (already built, never
+    wired in) as the shift catalog instead of creating a duplicate.
+-   New `EmployeeShiftAssignment` model + migration `0044`, mirroring the
+    established `EmployeeWeeklyOffAssignment` architecture exactly
+    (date-ranged, history-preserving, partial-unique "one open assignment
+    per employee" DB constraint).
+-   New idempotent seed migration `0045` (creates the two named policy rows
+    `WH-SGT-ICT`/`WH-UK` — skips if an admin already created a same-named
+    row; never touches the existing global settings).
+-   New `ShiftCacheService` resolver (`backend/core/cache_service.py`) —
+    per-employee effective shift, falling back to the global singleton,
+    mirroring `WeeklyOffCacheService`'s own priority-chain pattern.
+-   Late-arrival/early-exit checks in `services_attendance.py` now resolve
+    the employee's actual shift instead of always reading the global
+    config.
+-   **Highest-risk area, found and fixed via an independent adversarial
+    review before shipping:** the missing-clockout Celery job
+    (`services_unpunch.py`) originally computed one global deadline for
+    the whole tenant — a UK-shift employee would've been falsely flagged
+    "incomplete" around 18:00 while still legitimately working, and an
+    SGT/ICT employee's real no-show wouldn't be caught until 18:10 instead
+    of ~16:40. Rewritten to resolve each employee's own deadline in one
+    bulk query (no N+1). A second, narrower bug (an earlier-review fix)
+    was then also fixed: the job's early-exit optimization filtered
+    `WorkingHoursPolicy.objects.filter(is_active=True)`, so deactivating a
+    policy that was still actively assigned to someone could delay their
+    detection — fixed by not filtering that specific floor-calculation
+    query by `is_active` (the filter was only ever a cheap optimization
+    gate, never the real per-employee decision, so widening it is strictly
+    safer).
+-   New HR UI: Attendance & Time → **Shift Assignment** tab (employee
+    assignment list/bulk-assign/history) with an embedded **Shifts**
+    management card (the orphaned `WorkingHoursPolicy` CRUD, wired into a
+    UI for the first time) — `frontend/app/dashboard/attendance/
+    _components/ShiftAssignmentTab.tsx` / `ShiftMasterCard.tsx`.
+-   33 new backend tests (`tests_shift_assignment.py`).
+
+## Daily Clock In/Out limit — exactly 1 IN + 1 OUT per day
+
+New, explicitly confirmed business requirement, **not** a bug fix of the
+prior design: the system previously allowed unlimited alternating
+Clock-In/Clock-Out cycles per day by design (append-only punch log, no
+cap) — this was intentionally replaced with a hard cap of one Clock In and
+one Clock Out per employee per attendance day.
+
+-   `PunchService._validate_daily_punch_limit()`
+    (`services_attendance.py`) — rejects a 2nd Clock In or Clock Out with a
+    specific message for each case ("already clocked in" vs "already
+    completed your attendance for today").
+-   Race-condition-safe by construction, not just by convention: the
+    authoritative check runs inside a `transaction.atomic()` block holding
+    `select_for_update()` on the employee's `AttendanceRecord` row for that
+    date — safe even for the very first punch of the day because that
+    model already has a real `unique_together=('employee','date')`
+    constraint (Django's documented `get_or_create()`-under-a-unique-
+    constraint retry behavior handles the race). Verified with actual
+    concurrent `threading.Thread`s against a real Postgres connection (not
+    just reasoned about) — 5 simultaneous Clock-In attempts → exactly 1
+    success, 4 clean rejections, 1 punch row.
+-   New `day_completed` field on the `/attendance/today/` response; both
+    real Clock In/Out UI entry points (`ClockInButton.tsx`,
+    `my-attendance/_components/ClockWidget.tsx`) now show "Attendance
+    Completed" and disable themselves once both punches exist for the day,
+    instead of reverting to a clickable "Clock In".
+-   17 new backend tests (`tests_daily_punch_limit.py`).
+
+Shift timing + daily punch limit were committed together: **`326aa01`**.
+**Contains migrations `0044`/`0045` — pushed to GitHub and pulled onto this
+server (confirmed via a pasted `git pull` transcript), but `migrate_schemas`
++ service restart on this server were not confirmed back in this session.
+Run `showmigrations attendance` here before assuming `0044`/`0045` are
+live.**
+
+## UK Shift — geofence bypass with GPS still mandatory
+
+Confirmed requirement: UK Shift employees (and only UK Shift employees,
+identified by the **immutable** `WorkingHoursPolicy.policy_code='WH-UK'`,
+never the editable display name) can clock in/out from anywhere — branch
+geofence distance is not enforced for them — but GPS capture/storage stays
+mandatory exactly as for everyone else, and HR/Admin can see the actual
+captured coordinates.
+
+-   New `_validate_uk_shift_bypass()` in `services_geofencing.py`, called
+    from the existing `_validate_office()` path (UK employees stay on the
+    normal "office" attendance mode on the frontend — critical, because
+    GPS capture itself is only wired up for that mode; routing UK through
+    a different mode like `field` would have silently disabled GPS capture
+    entirely).
+-   `ShiftCacheService._Shift` extended with a `policy_code` field
+    (additive, trailing-default, doesn't break any existing caller) so the
+    geofence layer can identify UK Shift without duplicating shift
+    resolution.
+-   HR attendance detail API/UI gained `clock_in/out_latitude/longitude` +
+    a plain `maps.google.com/?q=` link (no maps SDK, no API key, no new
+    dependency) — this was the first time raw coordinates were exposed to
+    HR at all (previously only an inside/outside-geofence boolean + a
+    distance figure).
+-   13 new backend tests (`tests_uk_shift_geofence.py`).
+
+Committed as **`94c489d`** ("uk shift geotagging"). No migration required
+(reused existing `AttendancePunch` columns). **Server restart not
+confirmed back in this session.**
+
+## Human-readable punch location (reverse geocoding)
+
+Requirement: show HR an actual place name ("Hyderabad, Telangana, India"),
+not just raw coordinates — while never blocking Clock In/Out on a
+third-party network call.
+
+-   Confirmed via inspection (and the codebase's own prior documented
+    admission, in `apps/hrms/models.py`'s `WorkFromHomeRequest` docstring)
+    that this app had **no** geocoding integration of any kind before this.
+-   New `AttendancePunch.location_label` field + migration `0047`
+    (additive only).
+-   New `services_geocoding.py` — OpenStreetMap Nominatim (free, no API
+    key, no new pip dependency — reuses `requests`, already a project
+    dependency). Pure function, catches every failure mode internally,
+    never raises.
+-   New `reverse_geocode_punch_task` Celery task, dispatched via
+    `transaction.on_commit()` **only after** the punch is already
+    committed — a geocoding failure/timeout/rate-limit can never turn a
+    successful punch into a failed request (verified with a test that
+    forces the mocked geocoder to raise mid-task and confirms the task's
+    own outer exception handler still swallows it).
+-   HR detail drawer shows the resolved label above the existing
+    coordinates/map link, with a graceful "Location name unavailable"
+    fallback — coordinates are never removed or replaced.
+-   20 new backend tests (`tests_punch_location_geocoding.py`).
+
+Committed by the team as **`a87bd1e`** ("human readable attendance
+location"). **Contains migration `0047` — pushed, but `migrate_schemas` +
+restart not confirmed back in this session.**
+
+## UK office-vs-outside location label refinement
+
+Follow-up clarification after the above shipped: when a UK Shift
+employee's GPS places them genuinely inside their own branch's geofence,
+show **"Office – <Branch Name>"** instead of unnecessarily reverse-
+geocoding coordinates that are already known to be the office; when
+they're actually elsewhere, show the real reverse-geocoded place name
+exactly as before. The branch name must never be shown when the employee
+is actually elsewhere.
+
+-   `_validate_uk_shift_bypass()` now genuinely computes inside/outside
+    status for UK Shift via a newly-extracted shared helper,
+    `_match_branch_within_radius()` — the **exact same** Haversine-
+    distance-vs-radius algorithm `_validate_office()` already uses for
+    real enforcement elsewhere, so the two can never drift apart. The
+    result is display-only: `is_allowed` stays unconditionally `True` for
+    UK Shift regardless of the outcome.
+-   `reverse_geocode_punch_task` now skips the Nominatim call entirely
+    (zero HTTP calls) and sets the office label directly when (and only
+    when) `is_inside_geofence is True` **and** the employee's shift for
+    that punch's own date is `WH-UK`. Every other case — UK-outside,
+    UK-with-no-branch-match, and **all** SGT/ICT/default-shift punches
+    regardless of their own inside/outside status — falls through to the
+    pre-existing unconditional reverse-geocode call, unchanged.
+-   Found and fixed one now-superseded test (from the UK Shift geofence
+    work above) that had encoded the old "always report not-evaluated"
+    assumption — updated with an inline note explaining why, not silently
+    changed.
+-   13 new tests (`tests_uk_office_location_label.py`); combined regression
+    run across all five shift/punch/geofence/location test files together:
+    96/96 passing.
+
+Committed as **`30ffd55`** (reused an earlier commit message, "human
+readable attendance location" — the actual diff is the office-label
+refinement described here, confirmed via `git show`). No migration
+required. **Server restart not confirmed back in this session.**
+
+## Unrelated work observed on `production` during this window
+
+Two commits appeared on this branch from elsewhere during this engagement,
+not part of the work above — noted here only because they're now part of
+this server's deployment history:
+
+-   `65ed18c` — "Speed up face clock-in: preload models, cache weights,
+    faster capture"
+-   `843f4d8` — "Reduce face clock-in retries: telemetry, live framing
+    hints, robust liveness, fill light" (adds `FaceCaptureTelemetry`
+    model/migration `0046`, a read-only `face_clockin_report` management
+    command, and a `NEXT_PUBLIC_FACE_FLOW_V2=0` frontend kill switch —
+    inspected on request and confirmed it does not touch the face-match
+    threshold, the low-confidence margin, or the blink-AND-head-turn
+    liveness requirement)
+-   `1249dbe` — "Speed up face clock-in: preload+warm models at dashboard,
+    camera first, screen/camera brightness ramp" — **note:** this touches
+    `ClockInButton.tsx` and `my-attendance/_components/ClockWidget.tsx`,
+    the same two files the Daily Clock In/Out Limit work above also
+    modified (for the `day_completed`/"Attendance Completed" disabled
+    state) — worth a manual smoke-test of that disabled state once this is
+    live, since it hasn't been specifically re-verified after this other
+    commit landed on top.
+
+## Known pre-existing flaky test (not introduced by, or fixed during, this window)
+
+`apps.attendance.tests_face_verification.FaceRegistrationMyStatusTests
+.test_returns_latest_request_when_several_exist` is genuinely
+nondeterministic — it creates two records back-to-back with no delay and
+resolves "latest" via `order_by('-created_at')` with no tiebreaker.
+Confirmed flaky by running it in isolation three times with zero code
+changes (fail/pass/pass) and by diffing full-suite failure lists against
+the unmodified base commit (identical failure set either way). Left
+untouched per this engagement's "don't modify unrelated failing tests"
+rule — flagging it here so it isn't mistaken for a regression from any of
+the work above.
+
+## Outstanding action item for whoever deploys this batch
+
+Run on the server, in this order, before assuming any of the above is
+live:
+```
+cd /var/www/royalhrms/app/backend
+git log --oneline -8                          # confirm HEAD matches 30ffd55
+.venv/bin/python manage.py showmigrations attendance   # confirm 0044/0045/0047 applied
+.venv/bin/python manage.py migrate_schemas             # if any are unapplied
+sudo supervisorctl restart royalhrms_backend royalhrms_celery_worker royalhrms_celery_beat
+sudo supervisorctl status royalhrms_backend royalhrms_celery_worker royalhrms_celery_beat
+```
+The Celery worker specifically must be running for the reverse-geocoding
+task (human-readable location) to ever populate `location_label` — a
+restarted backend alone is not sufficient for that one feature.

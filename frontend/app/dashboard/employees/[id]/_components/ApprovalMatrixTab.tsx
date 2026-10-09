@@ -39,12 +39,13 @@ interface RelationshipEditorProps {
   currentId:    string;
   saveEndpoint: string;
   bodyKey:      string;
+  saveMethod?:  "patch" | "put";
   onSaved:      (id: string, name: string, empId: string) => void;
   onClose:      () => void;
 }
 
 function RelationshipEditorModal({
-  title, listEndpoint, currentId, saveEndpoint, bodyKey, onSaved, onClose,
+  title, listEndpoint, currentId, saveEndpoint, bodyKey, saveMethod = "patch", onSaved, onClose,
 }: RelationshipEditorProps) {
   const [selectedId, setSelectedId] = useState(currentId);
   const [saving,     setSaving]     = useState(false);
@@ -58,7 +59,7 @@ function RelationshipEditorModal({
     setSaving(true);
     setApiError("");
     try {
-      await clientApi.patch(saveEndpoint, { [bodyKey]: selectedId });
+      await clientApi[saveMethod](saveEndpoint, { [bodyKey]: selectedId });
       const person = people.find(p => p.id === selectedId);
       onSaved(selectedId, person?.full_name ?? "", person?.employee_id ?? "");
     } catch (err: unknown) {
@@ -539,6 +540,8 @@ export function ApprovalMatrixTab({
           currentId={hrId}
           saveEndpoint={API.employees.hr(employeeCode)}
           bodyKey="hr_id"
+          // PATCH on this route is the activate/deactivate handler; hr_id is handled by PUT.
+          saveMethod="put"
           onSaved={(id, name) => {
             setHrId(id);
             setHrName(name);

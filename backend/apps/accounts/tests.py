@@ -1674,3 +1674,185 @@ class CompanyEmailWrapperFooterTests(SimpleTestCase):
         self.assertIn("New Co", html)
         self.assertEqual(html.count('href="https://royalhrms.com"'), 1)
 
+
+class EmployeeReportingRelationshipPersistenceTests(TestCase):
+    """Reporting Manager / Reporting Approver / Branch HR must persist across
+    save -> GET (reopen). Covers the Personal-tab PUT, the Approval Matrix's
+    reporting-manager PATCH, and the Approval Matrix's Branch HR route.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        editor_role = make_role('rel_persist_editor', permission_codenames=['employees.view', 'employees.edit'])
+        self.editor = make_user(
+            'rel.editor@test.com', role=editor_role,
+            employee_id='EMPRPE001', full_name='Rel Editor', branch='Mumbai HQ',
+        )
+        self.staff_role = make_role('rel_persist_staff')
+        self.manager_a = self._staff('rel.mgr.a@test.com', 'EMPRPM001', 'Manager A')
+        self.manager_b = self._staff('rel.mgr.b@test.com', 'EMPRPM002', 'Manager B')
+        self.approver_a = self._staff('rel.apr.a@test.com', 'EMPRPA001', 'Approver A')
+        self.approver_b = self._staff('rel.apr.b@test.com', 'EMPRPA002', 'Approver B')
+        self.hr_a = self._staff('rel.hr.a@test.com', 'EMPRPH001', 'HR A')
+        self.hr_b = self._staff('rel.hr.b@test.com', 'EMPRPH002', 'HR B')
+        self.employee = make_user(
+            'rel.target@test.com', role=self.staff_role, employee_id='EMPRPT001', full_name='Target Employee',
+            branch='Mumbai HQ', phone='9000000001',
+            reporting_manager=self.manager_a, reporting_approver=self.approver_a, hr=self.hr_a,
+        )
+        _login(self.client, 'rel.editor@test.com')
+
+    def _staff(self, email, employee_id, full_name, branch='Mumbai HQ'):
+        return make_user(email, role=self.staff_role, employee_id=employee_id, full_name=full_name, branch=branch)
+
+    def _detail_url(self, employee=None):
+        return reverse('employee-detail', kwargs={'employee_id': (employee or self.employee).employee_id})
+
+    def _rm_url(self):
+        return reverse('employee-reporting-manager', kwargs={'employee_id': self.employee.employee_id})
+
+    def _hr_url(self):
+        return reverse('employee-hr-assign', kwargs={'employee_id': self.employee.employee_id})
+
+    def _get_relationships(self):
+        resp = self.client.get(self._detail_url())
+        self.assertEqual(resp.status_code, 200, resp.data)
+        data = resp.data['data']
+        return {k: data[k] for k in ('reporting_manager', 'reporting_approver', 'hr')}
+
+    def test_personal_put_persists_all_three_and_reopen_shows_them(self):
+        resp = self.client.put(self._detail_url(), {
+            'reporting_manager_id': str(self.manager_b.pk),
+            'reporting_approver_id': str(self.approver_b.pk),
+            'hr_id': str(self.hr_b.pk),
+            'phone': '9000000001',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+        for _ in range(2):  # reopen twice — GET's auto-assign must not override explicit values
+            rel = self._get_relationships()
+            self.assertEqual(rel['reporting_manager']['uuid'], str(self.manager_b.pk))
+            self.assertEqual(rel['reporting_manager']['name'], 'Manager B')
+            self.assertEqual(rel['reporting_approver']['uuid'], str(self.approver_b.pk))
+            self.assertEqual(rel['reporting_approver']['name'], 'Approver B')
+            self.assertEqual(rel['hr']['uuid'], str(self.hr_b.pk))
+
+    def test_get_uuid_round_trips_through_put_unchanged(self):
+        # The frontend echoes .uuid back as *_id on its next save — must be a no-op.
+        rel = self._get_relationships()
+        resp = self.client.put(self._detail_url(), {
+            'reporting_manager_id': rel['reporting_manager']['uuid'],
+            'reporting_approver_id': rel['reporting_approver']['uuid'],
+            'hr_id': rel['hr']['uuid'],
+            'phone': '9000000002',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_manager_id, self.manager_a.pk)
+        self.assertEqual(self.employee.reporting_approver_id, self.approver_a.pk)
+        self.assertEqual(self.employee.hr_id, self.hr_a.pk)
+        self.assertEqual(self.employee.phone, '9000000002')
+
+    def test_clearing_reporting_approver_persists_as_empty(self):
+        resp = self.client.put(self._detail_url(), {'reporting_approver_id': None}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        rel = self._get_relationships()
+        self.assertIsNone(rel['reporting_approver']['uuid'])
+        self.assertEqual(rel['reporting_manager']['uuid'], str(self.manager_a.pk))
+
+    def test_put_without_approver_key_leaves_approver_unchanged(self):
+        resp = self.client.put(self._detail_url(), {'phone': '9000000003'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_approver_id, self.approver_a.pk)
+
+    def test_approval_matrix_manager_change_survives_unrelated_save_with_fresh_values(self):
+        resp = self.client.patch(self._rm_url(), {'reporting_manager_id': str(self.manager_b.pk)}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+        # Fixed frontend: baseValues carries manager_b, so an unrelated save resends it.
+        rel = self._get_relationships()
+        resp = self.client.put(self._detail_url(), {
+            'reporting_manager_id': rel['reporting_manager']['uuid'],
+            'reporting_approver_id': rel['reporting_approver']['uuid'],
+            'hr_id': rel['hr']['uuid'],
+            'phone': '9000000004',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(self._get_relationships()['reporting_manager']['uuid'], str(self.manager_b.pk))
+
+    def test_personal_put_is_last_write_wins_so_stale_client_values_revert(self):
+        # Server contract behind the old frontend bug: the client must never resend a stale id.
+        self.client.patch(self._rm_url(), {'reporting_manager_id': str(self.manager_b.pk)}, format='json')
+        resp = self.client.put(self._detail_url(), {
+            'reporting_manager_id': str(self.manager_a.pk), 'phone': '9000000005',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_manager_id, self.manager_a.pk)
+
+    def test_hr_assign_route_put_persists_only_hr(self):
+        resp = self.client.put(self._hr_url(), {'hr_id': str(self.hr_b.pk)}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        rel = self._get_relationships()
+        self.assertEqual(rel['hr']['uuid'], str(self.hr_b.pk))
+        self.assertEqual(rel['reporting_manager']['uuid'], str(self.manager_a.pk))
+        self.assertEqual(rel['reporting_approver']['uuid'], str(self.approver_a.pk))
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.phone, '9000000001')
+        self.assertTrue(self.employee.is_active)
+
+    def test_hr_assign_route_patch_does_not_accept_hr_id(self):
+        # PATCH on this route is the activate/deactivate handler — why the
+        # Approval Matrix Branch HR editor must use PUT.
+        resp = self.client.patch(self._hr_url(), {'hr_id': str(self.hr_b.pk)}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.hr_id, self.hr_a.pk)
+
+    def test_self_as_reporting_approver_rejected_and_unchanged(self):
+        resp = self.client.put(self._detail_url(), {'reporting_approver_id': str(self.employee.pk)}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_approver_id, self.approver_a.pk)
+
+    def test_inactive_reporting_approver_rejected(self):
+        self.approver_b.is_active = False
+        self.approver_b.save(update_fields=['is_active'])
+        resp = self.client.put(self._detail_url(), {'reporting_approver_id': str(self.approver_b.pk)}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_approver_id, self.approver_a.pk)
+
+    def test_invalid_manager_aborts_whole_save_including_approver(self):
+        resp = self.client.put(self._detail_url(), {
+            'reporting_manager_id': str(self.employee.pk),
+            'reporting_approver_id': str(self.approver_b.pk),
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_manager_id, self.manager_a.pk)
+        self.assertEqual(self.employee.reporting_approver_id, self.approver_a.pk)
+
+    def test_branch_scoped_editor_cannot_change_other_branch_relationships(self):
+        other = make_user(
+            'rel.other@test.com', role=self.staff_role, employee_id='EMPRPO001',
+            full_name='Other Branch', branch='Delhi HQ', reporting_approver=self.approver_a,
+        )
+        resp = self.client.put(self._detail_url(other), {'reporting_approver_id': str(self.approver_b.pk)}, format='json')
+        self.assertEqual(resp.status_code, 404)
+        other.refresh_from_db()
+        self.assertEqual(other.reporting_approver_id, self.approver_a.pk)
+
+    def test_user_without_edit_permission_cannot_change_relationships(self):
+        make_user(
+            'rel.viewer@test.com', role=make_role('rel_persist_viewer', permission_codenames=['employees.view']),
+            employee_id='EMPRPV001', full_name='Viewer', branch='Mumbai HQ',
+        )
+        _login(self.client, 'rel.viewer@test.com')
+        resp = self.client.put(self._detail_url(), {'reporting_approver_id': str(self.approver_b.pk)}, format='json')
+        self.assertEqual(resp.status_code, 403)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_approver_id, self.approver_a.pk)
+

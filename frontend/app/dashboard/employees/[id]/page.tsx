@@ -217,6 +217,7 @@ export default function EmployeeProfilePage({
   const [justSaved,  setJustSaved]  = useState(false);
   const [saving,     setSaving]     = useState(false);
   const [saveError,  setSaveError]  = useState<string | null>(null);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const [isEditing,  setIsEditing]  = useState(false);
 
   const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
@@ -388,6 +389,7 @@ export default function EmployeeProfilePage({
     setSaving(true);
     setSaveError(null);
     setJustSaved(false);
+    setRefreshFailed(false);
     try {
       const employeePayload = {
         // Employment fields
@@ -452,7 +454,28 @@ export default function EmployeeProfilePage({
 
       await clientApi.put(API.employees.detail(id), employeePayload);
 
-      setBaseValues(values);
+      // Rebuild from the server so the form shows exactly what was persisted.
+      // A refresh failure must not be reported as a save failure.
+      try {
+        const { data } = await clientApi.get<{ data: ApiEmployee }>(API.employees.detail(id));
+        const raw = data.data;
+        const emp = apiToEmployee(raw, documentTypeConfigData ?? []);
+        setEmployee(emp);
+        setEmployeeUuid(raw.uuid);
+        setOnboardingStatus(raw.onboarding_status ?? "");
+        setRawApiDocuments(raw.documents ?? []);
+        setCustomFileFields(
+          (raw.custom_file_fields ?? []).map(f => ({
+            id: f.id, field_key: f.field_key, file_url: f.file,
+            file_name: f.file_name, file_size: f.file_size, uploaded_at: f.uploaded_at,
+          })),
+        );
+        setValues(emp.details);
+        setBaseValues({ ...emp.details });
+      } catch {
+        setBaseValues(values);
+        setRefreshFailed(true);
+      }
       setBaseTables(tables);
       setJustSaved(true);
       setIsEditing(false);
@@ -578,7 +601,9 @@ export default function EmployeeProfilePage({
           {justSaved && (
             <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-lg bg-[var(--success-c)] text-[var(--success)] text-[13px] font-medium">
               <i className="ti ti-circle-check text-[16px]" />
-              Changes saved successfully.
+              {refreshFailed
+                ? "Changes saved successfully, but the latest data could not be reloaded. Refresh the page to confirm."
+                : "Changes saved successfully."}
             </div>
           )}
           {saveError && (
@@ -736,8 +761,16 @@ export default function EmployeeProfilePage({
           defaultManagerName={values.reportingManager ?? ""}
           defaultHrId={values.hrId ?? ""}
           defaultHrName={values.hr ?? ""}
-          onManagerChanged={(id, name) => setValues(v => ({ ...v, reportingManager: name, reportingManagerId: id }))}
-          onHrChanged={(id, name) => setValues(v => ({ ...v, hr: name, hrId: id }))}
+          // Already persisted via the Approval Matrix's own PATCH, so it's the new
+          // baseline too — otherwise Cancel/Save on the Personal tab resend the stale value.
+          onManagerChanged={(id, name) => {
+            setValues(v => ({ ...v, reportingManager: name, reportingManagerId: id }));
+            setBaseValues(v => ({ ...v, reportingManager: name, reportingManagerId: id }));
+          }}
+          onHrChanged={(id, name) => {
+            setValues(v => ({ ...v, hr: name, hrId: id }));
+            setBaseValues(v => ({ ...v, hr: name, hrId: id }));
+          }}
         />
       ) : tab === "promotion" ? (
         <PromotionTab

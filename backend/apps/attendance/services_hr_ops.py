@@ -19,6 +19,7 @@ from django.db.models import Q
 from apps.attendance.models import (
     AttendanceImportLog,
     AttendanceOvertime,
+    AttendancePunch,
     AttendanceRecord,
 )
 from apps.attendance.serializers_hr import ImportRowSerializer
@@ -775,12 +776,17 @@ def export_attendance_csv(filters: dict) -> str:
         'employee_id', 'name', 'department', 'branch',
         'date', 'clock_in', 'clock_out', 'total_hours',
         'overtime', 'status',
+        'clock_in_location', 'clock_out_location',
     ])
     writer.writeheader()
 
+    target_date = filters.get('date', datetime.date.today())
+    locations = _punch_locations_by_record(rows, target_date)
+
     # DD-MM-YYYY survives Indian-locale Excel round-trip; YYYY-MM-DD gets reformatted to MM-DD-YYYY
-    date_str = filters.get('date', datetime.date.today()).strftime('%d-%m-%Y')
+    date_str = target_date.strftime('%d-%m-%Y')
     for row in rows:
+        clock_in_location, clock_out_location = locations.get(row['record_id'], ('', ''))
         writer.writerow({
             'employee_id': row['employee_id'],
             'name':        row['name'],
@@ -792,9 +798,75 @@ def export_attendance_csv(filters: dict) -> str:
             'total_hours': _dash_to_empty(row['total_hours']),
             'overtime':    _dash_to_empty(row['ot']),
             'status':      row['status'],
+            'clock_in_location':  clock_in_location,
+            'clock_out_location': clock_out_location,
         })
 
     return output.getvalue()
+
+
+def _punch_locations_by_record(rows: list[dict], target_date: datetime.date) -> dict[str, tuple[str, str]]:
+    """
+    record_id -> (clock-in location, clock-out location), taken from the punch whose
+    IST wall-clock time equals the record's first_punch_in / last_punch_out (that's
+    how AttendanceProcessorService derives them). A manually edited time with no
+    matching punch exports blank rather than another punch's location. Two queries
+    total; stored data only, never geocodes at export time.
+    """
+    from apps.attendance.services_attendance import _ist_time
+
+    record_ids = [r['record_id'] for r in rows if r['record_id']]
+    if not record_ids:
+        return {}
+
+    records = [
+        rec for rec in (
+            AttendanceRecord.objects
+            .filter(id__in=record_ids)
+            .values('id', 'employee_id', 'first_punch_in', 'last_punch_out')
+        )
+        if rec['first_punch_in'] is not None or rec['last_punch_out'] is not None
+    ]
+    if not records:
+        return {}
+
+    punches: dict[tuple, list[AttendancePunch]] = {}
+    for punch in (
+        AttendancePunch.objects
+        .filter(employee_id__in={rec['employee_id'] for rec in records}, punched_at__date=target_date)
+        .only('employee_id', 'punched_at', 'punch_type', 'location_label', 'latitude', 'longitude')
+        .order_by('punched_at')
+    ):
+        key = (punch.employee_id, _ist_time(punch.punched_at).replace(microsecond=0))
+        punches.setdefault(key, []).append(punch)
+
+    def _location(employee_id, record_time, preferred_type) -> str:
+        if record_time is None:
+            return ''
+        candidates = punches.get((employee_id, record_time.replace(microsecond=0)))
+        if not candidates:
+            return ''
+        punch = next((p for p in candidates if p.punch_type == preferred_type), candidates[0])
+        return _format_punch_location(punch)
+
+    return {
+        str(rec['id']): (
+            _location(rec['employee_id'], rec['first_punch_in'], AttendancePunch.PUNCH_IN),
+            _location(rec['employee_id'], rec['last_punch_out'], AttendancePunch.PUNCH_OUT),
+        )
+        for rec in records
+    }
+
+
+def _format_punch_location(punch: AttendancePunch) -> str:
+    """Stored label (e.g. 'Office – <Branch>' or a geocoded place), else raw coordinates, else blank."""
+    label = (punch.location_label or '').strip()
+    if label:
+        # Labels come from an external geocoder — neutralise spreadsheet formula injection.
+        return f"'{label}" if label[0] in ('=', '+', '-', '@', '\t', '\r') else label
+    if punch.latitude is not None and punch.longitude is not None:
+        return f'{punch.latitude:.6f}, {punch.longitude:.6f}'
+    return ''
 
 
 def _dash_to_empty(value) -> str:
