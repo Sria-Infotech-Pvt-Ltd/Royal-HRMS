@@ -361,6 +361,7 @@ export const API = {
     announcement:      "/dashboard/announcement/",
     birthdaysToday:    "/dashboard/employee/birthdays/today/",
     myBirthdayWidgets: "/dashboard/birthdays/mine/",
+    noticePeriod:      "/dashboard/employee/notice-period/",
   },
 
   payroll: {

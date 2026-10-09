@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
 from core.permissions import HasCompletedOnboarding
 from core.responses import error, success
-from apps.dashboard.views.overview import _is_system_admin, _is_hr_or_admin
+from apps.dashboard.views.overview import _hr_dashboard_branch, _is_system_admin, _is_hr_or_admin
 
 logger = logging.getLogger(__name__)
 _DENIED = 'You do not have permission to perform this action.'
@@ -82,6 +82,69 @@ def _upcoming_birthdays_data():
     return data
 
 
+# ─── Notice Period ────────────────────────────────────────────────────────────
+# Computed per request (not cached): days_remaining changes daily and a fresh
+# approval must appear immediately.
+
+def _notice_period_data(branch: str | None) -> dict:
+    from apps.hrms.models import SEP_APPROVED, SeparationRequest
+    from apps.hrms.services_notice import notice_info
+
+    today = timezone.localdate()
+    qs = (
+        SeparationRequest.objects
+        .filter(status=SEP_APPROVED, proposed_last_working_day__gte=today, employee__is_active=True)
+        .select_related('employee')
+        .prefetch_related('approval_stages')
+        .order_by('proposed_last_working_day', 'employee__full_name')
+    )
+    if branch:
+        qs = qs.filter(employee__branch__iexact=branch)
+
+    employees = []
+    for sep in qs:
+        info = notice_info(sep, today)
+        emp = sep.employee
+        employees.append({
+            'employee_id':      emp.employee_id or '',
+            'full_name':        emp.full_name,
+            'department':       emp.department or '',
+            'branch':           emp.branch or '',
+            'request_id':       str(sep.id),
+            'approved_at':      info['approved_at'],
+            'last_working_day': info['confirmed_last_working_day'],
+            'days_remaining':   info['days_remaining'],
+            'notice_status':    info['notice_status'],
+        })
+    return {'count': len(employees), 'employees': employees}
+
+
+class EmployeeNoticePeriodView(APIView):
+    """The requesting employee's own notice countdown — null unless their separation is fully approved."""
+    permission_classes = [IsAuthenticated, HasCompletedOnboarding]
+
+    def get(self, request):
+        from apps.hrms.models import SEP_APPROVED, SeparationRequest
+        from apps.hrms.services_notice import notice_info
+
+        sep = (
+            SeparationRequest.objects
+            .filter(employee=request.user, status=SEP_APPROVED)
+            .prefetch_related('approval_stages')
+            .order_by('-created_at')
+            .first()
+        )
+        # Wrapped because success() turns a bare None into {}.
+        if sep is None:
+            return success('No active notice period.', data={'notice_period': None})
+        return success('Notice period retrieved.', data={'notice_period': {
+            'request_id':           str(sep.id),
+            'request_ref':          f'SEP-{sep.request_number}' if sep.request_number else '',
+            'separation_type':      sep.get_separation_type_display(),
+            **notice_info(sep),
+        }})
+
+
 # ─── System Admin Employee Lifecycle ─────────────────────────────────────────
 
 class SystemAdminEmployeeLifecycleView(APIView):
@@ -120,7 +183,7 @@ class SystemAdminEmployeeLifecycleView(APIView):
 
         return success('Employee lifecycle retrieved.', data={
             'new_joiners':        {'count': len(new_joiners),   'employees': new_joiners},
-            'notice_period':      {'count': 0,                  'employees': []},
+            'notice_period':      _notice_period_data(None),
             'work_anniversaries': {'count': len(anniversaries), 'employees': anniversaries},
         })
 
@@ -196,9 +259,11 @@ class HREmployeeLifecycleView(APIView):
         if not _is_hr_or_admin(request.user):
             return error(_DENIED, http_status=403)
 
+        notice_period = _notice_period_data(_hr_dashboard_branch(request.user))
+
         cached = cache.get('dashboard:hr:lifecycle')
         if cached is not None:
-            return success('Employee lifecycle retrieved.', data=cached)
+            return success('Employee lifecycle retrieved.', data={**cached, 'notice_period': notice_period})
 
         from apps.accounts.models import User
 
@@ -237,11 +302,10 @@ class HREmployeeLifecycleView(APIView):
 
         data = {
             'new_joiners':        {'count': len(new_joiners),   'employees': new_joiners},
-            'notice_period':      {'count': 0,                  'employees': []},
             'work_anniversaries': {'count': len(anniversaries), 'employees': anniversaries},
         }
         cache.set('dashboard:hr:lifecycle', data, _TTL_LIFECYCLE)
-        return success('Employee lifecycle retrieved.', data=data)
+        return success('Employee lifecycle retrieved.', data={**data, 'notice_period': notice_period})
 
 
 # ─── HR Birthdays ─────────────────────────────────────────────────────────────

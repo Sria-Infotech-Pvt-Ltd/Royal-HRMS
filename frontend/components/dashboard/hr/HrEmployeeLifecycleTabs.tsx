@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { HREmployeeLifecycle, HRLifecycleEmployee } from "@/types/dashboard";
+import NoticePeriodRow from "../NoticePeriodRow";
 
 type Tab = "new_joiners" | "notice_period" | "work_anniversaries";
 
@@ -25,7 +26,6 @@ function initials(name: string): string {
 
 function subLabel(tab: Tab, emp: HRLifecycleEmployee): string {
   if (tab === "new_joiners")        return emp.date_of_joining ? `Joined ${formatDate(emp.date_of_joining)}` : emp.designation ?? "—";
-  if (tab === "notice_period")      return emp.date_of_joining ? `Since ${formatDate(emp.date_of_joining)}` : "—";
   if (tab === "work_anniversaries") return emp.years_completed ? `${emp.years_completed} year${emp.years_completed !== 1 ? "s" : ""} · ${formatDate(emp.anniversary_date)}` : formatDate(emp.anniversary_date);
   return "—";
 }
@@ -35,7 +35,9 @@ export default function HrEmployeeLifecycleTabs() {
   const { data, loading } = useFetch<HREmployeeLifecycle>(API.dashboard.hrEmployeeLifecycle);
 
   const group = data?.[activeTab];
-  const employees: HRLifecycleEmployee[] = group?.employees ?? [];
+  const noticeEmployees = activeTab === "notice_period" ? (data?.notice_period.employees ?? []) : [];
+  const employees: HRLifecycleEmployee[] = activeTab === "notice_period" ? [] : (group?.employees as HRLifecycleEmployee[] | undefined) ?? [];
+  const isEmpty = activeTab === "notice_period" ? noticeEmployees.length === 0 : employees.length === 0;
 
   return (
     <div className="card">
@@ -70,13 +72,26 @@ export default function HrEmployeeLifecycleTabs() {
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
         </div>
-      ) : employees.length === 0 ? (
+      ) : isEmpty ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-users" style={{ fontSize: 22, display: "block", marginBottom: 6, opacity: 0.3 }} />
-          No records
+          {activeTab === "notice_period" ? "No employees currently serving notice" : "No records"}
         </div>
       ) : (
         <div style={{ padding: "8px 0" }}>
+          {noticeEmployees.map(emp => (
+            <NoticePeriodRow
+              key={emp.request_id}
+              fullName={emp.full_name}
+              employeeId={emp.employee_id}
+              department={emp.department}
+              branch={emp.branch}
+              approvedAt={emp.approved_at}
+              lastWorkingDay={emp.last_working_day}
+              daysRemaining={emp.days_remaining}
+              noticeStatus={emp.notice_status}
+            />
+          ))}
           {employees.map((emp, index) => (
             <div key={emp.employee_id ?? index} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 20px" }}>
               <div style={{

@@ -7,6 +7,8 @@
 //  flags are computed server-side and must never be re-derived.
 // ============================================================
 
+import type { NoticeStatus } from "@/lib/noticePeriod";
+
 export interface AssignedPerson {
   id:   string;
   name: string;
@@ -57,6 +59,11 @@ export interface SeparationRequest {
   can_delete:                 boolean;
   is_own:                     boolean; // true when the viewer is the employee this request is for
   created_at:                 string; // ISO datetime
+  // Notice countdown — all null until the request is fully approved
+  approved_at:                string | null; // ISO datetime of the final approval
+  confirmed_last_working_day: string | null; // ISO date
+  notice_status:              NoticeStatus | null;
+  days_remaining:             number | null;
 }
 
 export interface PaginatedResponse<T> {

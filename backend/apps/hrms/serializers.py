@@ -802,6 +802,10 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
     can_edit                  = serializers.SerializerMethodField()
     can_delete                = serializers.SerializerMethodField()
     is_own                    = serializers.SerializerMethodField()
+    approved_at                = serializers.SerializerMethodField()
+    confirmed_last_working_day = serializers.SerializerMethodField()
+    notice_status              = serializers.SerializerMethodField()
+    days_remaining             = serializers.SerializerMethodField()
 
     class Meta:
         model  = SeparationRequest
@@ -812,7 +816,31 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
             'employee_name', 'employee_code', 'employee_department', 'employee_designation', 'reporting_manager',
             'document_url', 'created_by_name', 'approval_stages',
             'can_approve', 'can_cancel', 'can_edit', 'can_delete', 'is_own', 'created_at',
+            'approved_at', 'confirmed_last_working_day', 'notice_status', 'days_remaining',
         ]
+
+    def _notice(self, obj):
+        from .services_notice import notice_info
+        cache = self.context.setdefault('_notice_cache', {})
+        if obj.pk not in cache:
+            cache[obj.pk] = notice_info(obj)
+        return cache[obj.pk]
+
+    def get_approved_at(self, obj):
+        info = self._notice(obj)
+        return info['approved_at'] if info else None
+
+    def get_confirmed_last_working_day(self, obj):
+        info = self._notice(obj)
+        return info['confirmed_last_working_day'] if info else None
+
+    def get_notice_status(self, obj):
+        info = self._notice(obj)
+        return info['notice_status'] if info else None
+
+    def get_days_remaining(self, obj):
+        info = self._notice(obj)
+        return info['days_remaining'] if info else None
 
     def get_request_ref(self, obj):
         return f'SEP-{obj.request_number}' if obj.request_number else ''

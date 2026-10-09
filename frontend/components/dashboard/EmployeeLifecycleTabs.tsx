@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { EmployeeLifecycle, LifecycleEmployee } from "@/types/dashboard";
+import NoticePeriodRow from "./NoticePeriodRow";
 
 type Tab = "new_joiners" | "notice_period" | "work_anniversaries";
 
@@ -26,16 +27,26 @@ function joinDate(emp: LifecycleEmployee): string {
   return emp.join_date ?? emp.joining_date ?? "";
 }
 
-function lastDay(emp: LifecycleEmployee): string {
-  return emp.last_working_day ?? emp.last_day ?? "";
-}
-
 function anniversaryDate(emp: LifecycleEmployee): string {
   return emp.anniversary_date ?? emp.date ?? "";
 }
 
 function EmployeeRow({ emp, tab }: { emp: LifecycleEmployee; tab: Tab }) {
   const displayName = resolveName(emp);
+  if (tab === "notice_period") {
+    return (
+      <NoticePeriodRow
+        fullName={displayName}
+        employeeId={emp.employee_id}
+        department={emp.department}
+        branch={emp.branch}
+        approvedAt={emp.approved_at}
+        lastWorkingDay={emp.last_working_day ?? emp.last_day}
+        daysRemaining={emp.days_remaining}
+        noticeStatus={emp.notice_status}
+      />
+    );
+  }
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid var(--bg-high)" }}>
       <div style={{
@@ -55,16 +66,6 @@ function EmployeeRow({ emp, tab }: { emp: LifecycleEmployee; tab: Tab }) {
       {tab === "new_joiners" && (
         <div style={{ fontSize: 11, color: "var(--success)", fontWeight: 600, whiteSpace: "nowrap" }}>
           <i className="ti ti-calendar-plus" style={{ marginRight: 3 }} />{joinDate(emp)}
-        </div>
-      )}
-      {tab === "notice_period" && (
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 11, color: "var(--error)", fontWeight: 600, whiteSpace: "nowrap" }}>
-            Last day: {lastDay(emp)}
-          </div>
-          {emp.days_left !== undefined && (
-            <div style={{ fontSize: 10, color: "var(--on-variant)", marginTop: 1 }}>{emp.days_left} days left</div>
-          )}
         </div>
       )}
       {tab === "work_anniversaries" && (

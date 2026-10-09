@@ -39,5 +39,6 @@ urlpatterns = [
     path('employee/attendance-summary/', views.EmployeeAttendanceSummaryView.as_view()),
     path('employee/attendance-status/',  views.EmployeeAttendanceStatusView.as_view()),
     path('employee/birthdays/today/',    views.EmployeeBirthdayTodayView.as_view()),
+    path('employee/notice-period/',      views.EmployeeNoticePeriodView.as_view(), name='employee-notice-period'),
 
 ]

@@ -20,7 +20,7 @@ from ..serializers import (
     SeparationDocumentSerializer, SeparationHandoverTaskCreateSerializer,
     SeparationHandoverTaskSerializer, SeparationRequestSerializer,
 )
-from .separation import _has_perm, _log, _user_branch
+from .separation import _has_perm, _log, _request_visibility_error, _user_branch
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +30,9 @@ def _get_visible_request(request_id: str, user):
         sep_request = SeparationRequest.objects.select_related('employee').get(id=request_id)
     except SeparationRequest.DoesNotExist:
         return None, error('Separation request not found.', http_status=status.HTTP_404_NOT_FOUND)
-    is_own  = sep_request.employee_id == user.id
-    can_see = is_own or _has_perm(user, 'separation.approve') or _has_perm(user, 'employees.view')
-    if not can_see:
-        return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+    visibility_error = _request_visibility_error(user, sep_request)
+    if visibility_error:
+        return None, visibility_error
     return sep_request, None
 
 
@@ -166,10 +165,9 @@ class SeparationHandoverTaskDetailView(APIView):
             )
         except SeparationHandoverTask.DoesNotExist:
             return None, error('Handover task not found.', http_status=status.HTTP_404_NOT_FOUND)
-        is_own  = task.request.employee_id == user.id
-        can_see = is_own or _has_perm(user, 'separation.approve') or _has_perm(user, 'employees.view')
-        if not can_see:
-            return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        visibility_error = _request_visibility_error(user, task.request)
+        if visibility_error:
+            return None, visibility_error
         return task, None
 
     def patch(self, request, request_id: str, task_id: str):
@@ -248,7 +246,7 @@ class SeparationClearanceActionView(APIView):
         if clearance.status != APPROVAL_PENDING:
             return error(f'This clearance has already been {clearance.status}.')
 
-        can_action = _has_perm(user, 'separation.approve')
+        can_action = _has_perm(user, 'separation.approve') and _request_visibility_error(user, sep_request) is None
         if not can_action and clearance.clearance_type == SEP_CLEARANCE_MANAGER:
             from apps.accounts.models import Department
             dept = Department.objects.filter(name=sep_request.employee.department).first()
@@ -313,12 +311,16 @@ class SeparationDocumentDetailView(APIView):
 
     def delete(self, request, request_id: str, document_id: str):
         try:
-            doc = SeparationDocument.objects.select_related('request').get(id=document_id, request_id=request_id)
+            doc = SeparationDocument.objects.select_related('request', 'request__employee').get(id=document_id, request_id=request_id)
         except SeparationDocument.DoesNotExist:
             return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
         user = request.user
         if not (_has_perm(user, 'separation.approve') or doc.uploaded_by_id == user.id):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        if doc.uploaded_by_id != user.id:
+            visibility_error = _request_visibility_error(user, doc.request)
+            if visibility_error:
+                return visibility_error
         _log(doc.request, user, f'{doc.get_document_type_display()} removed by {user.full_name}.')
         doc.delete()
         return success('Document deleted.')

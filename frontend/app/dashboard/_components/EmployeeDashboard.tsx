@@ -10,6 +10,7 @@ import EmpUpcomingHolidays from "@/components/dashboard/employee/EmpUpcomingHoli
 import EmpActionItems      from "@/components/dashboard/employee/EmpActionItems";
 import EmpRecentRequests   from "@/components/dashboard/employee/EmpRecentRequests";
 import EmpUpdatesCard      from "@/components/dashboard/employee/EmpUpdatesCard";
+import EmpNoticePeriodCard from "@/components/dashboard/employee/EmpNoticePeriodCard";
 import type { SessionPayload } from "@/lib/session";
 
 interface Props { session: SessionPayload }
@@ -45,6 +46,9 @@ export default function EmployeeDashboard({ session }: Props) {
 
       {/* Row 1 + 2 — Console banner (KPIs + attendance status strip) */}
       <EmpConsole firstName={firstName} />
+
+      {/* Notice countdown — renders nothing unless the employee's own separation is fully approved */}
+      <EmpNoticePeriodCard />
 
       {/* Row 2.5 — Announcement + today's birthdays, one combined card (renders nothing when both are empty/dismissed) */}
       <EmpUpdatesCard />

@@ -1,3 +1,5 @@
+import type { NoticeStatus } from "@/lib/noticePeriod";
+
 export interface DashboardKPIs {
   total_employees:      number;
   pending_approvals:    number;
@@ -38,6 +40,10 @@ export interface LifecycleEmployee {
   last_working_day?: string;
   last_day?:         string;
   days_left?:        number;
+  branch?:           string;
+  approved_at?:      string | null;
+  days_remaining?:   number;
+  notice_status?:    NoticeStatus;
   // work anniversaries
   years?:            number;
   anniversary_date?: string;
@@ -146,10 +152,32 @@ export interface HRLifecycleEmployee {
   anniversary_date?: string;
 }
 
+export interface NoticePeriodEmployee {
+  employee_id:      string;
+  full_name:        string;
+  department:       string;
+  branch:           string;
+  request_id:       string;
+  approved_at:      string | null;
+  last_working_day: string;
+  days_remaining:   number;
+  notice_status:    NoticeStatus;
+}
+
 export interface HREmployeeLifecycle {
   new_joiners:        { count: number; employees: HRLifecycleEmployee[] };
-  notice_period:      { count: number; employees: HRLifecycleEmployee[] };
+  notice_period:      { count: number; employees: NoticePeriodEmployee[] };
   work_anniversaries: { count: number; employees: HRLifecycleEmployee[] };
+}
+
+export interface EmployeeNoticePeriod {
+  request_id:                 string;
+  request_ref:                string;
+  separation_type:            string;
+  notice_status:              NoticeStatus;
+  days_remaining:             number;
+  confirmed_last_working_day: string;
+  approved_at:                string | null;
 }
 
 export interface AttendancePunch {

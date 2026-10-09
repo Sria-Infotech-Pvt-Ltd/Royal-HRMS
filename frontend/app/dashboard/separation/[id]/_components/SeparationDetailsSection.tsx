@@ -1,4 +1,5 @@
 import type { SeparationRequest } from "@/types/separation";
+import { formatNoticeDate, noticeRemainingLabel } from "@/lib/noticePeriod";
 import { fmtDate } from "../../_workflow";
 
 function ReadField({ label, value }: { label: string; value: string }) {
@@ -30,6 +31,15 @@ export default function SeparationDetailsSection({ r }: { r: SeparationRequest }
           <ReadField label="Proposed Last Working Day" value={fmtDate(r.proposed_last_working_day)} />
         </div>
         <ReadField label="Notice Period" value={`${r.notice_period_days} days`} />
+        {r.confirmed_last_working_day && (
+          <>
+            <div className="form-row cols-2">
+              <ReadField label="Approved On" value={formatNoticeDate(r.approved_at)} />
+              <ReadField label="Confirmed Last Working Day" value={formatNoticeDate(r.confirmed_last_working_day)} />
+            </div>
+            <ReadField label="Notice Countdown" value={noticeRemainingLabel(r.days_remaining, r.notice_status)} />
+          </>
+        )}
         <div className="field-group">
           <label className="field-label">Comments</label>
           <textarea className="field-input" rows={2} value={r.comments || "—"} disabled style={{ resize: "vertical" }} />

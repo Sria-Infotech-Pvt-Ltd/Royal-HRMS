@@ -44,6 +44,28 @@ def _user_branch(user) -> str:
     return (getattr(user, 'branch', '') or '').strip()
 
 
+def _outside_branch(user, employee) -> bool:
+    """Branch-restricted users (no settings.edit, branch set) may only act on their own branch's employees."""
+    if _has_perm(user, 'settings.edit'):
+        return False
+    branch = _user_branch(user)
+    return bool(branch) and _user_branch(employee).casefold() != branch.casefold()
+
+
+def _request_visibility_error(user, sep_request):
+    """None when visible; else 403 (no separation access at all) or 404 (outside the user's branch)."""
+    if sep_request.employee_id == user.id:
+        return None
+    if not (_has_perm(user, 'separation.approve') or _has_perm(user, 'employees.view')):
+        return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+    if not _outside_branch(user, sep_request.employee):
+        return None
+    # A named approver keeps access even across branches, so the approval chain never breaks.
+    if sep_request.approval_stages.filter(approver_id=user.id).exists():
+        return None
+    return error('Separation request not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+
 def _approval_scope_filter(user) -> Q:
     """Scope filter for the HR/manager separation queue — excludes the viewer's own requests."""
     if _has_perm(user, 'settings.edit'):
@@ -125,7 +147,7 @@ class SeparationRequestListCreateView(APIView):
                 return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
             from apps.accounts.models import User
             target_employee = User.objects.filter(employee_id=employee_id_param).first()
-            if not target_employee:
+            if not target_employee or _outside_branch(request.user, target_employee):
                 return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
             queryset = qs_base.filter(employee=target_employee)
         elif scope == 'team' and has_manage:
@@ -155,8 +177,11 @@ class SeparationRequestListCreateView(APIView):
                 return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
             from apps.accounts.models import User
             target_employee = User.objects.filter(employee_id=employee_id).first()
-            if not target_employee:
+            if not target_employee or _outside_branch(request.user, target_employee):
                 return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if not target_employee.is_active:
+            return error('Separation requests cannot be created for inactive employees.')
 
         serializer = SeparationRequestCreateSerializer(data=request.data)
         if not serializer.is_valid():
@@ -206,11 +231,9 @@ class SeparationRequestDetailView(APIView):
         except SeparationRequest.DoesNotExist:
             return None, error('Separation request not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        user    = request.user
-        is_own  = sep_request.employee_id == user.id
-        can_see = is_own or _has_perm(user, 'separation.approve') or _has_perm(user, 'employees.view')
-        if not can_see:
-            return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        visibility_error = _request_visibility_error(request.user, sep_request)
+        if visibility_error:
+            return None, visibility_error
         return sep_request, None
 
     def get(self, request, request_id: str):

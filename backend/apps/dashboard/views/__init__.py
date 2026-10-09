@@ -27,6 +27,7 @@ from apps.dashboard.views.people import (
     EmployeeBirthdayTodayView,
     EmployeeActionItemsView,
     EmployeeRecentRequestsView,
+    EmployeeNoticePeriodView,
 )
 __all__ = [
     'MyBirthdayWidgetsView',
@@ -55,4 +56,5 @@ __all__ = [
     'EmployeeBirthdayTodayView',
     'EmployeeActionItemsView',
     'EmployeeRecentRequestsView',
+    'EmployeeNoticePeriodView',
 ]
