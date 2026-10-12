@@ -100,6 +100,18 @@ class AttendanceExportLocationTests(TestCase):
         self.assertEqual(row['clock_out_location'], 'Croydon, England, United Kingdom')
         self.assertNotIn(BRANCH, row['clock_in_location'] + row['clock_out_location'])
 
+    def test_full_address_labels_export_unchanged_in_both_columns(self):
+        emp = self._employee()
+        in_label = 'B3, 12-3, Palanpur Road, Adajan, Surat, Gujarat, India, 395009'
+        out_label = 'Hitech City Road, Madhapur, Hyderabad, Telangana, India, 500081'
+        self._punch(emp, AttendancePunch.PUNCH_IN, _at(12), in_label, 21.1959, 72.7933)
+        self._punch(emp, AttendancePunch.PUNCH_OUT, _at(21), out_label, 17.4483, 78.3915)
+        self._process(emp)
+
+        _, rows = self._export()
+        self.assertEqual(rows[emp.employee_id]['clock_in_location'], in_label)
+        self.assertEqual(rows[emp.employee_id]['clock_out_location'], out_label)
+
     def test_missing_label_falls_back_to_stored_coordinates(self):
         emp = self._employee()
         self._punch(emp, AttendancePunch.PUNCH_IN, _at(12), '', 51.5074, -0.1278)

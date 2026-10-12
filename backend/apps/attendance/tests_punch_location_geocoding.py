@@ -106,6 +106,65 @@ class ReverseGeocodeServiceTests(SimpleTestCase):
         mock_get.return_value = self._mock_response({})
         self.assertIsNone(reverse_geocode(OFFICE_LAT, OFFICE_LON))
 
+    def _mock_full_response(self, address: dict, name=None):
+        mock_resp = self._mock_response(address)
+        mock_resp.json = lambda: {'name': name, 'address': address}
+        return mock_resp
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_full_address_in_order_with_postcode(self, mock_get):
+        mock_get.return_value = self._mock_full_response({
+            'house_number': '12-3', 'road': 'Palanpur Road', 'suburb': 'Adajan',
+            'city': 'Surat', 'state': 'Gujarat', 'country': 'India', 'postcode': '395009',
+        }, name='B3')
+        self.assertEqual(
+            reverse_geocode(OFFICE_LAT, OFFICE_LON),
+            'B3, 12-3, Palanpur Road, Adajan, Surat, Gujarat, India, 395009',
+        )
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_requests_building_level_detail(self, mock_get):
+        mock_get.return_value = self._mock_response({'city': 'Hyderabad'})
+        reverse_geocode(OFFICE_LAT, OFFICE_LON)
+        self.assertEqual(mock_get.call_args.kwargs['params']['zoom'], 18)
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_duplicate_components_are_dropped(self, mock_get):
+        mock_get.return_value = self._mock_full_response({
+            'house_name': 'B3', 'road': 'Palanpur Road', 'neighbourhood': 'Adajan', 'suburb': 'adajan',
+            'city': 'Surat', 'state': 'Gujarat', 'country': 'India',
+        }, name='B3')
+        self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), 'B3, Palanpur Road, Adajan, Surat, Gujarat, India')
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_name_equal_to_road_is_not_repeated(self, mock_get):
+        mock_get.return_value = self._mock_full_response({
+            'road': 'Hitech City Road', 'suburb': 'Madhapur', 'city': 'Hyderabad', 'country': 'India',
+        }, name='Hitech City Road')
+        self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), 'Hitech City Road, Madhapur, Hyderabad, India')
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_missing_components_are_not_invented(self, mock_get):
+        mock_get.return_value = self._mock_full_response({'suburb': 'Madhapur', 'postcode': '500081'}, name='')
+        self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), 'Madhapur, 500081')
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_long_address_fits_255_without_splitting_a_component(self, mock_get):
+        long_name = 'Very Long Building Name ' * 6  # ~144 chars
+        mock_get.return_value = self._mock_full_response({
+            'road': 'R' * 60, 'suburb': 'S' * 40, 'city': 'Hyderabad', 'state': 'Telangana', 'country': 'India',
+        }, name=long_name.strip())
+        label = reverse_geocode(OFFICE_LAT, OFFICE_LON)
+        self.assertLessEqual(len(label), 255)
+        self.assertTrue(label.startswith(long_name.strip()))
+        for part in label.split(', '):
+            self.assertIn(part, (long_name.strip(), 'R' * 60, 'S' * 40, 'Hyderabad', 'Telangana', 'India'))
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_single_component_over_255_is_cut_to_fit(self, mock_get):
+        mock_get.return_value = self._mock_full_response({'country': 'India'}, name='X' * 300)
+        self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), 'X' * 255)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  reverse_geocode_punch_task — called directly, not via .delay()/apply_async()
@@ -130,6 +189,13 @@ class ReverseGeocodePunchTaskTests(TestCase):
         reverse_geocode_punch_task(connection.schema_name, str(self.punch.id))
         self.punch.refresh_from_db()
         self.assertEqual(self.punch.location_label, 'Hyderabad, Telangana, India')
+
+    @patch('apps.attendance.services_geocoding.reverse_geocode')
+    def test_max_length_full_address_is_stored(self, mock_geocode):
+        mock_geocode.return_value = 'A' * 255
+        reverse_geocode_punch_task(connection.schema_name, str(self.punch.id))
+        self.punch.refresh_from_db()
+        self.assertEqual(self.punch.location_label, 'A' * 255)
 
     # 2. Geocoding failure does not fail the punch.
     @patch('apps.attendance.services_geocoding.reverse_geocode')

@@ -1,7 +1,8 @@
 """
 Reverse geocoding for attendance punch locations — turns a punch's own
-latitude/longitude into a short human-readable "City, State, Country" (or
-finer, when available) label for HR/Admin display.
+latitude/longitude into the fullest human-readable address Nominatim
+provides (building/place, house number, road, locality, city, state,
+country, postal code — whichever are available) for HR/Admin display.
 
 Provider: OpenStreetMap Nominatim public API — free, no API key/signup, no
 new dependency (uses the `requests` library already in this project).
@@ -35,20 +36,34 @@ _NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse'
 _USER_AGENT = 'RoyalHRMS-AttendanceGeocoder/1.0'
 _TIMEOUT_SECONDS = 5
 
-# Preferred level of locality detail, finest first — the first one present
-# in Nominatim's address breakdown is used as the "area" component.
-_AREA_KEYS = ('road', 'neighbourhood', 'suburb')
+_MAX_LABEL_LENGTH = 255  # AttendancePunch.location_label's max_length
+
+# Locality components, all kept when present (duplicates are dropped below).
+_LOCALITY_KEYS = ('neighbourhood', 'suburb', 'quarter')
 _CITY_KEYS = ('city', 'town', 'village', 'municipality', 'county')
+
+
+def _fit_to_length(parts: list[str]) -> str:
+    """Join whole components while they fit, so a long address never splits mid-word."""
+    label = ''
+    for part in parts:
+        candidate = f'{label}, {part}' if label else part
+        if len(candidate) > _MAX_LABEL_LENGTH:
+            break
+        label = candidate
+    return label or parts[0][:_MAX_LABEL_LENGTH]
 
 
 def reverse_geocode(latitude: float, longitude: float) -> str | None:
     """
-    Returns a short label like "Hyderabad, Telangana, India" (or, when a
-    finer locality is available, "Banjara Hills, Hyderabad, Telangana,
-    India"), or None on any failure (timeout, rate limit, no result, bad
+    Returns the fullest address Nominatim provides, in the order: building or
+    place name, house number, road, locality, city, state, country, postal
+    code — e.g. "B3, Palanpur Road, Adajan, Surat, Gujarat, India, 395009".
+    Returns None on any failure (timeout, rate limit, no result, bad
     coordinates) — callers must treat None as "leave location_label empty",
     never as an error to raise. Never fabricates a missing component: pieces
-    Nominatim doesn't return are simply omitted, not guessed.
+    Nominatim doesn't return are simply omitted, not guessed; a component that
+    repeats an earlier one is dropped.
     """
     try:
         resp = requests.get(
@@ -57,7 +72,7 @@ def reverse_geocode(latitude: float, longitude: float) -> str | None:
                 'format': 'jsonv2',
                 'lat': f'{latitude:.8f}',
                 'lon': f'{longitude:.8f}',
-                'zoom': 14,
+                'zoom': 18,  # building level — finer detail, still one request per punch
                 'addressdetails': 1,
             },
             headers={'User-Agent': _USER_AGENT},
@@ -73,13 +88,23 @@ def reverse_geocode(latitude: float, longitude: float) -> str | None:
     if not address:
         return None
 
-    area = next((address[k] for k in _AREA_KEYS if address.get(k)), None)
-    city = next((address[k] for k in _CITY_KEYS if address.get(k)), None)
-    state = address.get('state') or ''
-    country = address.get('country') or ''
-
-    parts = [p for p in (area, city, state, country) if p]
+    candidates = [
+        data.get('name'),
+        address.get('house_name'),
+        address.get('house_number'),
+        address.get('road'),
+        *(address.get(k) for k in _LOCALITY_KEYS),
+        next((address[k] for k in _CITY_KEYS if address.get(k)), None),
+        address.get('state'),
+        address.get('country'),
+        address.get('postcode'),
+    ]
+    parts, seen = [], set()
+    for value in candidates:
+        text = str(value).strip() if value is not None else ''
+        if text and text.casefold() not in seen:
+            seen.add(text.casefold())
+            parts.append(text)
     if not parts:
         return None
-    label = ', '.join(parts)
-    return label[:255]  # matches AttendancePunch.location_label's max_length
+    return _fit_to_length(parts)
