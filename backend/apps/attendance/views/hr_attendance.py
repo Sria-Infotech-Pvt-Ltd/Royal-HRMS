@@ -503,7 +503,35 @@ class HRAttendanceImportView(APIView):
         if file.size > 5 * 1024 * 1024:
             return error('File size must not exceed 5 MB.')
 
-        result = import_attendance_csv(file, imported_by=request.user)
+        # Optional: single-employee mode, date range, and preview (dry run).
+        from apps.attendance.services_hr_ops import importable_employees
+        employee_code = (request.data.get('employee_id') or '').strip()
+        selected = None
+        if employee_code:
+            selected = importable_employees(request.user).filter(employee_id=employee_code).first()
+            if selected is None:
+                return error('Employee not found.', http_status=404)
+
+        date_range = {}
+        for key in ('date_from', 'date_to'):
+            raw = (request.data.get(key) or '').strip()
+            if raw:
+                try:
+                    date_range[key] = datetime.date.fromisoformat(raw)
+                except ValueError:
+                    return error(f'{key} must be a date in YYYY-MM-DD format.')
+        if date_range.get('date_from') and date_range.get('date_to') and date_range['date_from'] > date_range['date_to']:
+            return error('date_from must be on or before date_to.')
+
+        dry_run = str(request.data.get('dry_run', '')).lower() in ('1', 'true', 'yes')
+        result = import_attendance_csv(
+            file, imported_by=request.user,
+            employee_code=employee_code or None, dry_run=dry_run, **date_range,
+        )
+        if selected is not None:
+            result['employee'] = {'employee_id': selected.employee_id, 'full_name': selected.full_name}
+        if dry_run:
+            return success(result['message'], result)
         status_val = result.get('status')
         if status_val == 'queued':
             http_status = 202

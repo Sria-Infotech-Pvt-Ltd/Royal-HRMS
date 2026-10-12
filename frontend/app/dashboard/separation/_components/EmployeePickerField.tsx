@@ -17,9 +17,10 @@ interface ApiEmployeeRow {
 }
 
 interface Props {
-  value:     PickedEmployee | null;
-  onChange:  (emp: PickedEmployee | null) => void;
-  disabled?: boolean;
+  value:        PickedEmployee | null;
+  onChange:     (emp: PickedEmployee | null) => void;
+  disabled?:    boolean;
+  placeholder?: string;
 }
 
 /** Search-to-pick employee field, backed by the real /employees/ directory
@@ -27,7 +28,9 @@ interface Props {
  *  back, HR/admin get everyone). Only rendered for users with employees.view
  *  — leaving it unselected means the request is filed for the logged-in
  *  employee themselves (the backend defaults employee_id to self). */
-export default function EmployeePickerField({ value, onChange, disabled }: Props) {
+export default function EmployeePickerField({
+  value, onChange, disabled, placeholder = "Leave blank to file for yourself, or search an employee…",
+}: Props) {
   const [query,   setQuery]   = useState("");
   const [open,    setOpen]    = useState(false);
   const [results, setResults] = useState<ApiEmployeeRow[]>([]);
@@ -89,7 +92,7 @@ export default function EmployeePickerField({ value, onChange, disabled }: Props
     <div ref={boxRef} style={{ position: "relative" }}>
       <input
         className="field-input"
-        placeholder="Leave blank to file for yourself, or search an employee…"
+        placeholder={placeholder}
         value={query}
         disabled={disabled}
         onChange={e => { search(e.target.value); setOpen(true); }}

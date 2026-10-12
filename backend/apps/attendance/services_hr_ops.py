@@ -154,9 +154,32 @@ _SYNC_THRESHOLD = 500
 _BATCH_SIZE = 500
 
 
-def import_attendance_csv(file, imported_by) -> dict:
+_PREVIEW_ROW_LIMIT = 200
+
+
+def importable_employees(user):
+    """
+    Employees `user` may import attendance for — the same scope the attendance
+    list uses: managers → their own direct reports, branch-restricted users →
+    their branch, unrestricted users → everyone in this company.
+    """
+    from apps.attendance.views.hr_attendance import _branch_scope, _manager_scope_employee_ids
+
+    qs = User.objects.all()
+    manager_ids = _manager_scope_employee_ids(user)
+    if manager_ids is not None:
+        return qs.filter(id__in=manager_ids)
+    branch = _branch_scope(user, '')
+    return qs.filter(branch=branch) if branch else qs
+
+
+def import_attendance_csv(file, imported_by, *, employee_code=None, date_from=None, date_to=None, dry_run=False) -> dict:
     """
     Dispatcher for bulk CSV import.
+
+    employee_code: single-employee mode — only rows for this employee are imported.
+    date_from/date_to: rows outside this range are rejected.
+    dry_run: validate and plan only (always synchronous), write nothing.
 
     ≤ _SYNC_THRESHOLD rows  → processed inline, response returned immediately.
     > _SYNC_THRESHOLD rows  → Celery task queued; response contains import_id
@@ -178,6 +201,10 @@ def import_attendance_csv(file, imported_by) -> dict:
     content = file.read().decode('utf-8-sig')
     rows    = list(csv.DictReader(io.StringIO(content)))
     total   = len(rows)
+    options = {'employee_code': employee_code, 'date_from': date_from, 'date_to': date_to}
+
+    if dry_run:
+        return _preview_import(rows, imported_by, **options)
 
     import_log = AttendanceImportLog.objects.create(
         imported_by=imported_by,
@@ -199,6 +226,11 @@ def import_attendance_csv(file, imported_by) -> dict:
         # a separate process with no tenant of its own (see apps.tenants.utils).
         task = process_attendance_import.apply_async(
             args=[connection.schema_name, str(import_log.id), str(imported_by.pk), content],
+            kwargs={
+                'employee_code': employee_code,
+                'date_from': date_from.isoformat() if date_from else None,
+                'date_to': date_to.isoformat() if date_to else None,
+            },
             retry=False, ignore_result=True,
         )
         import_log.task_id = task.id
@@ -222,45 +254,31 @@ def import_attendance_csv(file, imported_by) -> dict:
             'task_id':       task.id,
         }
 
-    return _run_import_bulk(import_log, rows, imported_by, start_ts)
+    return _run_import_bulk(import_log, rows, imported_by, start_ts, **options)
 
 
-def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict:
+def _plan_import(rows: list, imported_by, *, employee_code=None, date_from=None, date_to=None) -> dict:
     """
-    Bulk import engine — used by both the sync path and the Celery worker.
-
-    Phases:
-      1  Normalize every raw CSV row.
-      2  Bulk-load all referenced employees — ONE query.
-      3  Validate each row with ImportRowSerializer (in-memory, no DB).
-      4  Deduplicate within the CSV (last occurrence wins per employee+date).
-      5  Bulk-detect existing AttendanceRecords — ONE query.
-      6  Build create / update lists in memory.
-      7  bulk_create new records in _BATCH_SIZE atomic batches.
-      8  bulk_update existing records in _BATCH_SIZE atomic batches.
-      9  bulk_create AttendanceAuditLog entries in _BATCH_SIZE batches.
-     10  Persist final counts and status to AttendanceImportLog.
+    Validation + planning shared by preview and the real import (phases 1-6).
+    Writes nothing. Employees outside the importer's scope are treated as not found.
     """
-    from apps.attendance.models import AttendanceAuditLog
     import uuid as _uuid_mod
     from django.utils import timezone
 
-    if start_ts is None:
-        start_ts = _time.monotonic()
-
-    total          = len(rows)
-    file_name      = import_log.file_name
-    importer_email = getattr(imported_by, 'email', str(imported_by))
-
     # ── Phase 1: Normalize ─────────────────────────────────────────────────────
     normalized_rows = [_normalize_row(r) for r in rows]
+    if employee_code:
+        # Single-employee mode: a blank Employee ID means the selected employee.
+        for r in normalized_rows:
+            if not r.get('employee_id'):
+                r['employee_id'] = employee_code
 
-    # ── Phase 2: Bulk employee lookup — ONE query ──────────────────────────────
+    # ── Phase 2: Bulk employee lookup within the importer's scope — ONE query ──
     emp_ids_in_file: set[str] = {r.get('employee_id', '') for r in normalized_rows}
     emp_ids_in_file.discard('')
     emp_map: dict[str, object] = {}
     if emp_ids_in_file:
-        for emp in User.objects.filter(
+        for emp in importable_employees(imported_by).filter(
             employee_id__in=emp_ids_in_file,
         ).only('id', 'employee_id', 'full_name'):
             emp_map[emp.employee_id] = emp
@@ -285,13 +303,32 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
 
         v = ser.validated_data
 
+        if employee_code and raw_emp_id != employee_code:
+            failed_count += 1
+            errors.append(_make_error_entry(
+                i, raw_emp_id, emp_name, str(v.get('date', raw_date)),
+                f"This row is for employee '{raw_emp_id}', not the selected employee '{employee_code}'.",
+                'Remove rows for other employees, or use Import for All Employees.',
+            ))
+            continue
+
+        if (date_from and v['date'] < date_from) or (date_to and v['date'] > date_to):
+            failed_count += 1
+            errors.append(_make_error_entry(
+                i, raw_emp_id, emp_name, str(v['date']),
+                f"Date {v['date']} is outside the selected range "
+                f"({date_from or 'any'} to {date_to or 'any'}).",
+                'Remove the row or widen the date range.',
+            ))
+            continue
+
         if emp_obj is None:
             failed_count += 1
             errors.append(_make_error_entry(
                 i, raw_emp_id, '',
                 str(v.get('date', raw_date)),
-                f"Employee ID '{raw_emp_id}' was not found.",
-                'Verify the Employee ID or create the employee before importing attendance.',
+                f"Employee ID '{raw_emp_id}' was not found or is outside your access.",
+                'Verify the Employee ID, and that the employee is in a branch or team you manage.',
             ))
             continue
 
@@ -301,11 +338,14 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
     # A CSV from a biometric device sometimes exports the same employee+date
     # twice.  We keep the last occurrence and count the earlier ones as skipped.
     skipped_count = 0
+    preview: list[dict] = []
     deduped: dict[tuple, tuple] = {}   # (emp_pk, date) → (row_num, v, emp_obj)
     for row_num, v, emp_obj in valid_rows:
         key = (emp_obj.pk, v['date'])
         if key in deduped:
             skipped_count += 1
+            prev_row, prev_v, _ = deduped[key]
+            preview.append(_preview_entry(prev_row, emp_obj, prev_v, 'skip_duplicate'))
         deduped[key] = (row_num, v, emp_obj)
 
     # ── Phase 5: Bulk existing-record detection — ONE query ────────────────────
@@ -360,6 +400,7 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
             # Never overwrite a manually-set or leave-synced on_leave status with punch data.
             if rec.status == AttendanceRecord.STATUS_ON_LEAVE:
                 skipped_count += 1
+                preview.append(_preview_entry(row_num, emp_obj, v, 'skip_on_leave'))
                 continue
             rec.status                = rec_status
             rec.first_punch_in        = punch_in
@@ -367,6 +408,7 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
             rec.total_working_minutes = minutes
             rec.updated_at            = now_ts
             records_to_update.append((rec, emp_obj, punch_in, punch_out, date))
+            preview.append(_preview_entry(row_num, emp_obj, v, 'update'))
         elif key in approved_leave_dates:
             # Employee was on approved leave this day — create on_leave record instead.
             rec_status = AttendanceRecord.STATUS_ON_LEAVE
@@ -380,6 +422,7 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
                 total_working_minutes=0,
             )
             records_to_create.append((rec, emp_obj, None, None, date))
+            preview.append(_preview_entry(row_num, emp_obj, v, 'create_on_leave'))
         else:
             rec = AttendanceRecord(
                 id=_uuid_mod.uuid4(),
@@ -391,6 +434,80 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
                 total_working_minutes=minutes,
             )
             records_to_create.append((rec, emp_obj, punch_in, punch_out, date))
+            preview.append(_preview_entry(row_num, emp_obj, v, 'create'))
+
+    preview.sort(key=lambda p: p['row'])
+    return {
+        'errors': errors, 'failed_count': failed_count, 'skipped_count': skipped_count,
+        'deduped': deduped, 'records_to_create': records_to_create,
+        'records_to_update': records_to_update, 'preview': preview,
+    }
+
+
+def _preview_entry(row_num, emp_obj, v, action: str) -> dict:
+    punch_in, punch_out = v.get('punch_in'), v.get('punch_out')
+    return {
+        'row':           row_num,
+        'employee_id':   emp_obj.employee_id or '',
+        'employee_name': emp_obj.full_name or '',
+        'date':          str(v['date']),
+        'punch_in':      punch_in.strftime('%H:%M') if punch_in else '',
+        'punch_out':     punch_out.strftime('%H:%M') if punch_out else '',
+        'action':        action,
+    }
+
+
+def _preview_import(rows: list, imported_by, *, employee_code=None, date_from=None, date_to=None) -> dict:
+    plan = _plan_import(rows, imported_by, employee_code=employee_code, date_from=date_from, date_to=date_to)
+    to_create = len(plan['records_to_create'])
+    to_update = len(plan['records_to_update'])
+    errors = plan['errors']
+    result = {
+        'status':        'preview',
+        'message':       f'{to_create + to_update} of {len(rows)} row(s) can be imported. Nothing has been saved yet.',
+        'total_records': len(rows),
+        'to_create':     to_create,
+        'to_update':     to_update,
+        'skipped':       plan['skipped_count'],
+        'failed':        plan['failed_count'],
+        'errors':        errors[:50],
+        'rows':          plan['preview'][:_PREVIEW_ROW_LIMIT],
+        'rows_truncated': len(plan['preview']) > _PREVIEW_ROW_LIMIT,
+    }
+    if errors:
+        result['error_report_csv'] = _build_error_report_csv(errors)
+    return result
+
+
+def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None, *,
+                     employee_code=None, date_from=None, date_to=None) -> dict:
+    """
+    Bulk import engine — used by both the sync path and the Celery worker.
+
+    Phases 1-6 (normalize, scoped employee lookup, row validation, intra-CSV
+    dedup, existing-record + approved-leave detection, create/update planning)
+    live in _plan_import(), shared with the preview. Then:
+      7  bulk_create new records in _BATCH_SIZE atomic batches.
+      8  bulk_update existing records in _BATCH_SIZE atomic batches.
+      9  bulk_create AttendanceAuditLog entries in _BATCH_SIZE batches.
+     10  Persist final counts and status to AttendanceImportLog.
+    """
+    from apps.attendance.models import AttendanceAuditLog
+
+    if start_ts is None:
+        start_ts = _time.monotonic()
+
+    total          = len(rows)
+    file_name      = import_log.file_name
+    importer_email = getattr(imported_by, 'email', str(imported_by))
+
+    plan = _plan_import(rows, imported_by, employee_code=employee_code, date_from=date_from, date_to=date_to)
+    errors            = plan['errors']
+    failed_count      = plan['failed_count']
+    skipped_count     = plan['skipped_count']
+    deduped           = plan['deduped']
+    records_to_create = plan['records_to_create']
+    records_to_update = plan['records_to_update']
 
     # ── Phase 7: Batch bulk_create — one transaction per _BATCH_SIZE rows ──────
     created_count = 0

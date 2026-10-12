@@ -286,9 +286,29 @@ export interface ImportRowError {
   resolution:      string;
 }
 
+export type ImportRowAction = "create" | "create_on_leave" | "update" | "skip_on_leave" | "skip_duplicate";
+
+export interface ImportPreview {
+  status:          "preview";
+  message:         string;
+  total_records:   number;
+  to_create:       number;
+  to_update:       number;
+  skipped:         number;
+  failed:          number;
+  errors:          ImportRowError[];
+  error_report_csv?: string;
+  rows: {
+    row: number; employee_id: string; employee_name: string; date: string;
+    punch_in: string; punch_out: string; action: ImportRowAction;
+  }[];
+  rows_truncated:  boolean;
+  employee?:       { employee_id: string; full_name: string };
+}
+
 export interface ImportResult {
   import_id:          string;
-  status:             "success" | "partial_success" | "failed";
+  status:             "success" | "partial_success" | "failed" | "queued";
   message:            string;
   total_records:      number;
   successful:         number;

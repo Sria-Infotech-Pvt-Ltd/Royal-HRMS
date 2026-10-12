@@ -45,7 +45,8 @@ def check_missing_clockouts(self):
 
 
 @shared_task(bind=True, max_retries=0, default_retry_delay=0)
-def process_attendance_import(self, schema_name: str, import_log_id: str, imported_by_pk: str, csv_content: str):
+def process_attendance_import(self, schema_name: str, import_log_id: str, imported_by_pk: str, csv_content: str,
+                              employee_code=None, date_from=None, date_to=None):
     """
     Async worker for large CSV imports (> SYNC_THRESHOLD rows).
 
@@ -67,10 +68,16 @@ def process_attendance_import(self, schema_name: str, import_log_id: str, import
     _User = get_user_model()
 
     def _do_import():
+        import datetime as _dt
         import_log   = AttendanceImportLog.objects.get(id=import_log_id)
         imported_by  = _User.objects.get(pk=imported_by_pk)
         rows         = list(_csv.DictReader(_io.StringIO(csv_content)))
-        _run_import_bulk(import_log, rows, imported_by)
+        _run_import_bulk(
+            import_log, rows, imported_by,
+            employee_code=employee_code,
+            date_from=_dt.date.fromisoformat(date_from) if date_from else None,
+            date_to=_dt.date.fromisoformat(date_to) if date_to else None,
+        )
         logger.info('process_attendance_import finished | import_id=%s', import_log_id)
 
     try:

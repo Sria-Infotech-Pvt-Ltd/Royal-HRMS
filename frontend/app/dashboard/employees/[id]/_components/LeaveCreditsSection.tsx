@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
@@ -70,6 +70,35 @@ function signed(n: number): string {
   return n > 0 ? `+${n}` : String(n);
 }
 
+function CollapsibleSection({ title, open, onToggle, children }: {
+  title: ReactNode; open: boolean; onToggle: () => void; children: ReactNode;
+}) {
+  const contentId = useId();
+  return (
+    <div style={{ border: "1px solid var(--outline-v)", borderRadius: 8 }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={contentId}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+          padding: "10px 14px", background: "transparent", border: "none", cursor: "pointer",
+          fontWeight: 600, fontSize: 13, color: "var(--on-bg)", textAlign: "left",
+        }}
+      >
+        <span>{title}</span>
+        <i
+          className="ti ti-chevron-down"
+          aria-hidden="true"
+          style={{ fontSize: 16, color: "var(--on-variant)", transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none" }}
+        />
+      </button>
+      {open && <div id={contentId} style={{ padding: "0 14px 14px" }}>{children}</div>}
+    </div>
+  );
+}
+
 function errorMessage(err: unknown): string {
   return (err as { message?: string })?.message || "Something went wrong. Please try again.";
 }
@@ -90,6 +119,8 @@ export default function LeaveCreditsSection({ employeeId, onChanged }: { employe
   const [pending, setPending] = useState<Pending | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [monthlyOpen, setMonthlyOpen] = useState(false);
   const reverseKeyRef = useRef<string>("");
 
   if (status === 403 || status === 404) return null;
@@ -271,10 +302,15 @@ export default function LeaveCreditsSection({ employeeId, onChanged }: { employe
 
         {/* History */}
         {data?.leave_type && (
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
-              Adjustment history — {data.monthly?.leave_type_label ?? data.leave_type}, {year}
-            </div>
+          <CollapsibleSection
+            title={<>Adjustment history — {data.monthly?.leave_type_label ?? data.leave_type}, {year}</>}
+            open={historyOpen}
+            onToggle={() => {
+              // A half-filled reversal shouldn't linger out of sight.
+              if (historyOpen) setReverseFor(null);
+              setHistoryOpen(o => !o);
+            }}
+          >
             {data.transactions.length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--on-variant)" }}>No manual adjustments recorded.</div>
             ) : (
@@ -327,13 +363,16 @@ export default function LeaveCreditsSection({ employeeId, onChanged }: { employe
                 <button className="btn btn-ghost" onClick={() => setReverseFor(null)}>Cancel</button>
               </div>
             )}
-          </div>
+          </CollapsibleSection>
         )}
 
         {/* Monthly */}
         {data?.monthly && (
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Monthly view — {data.monthly.leave_type_label}, {year}</div>
+          <CollapsibleSection
+            title={<>Monthly view — {data.monthly.leave_type_label}, {year}</>}
+            open={monthlyOpen}
+            onToggle={() => setMonthlyOpen(o => !o)}
+          >
             <div className="table-wrap">
               <table>
                 <thead>
@@ -373,7 +412,7 @@ export default function LeaveCreditsSection({ employeeId, onChanged }: { employe
                 {data.monthly.approximated_requests} leave request(s) no longer fall on any working day under current calendars and are shown in their start month.
               </p>
             )}
-          </div>
+          </CollapsibleSection>
         )}
       </div>
     </div>
