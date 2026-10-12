@@ -3432,6 +3432,10 @@ class EmployeeDetailView(APIView):
         if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
+        # Captured before any submitted change (role included) is applied.
+        stored_reporting_manager_id = employee.reporting_manager_id
+        was_manager                 = bool(employee.role and employee.role.can_manage_team)
+
         data          = request.data
         update_fields = ['updated_at']
         changes       = {}
@@ -3620,7 +3624,15 @@ class EmployeeDetailView(APIView):
                     rm_user = User.objects.get(pk=rm_val, is_active=True)
                 except (User.DoesNotExist, Exception):
                     return error('Reporting manager not found or is inactive.')
-                if employee.role and employee.role.can_manage_team and not _is_coo(rm_user):
+                # An existing manager resending their already-stored reporting manager
+                # (the frontend resends it on every save) is not a new assignment, so an
+                # unrelated edit isn't blocked by legacy data. A role change to manager in
+                # this same request still gets the full check.
+                unchanged_for_existing_manager = was_manager and rm_user.pk == stored_reporting_manager_id
+                if (
+                    employee.role and employee.role.can_manage_team and not _is_coo(rm_user)
+                    and not unchanged_for_existing_manager
+                ):
                     return error('Managers do not have a reporting manager.')
                 if rm_user.pk == employee.pk:
                     return error('An employee cannot be their own reporting manager.')

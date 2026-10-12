@@ -1856,3 +1856,106 @@ class EmployeeReportingRelationshipPersistenceTests(TestCase):
         self.employee.refresh_from_db()
         self.assertEqual(self.employee.reporting_approver_id, self.approver_a.pk)
 
+
+class ManagerStoredReportingManagerSaveTests(TestCase):
+    """Regression: a Manager whose STORED reporting manager is a non-COO
+    (legacy data from department-manager cascade, promotion, onboarding, or a
+    role flag change) could not save ANY profile field, because the frontend
+    resends the stored reporting_manager_id on every save and the
+    "Managers do not have a reporting manager" check treated it as a new
+    assignment. An unchanged value is now allowed; new assignments are not.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        hr_role = make_role('hr_stored_rm_test', permission_codenames=['employees.view', 'employees.edit'])
+        make_user('hr.storedrm@test.com', role=hr_role, employee_id='EMPSRH01', full_name='HR', branch='Mumbai HQ')
+        self.coo = make_user(
+            'coo.storedrm@test.com', role=make_role(COO_ROLE_NAME, can_manage_team=False),
+            employee_id='EMPSRC01', full_name='COO', branch='Delhi HQ',
+        )
+        self.manager_role = make_role('manager_stored_rm_test', can_manage_team=True)
+        self.legacy_rm = make_user(
+            'legacyrm.storedrm@test.com', role=self.manager_role, employee_id='EMPSRL01',
+            full_name='Legacy Manager', branch='Mumbai HQ',
+        )
+        self.peer = make_user(
+            'peer.storedrm@test.com', role=self.manager_role, employee_id='EMPSRP01',
+            full_name='Peer Manager', branch='Mumbai HQ',
+        )
+        # Legacy state: a Manager with a non-COO reporting manager already stored.
+        self.manager = make_user(
+            'manager.storedrm@test.com', role=self.manager_role, employee_id='EMPSRM01',
+            full_name='Stored RM Manager', branch='Mumbai HQ', phone='9000000001',
+            reporting_manager=self.legacy_rm,
+        )
+        self.employee_role = make_role('employee_stored_rm_test')
+        self.employee = make_user(
+            'emp.storedrm@test.com', role=self.employee_role, employee_id='EMPSRE01',
+            full_name='Regular Employee', branch='Mumbai HQ',
+        )
+        _login(self.client, 'hr.storedrm@test.com')
+
+    def _put(self, employee, payload):
+        return self.client.put(
+            reverse('employee-detail', kwargs={'employee_id': employee.employee_id}), payload, format='json',
+        )
+
+    def test_manager_with_stored_non_coo_rm_can_save_unrelated_field(self):
+        resp = self._put(self.manager, {'reporting_manager_id': str(self.legacy_rm.pk), 'phone': '9000000002'})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.manager.refresh_from_db()
+        self.assertEqual(self.manager.phone, '9000000002')
+        self.assertEqual(self.manager.reporting_manager_id, self.legacy_rm.pk)
+
+    def test_assigning_a_different_non_coo_rm_to_manager_still_rejected(self):
+        resp = self._put(self.manager, {'reporting_manager_id': str(self.peer.pk), 'phone': '9000000003'})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Managers do not have a reporting manager', resp.data['message'])
+        self.manager.refresh_from_db()
+        self.assertEqual(self.manager.reporting_manager_id, self.legacy_rm.pk)
+        self.assertEqual(self.manager.phone, '9000000001')
+
+    def test_assigning_coo_to_manager_succeeds(self):
+        resp = self._put(self.manager, {'reporting_manager_id': str(self.coo.pk)})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.manager.refresh_from_db()
+        self.assertEqual(self.manager.reporting_manager_id, self.coo.pk)
+
+    def test_clearing_manager_rm_succeeds(self):
+        resp = self._put(self.manager, {'reporting_manager_id': None})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.manager.refresh_from_db()
+        self.assertIsNone(self.manager.reporting_manager_id)
+
+    def test_manager_without_rm_can_save_profile(self):
+        resp = self._put(self.peer, {'reporting_manager_id': None, 'phone': '9000000004'})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.peer.refresh_from_db()
+        self.assertEqual(self.peer.phone, '9000000004')
+        self.assertIsNone(self.peer.reporting_manager_id)
+
+    def test_regular_employee_can_report_to_manager_or_coo(self):
+        for rm in (self.peer, self.coo):
+            with self.subTest(rm=rm.employee_id):
+                resp = self._put(self.employee, {'reporting_manager_id': str(rm.pk)})
+                self.assertEqual(resp.status_code, 200, resp.data)
+                self.employee.refresh_from_db()
+                self.assertEqual(self.employee.reporting_manager_id, rm.pk)
+
+    def test_promotion_to_manager_in_same_save_cannot_keep_non_coo_rm(self):
+        # The "unchanged" allowance is only for someone who was ALREADY a Manager.
+        self.employee.reporting_manager = self.peer
+        self.employee.save(update_fields=['reporting_manager'])
+        resp = self._put(self.employee, {'role': self.manager_role.name, 'reporting_manager_id': str(self.peer.pk)})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Managers do not have a reporting manager', resp.data['message'])
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.role_id, self.employee_role.pk)
+
+    def test_self_reporting_still_rejected(self):
+        resp = self._put(self.employee, {'reporting_manager_id': str(self.employee.pk)})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('own reporting manager', resp.data['message'])
+
