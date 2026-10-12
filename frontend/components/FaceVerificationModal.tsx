@@ -36,6 +36,8 @@ const VERIFICATION_FRAMES_TO_CAPTURE = 3;
 
 export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: FaceVerificationModalProps) {
   const { phase, errorMessage, liveHint, lowLight, livenessProgress, modelProgress, videoRef, canvasRef, start, retry, stop } = useFaceLivenessCapture({
+    // Quick clock-in: a head turn is the single liveness step (registration still requires blink AND turn).
+    livenessMode: "turn_only",
     // Release the camera the instant we have a descriptor — don't wait for the
     // parent to close the modal. The parent flips isOpen straight to false
     // once it has the embedding, which never re-runs the isOpen effect below
@@ -113,7 +115,7 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
 
         <div className="p-6" style={{ minHeight: 260, overflowY: "auto" }}>
           <div style={{ display: showCameraPreview ? "block" : "none" }}>
-            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} hint={liveHint} progress={livenessProgress} />
+            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} hint={liveHint} progress={livenessProgress} livenessMode="turn_only" />
             {fillLight && (
               <p className="text-center text-[12px] mt-3" style={{ color: "#475569" }}>
                 Low light detected — your screen is now acting as a light. Raising your screen brightness helps.
@@ -149,7 +151,7 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
             <FaceStatusPanel
               icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
               title="Couldn't confirm you're live"
-              message="We didn't detect both a natural blink and a slight head turn in time. Make sure you're well-lit and centered, then try again."
+              message="We didn't detect a slight head turn in time. Make sure you're well-lit and centered, then try again."
               action={{ label: "Try Again", onClick: retry }}
               secondaryAction={{ label: "Cancel", onClick: handleClose }}
             />

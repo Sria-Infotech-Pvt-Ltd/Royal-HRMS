@@ -56,6 +56,9 @@ function eyeAspectRatio(eye: Point[]): number {
   return horizontal === 0 ? 0 : (vertical1 + vertical2) / (2 * horizontal);
 }
 
+/** "blink_and_turn" (default) needs both signals. "turn_only" is the quick clock-in mode: a head turn alone passes. */
+export type LivenessMode = "blink_and_turn" | "turn_only";
+
 export interface LivenessResult {
   passed: boolean;
   score:  number; // 0–1, informational only — the backend stores it but never gates on it
@@ -80,6 +83,12 @@ export class LivenessTracker {
   private noseBaselineSamples: number[] = [];
   private maxHeadTurnRatio = 0;
   private headTurnDetected = false;
+
+  constructor(private mode: LivenessMode = "blink_and_turn") {}
+
+  setMode(mode: LivenessMode): void {
+    this.mode = mode;
+  }
 
   addSample(landmarks: Landmarks68): void {
     this.trackBlink(landmarks);
@@ -160,8 +169,8 @@ export class LivenessTracker {
 
     // Both signals required — see this file's module docstring (FR-E-18) for
     // why "either one" was defeatable by a tilted static photo.
-    if (this.blinkDetected && this.headTurnDetected) {
-      return { passed: true, score: clamp01((blinkScore + headTurnScore) / 2), signal: "blink_and_head_turn" };
+    if (this.headTurnDetected && (this.blinkDetected || this.mode === "turn_only")) {
+      return { passed: true, score: clamp01((blinkScore + headTurnScore) / 2), signal: this.blinkDetected ? "blink_and_head_turn" : "head_turn" };
     }
     const partialSignal = this.blinkDetected ? "blink" : this.headTurnDetected ? "head_turn" : null;
     return { passed: false, score: clamp01(Math.max(blinkScore, headTurnScore) * 0.5), signal: partialSignal };

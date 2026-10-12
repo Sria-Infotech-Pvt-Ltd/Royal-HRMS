@@ -85,6 +85,26 @@ describe("LivenessTracker — both a blink AND a head turn are required", () => 
   });
 });
 
+describe("LivenessTracker — turn_only mode (quick clock-in)", () => {
+  it("passes on a head turn alone", () => {
+    const t = new LivenessTracker("turn_only");
+    feed(t, steady(10));
+    feed(t, steady(5, OPEN, TURNED));
+    expect(t.getResult().passed).toBe(true);
+  });
+
+  it("still fails with no motion or with a blink only", () => {
+    const still = new LivenessTracker("turn_only");
+    feed(still, steady(60));
+    expect(still.getResult().passed).toBe(false);
+    const blink = new LivenessTracker("turn_only");
+    feed(blink, steady(10));
+    feed(blink, [{ eyeHeight: CLOSED, noseX: CENTER }, { eyeHeight: OPEN, noseX: CENTER }]);
+    feed(blink, steady(10));
+    expect(blink.getResult().passed).toBe(false);
+  });
+});
+
 describe("LivenessTracker — robustness of the baselines", () => {
   it("does not read a false blink from one noisy over-wide frame (static-image jitter)", () => {
     const t = new LivenessTracker();

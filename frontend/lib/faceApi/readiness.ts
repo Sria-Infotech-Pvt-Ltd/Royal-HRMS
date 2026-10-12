@@ -14,13 +14,15 @@
 import { QUALITY_THRESHOLDS } from "./qualityGate";
 
 export type ReadinessCode =
-  | "too_far" | "too_close" | "not_frontal" | "backlit" | "too_dark" | "low_confidence";
+  | "too_far" | "too_close" | "not_centered" | "not_frontal" | "backlit" | "too_dark" | "low_confidence";
 
 export interface LiveReadinessInput {
   /** Face box width / video native width. */
   faceWidthRatio: number;
   /** 0-1, see computeFrontality in qualityGate.ts. */
   frontality: number;
+  /** Whether the face sits inside the dotted guide oval (guide.ts). Omitted = not judged. */
+  insideGuide?: boolean;
   /** Detector confidence, 0-1. */
   detectionScore: number;
   /** Mean luminance of the face box on the raw (un-normalized) preview, 0-255; null if not sampled yet. */
@@ -48,8 +50,9 @@ export const BACKLIT_DELTA = 50;
 export const BACKLIT_MAX_FACE_LUMINANCE = 95;
 
 export const READINESS_HINTS: Record<ReadinessCode, string> = {
-  too_far:        "Move a little closer to the camera",
-  too_close:      "Move back a little",
+  too_far:        "Move closer \u2014 fill the dotted frame with your face",
+  too_close:      "Move back a little \u2014 put your face exactly inside the dotted lines",
+  not_centered:   "Put your face exactly inside the dotted lines",
   not_frontal:    "Look straight at the camera",
   backlit:        "Light is behind you — turn to face the light",
   too_dark:       "Too dark — face a light or raise your screen brightness",
@@ -68,6 +71,7 @@ export function assessLiveReadiness(input: LiveReadinessInput): LiveReadiness {
   let ready = true;
   if (input.faceWidthRatio < QUALITY_THRESHOLDS.MIN_FACE_WIDTH_RATIO) { code = "too_far"; ready = false; }
   else if (input.faceWidthRatio > QUALITY_THRESHOLDS.MAX_FACE_WIDTH_RATIO) { code = "too_close"; ready = false; }
+  else if (input.insideGuide === false) { code = "not_centered"; ready = false; }
   else if (input.frontality < QUALITY_THRESHOLDS.MIN_FRONTALITY) { code = "not_frontal"; ready = false; }
   else if (backlit) code = "backlit";
   else if (lowLight) code = "too_dark";

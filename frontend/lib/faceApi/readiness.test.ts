@@ -17,6 +17,16 @@ describe("assessLiveReadiness", () => {
     expect(assessLiveReadiness({ ...GOOD, frontality: 0.4 })).toMatchObject({ ready: false, code: "not_frontal" });
   });
 
+  it("blocks until the face is inside the dotted frame, and does not judge it when unknown", () => {
+    expect(assessLiveReadiness({ ...GOOD, insideGuide: false })).toMatchObject({ ready: false, code: "not_centered" });
+    expect(assessLiveReadiness({ ...GOOD, insideGuide: true })).toMatchObject({ ready: true, code: null });
+    expect(assessLiveReadiness({ ...GOOD })).toMatchObject({ ready: true, code: null }); // insideGuide omitted
+  });
+
+  it("distance hints come before the centring hint (too far is the more useful thing to say)", () => {
+    expect(assessLiveReadiness({ ...GOOD, faceWidthRatio: 0.1, insideGuide: false }).code).toBe("too_far");
+  });
+
   it("only hints (does not block) on lighting and detector confidence", () => {
     const dark = assessLiveReadiness({ ...GOOD, faceLuminance: 30, frameLuminance: 40 });
     expect(dark).toMatchObject({ ready: true, code: "too_dark", lowLight: true });

@@ -7,8 +7,12 @@
 // registration approval, or verify it against an approved one at clock-in) is
 // entirely up to the caller — this hook knows nothing about either.
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { faceapi, loadFaceApiModels, getModelLoadProgress, subscribeModelLoadProgress } from "@/lib/faceApi/loadModels";
-import { LivenessTracker } from "@/lib/faceApi/liveness";
+import {
+  faceapi, loadDetectionModels, loadRecognitionModel, isDetectionReady, isRecognitionReady,
+  getModelLoadProgress, subscribeModelLoadProgress,
+} from "@/lib/faceApi/loadModels";
+import { faceInsideGuide } from "@/lib/faceApi/guide";
+import { LivenessTracker, type LivenessMode } from "@/lib/faceApi/liveness";
 import { syncCanvasSize, drawDetectionBox, clearOverlay, OVERLAY_COLOR } from "@/lib/faceApi/overlay";
 import { grabVideoFrame, putImageData, meanLuminanceOfBox, assessEyeOcclusion, sampleFaceAndFrameLuminance } from "@/lib/faceApi/frameCapture";
 import { assessLiveReadiness } from "@/lib/faceApi/readiness";
@@ -137,7 +141,8 @@ interface QualityGatedFrameAttempt {
 
 interface WakeLockSentinelLike { release: () => Promise<void> }
 
-function livenessMissingMessage(progress: { blink: boolean; turn: boolean }): string {
+function livenessMissingMessage(progress: { blink: boolean; turn: boolean }, mode: LivenessMode): string {
+  if (mode === "turn_only") return "Let's try once more — turn your head slightly to one side, then back.";
   if (progress.blink && !progress.turn) return "Blink detected — now turn your head slightly to one side, then back.";
   if (progress.turn && !progress.blink) return "Head turn detected — now blink naturally, looking at the camera.";
   return "Let's try once more — blink naturally, then turn your head slightly.";
@@ -182,6 +187,8 @@ interface UseFaceLivenessCaptureOptions {
    *  compared against a registered reference gets the same lighting
    *  normalization the reference itself was built from. */
   normalizeLighting?: boolean;
+  /** "turn_only" lets a head turn alone pass the liveness step (quick clock-in); default needs blink AND turn. */
+  livenessMode?: LivenessMode;
   /** Diagnostics label only ("verify" for punch-time, "register" for enrollment). */
   purpose?: CapturePurpose;
 }
@@ -217,7 +224,7 @@ interface UseFaceLivenessCapture {
 }
 
 export function useFaceLivenessCapture(
-  { onCaptured, framesToCapture = 1, normalizeLighting = false, purpose = "verify" }: UseFaceLivenessCaptureOptions,
+  { onCaptured, framesToCapture = 1, normalizeLighting = false, purpose = "verify", livenessMode = "blink_and_turn" }: UseFaceLivenessCaptureOptions,
 ): UseFaceLivenessCapture {
   const [phase, setPhase] = useState<LivenessCapturePhase>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -232,7 +239,7 @@ export function useFaceLivenessCapture(
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef    = useRef<number | null>(null);
-  const livenessTrackerRef  = useRef(new LivenessTracker());
+  const livenessTrackerRef  = useRef(new LivenessTracker(livenessMode));
   const stableFrameCountRef = useRef(0);
   const livenessStartRef    = useRef(0);
   const captureSessionIdRef = useRef(generateCaptureSessionId()); // re-minted in start() below, once per camera session
@@ -265,6 +272,7 @@ export function useFaceLivenessCapture(
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { onCapturedRef.current = onCaptured; }, [onCaptured]);
+  useEffect(() => { livenessTrackerRef.current.setMode(livenessMode); }, [livenessMode]);
 
   const stopCamera = useCallback(() => {
     if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
@@ -422,6 +430,24 @@ export function useFaceLivenessCapture(
   // "quality_failed" instead, same retry shape as "liveness_failed".
   const captureMultipleFrames = useCallback(async (livenessScore: number) => {
     setPhase("capturing_multi");
+    // The big recognition model normally finishes downloading while the person is blinking and
+    // turning their head; only if it has not yet do we wait for it here, with a plain notice.
+    if (!isRecognitionReady()) {
+      showHint("recognition_wait", "Almost ready \u2014 finishing setup\u2026");
+      const waitStartedAt = Date.now();
+      try {
+        await loadRecognitionModel();
+      } catch (err: unknown) {
+        console.error("[useFaceLivenessCapture] failed to load face recognition model:", err);
+        setErrorMessage("Could not load face-recognition models. Check your connection and try again.");
+        telemetryRef.current.recordFailure("models_failed");
+        telemetryRef.current.finish("error");
+        stopCamera();
+        setPhase("error");
+        return;
+      }
+      telemetryRef.current.recordFlag("recognition_wait_ms", Date.now() - waitStartedAt);
+    }
     showHint(null, null); // framing hints are done - the stage shows "Hold still" now
 
     const collected: number[][] = [];
@@ -478,7 +504,7 @@ export function useFaceLivenessCapture(
       frameCount: collected.length,
       variance: consistency.meanPairwiseDistance,
     });
-  }, [framesToCapture, captureOneQualityGatedFrame, resumeDetecting, showHint]);
+  }, [framesToCapture, captureOneQualityGatedFrame, resumeDetecting, showHint, stopCamera]);
 
   const captureAndFinish = useCallback(async (livenessScore: number) => {
     await captureMultipleFrames(livenessScore);
@@ -523,6 +549,7 @@ export function useFaceLivenessCapture(
             result.landmarks.getLeftEye(), result.landmarks.getRightEye(), result.landmarks.getNose()[3],
           ),
           detectionScore: result.detection.score,
+          insideGuide: faceInsideGuide(box, nativeSize),
           faceLuminance: lumaRef.current?.face ?? null,
           frameLuminance: lumaRef.current?.frame ?? null,
         });
@@ -577,7 +604,7 @@ export function useFaceLivenessCapture(
         telemetryRef.current.recordLivenessTimeout(seen.blink, seen.turn);
         if (FACE_FLOW_V2 && autoResumeLivenessRef.current < MAX_AUTO_RESUMES_LIVENESS) {
           autoResumeLivenessRef.current += 1;
-          resumeDetecting(livenessMissingMessage(seen));
+          resumeDetecting(livenessMissingMessage(seen, livenessMode));
           return false; // resumeDetecting restarts the loop itself
         }
         setPhase("liveness_failed");
@@ -585,7 +612,7 @@ export function useFaceLivenessCapture(
       }
     }
     return true;
-  }, [captureAndFinish, resumeDetecting, resetProgress, showHint, maybeBoostCamera]);
+  }, [captureAndFinish, resumeDetecting, resetProgress, showHint, maybeBoostCamera, livenessMode]);
 
   const runDetectionLoop = useCallback(() => {
     const video = videoRef.current;
@@ -650,7 +677,11 @@ export function useFaceLivenessCapture(
     // appears the moment Clock In is clicked, and the person can be allowing it while any
     // remaining model/warm-up work finishes (normally already done - see FaceModelPreloader).
     setPhase("requesting_camera");
-    const modelsOutcome: Promise<unknown> = loadFaceApiModels().then(() => null, (err: unknown) => err ?? new Error("models"));
+    // Only the small detector + landmark models gate the camera flow; the large recognition model
+    // downloads in the background (loadRecognitionModel starts after them) and is awaited only at
+    // the final capture step.
+    const modelsOutcome: Promise<unknown> = loadDetectionModels().then(() => null, (err: unknown) => err ?? new Error("models"));
+    void loadRecognitionModel().catch(() => undefined);
 
     const openCamera = async (): Promise<MediaStream> => {
       if (!FACE_FLOW_V2) return navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
@@ -728,7 +759,7 @@ export function useFaceLivenessCapture(
     }
 
     // Camera is live; only now wait for the models (usually already loaded, so this is instant).
-    if (getModelLoadProgress() < 1) setPhase("loading_models");
+    if (!isDetectionReady()) setPhase("loading_models");
     const modelsError = await modelsOutcome;
     if (isStale()) return;
     if (modelsError) {
