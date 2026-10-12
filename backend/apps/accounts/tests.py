@@ -1959,3 +1959,45 @@ class ManagerStoredReportingManagerSaveTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn('own reporting manager', resp.data['message'])
 
+
+class ManagerListCooOnlyTests(TestCase):
+    """GET /employees/managers/?coo_only=1 — the Reporting Manager picker's list
+    for a Manager-role employee. Without the flag the endpoint is unchanged."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        viewer_role = make_role('mgrlist_viewer', permission_codenames=['employees.view'])
+        make_user('viewer.mgrlist@test.com', role=viewer_role, employee_id='EMPMLV01', full_name='Viewer', branch='Mumbai HQ')
+        coo_role = make_role(COO_ROLE_NAME, can_manage_team=False)
+        self.coo = make_user('coo.mgrlist@test.com', role=coo_role, employee_id='EMPMLC01', full_name='COO', branch='Delhi HQ')
+        self.old_coo = make_user(
+            'oldcoo.mgrlist@test.com', role=coo_role, employee_id='EMPMLC02', full_name='Former COO',
+            branch='Delhi HQ', is_active=False,
+        )
+        manager_role = make_role('mgrlist_manager', can_manage_team=True)
+        self.manager = make_user('mgr.mgrlist@test.com', role=manager_role, employee_id='EMPMLM01', full_name='Manager', branch='Mumbai HQ')
+        self.url = reverse('employee-manager-list')
+
+    def _ids(self, resp):
+        return {row['employee_id'] for row in resp.data['data']}
+
+    def test_coo_only_returns_only_active_coo_without_branch(self):
+        _login(self.client, 'viewer.mgrlist@test.com')
+        resp = self.client.get(self.url, {'coo_only': '1'})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(self._ids(resp), {'EMPMLC01'})
+
+    def test_unfiltered_behaviour_unchanged(self):
+        _login(self.client, 'viewer.mgrlist@test.com')
+        self.assertEqual(self.client.get(self.url).status_code, 400)
+        resp = self.client.get(self.url, {'branch': 'Mumbai HQ'})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(self._ids(resp), {'EMPMLM01', 'EMPMLC01'})
+
+    def test_coo_only_still_requires_employees_view(self):
+        make_user('noview.mgrlist@test.com', role=make_role('mgrlist_noview'), employee_id='EMPMLN01',
+                  full_name='No View', branch='Mumbai HQ')
+        _login(self.client, 'noview.mgrlist@test.com')
+        self.assertEqual(self.client.get(self.url, {'coo_only': '1'}).status_code, 403)
+

@@ -18,6 +18,7 @@ interface Props {
   disabled:     boolean;  // true = view mode
   listEndpoint: string;
   onSelect:     (uuid: string | null, name: string | null) => void;
+  allowClear?:  boolean;  // adds a "None" option that clears the selection
 }
 
 const BORDER   = "#d3dae8";
@@ -26,7 +27,7 @@ const BASE_CLS =
   "w-full px-3.5 py-[7px] rounded-md border text-[13px] outline-none transition-all";
 
 export function EmployeePickerInline({
-  label, value, selectedId, disabled, listEndpoint, onSelect,
+  label, value, selectedId, disabled, listEndpoint, onSelect, allowClear = false,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -81,6 +82,20 @@ export function EmployeePickerInline({
             background: "#fff", border: "1px solid var(--outline-v)", borderRadius: 8,
             boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden", maxHeight: 240, overflowY: "auto",
           }}>
+            {allowClear && !loading && (
+              <button
+                type="button"
+                style={{
+                  display: "block", width: "100%", padding: "9px 14px", textAlign: "left",
+                  background: selectedId ? "none" : "rgba(30,78,140,0.06)",
+                  border: "none", borderBottom: "1px solid var(--outline-v)", cursor: "pointer",
+                  fontSize: 13, color: "var(--on-variant)", fontStyle: "italic",
+                }}
+                onClick={() => { onSelect(null, null); setOpen(false); }}
+              >
+                None — no reporting manager
+              </button>
+            )}
             {loading ? (
               <div style={{ padding: "12px 14px", fontSize: 13, color: "var(--on-variant)", textAlign: "center" }}>
                 <i className="ti ti-loader-2 spin" style={{ marginRight: 6 }} />Loading…

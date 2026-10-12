@@ -6023,12 +6023,21 @@ class ManagerListView(APIView):
     """GET list of active managers — filtered by department and/or branch.
     Query params: department (optional), branch (optional) — at least one is
     required. e.g. ?department=Engineering or ?branch=Mumbai HQ or both.
+    ?coo_only=1 instead returns only the active COO(s) — the one valid
+    reporting manager for a Manager-role employee — and needs no other filter.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        if (request.query_params.get('coo_only') or '').strip().lower() in ('1', 'true', 'yes'):
+            coos = User.objects.filter(role__name=COO_ROLE_NAME, is_active=True).order_by('full_name')
+            return success('Managers retrieved.', data=[
+                {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
+                 'department': u.department, 'branch': u.branch}
+                for u in coos
+            ])
         department = (request.query_params.get('department') or '').strip()
         branch     = (request.query_params.get('branch') or '').strip()
         if not department and not branch:

@@ -31,6 +31,9 @@ import ProfileTabBar from "./_components/ProfileTabBar";
 import ProfileSidebar from "./_components/ProfileSidebar";
 import ProfileForm from "./_components/ProfileForm";
 import { EmployeePickerInline } from "./_components/ReportingManagerCard";
+import {
+  MANAGER_RM_NOTE, isManagerRole, reportingManagerListEndpoint, shouldClearReportingManager,
+} from "@/lib/reportingManager";
 import { ApprovalMatrixTab } from "./_components/ApprovalMatrixTab";
 import { WishesTab } from "./_components/WishesTab";
 import { LeaveTab } from "./_components/LeaveTab";
@@ -238,6 +241,7 @@ export default function EmployeeProfilePage({
   const [allDesigs,       setAllDesigs]       = useState<{ name: string; department_name: string }[]>([]);
   const [desigOptions,    setDesigOptions]    = useState<FieldOption[]>([]);
   const [roleOptions,     setRoleOptions]     = useState<FieldOption[]>([]);
+  const [managerRoleNames, setManagerRoleNames] = useState<string[]>([]);
   const [branchOptions,   setBranchOptions]   = useState<FieldOption[]>([]);
 
   // fetch dropdown lists once on mount — use allSettled so one failure does
@@ -248,7 +252,7 @@ export default function EmployeeProfilePage({
     Promise.allSettled([
       clientApi.get<{ data: { results: { id: number; name: string }[] } }>(API.departments.list),
       clientApi.get<{ data: unknown }>(API.designations.list),
-      clientApi.get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(`${API.roles.list}?page_size=100`),
+      clientApi.get<{ data: { results: { id: number; name: string; display_name: string; can_manage_team?: boolean }[] } }>(`${API.roles.list}?page_size=100`),
       clientApi.get<{ data: { results: { id: number; branch_name: string }[] } }>(API.branches.list),
     ]).then(([depts, desigs, roles, branches]) => {
       if (depts.status === "fulfilled")
@@ -257,12 +261,14 @@ export default function EmployeeProfilePage({
         const desigData = desigs.value.data.data as { results?: { name: string; department_name: string }[] } | { name: string; department_name: string }[];
         setAllDesigs(Array.isArray(desigData) ? desigData : (desigData.results ?? []));
       }
-      if (roles.status === "fulfilled")
+      if (roles.status === "fulfilled") {
         setRoleOptions(
           roles.value.data.data.results
             .filter(r => r.name !== "system_admin")
             .map(r => ({ value: r.name, label: r.display_name }))
         );
+        setManagerRoleNames(roles.value.data.data.results.filter(r => r.can_manage_team).map(r => r.name));
+      }
       if (branches.status === "fulfilled")
         setBranchOptions(branches.value.data.data.results.map(b => ({ value: b.branch_name, label: b.branch_name })));
     });
@@ -342,6 +348,10 @@ export default function EmployeeProfilePage({
   const { data: fieldConfigData } = useFetch<OnboardingFieldConfigByStep>(API.onboarding.fieldConfig);
   const fieldConfig = fieldConfigData ?? {};
 
+  // The COO(s) — the only valid reporting manager for a manager-role employee.
+  const { data: cooList } = useFetch<{ id: string }[]>(isEditing ? `${API.employees.managerList}?coo_only=1` : null);
+  const managerRole = isManagerRole(values.ssRole, managerRoleNames);
+
   const rawSection = PROFILE_SECTIONS.find(s => s.id === sectionId)!;
   const section = applyFieldConfig(rawSection, fieldConfig);
 
@@ -378,7 +388,17 @@ export default function EmployeeProfilePage({
   }
 
   function onFieldChange(key: string, val: string) {
-    setValues(v => ({ ...v, [key]: val }));
+    setValues(v => {
+      const next = { ...v, [key]: val };
+      if (key === "ssRole" && shouldClearReportingManager({
+        previousRole: v.ssRole, nextRole: val, managerRoleNames,
+        reportingManagerId: v.reportingManagerId, cooIds: cooList?.map(c => c.id),
+      })) {
+        next.reportingManager = "";
+        next.reportingManagerId = "";
+      }
+      return next;
+    });
     setJustSaved(false);
   }
   function onRowsChange(rows: TableRow[]) {
@@ -672,16 +692,22 @@ export default function EmployeeProfilePage({
                   // Read mode: let ProfileForm show the value as a standard readonly field (always visible)
                   if (disabled) return null;
                   return (
-                    <EmployeePickerInline
-                      label="Reporting Manager"
-                      value={values.reportingManager ?? ""}
-                      selectedId={values.reportingManagerId ?? ""}
-                      disabled={false}
-                      listEndpoint={values.branch ? `${API.employees.managerList}?branch=${encodeURIComponent(values.branch)}` : API.employees.managerList}
-                      onSelect={(uuid, name) =>
-                        setValues(v => ({ ...v, reportingManager: name ?? "", reportingManagerId: uuid ?? "" }))
-                      }
-                    />
+                    <div>
+                      <EmployeePickerInline
+                        label="Reporting Manager"
+                        value={values.reportingManager ?? ""}
+                        selectedId={values.reportingManagerId ?? ""}
+                        disabled={false}
+                        listEndpoint={reportingManagerListEndpoint(API.employees.managerList, values.branch, managerRole)}
+                        allowClear={managerRole}
+                        onSelect={(uuid, name) =>
+                          setValues(v => ({ ...v, reportingManager: name ?? "", reportingManagerId: uuid ?? "" }))
+                        }
+                      />
+                      {managerRole && (
+                        <p style={{ fontSize: 11.5, color: "var(--on-variant)", margin: "4px 0 0 152px" }}>{MANAGER_RM_NOTE}</p>
+                      )}
+                    </div>
                   );
                 }
                 if (key === "reportingApprover") {
