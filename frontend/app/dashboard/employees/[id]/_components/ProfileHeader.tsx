@@ -28,7 +28,12 @@ export default function ProfileHeader({
 }) {
   const router = useRouter();
   const exp = experienceFrom(employee.dateOfJoining);
-  const canResetPassword = usePermission("employees.reset_password");
+  // The backend requires BOTH (acting on another person's login is an admin
+  // action: views_reset_password._can_manage_accounts), so only offer the
+  // buttons to someone for whom they will actually work.
+  const canResetPermission = usePermission("employees.reset_password");
+  const canEditEmployees = usePermission("employees.edit");
+  const canResetPassword = canResetPermission && canEditEmployees;
 
   const [resetting, setResetting] = useState(false);
   const [resetMsg,  setResetMsg]  = useState<string | null>(null);

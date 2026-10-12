@@ -22,6 +22,7 @@ import RequestModal from "@/components/RequestModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import DateInput from "@/components/shared/DateInput";
 
 const NOTICE_PERIOD_OPTIONS = [15, 30, 45, 60, 90];
 
@@ -90,13 +91,7 @@ export default function ResignationRequestModal({ defaultNoticePeriodDays, onClo
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
           <label className="field-label">Proposed last day</label>
-          <input
-            type="date"
-            className="field-input"
-            min={todayIso()}
-            value={lastDay}
-            onChange={e => setLastDay(e.target.value)}
-          />
+          <DateInput className="field-input" min={todayIso()} value={lastDay} onChange={isoDate => setLastDay(isoDate)} />
         </div>
         <div className="field-group">
           <label className="field-label">Notice period</label>

@@ -574,3 +574,14 @@ export function apiToEmployee(u: ApiEmployee): Employee {
     tables: {},
   };
 }
+
+/** The word the Employee Directory shows for someone's status — one definition for the table pill, the
+    drawer and the action modal, mirroring the status filter / stat cards (Active excludes probation and notice). */
+export type DirectoryStatusLabel = "Active" | "Onboarding" | "Probation" | "Notice Period" | "Exited";
+
+export function directoryStatusLabel(e: Pick<Employee, "status" | "lastWorkingDay" | "employmentStatus">): DirectoryStatusLabel {
+  if (e.status === "inactive") return "Exited";
+  if (e.status === "onboarding") return "Onboarding";
+  if (e.lastWorkingDay) return "Notice Period";
+  return e.employmentStatus === "probation" ? "Probation" : "Active";
+}

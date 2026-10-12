@@ -33,7 +33,7 @@ export default function AppraisalBanner() {
     : "No employee reviews started yet.";
 
   return (
-    <div className="card mb-6" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "16px 22px", flexWrap: "wrap" }}>
+    <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "16px 22px", flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: "var(--r-card)" }}>
       <div>
         <div style={{ fontWeight: 700, fontSize: 14, color: "var(--on-bg)" }}>
           {data.cycle_name} appraisal · HR review queue

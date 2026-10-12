@@ -134,13 +134,16 @@ class EmployeeSalaryHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, employee_pk):
-        if not _has_perm(request.user, 'payroll.view'):
+        employee = _resolve_employee(employee_pk)
+        # Everyone may read their OWN pay history (it is on their payslips and
+        # in My Profile); anyone else's needs payroll.view.
+        is_own_record = bool(employee) and employee.pk == request.user.pk
+        if not is_own_record and not _has_perm(request.user, 'payroll.view'):
             return error('Only HR admin can view salary history.', http_status=403)
 
-        employee = _resolve_employee(employee_pk)
         if not employee:
             return error('Employee not found.', http_status=404)
-        if not _is_admin(request.user) and employee.branch != request.user.branch:
+        if not is_own_record and not _is_admin(request.user) and employee.branch != request.user.branch:
             return error('Access denied.', http_status=403)
 
         configs = EmployeeSalaryConfig.objects.filter(

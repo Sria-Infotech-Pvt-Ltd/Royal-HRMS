@@ -39,7 +39,9 @@ export default function EmployeeTable({
           </button>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        // No overflow wrapper here: .tbl-wrap is the single scroll container, so the sticky header row
+        // stays pinned while the rows scroll beneath it (a nested overflow-x-auto would capture it).
+        <div>
           <div style={{ minWidth: 980 }}>
             <div className="tbl-h grid-cols-emp">
               {COLUMNS.map(h => <div key={h}>{h}</div>)}

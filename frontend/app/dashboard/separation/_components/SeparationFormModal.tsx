@@ -7,6 +7,7 @@ import { useFetch } from "@/hooks/useFetch";
 import type { SeparationLookupOption, SeparationRequest, SeparationTypeOption } from "@/types/separation";
 import { daysBetween, todayIso } from "../_workflow";
 import EmployeePickerField, { type PickedEmployee } from "./EmployeePickerField";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   mode:            "create" | "edit";
@@ -263,20 +264,14 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
               <label className="field-label">
                 Request Date <span style={{ color: "var(--error)" }}>*</span>
               </label>
-              <input
-                type="date" className={`field-input${errors.requestDate ? " field-error" : ""}`}
-                value={form.requestDate} onChange={e => setField("requestDate", e.target.value)}
-              />
+              <DateInput className={`field-input${errors.requestDate ? " field-error" : ""}`} value={form.requestDate} onChange={isoDate => setField("requestDate", isoDate)} />
               {errors.requestDate && <p className="field-error-msg">{errors.requestDate}</p>}
             </div>
             <div className="field-group">
               <label className="field-label">
                 Proposed Last Working Day <span style={{ color: "var(--error)" }}>*</span>
               </label>
-              <input
-                type="date" className={`field-input${errors.proposedLastWorkingDay ? " field-error" : ""}`}
-                value={form.proposedLastWorkingDay} onChange={e => setField("proposedLastWorkingDay", e.target.value)}
-              />
+              <DateInput className={`field-input${errors.proposedLastWorkingDay ? " field-error" : ""}`} value={form.proposedLastWorkingDay} onChange={isoDate => setField("proposedLastWorkingDay", isoDate)} />
               {errors.proposedLastWorkingDay
                 ? <p className="field-error-msg">{errors.proposedLastWorkingDay}</p>
                 : noticeDays !== null && <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>{noticeDays} day{noticeDays !== 1 ? "s" : ""} from request date</p>}

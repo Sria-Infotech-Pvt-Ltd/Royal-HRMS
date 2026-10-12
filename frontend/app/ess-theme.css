@@ -1,0 +1,173 @@
+/* Employee Self Service — ported verbatim from the reference artifact
+   (reference_live.html style block, ESS / pay / request / appraisal rules).
+   Scoped to .ess-*, .pay-*, .request-*, .appraisal-* and .directory-appraisal, so it cannot
+   collide with the shared shell. Loaded after aira-theme.css; supersedes the older
+   .ess-tabs / .ess-tab pill rules in globals.css. */
+.ess-mode .navlinks,.ess-mode .navsearch{display:none}
+.ess-mode .brandcopy small{display:block}
+.ess-shell{display:flex;flex-direction:column;gap:14px}
+.ess-sticky{position:sticky;top:-16px;z-index:25;display:flex;flex-direction:column;gap:10px;padding:16px 0 8px;background:var(--bg);box-shadow:0 8px 14px color-mix(in srgb,var(--bg) 88%,transparent)}
+.ess-hero{display:grid;grid-template-columns:1.35fr .65fr;gap:14px;padding:22px;border-radius:18px;background:linear-gradient(125deg,#312e81,#6d28d9 62%,#8b5cf6);color:#fff;box-shadow:0 12px 28px rgba(76,29,149,.2)}
+.ess-person{display:flex;align-items:center;gap:15px}
+.ess-photo{width:64px;height:64px;border-radius:18px;background-image:url('/employee-headshots.png');background-size:700% 700%;background-position:0% 0%;border:3px solid rgba(255,255,255,.35)}
+.ess-hero h1{font-size:26px;margin:0}
+.ess-hero p{margin:5px 0 0;color:#ddd6fe;font-size:12px}
+.ess-clock{display:flex;align-items:center;justify-content:flex-end;gap:12px}
+.ess-clock b{display:block;font-size:15px}
+.ess-clock span{display:block;color:#ddd6fe;font-size:11px;margin-top:3px}
+.ess-clock .btn{background:#fff;color:#4c1d95;border-color:#fff}
+.ess-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.ess-metric{border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:15px}
+.ess-metric i{display:block;font-style:normal;font-size:9.5px;font-weight:800;letter-spacing:.08em;color:var(--faint)}
+.ess-metric b{display:block;font-size:24px;margin-top:7px}
+.ess-metric span{display:block;font-size:10.5px;color:var(--muted);margin-top:3px}
+.ess-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:14px}
+.ess-card{border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:17px}
+.ess-card h2{font-size:16px;margin:0}
+.ess-card>p{font-size:11px;color:var(--muted);margin:4px 0 14px}
+.ess-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.ess-action{display:flex;flex-direction:column;gap:6px;min-height:78px;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2);text-align:left;color:var(--ink)}
+.ess-action strong{font-size:12px}
+.ess-action small{color:var(--muted);font-size:10px;line-height:1.35}
+.ess-action .ea-ico{width:26px;height:26px;display:grid;place-items:center;border-radius:8px;background:var(--brand-tint);color:var(--brand-ink);font-weight:900}
+.ess-list{display:flex;flex-direction:column}
+.ess-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:11px 0;border-top:1px solid var(--line-soft)}
+.ess-row:first-child{border-top:0}
+.ess-row b{font-size:12px}
+.ess-row small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
+.ess-row .state{font-size:9px;font-weight:800;padding:4px 7px;border-radius:99px;background:var(--warn-bg);color:var(--warn)}
+.ess-row .state.ok{background:var(--ok-bg);color:var(--ok)}
+.ess-footer-note{font-size:10px;color:var(--muted);text-align:center}
+@media(max-width:900px){.ess-hero,.ess-grid{grid-template-columns:1fr}.ess-clock{justify-content:flex-start}.ess-metrics{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.ess-sticky{top:-16px;padding-top:16px}.ess-actions{grid-template-columns:repeat(2,1fr)}.ess-hero{padding:12px 14px;gap:8px;border-radius:14px}.ess-photo{width:44px;height:44px;border-radius:12px}.ess-hero h1{font-size:18px}.ess-hero p{font-size:10px}.ess-clock{justify-content:space-between}.ess-clock b{font-size:12px}.ess-clock span{font-size:10px}.ess-tabs{border-radius:10px}}
+.ess-profile{border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:18px;scroll-margin-top:12px}
+.ess-profile-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.ess-profile-head h2{font-size:18px;margin:0}
+.ess-profile-head p{font-size:11px;color:var(--muted);margin:4px 0 0}
+.ess-profile-grid>.shared-profile-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ess-detail{border:1px solid var(--line-soft);border-radius:12px;background:var(--surface-2);padding:13px}
+.ess-detail h3{font-size:10px;letter-spacing:.08em;color:var(--brand-ink);margin:0 0 10px}
+.ess-dl{display:grid;gap:8px}
+.ess-kv{display:grid;grid-template-columns:minmax(92px,.8fr) 1.2fr;gap:10px;font-size:10.5px;align-items:baseline}
+.ess-kv span{color:var(--muted)}
+.ess-kv b{text-align:right;font-size:11px;overflow-wrap:anywhere}
+.ess-sensitive{display:inline-flex;align-items:center;gap:5px}
+.ess-lock{font-size:9px;color:var(--warn)}
+@media(max-width:980px){.ess-profile-grid>.shared-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.shared-profile-grid,.ess-profile-grid>.shared-profile-grid{grid-template-columns:1fr}.ess-profile-head{align-items:flex-start;flex-direction:column}.drawer{width:100vw}}
+.ess-profile-grid>.rvcard{height:100%;background:var(--surface-2)}
+.ess-profile-grid>.rvcard h4{color:var(--brand-ink)}
+.ess-profile-grid .kv{font-size:11px}
+.ess-profile-grid .kv b{max-width:60%;overflow-wrap:anywhere}
+.ess-tabs{display:flex;gap:4px;padding:5px;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow-x:auto;scrollbar-width:none}
+.ess-tab{border:0;background:transparent;color:var(--muted);padding:8px 11px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap}
+.ess-tab.on{background:var(--brand-tint);color:var(--brand-ink)}
+.ess-page[hidden]{display:none!important}
+.ess-page{display:flex;flex-direction:column;gap:14px}
+.ess-pagehead{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.ess-pagehead h2{font-size:22px;margin:0}
+.ess-pagehead p{font-size:11px;color:var(--muted);margin:4px 0 0}
+.ess-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ess-field label{display:block;font-size:10px;font-weight:800;color:var(--faint);margin-bottom:5px}
+.ess-field input,.ess-field select,.ess-field textarea{width:100%;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);padding:9px 10px;font-size:11px}
+.ess-field textarea{min-height:76px;resize:vertical}
+.ess-upload{border:1px dashed var(--brand);background:var(--brand-bg);border-radius:13px;padding:24px;text-align:center}
+.ess-upload b{display:block;font-size:13px}
+.ess-upload span{display:block;font-size:10px;color:var(--muted);margin:5px 0 10px}
+.ess-calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.ess-day{min-height:54px;border:1px solid var(--line-soft);border-radius:8px;padding:6px;font-size:9px;color:var(--muted)}
+.ess-day b{display:block;color:var(--ink);font-size:11px}
+.ess-day.leave{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 25%,var(--line))}
+.ess-day.present{background:var(--ok-bg)}
+@media(max-width:650px){.ess-form{grid-template-columns:1fr}.ess-pagehead{align-items:flex-start;flex-direction:column}.ess-calendar{min-width:560px}.ess-calendar-wrap{overflow-x:auto}}
+.pay-hero{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;padding:20px;border-radius:16px;background:linear-gradient(135deg,#111827,#312e81);color:#fff;box-shadow:0 12px 28px rgba(17,24,39,.18)}
+.pay-hero small{display:block;color:#c7d2fe;font-size:10px}
+.pay-hero h3{font-size:30px;margin:7px 0 4px}
+.pay-hero p{margin:0;color:#ddd6fe;font-size:11px}
+.pay-hero-side{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.pay-hero-side div{padding:11px;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(255,255,255,.07)}
+.pay-hero-side b{display:block;margin-top:4px;font-size:14px}
+.pay-status{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:99px;background:#dcfce7;color:#166534;font-size:9px;font-weight:900;letter-spacing:.05em}
+.pay-layout{display:grid;grid-template-columns:1.35fr .65fr;gap:14px}
+.pay-table{width:100%;border-collapse:collapse;font-size:11px}
+.pay-table th{padding:9px 0;border-bottom:1px solid var(--line);color:var(--faint);font-size:9px;letter-spacing:.07em;text-align:left}
+.pay-table th:last-child,.pay-table td:last-child{text-align:right}
+.pay-table td{padding:9px 0;border-bottom:1px solid var(--line-soft)}
+.pay-table tr:last-child td{border-bottom:0}
+.pay-table .pay-total td{padding-top:12px;font-weight:900;font-size:12px}
+.pay-callout{padding:13px;border-radius:11px;background:var(--brand-bg);border:1px solid var(--brand-tint)}
+.pay-callout b{font-size:11px}
+.pay-callout p{font-size:10px;color:var(--muted);line-height:1.5;margin:4px 0 0}
+.pay-history .ess-row{padding:13px 0}
+.pay-actions{display:flex;gap:8px;flex-wrap:wrap}
+.pay-selector{min-width:150px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);padding:8px 10px;font-size:11px}
+@media(max-width:760px){.pay-hero,.pay-layout{grid-template-columns:1fr}.pay-hero-side{grid-template-columns:1fr 1fr}}
+@media(max-width:440px){.pay-hero-side{grid-template-columns:1fr}.pay-actions{width:100%}.pay-actions .btn,.pay-selector{flex:1}}
+.ess-metric[data-ess-page]{width:100%;color:var(--ink);text-align:left;cursor:pointer;font:inherit}
+.ess-metric[data-ess-page]:hover,.ess-metric[data-ess-page]:focus-visible{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-bg);transform:translateY(-1px)}
+.ess-row-link{width:100%;border:0;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.ess-row-link:hover,.ess-row-link:focus-visible{background:var(--brand-bg);border-radius:9px;padding-left:10px;padding-right:10px}
+.ess-row-link .row-go{font-size:18px;color:var(--brand-ink)}
+.request-detail{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}
+.request-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.request-fact{padding:12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--surface-2)}
+.request-fact small{display:block;color:var(--faint);font-size:9px;font-weight:800;letter-spacing:.07em}
+.request-fact b{display:block;margin-top:5px;font-size:12px}
+.request-timeline{display:flex;flex-direction:column}
+.request-step{display:grid;grid-template-columns:18px 1fr;gap:9px;padding:8px 0}
+.request-step i{width:10px;height:10px;margin-top:3px;border-radius:50%;background:var(--line);box-shadow:0 0 0 4px var(--surface-2)}
+.request-step.done i{background:var(--ok)}
+.request-step.current i{background:var(--warn)}
+.request-step b{display:block;font-size:11px}
+.request-step small{display:block;color:var(--muted);font-size:10px;margin-top:2px}
+@media(max-width:720px){.request-detail,.request-summary{grid-template-columns:1fr}}
+.appraisal-status{display:inline-flex;align-items:center;border-radius:99px;padding:6px 10px;background:var(--brand-bg);color:var(--brand-ink);font-size:11px;font-weight:800}
+.appraisal-grid{display:grid;grid-template-columns:1.35fr .65fr;gap:14px}
+.appraisal-goal{padding:14px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2);margin-top:10px}
+.appraisal-goal h3{font-size:14px;margin:0 0 4px}
+.appraisal-goal p{font-size:12px;color:var(--muted);margin:0 0 12px}
+.appraisal-goal .ess-form{grid-template-columns:1fr 1fr}
+.appraisal-goal textarea{min-height:84px}
+.appraisal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.appraisal-read{white-space:pre-wrap;line-height:1.5;font-size:13px}
+.appraisal-stage{display:grid;grid-template-columns:20px 1fr;gap:9px;padding:8px 0}
+.appraisal-stage i{width:11px;height:11px;margin-top:3px;border-radius:50%;background:var(--line)}
+.appraisal-stage.done i{background:var(--ok)}
+.appraisal-stage.current i{background:var(--warn)}
+.appraisal-stage b{display:block;font-size:13px}
+.appraisal-stage small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+@media(max-width:820px){.appraisal-grid,.appraisal-goal .ess-form{grid-template-columns:1fr}}
+.directory-appraisal{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 15px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.directory-appraisal strong{font-size:13px}
+.directory-appraisal p{margin:3px 0 0;color:var(--muted);font-size:11px}
+.directory-appraisal .btn{flex:none}
+.drawer-appraisal .appraisal-stage{padding:6px 0}
+.drawer-appraisal .appraisal-read{font-size:11px}
+.drawer-appraisal .request-fact b{font-size:11px;overflow-wrap:anywhere}
+.drawer-appraisal .ess-form{grid-template-columns:1fr}
+.drawer-appraisal .ess-card{padding:12px;margin-top:10px}
+@media(max-width:650px){.directory-appraisal{align-items:flex-start;flex-direction:column}}
+
+/* ── Alignment layer ─────────────────────────────────────────────────────────
+   The reference sets none of these (it has no Tailwind preflight and a
+   `normal` line-height); this app resets headings to inherit weight and sets
+   body line-height 1.5, which shifted every ESS box by a few pixels. Scoped to
+   .ess-shell so no other page changes. */
+.ess-shell{max-width:1400px;margin:0 auto;line-height:normal}
+.ess-shell h1,.ess-shell h2,.ess-shell h3,.ess-shell h4{font-weight:700;line-height:normal}
+.ess-shell .btn{height:34px;padding:0 13px;border-radius:9px;font-size:12.5px;font-weight:600;gap:7px;line-height:normal;display:inline-flex;align-items:center;white-space:nowrap}
+.ess-shell .btn.btn-sm{height:34px;padding:0 13px;font-size:12.5px}
+.ess-shell .ess-action{font-size:13.3333px}
+.ess-shell .ess-metric,.ess-shell .ess-action,.ess-shell .ess-row-link{font-family:inherit}
+.ess-shell button{font-family:inherit}
+.ess-card h2,.ess-card h3,.ess-pagehead h2,.module-card h2,.appraisal-goal h3,.pay-hero h3,.ess-profile-head h2,.ess-detail h3{font-weight:700;line-height:normal}
+
+/* ── Legacy tab bodies ───────────────────────────────────────────────────────
+   Attendance, Leave, Payslips and Requests reuse the standalone pages (they are
+   shared with other roles, so their own styles must not change). Inside the ESS
+   shell only, bring their headings and cards to the reference's scale. */
+.ess-shell .page-title{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:normal}
+.ess-shell .page-sub{font-size:11px;margin-top:4px}
+.ess-shell .card,.ess-shell .stat-card{border-radius:14px}
+.ess-shell .card-title{font-size:16px;font-weight:700}
+.ess-shell .stat-card{padding:15px}

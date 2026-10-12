@@ -11,6 +11,7 @@ import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import { useToast } from "@/components/ToastProvider";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import type { OvertimeCreatePayload, PaginatedOvertime } from "@/types/attendance";
+import DateInput from "@/components/shared/DateInput";
 
 interface PickerEmployee {
   employee_id: string;
@@ -111,7 +112,7 @@ export default function OtEntryTab() {
             </div>
             <div className="field-group">
               <label className="field-label">Date</label>
-              <input type="date" className="field-input" value={form.date} onChange={e => setField("date", e.target.value)} />
+              <DateInput className="field-input" value={form.date} onChange={isoDate => setField("date", isoDate)} />
             </div>
             <div className="field-group">
               <label className="field-label">OT Type</label>

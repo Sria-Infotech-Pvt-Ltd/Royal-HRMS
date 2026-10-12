@@ -9,6 +9,7 @@ import type { KtHandoverTask, SeparationRequest } from "@/types/separation";
 import type { SeparationAccess } from "../../_access";
 import { fmtDate } from "../../_workflow";
 import EmployeePickerField, { type PickedEmployee } from "../../_components/EmployeePickerField";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   r:      SeparationRequest;
@@ -98,7 +99,7 @@ export default function KtHandoverSection({ r, access }: Props) {
             <input className="field-input" placeholder="Description (optional)" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             <div className="form-row cols-2">
               <EmployeePickerField value={assignee} onChange={setAssignee} />
-              <input type="date" className="field-input" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+              <DateInput className="field-input" value={form.dueDate} onChange={isoDate => setForm(f => ({ ...f, dueDate: isoDate }))} />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn btn-filled btn-sm" onClick={submitTask} disabled={saving} suppressHydrationWarning>

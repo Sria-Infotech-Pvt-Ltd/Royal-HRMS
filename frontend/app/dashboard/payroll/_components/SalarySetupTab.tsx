@@ -6,6 +6,7 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { EmployeeSalaryConfig, SalaryStructureListItem } from "@/types/payroll";
+import DateInput from "@/components/shared/DateInput";
 
 interface PagedResponse<T> { results: T[]; count: number; }
 interface Employee { id: string; uuid: string; full_name: string; employee_id: string; department: string; branch: string; }
@@ -254,12 +255,7 @@ export default function SalarySetupTab() {
               </div>
               <div className="field-group">
                 <label className="field-label">Effective From *</label>
-                <input
-                  type="date"
-                  className="field-input"
-                  value={modal.effective_from}
-                  onChange={e => setModal(m => m ? { ...m, effective_from: e.target.value } : m)}
-                />
+                <DateInput className="field-input" value={modal.effective_from} onChange={isoDate => setModal(m => m ? { ...m, effective_from: isoDate } : m)} />
               </div>
             </div>
 

@@ -296,13 +296,14 @@ class LeaveBalanceSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
     available_days = serializers.SerializerMethodField()
     leave_type_display = serializers.CharField(source='get_leave_type_display', read_only=True)
+    annual_entitlement = serializers.SerializerMethodField()
 
     class Meta:
         model  = LeaveBalance
         fields = [
             'id', 'employee_name', 'leave_type', 'leave_type_display',
             'year', 'total_days', 'used_days', 'carried_forward',
-            'carry_forward_expiry_date', 'available_days',
+            'carry_forward_expiry_date', 'available_days', 'annual_entitlement',
         ]
 
     def get_employee_name(self, obj):
@@ -310,6 +311,11 @@ class LeaveBalanceSerializer(serializers.ModelSerializer):
 
     def get_available_days(self, obj):
         return float(obj.total_days - obj.used_days)
+
+    def get_annual_entitlement(self, obj):
+        """The policy's full-year entitlement for this leave type (0 for event-based types such as LOP)."""
+        policy = LeavePolicy.objects.filter(leave_type=obj.leave_type, is_active=True).only('annual_days').first()
+        return float(policy.annual_days) if policy else 0.0
 
 
 class LeaveRequestSerializer(serializers.ModelSerializer):

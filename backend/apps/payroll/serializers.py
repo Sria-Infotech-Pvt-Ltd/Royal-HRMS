@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 from .models import (
     PayrollSettings,
@@ -275,6 +277,9 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
     structure_name = serializers.CharField(source='salary_structure.name', read_only=True)
     monthly_ctc = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     reason_display = serializers.CharField(source='get_reason_display', read_only=True)
+    # The employee's own tax-regime election (their most recent declaration) — shown, never edited, in the
+    # Basic pay dialog because the employee elects it once per financial year.
+    employee_tax_regime = serializers.SerializerMethodField()
     # Snapshot strings, not a nested serializer — a promotion record's own
     # designation/role fields are themselves already immutable snapshots
     # (see PromotionRecord's docstring), so echoing them back here needs no
@@ -304,21 +309,62 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
             'linked_promotion',
             'linked_promotion_designation',
             'linked_promotion_effective_date',
+            'pay_scale_group',
+            'pay_scale_level',
+            'basic_percent',
+            'earnings_override',
+            'employee_tax_regime',
             'is_active',
             'created_at',
             'updated_at',
         ]
         read_only_fields = [
-            'id', 'employee_name', 'employee_id_code',
+            'id', 'employee_name', 'employee_id_code', 'employee_tax_regime',
             'structure_name', 'monthly_ctc', 'reason_display',
             'linked_promotion_designation', 'linked_promotion_effective_date',
             'created_at', 'updated_at',
         ]
 
+    def get_employee_tax_regime(self, obj):
+        declaration = obj.employee.tax_declarations.order_by('-financial_year_start').first()
+        return declaration.tax_regime if declaration else ''
+
     def validate_annual_ctc(self, value):
         if value is not None and value <= 0:
             raise serializers.ValidationError('Annual CTC must be greater than 0.')
         return value
+
+    def validate_pay_scale_group(self, value):
+        if value and not re.fullmatch(r'L[1-5]', value):
+            raise serializers.ValidationError('Pay scale group must be L1 to L5.')
+        return value
+
+    def validate_pay_scale_level(self, value):
+        if value and not re.fullmatch(r'0[1-4]', value):
+            raise serializers.ValidationError('Pay scale level must be 01 to 04.')
+        return value
+
+    def validate_basic_percent(self, value):
+        if value not in (40, 45, 50):
+            raise serializers.ValidationError('Basic must be 40%, 45% or 50% of CTC.')
+        return value
+
+    def validate_earnings_override(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError('Overrides must be an object of monthly amounts.')
+        allowed = set(EmployeeSalaryConfig.OVERRIDABLE_EARNINGS)
+        cleaned = {}
+        for key, amount in value.items():
+            if key not in allowed:
+                raise serializers.ValidationError(f'{key} cannot be overridden.')
+            try:
+                number = float(amount)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(f'{key} must be a number.')
+            if number < 0:
+                raise serializers.ValidationError(f'{key} cannot be negative.')
+            cleaned[key] = round(number)
+        return cleaned
 
     def validate(self, attrs):
         # linked_promotion must belong to the same employee this config is

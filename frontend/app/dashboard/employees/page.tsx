@@ -25,9 +25,6 @@ const STATUS_FILTERS: { value: "all" | EmployeeStatusFilter; label: string }[] =
   { value: "inactive",       label: "Exited"         },
 ];
 
-// PreviewRoleProvider now wraps the whole dashboard (app/dashboard/layout.tsx)
-// so the "Preview as" state set from the global nav switcher reaches this
-// page's masking too — no local provider needed here anymore.
 export default function EmployeesPage() {
   return <EmployeesPageInner />;
 }
@@ -37,6 +34,7 @@ function EmployeesPageInner() {
   const canCreate = usePermission("employees.create");
   const canEdit = usePermission("employees.edit");
   const canEditOnboarding = usePermission("onboarding.edit");
+  const canExport = usePermission("employees.export");
 
   const emp = useEmployees();
 
@@ -53,10 +51,12 @@ function EmployeesPageInner() {
   }
 
   return (
-    <div>
+    <div className="emp-fit">
       <EmployeeDirectoryHeader
         totalHeadcount={emp.total}
         canCreate={canCreate}
+        canUseAiAssist={canEdit}
+        canExport={canExport}
         exporting={emp.exporting}
         onResumeDraft={id => setResumeDraftId(id)}
         onOpenAiAssist={() => setShowAiAssist(true)}
@@ -64,19 +64,16 @@ function EmployeesPageInner() {
         onHireEmployee={() => setShowModal(true)}
       />
 
-      {/* Tailwind's own mt-4/mb-4 (1rem) scale — same spacing unit the
-          toolbar below already uses for its own mb-4 — applied consistently
-          between every section here instead of the sections sitting flush
-          (0px) or near-flush (1px) against each other. */}
-      <div className="mt-4">
-        <EmployeeStatCards stats={emp.stats} />
-      </div>
+      {/* Section spacing comes from .emp-fit's gap (directory-theme.css) — the stats, banner and panel are
+          direct children so the reference's compact `.page > .stats` / `.page > .panel` rules apply. */}
+      <EmployeeStatCards stats={emp.stats} />
 
-      <div className="mt-4">
-        <AppraisalBanner />
-      </div>
+      <AppraisalBanner />
 
-      <div className="mt-4">
+      <section className="panel">
+        <div className="panel-h">
+          <h2>All <em className="hl">employees</em><span className="cnt">{emp.totalCount} of {emp.total}</span></h2>
+        </div>
         <EmployeeToolbar
           search={emp.search} onSearchChange={emp.setSearch}
           branch={emp.branch} branchOptions={emp.branchOptions} onBranchChange={emp.setBranch}
@@ -87,25 +84,25 @@ function EmployeesPageInner() {
           onClearFilters={emp.clearFilters}
           canImport={canCreate} onBulkImport={() => setShowImport(true)}
         />
-      </div>
 
-      <EmployeeTable
-        employees={emp.employees}
-        loading={emp.loading}
-        fetchError={emp.fetchError}
-        canEditOnboarding={canEditOnboarding}
-        canEdit={canEdit}
-        togglingId={emp.toggling}
-        onOpen={open}
-        onToggleStatus={emp.toggleStatus}
-        onRetry={() => emp.fetchEmployees()}
-        onActionApplied={() => { emp.fetchEmployees(); emp.fetchStats(emp.branch, emp.dept, emp.status); }}
-      />
+        <EmployeeTable
+          employees={emp.employees}
+          loading={emp.loading}
+          fetchError={emp.fetchError}
+          canEditOnboarding={canEditOnboarding}
+          canEdit={canEdit}
+          togglingId={emp.toggling}
+          onOpen={open}
+          onToggleStatus={emp.toggleStatus}
+          onRetry={() => emp.fetchEmployees()}
+          onActionApplied={() => { emp.fetchEmployees(); emp.fetchStats(emp.branch, emp.dept, emp.status); }}
+        />
 
-      <Pagination
-        page={emp.page} totalPages={emp.totalPages} totalCount={emp.totalCount}
-        pageSize={20} itemLabel="employees" onPageChange={emp.handlePageChange}
-      />
+        <Pagination
+          page={emp.page} totalPages={emp.totalPages} totalCount={emp.totalCount}
+          pageSize={20} itemLabel="employees" onPageChange={emp.handlePageChange}
+        />
+      </section>
 
       {(showModal || resumeDraftId) && (
         <HireEmployeeModal

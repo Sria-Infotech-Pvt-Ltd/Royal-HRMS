@@ -687,21 +687,29 @@ class HRLifecycleActionRegisterView(APIView):
 
         branch = _hr_dashboard_branch(request.user)
 
+        # Filter BEFORE slicing: Django refuses .filter() on a sliced queryset,
+        # which used to 500 this endpoint for every branch-scoped HR/Payroll user.
         sep_qs = (
             SeparationRequest.objects
             .filter(status__in=[SEP_PENDING, SEP_STAGE2_PENDING])
             .select_related('employee')
-            .order_by('-created_at')[:10]
         )
         if branch:
             sep_qs = sep_qs.filter(employee__branch=branch)
+        sep_qs = sep_qs.order_by('-created_at')[:10]
 
-        onboarding_qs = (
-            User.objects.filter(onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True)
-            .order_by('-updated_at')[:10]
-        )
+        onboarding_qs = User.objects.filter(onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True)
         if branch:
             onboarding_qs = onboarding_qs.filter(branch=branch)
+        onboarding_qs = onboarding_qs.order_by('-updated_at')[:10]
+
+        # Promotion / Org assignment / Pay change / Confirmation raised by a
+        # Reporting Manager and still waiting on an approver.
+        from apps.accounts.models_personnel_action import PersonnelActionRequest
+        action_qs = PersonnelActionRequest.objects.filter(status=PersonnelActionRequest.STATUS_PENDING).select_related('employee')
+        if branch:
+            action_qs = action_qs.filter(employee__branch=branch)
+        action_qs = action_qs.order_by('-created_at')[:10]
 
         rows = []
         for sep in sep_qs:
@@ -723,6 +731,18 @@ class HRLifecycleActionRegisterView(APIView):
                 'owner':         'Reporting Manager' if user.reporting_manager_id else 'HR Operations',
                 'state':         'Pending',
                 'link':          f'/dashboard/employees/{user.employee_id}/onboarding',
+            })
+
+        for action in action_qs:
+            step = action.steps[action.current_step] if action.current_step < len(action.steps) else None
+            rows.append({
+                'case_ref':      f'ACT-{str(action.id)[:5].upper()}',
+                'employee_name': action.employee.full_name,
+                'action':        action.get_action_type_display(),
+                'effective':     action.effective_from.isoformat(),
+                'owner':         step['label'] if step else 'HR Operations',
+                'state':         'Pending',
+                'link':          '/dashboard/approvals',
             })
 
         rows.sort(key=lambda r: r['effective'] or '9999-99-99')

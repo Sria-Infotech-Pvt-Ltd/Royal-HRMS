@@ -32,6 +32,7 @@ export default function DashboardShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const isFitPage = pathname === "/dashboard/employees";
 
   // Fetched independently of the server-rendered session cookie (name/role
   // only) so a photo change shows up immediately, without needing to log in
@@ -154,7 +155,10 @@ export default function DashboardShell({
 
         {/* Right-side utilities */}
         <div className="navright order-2 md:order-none">
-          <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
+          {/* Hidden on the ESS shell, as in the reference (.ess-mode .navsearch). */}
+          {!pathname.startsWith("/dashboard/ess") && (
+            <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
+          )}
           <DarkModeToggle />
           <NotificationBell />
           <button
@@ -180,8 +184,12 @@ export default function DashboardShell({
       </header>
 
       {/* ══════════════════ CONTENT ══════════════════ */}
-      <main className="flex-1 overflow-y-auto bg-[var(--bg)]">
-        <div className="px-6 py-4 md:px-10 md:py-6">
+      <main className={`flex-1 overflow-y-auto bg-[var(--bg)]${isFitPage ? " flex flex-col" : ""}`}>
+        {/* The ESS shell uses the reference's .module-page spacing
+            (16px 24px 40px) instead of the standard page gutter.
+            The Employee Directory is a "fit" page (as in the reference): the wrapper fills <main>
+            so the page header, KPIs and banner stay put and only the table body scrolls. */}
+        <div className={`${pathname.startsWith("/dashboard/ess") ? "px-6 pt-4 pb-10" : isFitPage ? "px-4 py-3 md:px-5 md:pt-2 md:pb-2.5" : "px-6 py-4 md:px-10 md:py-6"}${isFitPage ? " flex-1 min-h-0 flex flex-col w-full max-w-[1400px] mx-auto" : ""}`}>
           {children}
         </div>
       </main>

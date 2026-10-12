@@ -12,6 +12,7 @@
 import { useRef, useState } from "react";
 import { useMyDocuments, type ApiDocumentSubmission, type DocumentCategory, type DocumentStatus } from "@/hooks/useMyDocuments";
 import { formatDate } from "@/lib/formatDate";
+import DateInput from "@/components/shared/DateInput";
 
 const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "identity",   label: "Identity" },
@@ -91,7 +92,7 @@ function SubmissionForm({ submitting, submitError, onSubmit }: {
         Submit a document for verification
       </p>
       <small style={{ display: "block", marginBottom: 16 }}>
-        PDF, JPG or PNG · Maximum 10 MB. This demo records submission metadata; it does not retain the file.
+        PDF, JPG or PNG · Maximum 10 MB. Only the document details are recorded; the file itself is not stored here, so keep the original ready for verification.
       </small>
 
       {(formError || submitError) && (
@@ -114,12 +115,7 @@ function SubmissionForm({ submitting, submitError, onSubmit }: {
         </div>
         <div className="field-group">
           <label className="field-label">Expiry date (if applicable)</label>
-          <input
-            type="date"
-            className="field-input"
-            value={expiryDate}
-            onChange={e => setExpiryDate(e.target.value)}
-          />
+          <DateInput className="field-input" value={expiryDate} onChange={isoDate => setExpiryDate(isoDate)} />
         </div>
       </div>
 

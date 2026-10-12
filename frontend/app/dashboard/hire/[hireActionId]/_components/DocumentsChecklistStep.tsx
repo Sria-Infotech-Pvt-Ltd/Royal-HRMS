@@ -8,6 +8,7 @@
 
 import { useEffect, useRef } from "react";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
+import DateInput from "@/components/shared/DateInput";
 
 export type { HireDocument };
 
@@ -125,8 +126,8 @@ export default function DocumentsChecklistStep({ documents, uploading, error, on
         </div>
         <div>
           <label className="block text-[12.5px] font-semibold mb-1.5">Completed on</label>
-          <input type="date" value={verification.verification_completed_on}
-            onChange={e => onVerificationChange({ ...verification, verification_completed_on: e.target.value })}
+          <DateInput value={verification.verification_completed_on}
+            onChange={iso => onVerificationChange({ ...verification, verification_completed_on: iso })}
             className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--outline-v)] text-[13px] bg-[var(--surface)]" />
         </div>
         <div>

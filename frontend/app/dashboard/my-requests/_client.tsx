@@ -19,6 +19,7 @@ import {
   REQUEST_TABS, STATUS_BADGE_CLASS, STATUS_FILTERS, STATUS_LABEL, TYPE_META,
   correctionToMyItem, expenseToMyItem, fmtSubmitted, hrHelpToMyItem, leaveToMyItem, toSortableTime, wfhToMyItem,
 } from "./_data";
+import DateInput from "@/components/shared/DateInput";
 
 type SortKey = "submittedAt" | "lastUpdated" | "status";
 const PAGE_SIZE = 10;
@@ -193,25 +194,9 @@ export default function MyRequestsClient({ initialTab }: Props) {
         >
           {STATUS_FILTERS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
         </select>
-        <input
-          type="date"
-          className="field-input"
-          style={{ width: 150 }}
-          value={dateFrom}
-          onChange={e => setDateFrom(e.target.value)}
-          title="Submitted from"
-          suppressHydrationWarning
-        />
+        <DateInput className="field-input" style={{ width: 150 }} value={dateFrom} onChange={isoDate => setDateFrom(isoDate)} title="Submitted from" />
         <span style={{ fontSize: 12, color: "var(--on-variant)" }}>to</span>
-        <input
-          type="date"
-          className="field-input"
-          style={{ width: 150 }}
-          value={dateTo}
-          onChange={e => setDateTo(e.target.value)}
-          title="Submitted to"
-          suppressHydrationWarning
-        />
+        <DateInput className="field-input" style={{ width: 150 }} value={dateTo} onChange={isoDate => setDateTo(isoDate)} title="Submitted to" />
       </div>
 
       <div className="card">

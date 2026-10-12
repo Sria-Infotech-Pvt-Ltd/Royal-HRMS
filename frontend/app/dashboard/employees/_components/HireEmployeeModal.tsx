@@ -10,6 +10,7 @@ import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import { usePermission } from "@/hooks/usePermission";
 import type { Position } from "@/types/orgStructure";
 import HireWizardClient from "@/app/dashboard/hire/[hireActionId]/_components/HireWizardClient";
+import DateInput from "@/components/shared/DateInput";
 
 // Stage 1 of the two-stage Hire flow — collects just enough to reserve a
 // HireAction (reason/effective date/position) before any User exists. Once
@@ -159,7 +160,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
           </div>
           <div className="f">
             <label>Effective from <span className="req">*</span></label>
-            <input type="date" min={todayStr} value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} className="finput" />
+            <DateInput min={todayStr} value={effectiveFrom} onChange={setEffectiveFrom} className="finput" />
             <p className="hint">This becomes the date of joining.</p>
           </div>
         </div>

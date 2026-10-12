@@ -8,6 +8,7 @@ import { API } from "@/lib/api/endpoints";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import type { PaginatedUnpunches } from "@/types/attendance";
+import DateInput from "@/components/shared/DateInput";
 
 interface BranchOption { id: number; branch_name: string }
 
@@ -54,13 +55,7 @@ export default function UnpunchesTab() {
       </div>
 
       <div className="filter-bar" style={{ marginBottom: 14 }}>
-        <input
-          type="date"
-          className="field-input"
-          style={{ width: 160 }}
-          value={date}
-          onChange={e => { setDate(e.target.value); setPage(1); }}
-        />
+        <DateInput className="field-input" style={{ width: 160 }} value={date} onChange={isoDate => { setDate(isoDate); setPage(1); }} />
         <BranchFilterSelect
           branches={branches}
           value={branchInput}

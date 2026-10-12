@@ -9,6 +9,7 @@ import { NAME_RE, POSITION_RE, sanitizeName, sanitizePosition, todayDateString }
 import { Branch, Candidate, InterviewMode, MODE_LABELS, RECRUITMENT_API } from "./_data";
 import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   candidate: Candidate;
@@ -184,11 +185,7 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Interview Date</label>
-              <input type="date" className="field-input"
-                min={todayStr}
-                value={interviewDate.slice(0, 10)}
-                onChange={e => setInterviewDate(e.target.value)}
-                suppressHydrationWarning />
+              <DateInput className="field-input" min={todayStr} value={interviewDate.slice(0, 10)} onChange={isoDate => setInterviewDate(isoDate)} />
               {interviewDate && !candidate.interview_date && (
                 <p style={{ fontSize: 11, color: "var(--info, #0284c7)", marginTop: 5, display: "flex", alignItems: "center", gap: 5 }}>
                   <i className="ti ti-mail" /> An interview invitation email will be sent to the candidate.

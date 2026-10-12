@@ -12,6 +12,7 @@ import {
   type ApiDocument, type ApiStatsResponse, type DocCategory,
   type DocUploadErrors, type DocUploadForm,
 } from "./_data";
+import DateInput from "@/components/shared/DateInput";
 
 // ─── Filter tabs ──────────────────────────────────────────────────────────────
 
@@ -644,10 +645,7 @@ export default function DocumentCenterPage() {
                   </div>
                   <div className="field-group" style={{ flex: 1 }}>
                     <label className="field-label">Effective date <span style={{ fontSize: 11, color: "var(--outline)" }}>(optional)</span></label>
-                    <input className="field-input" type="date"
-                      value={uploadForm.effective_date}
-                      onChange={e => setUploadForm(p => ({ ...p, effective_date: e.target.value }))}
-                      suppressHydrationWarning />
+                    <DateInput className="field-input" value={uploadForm.effective_date} onChange={isoDate => setUploadForm(p => ({ ...p, effective_date: isoDate }))} />
                   </div>
                 </div>
               )}

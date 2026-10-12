@@ -110,12 +110,14 @@ class Goal(models.Model):
 # ─── Performance Review ─────────────────────────────────────────────────────────
 
 REVIEW_NOT_STARTED    = 'not_started'
+REVIEW_RETURNED       = 'returned'
 REVIEW_SELF_REVIEW    = 'self_review'
 REVIEW_HR_CALIBRATION = 'hr_calibration'
 REVIEW_PUBLISHED      = 'published'
 REVIEW_COMPLETED      = 'completed'
 REVIEW_STATUS_CHOICES = [
     (REVIEW_NOT_STARTED,    'Not Started'),
+    (REVIEW_RETURNED,       'Returned for Changes'),
     (REVIEW_SELF_REVIEW,    'Awaiting Manager Review'),
     (REVIEW_HR_CALIBRATION, 'Awaiting HR Calibration'),
     (REVIEW_PUBLISHED,      'Published'),
@@ -153,11 +155,27 @@ class PerformanceReview(models.Model):
     manager_rating       = models.CharField(max_length=1, choices=RATING_CHOICES, blank=True, default='')
     manager_notes        = models.TextField(blank=True, default='')
     manager_submitted_at = models.DateTimeField(null=True, blank=True)
+    # Development plan + next check-in the manager agrees with the employee —
+    # part of the manager assessment, hidden from the employee until publish.
+    manager_development_plan = models.TextField(blank=True, default='')
+    manager_next_checkin     = models.DateField(null=True, blank=True)
+
+    # A manager can send a submitted self-review back for changes. Returning
+    # clears self_submitted_at (the employee may edit and resubmit) and keeps
+    # the reason + time so the employee sees why and the history records it.
+    returned_at   = models.DateTimeField(null=True, blank=True)
+    return_reason = models.TextField(blank=True, default='')
 
     # ── HR calibration and publish/acknowledge (stages 3 and 4) ──
     hr_calibrated_at = models.DateTimeField(null=True, blank=True)
+    # The rating HR finally confirms (may differ from the manager's) and why.
+    final_rating     = models.CharField(max_length=1, choices=RATING_CHOICES, blank=True, default='')
+    calibration_note = models.TextField(blank=True, default='')
     published_at     = models.DateTimeField(null=True, blank=True)
     acknowledged_at  = models.DateTimeField(null=True, blank=True)
+    # Optional response the employee leaves when acknowledging (acknowledging
+    # means "read", not "agree").
+    acknowledgement_comment = models.TextField(blank=True, default='')
 
     status     = models.CharField(max_length=20, choices=REVIEW_STATUS_CHOICES, default=REVIEW_NOT_STARTED, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -186,5 +204,44 @@ class PerformanceReview(models.Model):
             self.status = REVIEW_HR_CALIBRATION
         elif self.self_submitted_at:
             self.status = REVIEW_SELF_REVIEW
+        elif self.returned_at:
+            self.status = REVIEW_RETURNED
         else:
             self.status = REVIEW_NOT_STARTED
+
+
+# ─── Continuous feedback requests ────────────────────────────────────────────
+
+class FeedbackRequest(models.Model):
+    """One person asking another for focused feedback (manager, peer or direct
+    report). Separate from the formal appraisal: no ratings, no HR step."""
+    STATUS_PENDING  = 'pending'
+    STATUS_PROVIDED = 'provided'
+    STATUS_DECLINED = 'declined'
+    STATUS_CHOICES = [
+        (STATUS_PENDING,  'Awaiting response'),
+        (STATUS_PROVIDED, 'Feedback received'),
+        (STATUS_DECLINED, 'Declined'),
+    ]
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    requester   = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='feedback_requests_made')
+    recipient   = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='feedback_requests_received')
+    cycle_label = models.CharField(max_length=60, default='Continuous feedback')
+    topic       = models.TextField()
+    status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    response    = models.TextField(blank=True, default='')
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'performance_feedback_requests'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', 'status'], name='fbreq_recipient_status_idx'),
+            models.Index(fields=['requester', 'created_at'], name='fbreq_requester_created_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.requester_id} -> {self.recipient_id} ({self.status})'

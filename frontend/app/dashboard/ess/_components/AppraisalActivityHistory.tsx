@@ -23,7 +23,7 @@ export default function AppraisalActivityHistory({ entries }: { entries: Apprais
         </div>
         <div style={{ padding: "0 20px 4px" }}>
           <p style={{ margin: 0, fontSize: 12.5, color: "var(--on-variant)" }}>
-            Each stage change is recorded in this browser-local demo.
+            Every stage change is recorded here with who made it and when.
           </p>
         </div>
         <div style={{ padding: "8px 20px 16px" }}>
@@ -51,7 +51,7 @@ export default function AppraisalActivityHistory({ entries }: { entries: Apprais
         </div>
         <div style={{ padding: "0 20px 16px" }}>
           <p style={{ fontSize: 12, color: "var(--on-variant)", margin: 0 }}>
-            Manager notes and calibrated ratings stay hidden until the outcome is published. This demo does not make payroll or promotion changes.
+            Manager notes and calibrated ratings stay hidden until the outcome is published. Publishing an appraisal does not change pay, promotion or any other HR record.
           </p>
         </div>
       </div>

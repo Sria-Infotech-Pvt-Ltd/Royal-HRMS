@@ -66,8 +66,11 @@ class LeaveRequestListCreateView(APIView):
             if not (_has_perm(request.user, 'employees.view') or has_approve):
                 return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
             from apps.accounts.models import User
+            from apps.accounts.views.shared import _employee_out_of_branch_scope
             target_user = User.objects.filter(employee_id=employee_id_param).first()
-            if not target_user:
+            # Same scoping as every other employee-record endpoint: managers see direct reports only,
+            # branch-scoped roles their own branch (this listing used to ignore it).
+            if not target_user or (target_user.pk != request.user.pk and _employee_out_of_branch_scope(request.user, target_user)):
                 return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
             queryset = qs_base.filter(employee=target_user)
         elif scope == 'team' and has_approve:

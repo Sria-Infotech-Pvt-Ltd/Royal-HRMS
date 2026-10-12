@@ -17,9 +17,12 @@ interface Props {
   /** Called after a clock in/out request succeeds — lets the parent refresh
    *  any sibling widgets (KPIs, attendance status) that read the same data. */
   onPunchSuccess?: () => void;
+  /** "ess" renders the Employee Self Service hero's single white "Punch in / Punch out" button
+   *  (same punch + geofence + face-verification flow underneath). */
+  variant?: "default" | "ess";
 }
 
-export default function ClockInButton({ onPunchSuccess }: Props) {
+export default function ClockInButton({ onPunchSuccess, variant = "default" }: Props) {
   const { session, isLoading, isPunching, faceVerificationRequired, prepareLocation, punch } = useClockWidget();
   const [showModal, setShowModal] = useState(false);
   const [showFaceModal, setShowFaceModal] = useState(false);
@@ -47,6 +50,21 @@ export default function ClockInButton({ onPunchSuccess }: Props) {
     setShowFaceModal(false);
     const ok = await punch(isClockedIn ? "OUT" : "IN", MODE, pendingLocation, embedding, livenessScore, captureSessionId);
     if (ok) onPunchSuccess?.();
+  }
+
+  if (variant === "ess") {
+    return (
+      <>
+        <button type="button" className="btn" onClick={handlePunch} disabled={isBusy} aria-pressed={isClockedIn} suppressHydrationWarning>
+          {isPunching ? "Please wait…" : isClockedIn ? "Punch out" : "Punch in"}
+        </button>
+        <FaceVerificationModal
+          isOpen={showFaceModal}
+          onCaptured={handleFaceCaptured}
+          onClose={() => setShowFaceModal(false)}
+        />
+      </>
+    );
   }
 
   return (

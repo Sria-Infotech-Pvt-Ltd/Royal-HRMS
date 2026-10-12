@@ -13,6 +13,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
 import ConfirmModal from "@/components/ConfirmModal";
+import DateInput from "@/components/shared/DateInput";
 
 export interface GrowthGoal {
   id: string;
@@ -176,7 +177,7 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
           </div>
           <div className="field-group">
             <label className="field-label">Due date</label>
-            <input className="field-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+            <DateInput className="field-input" value={dueDate} onChange={isoDate => setDueDate(isoDate)} />
           </div>
         </div>
         <button className="btn btn-filled" onClick={handleAdd} disabled={adding || !title.trim()}>

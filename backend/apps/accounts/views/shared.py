@@ -314,7 +314,7 @@ def _employee_dict(user: User) -> dict:
         # viewer permission; the real value only ever comes back from
         # EmployeeRevealSensitiveView, gated by employees.view_sensitive.
         'pan_masked': (
-            f'{p.pan_number[:5]}••••{p.pan_number[-1]}'
+            f'{p.pan_number[:3]}••••{p.pan_number[-1]}'
             if (p and p.pan_number and len(p.pan_number) >= 6) else ''
         ),
         # Aadhaar/PF number/passport are the same PII tier as PAN — masked

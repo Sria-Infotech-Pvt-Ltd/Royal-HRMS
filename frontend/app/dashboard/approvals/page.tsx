@@ -6,14 +6,18 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import TeamApprovalsSection from "./_components/TeamApprovalsSection";
 import AttendanceApprovalTab from "./_components/AttendanceApprovalTab";
 import FaceRegistrationApprovalsTab from "./_components/FaceRegistrationApprovalsTab";
+import PersonnelActionsTab from "./_components/PersonnelActionsTab";
 
-type Section = "approvals" | "attendance" | "face_registration";
+type Section = "approvals" | "attendance" | "face_registration" | "personnel";
 
 export default function ApprovalsPage() {
   const user = useCurrentUser();
   const [section, setSection] = useState<Section>("approvals");
   const canApprove      = useAnyPermission("leave.approve", "expenses.approve", "attendance.create", "separation.approve");
   const canApproveFace  = usePermission("facial_recognition.approve");
+  // employees.approve = HR step, payroll.edit = Payroll Admin step, employees.raise_action =
+  // a manager following the requests they raised. The server decides who may act on what.
+  const canSeePersonnel = useAnyPermission("employees.approve", "payroll.edit", "employees.raise_action");
   const hasPayrollView  = usePermission("payroll.view");
   // Managers, superusers, and anyone with payroll.view (payroll admins and HR
   // alike) get this tab — it's the only place attendance-cycle sign-off lives
@@ -26,8 +30,9 @@ export default function ApprovalsPage() {
   const sections: { key: Section; label: string; icon: string }[] = useMemo(() => [
     ...(canApprove           ? [{ key: "approvals"         as Section, label: "Team Approvals",      icon: "ti-checks"         }] : []),
     ...(canApproveAttendance ? [{ key: "attendance"         as Section, label: "Attendance Approval", icon: "ti-calendar-check" }] : []),
+    ...(canSeePersonnel      ? [{ key: "personnel"          as Section, label: "Personnel Actions",   icon: "ti-bolt"           }] : []),
     ...(canApproveFace       ? [{ key: "face_registration"  as Section, label: "Face Registration",   icon: "ti-face-id"        }] : []),
-  ], [canApprove, canApproveAttendance, canApproveFace]);
+  ], [canApprove, canApproveAttendance, canApproveFace, canSeePersonnel]);
 
   useEffect(() => {
     if (sections.length > 0 && !sections.some(s => s.key === section)) {
@@ -53,6 +58,7 @@ export default function ApprovalsPage() {
 
       {section === "approvals"         && canApprove           && <TeamApprovalsSection />}
       {section === "attendance"        && canApproveAttendance && <div className="settings-card"><AttendanceApprovalTab /></div>}
+      {section === "personnel"         && canSeePersonnel      && <PersonnelActionsTab />}
       {section === "face_registration" && canApproveFace        && <div className="settings-card"><FaceRegistrationApprovalsTab /></div>}
     </div>
   );

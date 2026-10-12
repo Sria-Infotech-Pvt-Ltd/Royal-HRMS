@@ -2,6 +2,7 @@
 
 import type { EducationExperienceFieldConfig } from "@/types/onboardingFieldConfig";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
+import DateInput from "@/components/shared/DateInput";
 
 // ── Step: Experience ──────────────────────────────────────────────────────────
 // A genuinely repeatable, unbounded list of previous employers (unlike
@@ -132,19 +133,13 @@ export default function ExperienceList({
               {isVisible("start_date") && (
                 <div className="field-group">
                   <label className="field-label">Start Date{isRequired("start_date") && <Req />}</label>
-                  <input className="field-input" type="date" value={entry.start_date} onChange={e => onFieldChange(entry.id, "start_date", e.target.value)} />
+                  <DateInput className="field-input" value={entry.start_date} onChange={isoDate => onFieldChange(entry.id, "start_date", isoDate)} />
                 </div>
               )}
               {isVisible("end_date") && (
                 <div className="field-group">
                   <label className="field-label">Last working day{isRequired("end_date") && !entry.is_current && <Req />}</label>
-                  <input
-                    className="field-input" type="date"
-                    value={entry.end_date}
-                    disabled={entry.is_current}
-                    onChange={e => onFieldChange(entry.id, "end_date", e.target.value)}
-                    style={entry.is_current ? { background: "var(--bg-low)", color: "var(--on-variant)" } : undefined}
-                  />
+                  <DateInput className="field-input" value={entry.end_date} disabled={entry.is_current} onChange={isoDate => onFieldChange(entry.id, "end_date", isoDate)} style={entry.is_current ? { background: "var(--bg-low)", color: "var(--on-variant)" } : undefined} />
                   <div className="hint">Actual, or expected if serving notice.</div>
                 </div>
               )}

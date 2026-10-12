@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { EducationExperienceFieldConfig } from "@/types/onboardingFieldConfig";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 import SearchableSelect from "@/components/SearchableSelect";
+import DateInput from "@/components/shared/DateInput";
 
 // ── Step: Education ──────────────────────────────────────────────────────────
 // A genuinely repeatable, unbounded list of qualifications (two Bachelor's
@@ -240,13 +241,13 @@ export default function EducationChecklist({
               {isVisible("start_date") && (
                 <div className="field-group">
                   <label className="field-label">Start Date{isRequired("start_date") && <Req />}</label>
-                  <input className="field-input" type="date" value={entry.start_date} onChange={e => onFieldChange(entry.id, "start_date", e.target.value)} />
+                  <DateInput className="field-input" value={entry.start_date} onChange={isoDate => onFieldChange(entry.id, "start_date", isoDate)} />
                 </div>
               )}
               {isVisible("end_date") && (
                 <div className="field-group">
                   <label className="field-label">End Date{isRequired("end_date") && <Req />}</label>
-                  <input className="field-input" type="date" value={entry.end_date} onChange={e => onFieldChange(entry.id, "end_date", e.target.value)} />
+                  <DateInput className="field-input" value={entry.end_date} onChange={isoDate => onFieldChange(entry.id, "end_date", isoDate)} />
                 </div>
               )}
             </div>

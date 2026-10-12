@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import { formatDateTime } from "@/lib/formatDate";
+import DateInput from "@/components/shared/DateInput";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -200,17 +201,9 @@ export default function EmailLogsPage() {
           {MODULES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
 
-        <input
-          className="field-input" type="date" style={{ width: 140, flexShrink: 0 }}
-          value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-          title="From" suppressHydrationWarning
-        />
+        <DateInput className="field-input" style={{ width: 140, flexShrink: 0 }} value={dateFrom} onChange={isoDate => setDateFrom(isoDate)} title="From" />
         <span style={{ fontSize: 12, color: "var(--on-variant)", flexShrink: 0 }}>to</span>
-        <input
-          className="field-input" type="date" style={{ width: 140, flexShrink: 0 }}
-          value={dateTo} onChange={e => setDateTo(e.target.value)}
-          title="To" suppressHydrationWarning
-        />
+        <DateInput className="field-input" style={{ width: 140, flexShrink: 0 }} value={dateTo} onChange={isoDate => setDateTo(isoDate)} title="To" />
 
         {hasActiveFilters && (
           <button type="button" className="btn btn-ghost" onClick={clearFilters} style={{ flexShrink: 0 }}>

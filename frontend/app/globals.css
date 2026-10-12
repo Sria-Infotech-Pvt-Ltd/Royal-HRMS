@@ -360,7 +360,7 @@ tr:hover td {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
   border: none;
 }
 
@@ -684,7 +684,7 @@ textarea.field-input {
   color: var(--on-variant);
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  transition: all 0.15s;
+  transition: all 0.12s;
   margin-bottom: -1px;
 }
 
@@ -698,53 +698,7 @@ textarea.field-input {
   border-bottom-color: var(--on-bg);
 }
 
-/* ESS pill tab bar — a rounded segmented control, distinct from the
-   underline .tabs/.tab used elsewhere in the app. */
-.ess-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 1px;
-  background: var(--surface);
-  border: 1px solid var(--outline-v);
-  border-radius: 12px;
-  padding: 5px;
-  margin-bottom: 20px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.ess-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.ess-tab {
-  padding: 7px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--on-variant);
-  cursor: pointer;
-  border-radius: 8px;
-  border: none;
-  background: none;
-  transition: all 0.15s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.ess-tab:hover {
-  color: var(--on-bg);
-  background: var(--bg-mid);
-}
-
-.ess-tab:active {
-  background: color-mix(in srgb, var(--bg-mid) 70%, var(--outline-v));
-}
-
-.ess-tab.active {
-  color: var(--primary);
-  font-weight: 700;
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-}
+/* ESS pill tab bar rules moved to ess-theme.css (reference-exact). */
 
 /* Alert */
 .alert {
@@ -1083,7 +1037,7 @@ textarea.field-input {
   border-left: 3px solid var(--primary);
   font-size: 13px;
   color: var(--on-bg);
-  animation: slideIn 0.25s ease;
+  animation: slideIn 0.18s ease-out;
   min-width: 260px;
 }
 
@@ -1196,7 +1150,7 @@ textarea.field-input {
   padding: 32px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
   background: var(--bg-low);
 }
 
@@ -1325,7 +1279,7 @@ textarea.field-input {
   align-items: flex-start;
   gap: 8px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
   text-align: left;
 }
 
@@ -1365,7 +1319,7 @@ textarea.field-input {
   border-radius: var(--radius-lg);
   padding: 18px 20px;
   position: relative;
-  transition: all 0.15s;
+  transition: all 0.12s;
 }
 
 .anc-card:hover {
@@ -1405,7 +1359,7 @@ textarea.field-input {
   border-radius: var(--radius);
   padding: 16px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1737,7 +1691,7 @@ textarea.field-input {
   font-weight: 500;
   color: var(--on-variant);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1771,7 +1725,7 @@ textarea.field-input {
   border-radius: var(--radius-lg);
   padding: 18px 20px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
   display: flex;
   gap: 14px;
   align-items: flex-start;
@@ -2797,7 +2751,7 @@ html[data-theme="dark"] {
 .drawer.open { transform: translateX(0); }
 .drawer-header { padding: 20px 24px; border-bottom: 1px solid var(--outline-v); display: flex; align-items: center; justify-content: space-between; background: var(--surface); flex-shrink: 0; }
 .drawer-title { font-size: 16px; font-weight: 600; color: var(--on-bg); }
-.drawer-close { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--outline); border: none; background: var(--bg-low); transition: all 0.15s; }
+.drawer-close { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--outline); border: none; background: var(--bg-low); transition: all 0.12s; }
 .drawer-close:hover { background: var(--bg-mid); color: var(--on-bg); }
 .drawer-body { padding: 24px; flex: 1; overflow-y: auto; }
 .drawer-footer { padding: 16px 24px; border-top: 1px solid var(--outline-v); display: flex; justify-content: flex-end; gap: 10px; background: var(--surface); flex-shrink: 0; }
@@ -2889,7 +2843,7 @@ html[data-theme="dark"] {
   padding: 9px 16px; border: none; background: transparent; cursor: pointer;
   font-size: 13px; font-weight: 500; color: var(--ta-text-muted);
   border-radius: var(--ta-radius-sm); white-space: nowrap; flex-shrink: 0;
-  transition: all 0.15s;
+  transition: all 0.12s;
 }
 .ta-tab:hover { background: var(--ta-bg); color: var(--ta-text); }
 .ta-tab.active { background: var(--ta-primary); color: #fff; font-weight: 600; }
@@ -2918,7 +2872,7 @@ html[data-theme="dark"] {
   display: flex; align-items: center; gap: 6px; padding: 8px 14px;
   border-radius: var(--ta-radius-sm); border: 1.5px solid var(--ta-border);
   background: var(--ta-surface); color: var(--ta-text-muted); font-size: 13px; font-weight: 500;
-  cursor: pointer; transition: all 0.15s; margin-left: auto; flex-shrink: 0;
+  cursor: pointer; transition: all 0.12s; margin-left: auto; flex-shrink: 0;
 }
 .ta-refresh-btn:hover { border-color: var(--ta-primary); color: var(--ta-primary); background: var(--ta-primary-soft); }
 .ta-refresh-btn i.spin { animation: spin 0.8s linear infinite; }
@@ -2932,7 +2886,7 @@ html[data-theme="dark"] {
 }
 @keyframes taBulkIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 .ta-bulk-count { font-size: 13px; font-weight: 600; color: var(--ta-primary-hover); }
-.ta-bulk-btn { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--ta-radius-sm); border: none; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.ta-bulk-btn { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--ta-radius-sm); border: none; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all 0.12s; }
 .ta-bulk-approve { background: var(--ta-success); color: #fff; }
 .ta-bulk-approve:hover { background: #16A34A; }
 .ta-bulk-reject { background: #fff; color: var(--ta-danger); border: 1.5px solid var(--ta-danger); }
@@ -2989,7 +2943,7 @@ html[data-theme="dark"] {
 
 /* Actions */
 .ta-actions { display: flex; align-items: center; gap: 6px; }
-.ta-icon-btn { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--ta-border); background: var(--ta-surface); color: var(--ta-text-muted); cursor: pointer; transition: all 0.15s; font-size: 14px; }
+.ta-icon-btn { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--ta-border); background: var(--ta-surface); color: var(--ta-text-muted); cursor: pointer; transition: all 0.12s; font-size: 14px; }
 .ta-icon-btn:hover { background: var(--ta-bg); color: var(--ta-text); }
 .ta-icon-btn.view:hover { border-color: var(--ta-primary); color: var(--ta-primary); background: var(--ta-primary-soft); }
 .ta-icon-btn.approve:hover { border-color: var(--ta-success); color: #15803D; background: var(--ta-success-soft); }
@@ -3014,7 +2968,7 @@ html[data-theme="dark"] {
 /* Pagination */
 .ta-pagination { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid var(--ta-border); flex-wrap: wrap; gap: 10px; }
 .ta-pagination-info { font-size: 12px; color: var(--ta-text-muted); }
-.ta-page-btn { display: flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: var(--ta-radius-sm); border: 1.5px solid var(--ta-border); background: var(--ta-surface); color: var(--ta-text-muted); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+.ta-page-btn { display: flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: var(--ta-radius-sm); border: 1.5px solid var(--ta-border); background: var(--ta-surface); color: var(--ta-text-muted); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all 0.12s; }
 .ta-page-btn:hover:not(:disabled) { border-color: var(--ta-primary); color: var(--ta-primary); }
 .ta-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .ta-page-num { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--ta-radius-sm); border: 1.5px solid transparent; background: transparent; color: var(--ta-text-muted); font-size: 12.5px; font-weight: 600; cursor: pointer; }
@@ -3026,7 +2980,7 @@ html[data-theme="dark"] {
 .ta-drawer-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 .ta-drawer-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ta-text-muted); margin-bottom: 8px; }
 .ta-drawer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-.ta-attachment { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--ta-border); border-radius: var(--ta-radius-sm); margin-bottom: 8px; transition: all 0.15s; cursor: pointer; }
+.ta-attachment { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--ta-border); border-radius: var(--ta-radius-sm); margin-bottom: 8px; transition: all 0.12s; cursor: pointer; }
 .ta-attachment:hover { border-color: var(--ta-primary); background: var(--ta-primary-soft); }
 .ta-attachment i { font-size: 18px; color: var(--ta-primary); flex-shrink: 0; }
 .ta-timeline-item { display: flex; gap: 12px; padding-bottom: 16px; position: relative; }

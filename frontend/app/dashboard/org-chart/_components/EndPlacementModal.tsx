@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import type { Position } from "@/types/orgStructure";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   position: Position | null;
@@ -72,13 +73,7 @@ export default function EndPlacementModal({ position, onClose, onEnded }: Props)
 
       <div className="field-group mb-16">
         <label className="field-label">Last day <span style={{ color: "var(--error)" }}>*</span></label>
-        <input
-          className={`field-input${dateError ? " field-error" : ""}`}
-          type="date"
-          min={position.holder_since ?? undefined}
-          value={lastDay}
-          onChange={e => { setLastDay(e.target.value); setDateError(null); }}
-        />
+        <DateInput className={`field-input${dateError ? " field-error" : ""}`} min={position.holder_since ?? undefined} value={lastDay} onChange={isoDate => { setLastDay(isoDate); setDateError(null); }} />
         {dateError && <p className="field-error-msg">{dateError}</p>}
       </div>
 

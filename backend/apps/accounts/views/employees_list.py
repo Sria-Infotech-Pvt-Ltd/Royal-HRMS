@@ -122,6 +122,10 @@ from apps.accounts.views.shared import *  # noqa: F401,F403
 
 # ─── Employee List / Create ───────────────────────────────────────────────────
 
+LIST_MAX_PAGE_SIZE = 50
+EXPORT_MAX_PAGE_SIZE = 1000
+
+
 class EmployeeListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -229,9 +233,15 @@ class EmployeeListCreateView(APIView):
         if hr_id := request.query_params.get('hr_id', '').strip():
             qs = qs.filter(hr_id=hr_id, is_active=True)
 
+        # The directory's Export button pulls the whole (already scoped and
+        # filtered) list in one request, so a viewer holding employees.export
+        # may ask for a large page; everyone else stays capped at 50. Export is
+        # client-side CSV from this endpoint, so this cap is the server-side
+        # enforcement of the export permission.
+        max_page_size = EXPORT_MAX_PAGE_SIZE if _has_perm(request.user, 'employees.export') else LIST_MAX_PAGE_SIZE
         try:
             page_num  = max(1, int(request.query_params.get('page', 1)))
-            page_size = min(50, max(1, int(request.query_params.get('page_size', 20))))
+            page_size = min(max_page_size, max(1, int(request.query_params.get('page_size', 20))))
         except (ValueError, TypeError):
             page_num, page_size = 1, 20
 

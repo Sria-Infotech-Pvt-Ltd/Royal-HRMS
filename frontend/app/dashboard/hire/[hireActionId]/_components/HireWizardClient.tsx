@@ -36,6 +36,7 @@ import BasicPayStep, { EMPTY_BASIC_PAY, type BasicPayDraft } from "./BasicPaySte
 import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "./StatutoryAccountsStep";
 import DocumentsChecklistStep, { REQUIRED_DOC_KEYS, REQUIRED_DOC_LABELS, EMPTY_VERIFICATION, type VerificationDraft, type HireDocument } from "./DocumentsChecklistStep";
 import ReviewStep from "./ReviewStep";
+import DateInput from "@/components/shared/DateInput";
 import {
   EMPTY_FORM,
   type IdentityExtras,
@@ -708,7 +709,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Date of birth <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input type="date" value={form.date_of_birth} onChange={e => setForm(f => ({ ...f, date_of_birth: e.target.value }))} className="field-input" />
+                  <DateInput value={form.date_of_birth} onChange={iso => setForm(f => ({ ...f, date_of_birth: iso }))} className="field-input" />
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Gender <span style={{ color: "var(--error)" }}>*</span></label>

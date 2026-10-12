@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import Modal from "@/components/Modal";
 import { useAttendanceCorrection } from "@/hooks/useAttendanceCorrection";
 import type { PunchType, CorrectionReason } from "@/types/attendance";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   isOpen:    boolean;
@@ -77,7 +78,7 @@ export default function CorrectionModal({ isOpen, date, onClose, onSuccess }: Pr
         <div className="form-row cols-2">
           <div className="field-group">
             <label className="field-label">Date</label>
-            <input type="date" className="field-input" value={date} readOnly />
+            <DateInput className="field-input" value={date} readOnly onChange={() => undefined} />
           </div>
           <div className="field-group">
             <label className="field-label">Punch Type</label>

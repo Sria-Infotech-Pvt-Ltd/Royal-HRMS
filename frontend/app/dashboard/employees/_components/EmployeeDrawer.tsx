@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { fullName, initials, avatarColor, type Employee } from "../_data";
 import Avatar from "./Avatar";
 import EmployeeFullRecordBody from "./EmployeeFullRecordBody";
+import { usePermission } from "@/hooks/usePermission";
 
 interface Props {
   employee: Employee;
@@ -22,6 +23,8 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
   const router = useRouter();
   const isAdmin = mode === "admin";
   const isSelf  = mode === "self";
+  // "Edit full record" opens the HR edit page — only offered to roles that can actually edit.
+  const canEditRecord = usePermission("employees.edit");
   const mouseDownOnOverlay = useRef(false);
 
   return (
@@ -30,41 +33,43 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
       onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
       onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) onClose(); }}
     >
-      <div className="drawer open" onClick={e => e.stopPropagation()}>
-        <div className="drawer-header">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Avatar text={initials(employee.firstName, employee.lastName)} size={32} color={avatarColor(employee.department)} photoUrl={employee.photoUrl} />
-            <div>
-              <div className="drawer-title">{fullName(employee)}</div>
-              <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{employee.code} · {employee.designation || "—"}</span>
+      <div className="drawer open emp-drawer" onClick={e => e.stopPropagation()}>
+        <div className="dh">
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <Avatar
+              text={initials(employee.firstName, employee.lastName)} size={40} radius={12}
+              color={avatarColor(employee.department)} photoUrl={employee.photoUrl}
+            />
+            <div style={{ minWidth: 0 }}>
+              <div className="n">{fullName(employee)}</div>
+              <div className="i">{employee.code} · {employee.designation || "—"}</div>
             </div>
           </div>
-          <button className="drawer-close" onClick={onClose}>
+          <button className="xbtn" onClick={onClose} aria-label="Close">
             <i className="ti ti-x" />
           </button>
         </div>
 
-        <div className="drawer-body">
+        <div className="dbody">
           <EmployeeFullRecordBody employee={employee} mode={mode} />
         </div>
 
-        <div className="drawer-footer" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+        <div className="dfoot">
+          <button className="rvbtn ghost" onClick={onClose}>Close</button>
+          <span className="spacer" />
           {isSelf && (
-            <div style={{ display: "flex", gap: 10 }}>
-              <button className="btn btn-filled" onClick={onRequestCorrection ?? (() => router.push("/dashboard/profile"))}>
+            <>
+              <button className="rvbtn" onClick={() => router.push("/dashboard/leave")}>Request leave</button>
+              <button className="rvbtn pri" onClick={onRequestCorrection ?? (() => router.push("/dashboard/profile"))}>
                 {correctionLabel ?? "Request profile correction"}
               </button>
-              <button className="btn btn-outline" onClick={() => router.push("/dashboard/leave")}>Request leave</button>
-            </div>
+            </>
           )}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <button className="btn btn-ghost" onClick={onClose}>Close</button>
-            {isAdmin && (
-              <button className="btn btn-filled" onClick={() => router.push(`/dashboard/employees/${employee.id}`)}>
-                Edit full record
-              </button>
-            )}
-          </div>
+          {isAdmin && canEditRecord && (
+            <button className="rvbtn pri" onClick={() => router.push(`/dashboard/employees/${employee.id}`)}>
+              Edit full record
+            </button>
+          )}
         </div>
       </div>
     </div>

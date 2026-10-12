@@ -13,6 +13,7 @@ import {
 } from "../_data";
 import { type LeaveForm, BLANK, Lbl, Err, dayName } from "./applyLeaveFormHelpers";
 import LeaveSubmittedScreen from "./LeaveSubmittedScreen";
+import DateInput from "@/components/shared/DateInput";
 
 export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const { showToast } = useToast();
@@ -223,8 +224,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                   <Lbl text="Start Date" required />
                   <div className="relative">
                     <i className="ti ti-calendar absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--on-variant)] text-sm pointer-events-none" />
-                    <input type="date" value={form.from_date} onChange={e => setField("from_date", e.target.value)}
-                      className={[(errors.from_date ? INPUT_ERR : INPUT), "pl-9"].join(" ")} />
+                    <DateInput value={form.from_date} onChange={isoDate => setField("from_date", isoDate)} className={[(errors.from_date ? INPUT_ERR : INPUT), "pl-9"].join(" ")} />
                   </div>
                   {form.from_date && !errors.from_date && (
                     <p className="text-xs text-[var(--on-variant)] mt-1">{dayName(form.from_date)}, {fmtDate(form.from_date)}</p>
@@ -235,12 +235,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                   <Lbl text="End Date" required={!isHalfDay} />
                   <div className="relative">
                     <i className="ti ti-calendar absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--on-variant)] text-sm pointer-events-none" />
-                    <input type="date"
-                      value={isHalfDay ? form.from_date : form.to_date}
-                      min={form.from_date}
-                      disabled={isHalfDay}
-                      onChange={e => setField("to_date", e.target.value)}
-                      className={[(errors.to_date ? INPUT_ERR : INPUT), "pl-9", isHalfDay ? "opacity-40 cursor-not-allowed" : ""].join(" ")} />
+                    <DateInput value={isHalfDay ? form.from_date : form.to_date} min={form.from_date} disabled={isHalfDay} onChange={isoDate => setField("to_date", isoDate)} className={[(errors.to_date ? INPUT_ERR : INPUT), "pl-9", isHalfDay ? "opacity-40 cursor-not-allowed" : ""].join(" ")} />
                   </div>
                   <Err msg={errors.to_date} />
                 </div>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 import CountrySelect from "@/components/CountrySelect";
+import DateInput from "@/components/shared/DateInput";
 import { useIfscLookup } from "@/hooks/useIfscLookup";
 
 export interface StatutoryDraft {
@@ -116,11 +117,11 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
         </div>
         <div className="f">
           <label>Passport issue date <span className="tag">OPTIONAL</span></label>
-          <input type="date" value={value.passport_issue_date} onChange={e => set("passport_issue_date", e.target.value)} disabled={!value.passport_number} className="finput" />
+          <DateInput value={value.passport_issue_date} onChange={iso => set("passport_issue_date", iso)} disabled={!value.passport_number} className="finput" />
         </div>
         <div className="f">
           <label>Passport expiry <span className="tag">OPTIONAL</span></label>
-          <input type="date" value={value.passport_expiry} onChange={e => set("passport_expiry", e.target.value)} disabled={!value.passport_number} className="finput" />
+          <DateInput value={value.passport_expiry} onChange={iso => set("passport_expiry", iso)} disabled={!value.passport_number} className="finput" />
           {value.passport_issue_date && value.passport_expiry && value.passport_expiry <= value.passport_issue_date && (
             <div className="hint" style={{ color: "var(--error)" }}>Expiry must be after the issue date.</div>
           )}

@@ -7,6 +7,7 @@ import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
 import type { WorkFromHomeRequest, WFHSavedLocation } from "@/types/workFromHome";
 import { formatDate } from "@/lib/formatDate";
+import DateInput from "@/components/shared/DateInput";
 
 interface Coords { latitude: number; longitude: number; accuracy: number | null }
 
@@ -240,14 +241,12 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Lbl text="Start Date" required />
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                className={errors.startDate ? INPUT_ERR : INPUT} />
+              <DateInput value={startDate} onChange={isoDate => setStartDate(isoDate)} className={errors.startDate ? INPUT_ERR : INPUT} />
               <Err msg={errors.startDate} />
             </div>
             <div>
               <Lbl text="End Date" required />
-              <input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)}
-                className={errors.endDate ? INPUT_ERR : INPUT} />
+              <DateInput value={endDate} min={startDate} onChange={isoDate => setEndDate(isoDate)} className={errors.endDate ? INPUT_ERR : INPUT} />
               <Err msg={errors.endDate} />
             </div>
           </div>

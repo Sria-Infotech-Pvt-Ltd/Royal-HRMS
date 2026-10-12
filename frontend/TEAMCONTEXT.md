@@ -5748,3 +5748,85 @@ files:
   `WeeklyBarChart` — if a future reference-replication pass wants the capability-grid/safeguards
   look again, it needs to be rebuilt from scratch (deliberately deleted, not commented out, since
   grep confirmed zero real consumers).
+
+# Team Context — Employee Directory "Fit" Layout, DD/MM/YYYY Date Fields, Pre-Push Front-End QA (2026-10-12)
+
+## 1. Employee Directory now scrolls like the reference (header fixed, table body scrolls)
+
+The reference keeps the page header, the four KPI cards and the appraisal banner in place and
+scrolls only the table rows, with the header row sticky and the pager pinned underneath. The real
+page scrolled as a whole. Cause: `DashboardShell`'s `<main>` was the only scroller, and
+`EmployeeTable` wrapped its grid in an extra `overflow-x-auto` div, which became the sticky
+header's scroll container and stopped it pinning. Changes (UI only, no behaviour change):
+
+- `components/dashboard/DashboardShell.tsx` — `isFitPage = pathname === "/dashboard/employees"`;
+  for that route only, `<main>` becomes a flex column and the content wrapper `flex-1 min-h-0`
+  (plus `max-w-[1400px] mx-auto` and the compact gutter `px-4 py-3 md:px-5 md:pt-2 md:pb-2.5`).
+  Other routes are untouched.
+- `app/directory-theme.css` — new `.emp-fit` block. Panel is `flex: 1 1 0; min-height: 260px`;
+  below that height `<main>` falls back to scrolling the whole page. The desktop-only (>=761px)
+  rules mirror the reference's `.page > …` compaction (28px title, one-line ellipsised lede, 8px
+  gaps, 25px KPI numbers, tighter toolbar/rows). They had to be re-scoped to `.emp-fit` because
+  `aira-theme.css` only applies them under a `.page` ancestor and nothing in the app uses `.page`.
+- `employees/page.tsx` — root is `<div className="emp-fit">`; the `mt-4` wrapper divs were removed
+  so `.stats` and `.panel` are direct children (spacing now comes from the container's `gap`).
+- `EmployeeTable.tsx` — removed the inner `overflow-x-auto` wrapper; `.tbl-wrap` is the single
+  scroll container (it already has `overflow:auto`, rows have `min-width`).
+- `EmployeeDirectoryHeader.tsx` — dropped the `maxWidth: 560` on the title block so the lede is one
+  line with an ellipsis (as in the reference); actions row uses `.headacts`; the right-hand block
+  uses the theme's `.bignum/.saved` classes. `AppraisalBanner.tsx` — removed `mb-6`, border/radius
+  now `var(--line)` / `var(--r-card)` like the stat cards and panel (identical in light mode).
+- `EmployeeRowActionsMenu.tsx` — the row action icon is horizontal dots (`ti-dots`).
+
+## 2. Every date field is typed DD/MM/YYYY (new `components/shared/DateInput.tsx`)
+
+A native `<input type="date">` follows the browser's regional order. On an en-US browser the first
+box is the month, so typing "30" for the 30th became month 03. `DateInput` is a text field that
+always takes day first, inserts the slashes itself, rejects impossible dates (31/02) and years
+outside 1900–2100, and still offers the browser calendar through a button (hidden native date input +
+`showPicker()`).
+
+- Contract: `value`/`onChange` use the same ISO `YYYY-MM-DD` string a native date input uses, and
+  `""` while the typed date is incomplete/invalid/outside `min`/`max` — so it is a drop-in
+  replacement and the surrounding state, API payloads and validators did not change. Props:
+  `id, className, style, disabled, readOnly, required, title, min, max`. Layout styles
+  (`width`, `flex*`, `margin*`, `gridColumn`, `alignSelf`) are moved to the wrapper so fixed-width
+  filters (e.g. Email Logs) keep their size.
+- All 55 native date inputs (~38 files: Hire wizard and dialogs, Leave, WFH, Attendance, Approvals,
+  Email Logs, Audit log, Expenses, Separation, Org chart, Payroll, Performance, Holiday calendar,
+  Interview list, Documents, employee profile tabs/modals, My requests, ESS, Onboarding) were
+  converted with a script that parses each `<input type="date" …>` tag; it reported the one it
+  could not convert mechanically (the read-only Correction date), done by hand. `FormField.tsx`'s
+  `date` case covers the Hire wizard's dynamic family/education fields.
+- Not covered: `datetime-local` / `month` inputs (none exist today). Any NEW date field should use
+  `DateInput`, not a native input.
+
+## 3. Checks run (nothing committed or pushed)
+
+`npm run build` OK (56/56 pages), `tsc --noEmit` clean, `eslint` 0 errors / 10 old warnings (none in
+files changed here), `vitest` 58/58. CLAUDE.md PR-checklist greps clean on the changed files (no
+`any`, console/debugger, inline API paths, token storage, `127.0.0.1`); no changed file is unused.
+Known and left alone: duplicate helpers (`initials` x5, `fmtDate` x4, `formatDate` x2, `avatarColor`
+x2, `toDisplayStatus` x2) and duplicate component names (`ClockWidget`, `AnnouncementCard`,
+`StatusBadge` vs `StatusPill`).
+
+## Key Files Changed
+
+`components/shared/DateInput.tsx` (new), `components/dashboard/DashboardShell.tsx`,
+`app/directory-theme.css`, `app/dashboard/employees/page.tsx` and `_components/`
+(`EmployeeTable`, `EmployeeDirectoryHeader`, `AppraisalBanner`, `EmployeeRowActionsMenu`,
+`FormField`, `HireEmployeeModal`), the Hire wizard (`HireWizardClient`, `StatutoryAccountsStep`,
+`DocumentsChecklistStep`), plus the ~35 other files that previously held a native date input.
+
+## Notes for Next Developer
+
+- The Employee Directory is the only "fit" page. To give another page the same behaviour add its
+  path to `isFitPage` in `DashboardShell.tsx` and give the page root `.emp-fit` (or a sibling class);
+  do not add `.page` — nothing else uses it and it carries its own padding/max-width.
+- If a date field ever looks stuck, check it is a `DateInput` and that the page passes ISO strings
+  (`YYYY-MM-DD`); `DateInput` reports `""` for anything that is not a complete valid date.
+- Local dev: the employees list shows "Could not load employees" when `REDIS_URL` is set but the
+  Windows Memurai service is stopped (each cache call waits 5 s). Start it from an Administrator
+  PowerShell (`Start-Service Memurai`) or unset `REDIS_URL` for the in-memory fallback.
+- The Drafts "Delete" uses a native `window.confirm`; browser automation must override it before
+  clicking.

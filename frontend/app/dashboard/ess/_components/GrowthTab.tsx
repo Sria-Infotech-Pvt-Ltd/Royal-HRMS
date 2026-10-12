@@ -6,12 +6,15 @@
 // own docstring). Split into GrowthAppraisalBanner / GrowthGoalsCard /
 // GrowthReviewTimeline to keep this file under the project's line guideline.
 
+import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import GrowthAppraisalBanner from "./GrowthAppraisalBanner";
 import GrowthGoalsCard, { GrowthGoal } from "./GrowthGoalsCard";
 import GrowthReviewTimeline from "./GrowthReviewTimeline";
 import { AppraisalActivityEntry } from "./AppraisalActivityHistory";
+import FeedbackRequestModal from "./FeedbackRequestModal";
+import FeedbackRequestsCard from "./FeedbackRequestsCard";
 
 interface ApiReview {
   cycle_name: string;
@@ -37,6 +40,9 @@ export default function GrowthTab({ onNavigateToAppraisals }: Props) {
   const { data: goals, loading, error, refetch } = useFetch<GrowthGoal[]>(API.performance.myGoals);
   const { data: review } = useFetch<ApiReview>(API.performance.myReview);
 
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackKey, setFeedbackKey] = useState(0);
+
   const list = goals ?? [];
   const cycleName = review?.cycle_name ?? null;
 
@@ -56,16 +62,8 @@ export default function GrowthTab({ onNavigateToAppraisals }: Props) {
       <div className="card mb-16">
         <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div className="card-title"><i className="ti ti-heart-handshake" /> Growth &amp; feedback</div>
-          <button
-            className="btn btn-ghost btn-sm"
-            disabled
-            title="Request feedback — Coming Soon"
-            style={{ cursor: "not-allowed", opacity: 0.6 }}
-          >
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setShowFeedbackModal(true)}>
             Request feedback
-            <span style={{ fontSize: 8.5, fontWeight: 700, background: "var(--bg-high)", color: "var(--on-variant)", padding: "1px 5px", borderRadius: 99, letterSpacing: "0.04em", marginLeft: 6 }}>
-              SOON
-            </span>
           </button>
         </div>
         <div style={{ padding: "0 20px 16px" }}>
@@ -74,6 +72,8 @@ export default function GrowthTab({ onNavigateToAppraisals }: Props) {
           </p>
         </div>
       </div>
+
+      <FeedbackRequestsCard refreshKey={feedbackKey} />
 
       <GrowthGoalsCard cycleName={cycleName} goals={list} loading={loading} error={error} refetch={refetch} />
 
@@ -87,6 +87,13 @@ export default function GrowthTab({ onNavigateToAppraisals }: Props) {
             selfSubmittedAt: review.self_submitted_at,
             managerSubmittedAt: review.manager_submitted_at,
           }}
+        />
+      )}
+      {showFeedbackModal && (
+        <FeedbackRequestModal
+          cycleName={cycleName}
+          onClose={() => setShowFeedbackModal(false)}
+          onSent={() => setFeedbackKey(k => k + 1)}
         />
       )}
     </div>

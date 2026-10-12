@@ -11,6 +11,7 @@ export default function Avatar({
   shape = "circle",
   className = "",
   photoUrl,
+  radius,
 }: {
   text: string;
   size?: number;
@@ -25,6 +26,8 @@ export default function Avatar({
   shape?: "circle" | "square";
   className?: string;
   photoUrl?: string | null;
+  /** Corner radius in px — overrides `shape` (the directory drawer header uses 12). */
+  radius?: number;
 }) {
   const shapeClass = shape === "square" ? "rounded-[10px]" : "rounded-full";
 
@@ -35,7 +38,7 @@ export default function Avatar({
         src={photoUrl}
         alt={text}
         className={`${shapeClass} object-cover flex-shrink-0 ${className}`}
-        style={{ width: size, height: size }}
+        style={{ width: size, height: size, ...(radius !== undefined ? { borderRadius: radius } : {}) }}
       />
     );
   }
@@ -47,6 +50,7 @@ export default function Avatar({
         width: size,
         height: size,
         fontSize: Math.round(size * 0.36),
+        ...(radius !== undefined ? { borderRadius: radius } : {}),
         // Plain Tailwind utilities (rounded-full, flex-shrink-0, etc.) compile
         // fine under this project's Tailwind v2 JIT pipeline, but arbitrary
         // values containing a CSS var() call — e.g. the `bg-[var(--primary)]`

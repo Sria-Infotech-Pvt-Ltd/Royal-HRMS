@@ -8,6 +8,7 @@ import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import type { CtcRevisionReason, EmployeeSalaryConfig, SalaryStructureListItem } from "@/types/payroll";
 import { formatDate } from "@/lib/formatDate";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   employeeId: string;
@@ -258,12 +259,7 @@ export default function SalaryTab({ employeeId, employeeCode }: Props) {
             <label className="field-label">
               Effective From <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input
-              className="field-input"
-              type="date"
-              value={form.effective_from}
-              onChange={e => setForm(f => ({ ...f, effective_from: e.target.value }))}
-            />
+            <DateInput className="field-input" value={form.effective_from} onChange={isoDate => setForm(f => ({ ...f, effective_from: isoDate }))} />
           </div>
 
           <div className="field-group">

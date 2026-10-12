@@ -1,6 +1,7 @@
 "use client";
 
 import { ApprovalKind, DisplayStatus, STATUS_FILTERS, TYPE_BADGE } from "../_data";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   search:        string;
@@ -58,23 +59,9 @@ export default function ApprovalsToolbar({
         </select>
       )}
 
-      <input
-        type="date"
-        className="ta-date-input"
-        value={dateFrom}
-        onChange={e => onDateFrom(e.target.value)}
-        title="Submitted from"
-        suppressHydrationWarning
-      />
+      <DateInput className="ta-date-input" value={dateFrom} onChange={isoDate => onDateFrom(isoDate)} title="Submitted from" />
       <span style={{ fontSize: 12, color: "var(--ta-text-faint)" }}>to</span>
-      <input
-        type="date"
-        className="ta-date-input"
-        value={dateTo}
-        onChange={e => onDateTo(e.target.value)}
-        title="Submitted to"
-        suppressHydrationWarning
-      />
+      <DateInput className="ta-date-input" value={dateTo} onChange={isoDate => onDateTo(isoDate)} title="Submitted to" />
 
       <button className="ta-refresh-btn" onClick={onRefresh} disabled={refreshing} suppressHydrationWarning>
         <i className={`ti ti-refresh ${refreshing ? "spin" : ""}`} />

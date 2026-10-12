@@ -26,6 +26,7 @@ from .views import (
     LeaveOpeningBalanceValidateView,
     LeavePolicyView,
     LeaveRequestDetailView,
+    LeaveRecordView,
     LeaveRequestListCreateView,
     LeaveStatsView,
     SeparationActivityListView,
@@ -75,6 +76,7 @@ urlpatterns = [
 
     # Leave — requests
     path('leave/requests/',                          LeaveRequestListCreateView.as_view(), name='leave-request-list'),
+    path('leave/requests/record/',                   LeaveRecordView.as_view(),            name='leave-request-record'),
     path('leave/requests/<str:request_id>/',         LeaveRequestDetailView.as_view(),     name='leave-request-detail'),
     path('leave/requests/<str:request_id>/approve/', LeaveApprovalView.as_view(),          name='leave-request-approve'),
 
