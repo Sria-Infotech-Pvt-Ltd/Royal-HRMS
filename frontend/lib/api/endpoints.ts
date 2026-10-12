@@ -242,6 +242,9 @@ export const API = {
     balanceImportSample:   "/leave/balance/import/sample/", // + ?format=csv|xlsx
     balanceImport:         "/leave/balance/import/",
     balanceImportValidate: "/leave/balance/import/validate/",
+    creditsOverview: (employeeCode: string) => `/leave/credits/${employeeCode}/`,
+    creditsAdjust:   (employeeCode: string) => `/leave/credits/${employeeCode}/adjust/`,
+    creditsReverse:  (employeeCode: string, txnId: string) => `/leave/credits/${employeeCode}/transactions/${txnId}/reverse/`,
     requests: "/leave/requests/",
     requestDetail: (id: string) => `/leave/requests/${id}/`,
     approve: (id: string) => `/leave/requests/${id}/approve/`,

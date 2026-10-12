@@ -18,6 +18,9 @@ from .views import (
     LeaveBalanceAdjustView,
     LeaveBalanceView,
     LeaveCalendarView,
+    LeaveCreditAdjustView,
+    LeaveCreditOverviewView,
+    LeaveCreditReverseView,
     LeaveOpeningBalanceImportView,
     LeaveOpeningBalanceSampleView,
     LeaveOpeningBalanceValidateView,
@@ -67,6 +70,14 @@ urlpatterns = [
     path('leave/balance/import/validate/',   LeaveOpeningBalanceValidateView.as_view(), name='leave-balance-import-validate'),
     path('leave/balance/import/sample/',     LeaveOpeningBalanceSampleView.as_view(),   name='leave-balance-import-sample'),
     path('leave/balance/<str:balance_id>/',  LeaveBalanceAdjustView.as_view(),        name='leave-balance-adjust'),
+
+    # Leave — employee-wise credit management (append-only history)
+    path('leave/credits/<str:employee_id>/',         LeaveCreditOverviewView.as_view(), name='leave-credit-overview'),
+    path('leave/credits/<str:employee_id>/adjust/',  LeaveCreditAdjustView.as_view(),   name='leave-credit-adjust'),
+    path(
+        'leave/credits/<str:employee_id>/transactions/<uuid:txn_id>/reverse/',
+        LeaveCreditReverseView.as_view(), name='leave-credit-reverse',
+    ),
 
     # Leave — requests
     path('leave/requests/',                          LeaveRequestListCreateView.as_view(), name='leave-request-list'),

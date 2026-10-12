@@ -705,13 +705,13 @@ class LeaveBalanceView(APIView):
         return success(f'Credited {created_count} balance records for {year}.', {'year': year, 'credited': created_count})
 
 
-def _can_adjust_balance(user, balance) -> bool:
+def _can_manage_leave_credits(user, employee) -> bool:
     """
     Block self-adjustment entirely (nobody may inflate their own balance),
     then scope by permission — mirrors _can_approve_at_stage's branch/
     reporting-chain conventions used for leave request approval.
     """
-    if balance.employee_id == user.id:
+    if employee.id == user.id:
         return False
     if _has_perm(user, 'settings.edit'):
         return True
@@ -720,11 +720,15 @@ def _can_adjust_balance(user, balance) -> bool:
     # otherwise a manager could adjust any same-branch employee's balance
     # instead of only their own direct reports.
     if user.role and user.role.can_manage_team:
-        return balance.employee.reporting_manager_id == user.id
+        return employee.reporting_manager_id == user.id
     if _has_perm(user, 'leave.approve'):
         branch = _user_branch(user)
-        return not branch or _user_branch(balance.employee) == branch
+        return not branch or _user_branch(employee) == branch
     return False
+
+
+def _can_adjust_balance(user, balance) -> bool:
+    return _can_manage_leave_credits(user, balance.employee)
 
 
 class LeaveBalanceAdjustView(APIView):

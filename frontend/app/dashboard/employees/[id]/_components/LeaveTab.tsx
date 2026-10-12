@@ -11,6 +11,7 @@ import {
 } from "@/app/dashboard/leave/_data";
 import LeaveRequestDetailModal from "@/app/dashboard/leave/_components/LeaveRequestDetailModal";
 import LopBadge from "@/app/dashboard/leave/_components/LopBadge";
+import LeaveCreditsSection from "./LeaveCreditsSection";
 
 interface Props {
   employeeId: string;
@@ -35,7 +36,7 @@ const LWP_KEY = "lwp";
 
 export function LeaveTab({ employeeId }: Props) {
   const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
-  const { year, prevYear, nextYear, page, setPage, totalPages, requests, stats, loading, error } =
+  const { year, prevYear, nextYear, page, setPage, totalPages, requests, stats, loading, error, refetch } =
     useEmployeeLeave(employeeId);
 
   // Same policy data + resolver ApplyLeaveForm uses, so a custom Leave
@@ -126,6 +127,8 @@ export function LeaveTab({ employeeId }: Props) {
           <div className="progress-bar"><div className="progress-fill" style={{ width: 0 }} /></div>
         </div>
       </div>
+
+      <LeaveCreditsSection employeeId={employeeId} onChanged={refetch} />
 
       <div className="card">
         <div className="card-header">

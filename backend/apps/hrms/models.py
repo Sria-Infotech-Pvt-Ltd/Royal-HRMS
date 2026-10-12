@@ -288,6 +288,52 @@ class LeaveBalance(models.Model):
         return self.total_days - self.used_days
 
 
+# ─── Leave Credit Transaction (append-only history) ──────────────────────────
+# Every manual credit change made through apps.hrms.services_leave_credit is
+# recorded here; LeaveBalance stays the source of truth. Rows are never
+# updated or deleted — a mistake is undone by a compensating reversal row.
+
+CREDIT_TXN_ADJUSTMENT = 'adjustment'
+CREDIT_TXN_REVERSAL   = 'reversal'
+CREDIT_TXN_TYPE_CHOICES = [
+    (CREDIT_TXN_ADJUSTMENT, 'Adjustment'),
+    (CREDIT_TXN_REVERSAL,   'Reversal'),
+]
+
+
+class LeaveCreditTransaction(models.Model):
+    id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    balance         = models.ForeignKey(LeaveBalance, on_delete=models.CASCADE, related_name='credit_transactions')
+    employee        = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='leave_credit_transactions')
+    leave_type      = models.CharField(max_length=50)
+    year            = models.PositiveIntegerField()
+    txn_type        = models.CharField(max_length=20, choices=CREDIT_TXN_TYPE_CHOICES)
+    amount          = models.DecimalField(max_digits=6, decimal_places=1)  # signed
+    total_before    = models.DecimalField(max_digits=6, decimal_places=1)
+    total_after     = models.DecimalField(max_digits=6, decimal_places=1)
+    reason          = models.TextField()
+    reverses        = models.OneToOneField(
+        'self', on_delete=models.CASCADE, null=True, blank=True, related_name='reversed_by',
+    )
+    idempotency_key = models.CharField(max_length=64, unique=True)
+    created_by      = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='leave_credit_transactions_made',
+    )
+    created_by_name = models.CharField(max_length=255, blank=True, default='')
+    created_at      = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'hrms_leave_credit_transactions'
+        ordering = ['-created_at']
+        indexes  = [
+            models.Index(fields=['employee', 'year', 'leave_type'], name='leave_credit_emp_year_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.employee_id} {self.leave_type} {self.year} {self.amount:+}'
+
+
 # ─── Carry Forward Log ───────────────────────────────────────────────────────
 
 class CarryForwardLog(models.Model):

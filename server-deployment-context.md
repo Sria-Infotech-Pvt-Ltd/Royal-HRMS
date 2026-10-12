@@ -1722,3 +1722,148 @@ sudo supervisorctl status royalhrms_backend royalhrms_celery_worker royalhrms_ce
 The Celery worker specifically must be running for the reverse-geocoding
 task (human-readable location) to ever populate `location_label` — a
 restarted backend alone is not sufficient for that one feature.
+
+---
+
+# 28. Application change log (production support, 2026-10-09)
+
+Continuation of section 27. Same rules: everything implemented and tested
+locally first against the isolated Docker Postgres test DB on
+`localhost:15432` (never production). **None of the three items below adds
+a database migration** — deploying them is pull + frontend rebuild +
+backend/frontend restart only. Status per item:
+
+| Item | Commit | Pushed | Deployed on server |
+|---|---|---|---|
+| Reporting Manager / Approver / Branch HR persistence | `8afc63d` | Yes | Not confirmed |
+| Attendance CSV export — Clock In/Out location | `8afc63d` (same commit) | Yes | Not confirmed |
+| Notice Period countdown + separation branch scoping | Not yet committed at time of writing | No | No |
+
+## Reporting Manager / Reporting Approver / Branch HR not persisting
+
+Symptom: Employee Profile → Personal tab, Reporting Manager / Reporting
+Approver sometimes showed old values after save and reopen.
+
+-   **Root cause 1 (confirmed):** the Approval Matrix tab saves Reporting
+    Manager and Branch HR through its own endpoints, then updated only the
+    Personal tab's live form values, not its saved baseline. A later
+    Cancel restored the stale value on screen, and a later Save of *any*
+    unrelated field resent the stale ID and silently reverted the backend
+    (the Personal tab PUT always sends every field).
+-   **Root cause 2 (found during testing):** the Approval Matrix's
+    "Edit Branch HR" never worked — it sent `PATCH /employees/<id>/hr/`,
+    but PATCH on that URL is the activate/deactivate handler and always
+    returned 400 "is_active field is required." Switched that one editor to
+    PUT (which already handles `hr_id` with the same permission, branch and
+    validation checks). No backend change.
+-   Personal tab Save now re-fetches the employee from the server and
+    rebuilds the form from it; a failed re-fetch shows "saved, but could not
+    reload" instead of a false save failure.
+-   Files: `frontend/app/dashboard/employees/[id]/page.tsx`,
+    `.../_components/ApprovalMatrixTab.tsx`, tests in
+    `backend/apps/accounts/tests.py` (13 new).
+-   Known limitation: two people (or two browser tabs) editing the same
+    profile can still overwrite each other — last save wins. Not addressed.
+
+## Attendance CSV export — Clock In / Clock Out location
+
+Attendance & Time → Export CSV gains two columns appended at the end:
+`clock_in_location`, `clock_out_location`. All existing columns, values,
+filters and permissions unchanged; an exported file still re-imports.
+
+-   Each value comes from the punch behind that exported time: the stored
+    `location_label` ("Office – <Branch>" for UK office punches, or the
+    geocoded place name), else stored coordinates (`51.507400, -0.127800`),
+    else blank. Never the branch name as a guess. A manually edited time
+    with no matching punch exports blank.
+-   No geocoding at export time — reads stored data only, two extra DB
+    queries per export regardless of size. Geocoder labels are guarded
+    against spreadsheet formula injection.
+-   Files: `backend/apps/attendance/services_hr_ops.py`, tests in
+    `backend/apps/attendance/tests_attendance_export_location.py` (16 new).
+-   Punches recorded before the human-readable-location feature went live
+    have no label, so they export coordinates or blank.
+
+## Notice Period countdown (+ separation branch scoping)
+
+Requirement: HR/Admin initiates an employee's separation; once it is
+**fully approved** a notice countdown shows on the employee's dashboard.
+
+-   Built on the existing Separation & Exit workflow and approval chain
+    (unchanged). The countdown starts only when the request reaches final
+    `approved` status. Pending / stage-2 pending / rejected / cancelled
+    requests show no countdown.
+-   **No migration:** the approval date is taken from the final approval
+    stage's existing `actioned_at`; the confirmed last working day is the
+    request's `proposed_last_working_day`, which cannot be edited after
+    approval anywhere in the app (not registered in Django admin either).
+-   Days remaining = confirmed last working day − today (India date,
+    server `TIME_ZONE`). Last working day today → "0 days remaining"; the
+    day after → "Notice completed". Employees are **not** deactivated
+    automatically.
+-   New employee endpoint `GET /api/dashboard/employee/notice-period/` (own
+    data only) and an Employee-dashboard **Notice Period** card (hidden when
+    there is no approved request).
+-   HR and System Admin dashboard **Notice Period** tabs now list employees
+    currently serving notice (previously a hard-coded empty list). HR tab is
+    limited to the viewer's branch and computed fresh on every load (not
+    from the shared 1-hour lifecycle cache). Wrong "Since <date of joining>"
+    subtitle removed.
+-   Separation detail page keeps "Proposed Last Working Day" and adds
+    "Approved On", "Confirmed Last Working Day" and the countdown.
+-   **Security fixes in the Separation APIs:** filing on behalf of an
+    employee, viewing a request, listing by employee, and all request
+    sub-pages (tasks, clearances, documents, activity) are now limited to
+    the user's own branch (`settings.edit` holders stay unrestricted). A
+    named approver on a request keeps access across branches. New requests
+    for inactive employees are blocked.
+-   Files: `backend/apps/hrms/services_notice.py` (new),
+    `backend/apps/hrms/serializers.py`,
+    `backend/apps/hrms/views/separation.py`,
+    `backend/apps/hrms/views/separation_workflow.py`,
+    `backend/apps/dashboard/views/people.py`, `.../views/__init__.py`,
+    `backend/apps/dashboard/urls.py`; frontend `lib/noticePeriod.ts` (new),
+    `components/dashboard/employee/EmpNoticePeriodCard.tsx` (new),
+    `components/dashboard/NoticePeriodRow.tsx` (new),
+    `components/dashboard/EmployeeLifecycleTabs.tsx`,
+    `components/dashboard/hr/HrEmployeeLifecycleTabs.tsx`,
+    `app/dashboard/_components/EmployeeDashboard.tsx`,
+    `app/dashboard/separation/[id]/_components/SeparationDetailsSection.tsx`,
+    `lib/api/endpoints.ts`, `types/dashboard.ts`, `types/separation.ts`.
+    Tests: `backend/apps/hrms/tests_notice_period.py` (24 new) and
+    `frontend/lib/noticePeriod.test.ts` (7 new).
+-   Known limitations (accepted for now): HR users who hold `settings.edit`
+    still see all branches in the Separation module; a manager in a
+    different branch loses access unless named as an approver; UK
+    employees' countdown follows the India date (can drop a day early late
+    in the UK evening); HR/managers serving notice get no card (Employee
+    dashboard only); approved notices cannot be extended or shortened.
+-   **Browser check not yet done** at time of writing.
+
+## Test results for this window
+
+-   accounts: 135 run — all new and related tests pass; 6 failures
+    (5 profile-photo upload, 1 forgot-password) are pre-existing —
+    identical with the new changes removed.
+-   attendance: 198 run — all 16 new tests pass; 17 failures (punch,
+    face-verification, WFH tests) are pre-existing — identical with the
+    export change removed. Worth a separate investigation.
+-   hrms + dashboard + notifications: 103/103 pass.
+-   Frontend: TypeScript, ESLint and Vitest (108/108) pass.
+-   `manage.py check` clean; `makemigrations --check` reports no changes.
+
+## Deploy steps for this batch
+
+After the Notice Period commit is pushed:
+```
+cd /var/www/royalhrms/app
+git pull origin production
+cd frontend && npm ci && npm run build
+cd ../backend
+.venv/bin/python manage.py check
+sudo supervisorctl restart royalhrms_backend royalhrms_frontend
+sudo supervisorctl status royalhrms_backend royalhrms_frontend royalhrms_celery_worker royalhrms_celery_beat
+```
+No `migrate_schemas` needed for this batch (section 27's migrations
+`0044`/`0045`/`0047` still need confirming if not already done). Do not
+restart if `npm run build` fails.
