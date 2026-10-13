@@ -4155,3 +4155,50 @@ Opened Hire → Sales / Sales Associate, filled Personal identity, Employment (P
 - Frontend: `npm run lint` 0 errors (10 old warnings), `tsc` clean, `npm run build` OK, `vitest` 58/58.
 - Removed 3 unused imports in new Python files. Known and left alone: old blanket import blocks in `accounts/views/shared.py`, `employees_list.py`, `hrms/views/leave_policy.py`, `leave_requests.py` (re-exported via `import *`); duplicate helpers (`initials` x5, `fmtDate` x4, `formatDate` x2, `avatarColor` x2, `toDisplayStatus` x2) and duplicate component names (`ClockWidget`, `AnnouncementCard`, `StatusBadge` vs `StatusPill`).
 - Local admin login `sriainfotech@gmail.com` had its password reset on 2026-10-12 at the user's request.
+
+## Session Log — 2026-10-13 — Merged `origin/employee` into `New-AI`
+
+Merged the `employee` branch (Employee Directory layout, DD/MM/YYYY date fields, personnel actions,
+appraisals and pay-scale work, last commit `3ac48fc`) into `New-AI` on top of the platform_core
+Phase 0–9B + hire-wizard checkpoint. 10 files had real conflicts; resolved keeping both sides'
+functionality wherever possible, preferring the more complete/working side where two independent
+implementations of the same feature collided:
+
+- `apps/accounts/models.py`, `apps/performance/models.py`/`serializers.py` — combined both sides'
+  additive model/import blocks (no overlap in substance, just textual proximity at file end).
+- `ApplyLeaveForm.tsx` — took `origin/employee`'s version wholesale: it's the fuller-featured,
+  pre-existing implementation (leave-type picker cards with balance bars, document upload,
+  handover/contact fields, holiday/week-off breakdown, live preview) that this session's
+  reference-replication pass had regressed to a bare dropdown-and-dates form.
+- `GrowthGoalsCard.tsx` — same situation: took `origin/employee`'s version wholesale (working
+  self-service add/edit/remove-goal UI wired to real `API.performance.myGoals`/`myGoalDetail`)
+  over this session's read-only rewrite.
+- `GrowthTab.tsx` — merged by hand: kept this session's 2-column goals/timeline grid layout, but
+  wired in `origin/employee`'s real `FeedbackRequestModal`/`FeedbackRequestsCard` (backed by the
+  new `FeedbackRequest` model/`apps.performance` endpoints) instead of this session's
+  `GrowthFeedbackRequestModal`/`Card`, which only posted into the generic HR-help queue as a
+  workaround. Those two now-unwired files are still on disk, just not imported — not deleted.
+- `EmployeeDrawer.tsx` — both sides built a different "edit full record" UX (this session: an
+  inline `EditRecordModal`; `origin/employee`: permission-gated navigation to the employee detail
+  page). Kept both as separate buttons ("Quick edit" / "Edit full record") rather than picking one.
+- `ess/_client.tsx` — two independently-built "Requests" tab implementations
+  (`MyRequestsSummaryTab` vs `EssRequestsTab`), functionally identical; wired in `EssRequestsTab`
+  (`origin/employee`'s, slightly more recent). `MyRequestsSummaryTab.tsx` stays on disk unused.
+- `ProfileSummaryTab.tsx`, `AppraisalActivityHistory.tsx` — straightforward combines (interface
+  fields from both sides; `origin/employee`'s `.card`-wrapped visibility note, cosmetically better).
+- **Silent auto-merge bug caught by `tsc --noEmit`, not by a conflict marker**: both branches had
+  independently changed `SectionCard`'s props (this session dropped the `icon` prop for its
+  uppercase-title reference-replication restyle; `origin/employee` kept relying on it in
+  `OnboardingDrawer.tsx`) on non-overlapping lines, so git merged clean with no conflict — but the
+  result didn't type-check. Fixed by restoring `icon` as an optional prop.
+- `origin/employee`'s own last commit had deliberately deleted `usePreviewRole.tsx`/
+  `RolePreviewSwitcher.tsx` (the old "preview as a role" demo mechanic); accepted that deletion —
+  nothing in the codebase referenced them anymore.
+- Migration graph conflicts (accounts/payroll/performance each had independently-added leaf
+  migrations) resolved with `manage.py makemigrations --merge`.
+
+Verification before pushing: `manage.py check` clean, `makemigrations --check --dry-run` clean
+(after the 3 merge migrations), `npx tsc --noEmit` clean (0 errors). Backend test suite
+(`apps.accounts apps.performance apps.payroll`) was kicked off in the background to run
+concurrently with the merge work; see git log around this date for its outcome if picking this up
+later and the run wasn't captured here.
