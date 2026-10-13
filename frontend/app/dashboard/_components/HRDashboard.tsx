@@ -6,6 +6,11 @@ import { KpiCard, OverviewItem, QuickTile, AttendanceTrend, AttendanceInsights, 
 import WorkforceOperations from "@/components/dashboard/WorkforceOperations";
 import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { usePermission } from "@/hooks/usePermission";
+import { useToast } from "@/components/ToastProvider";
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
+import type { ApiEmployee } from "@/app/dashboard/employees/_data";
+import { downloadCsv, employeesToCsv } from "@/lib/exportEmployeesCsv";
 import type { SessionPayload } from "@/lib/session";
 
 interface Props { session: SessionPayload }
@@ -24,6 +29,32 @@ export default function HRDashboard({ session }: Props) {
   // directory page itself silently no-ops the deep link for a user who
   // can't create employees, rather than erroring.
   const canHire = usePermission("employees.create");
+  // Same gate the real Employee Directory export button uses — Payroll
+  // Admin and HR hold it, a Reporting Manager does not (see
+  // EmployeeDirectoryHeader's own comment on employees.export).
+  const canExport = usePermission("employees.export");
+  const { showToast } = useToast();
+  const [exporting, setExporting] = useState(false);
+
+  // "Export report" — a real, immediate download (the full workforce
+  // snapshot, unfiltered), not just a navigation to the Reports hub. Reuses
+  // the exact same CSV columns the Employee Directory's own filtered export
+  // produces (lib/exportEmployeesCsv.ts) so the two never drift apart.
+  async function handleExportReport() {
+    setExporting(true);
+    try {
+      const { data } = await clientApi.get<{ data: { results: ApiEmployee[] } }>(
+        API.employees.list, { params: { page: 1, page_size: 1000 } },
+      );
+      const rows = data.data?.results ?? [];
+      downloadCsv(employeesToCsv(rows), `workforce-report-${new Date().toISOString().slice(0, 10)}.csv`);
+      showToast("Workforce report exported.", "success");
+    } catch {
+      showToast("Could not export the workforce report. Please try again.", "error");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // Date/greeting depend on the viewer's clock, so they're filled in after
   // mount — computing them during render would risk a server/client mismatch.
@@ -48,10 +79,10 @@ export default function HRDashboard({ session }: Props) {
   const compliancePct = data?.compliance_pct ?? 0;
 
   const quickActions = [
-    canHire && { title: "Hire an employee", sub: "Start the guided onboarding flow", href: "/dashboard/employees?action=hire", icon: WfIcon.userPlus, tone: "brand" as const },
-    { title: "Review leave", sub: `${openRequests} requests need a decision`, href: "/dashboard/approvals", icon: WfIcon.calendar, tone: "info" as const },
-    { title: "Run payroll checks", sub: `Resolve ${payrollBlocked} blocked records`, href: "/dashboard/payroll", icon: WfIcon.wallet, tone: "warn" as const },
-    { title: "Export workforce report", sub: "Download the current snapshot", href: "/dashboard/reports", icon: WfIcon.report, tone: "ok" as const },
+    canHire && { title: "Hire an employee", sub: "Start the guided onboarding flow", onClick: () => router.push("/dashboard/employees?action=hire"), icon: WfIcon.userPlus, tone: "brand" as const },
+    { title: "Review leave", sub: `${openRequests} requests need a decision`, onClick: () => router.push("/dashboard/approvals"), icon: WfIcon.calendar, tone: "info" as const },
+    { title: "Run payroll checks", sub: `Resolve ${payrollBlocked} blocked records`, onClick: () => router.push("/dashboard/payroll"), icon: WfIcon.wallet, tone: "warn" as const },
+    canExport && { title: "Export workforce report", sub: exporting ? "Exporting…" : "Download the current snapshot", onClick: handleExportReport, icon: WfIcon.report, tone: "ok" as const },
   ].filter((a): a is Exclude<typeof a, false> => Boolean(a));
 
   return (
@@ -65,7 +96,11 @@ export default function HRDashboard({ session }: Props) {
           </p>
         </div>
         <div className="wf-headacts">
-          <button type="button" className="wf-btn" onClick={() => router.push("/dashboard/reports")}>Export report</button>
+          {canExport && (
+            <button type="button" className="wf-btn" onClick={handleExportReport} disabled={exporting}>
+              {exporting ? "Exporting…" : "Export report"}
+            </button>
+          )}
           <button type="button" className="wf-btn pri" onClick={() => router.push("/dashboard/approvals")}>Review alerts</button>
         </div>
       </div>
@@ -145,7 +180,7 @@ export default function HRDashboard({ session }: Props) {
           </header>
           <div className="wf-qa-grid">
             {quickActions.map((a) => (
-              <QuickTile key={a.title} icon={a.icon} tone={a.tone} title={a.title} sub={a.sub} onClick={() => router.push(a.href)} />
+              <QuickTile key={a.title} icon={a.icon} tone={a.tone} title={a.title} sub={a.sub} onClick={a.onClick} />
             ))}
           </div>
         </section>
