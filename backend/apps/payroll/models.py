@@ -452,6 +452,19 @@ class PayrollCycle(models.Model):
 
     notes = models.TextField(blank=True)
 
+    # Phase 7B Task A — nullable, additive. Linked best-effort by
+    # services_pay_calendar.link_historical_cycles() for every PRE-EXISTING
+    # cycle (there was no pay-group/calendar concept when they were
+    # created); every READ of PayrollCycle elsewhere in the codebase is
+    # unaffected since these are optional extra context, not a replacement
+    # for cycle_start/cycle_end/pay_date/branch.
+    pay_group = models.ForeignKey(
+        'payroll.PayGroup', on_delete=models.SET_NULL, null=True, blank=True, related_name='cycles',
+    )
+    pay_period = models.ForeignKey(
+        'payroll.PayPeriod', on_delete=models.SET_NULL, null=True, blank=True, related_name='cycles',
+    )
+
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancelled_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -895,4 +908,49 @@ class EmployeeTaxDeclaration(models.Model):
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — FY {self.financial_year_start}-{str(self.financial_year_start + 1)[2:]} ({self.tax_regime})'
+
+
+# Phase 7A Task B — same "new model file, re-exported here" convention Phase
+# 6B used for Shift/AttendanceDevice/Geofence in apps.attendance.models.
+from apps.payroll.models_pay_component import PayComponent  # noqa: E402,F401
+# Phase 7A Task C.
+from apps.payroll.models_pay_structure import PayStructure, PayStructureComponent  # noqa: E402,F401
+# Phase 7A Task D.
+from apps.payroll.models_compensation import (  # noqa: E402,F401
+    EmployeeCompensation, EmployeeCompensationComponent, EmployeeRecurringComponent,
+)
+# Phase 7A Task E.
+from apps.payroll.models_payslip_line import PayslipLine  # noqa: E402,F401
+# Phase 7A Task F.
+from apps.payroll.models_statutory_scheme import StatutoryScheme, StatutoryRate  # noqa: E402,F401
+# Phase 7A Task G.
+from apps.payroll.models_tax_year import TaxRegime, TaxYearConfig, TaxSection  # noqa: E402,F401
+# Phase 7A Task H.
+from apps.payroll.models_tax_declaration import TaxDeclarationWindow, TaxProofSubmission  # noqa: E402,F401
+# Phase 7A Task J.
+from apps.payroll.models_shadow_run import PayslipShadowRunResult, PayrollV2Entitlement  # noqa: E402,F401
+# Phase 7B Task A.
+from apps.payroll.models_pay_calendar import PayrollCalendar, PayPeriod, PayGroup  # noqa: E402,F401
+# Phase 7B Task B.
+from apps.payroll.models_run import RunStageTemplate, PayrollRun, RunVersion  # noqa: E402,F401
+# Phase 7B Task C.
+from apps.payroll.models_payroll_check import PayrollCheck, PayrollCheckResult, PayrollHold  # noqa: E402,F401
+# Phase 7B Task D.
+from apps.payroll.models_reversal import ReversalEntry  # noqa: E402,F401
+# Phase 7B Task E.
+from apps.payroll.models_arrears import ArrearsRequest, ArrearsLine  # noqa: E402,F401
+# Phase 7B Task F.
+from apps.payroll.models_loan import LoanType, EmployeeLoan, LoanEmiSchedule  # noqa: E402,F401
+# Phase 7B Task G.
+from apps.payroll.models_payment_instruction import PaymentInstruction  # noqa: E402,F401
+# Phase 7B Task H.
+from apps.payroll.models_bank_template import BankFileTemplate, GeneratedBankFile, BankFileDownloadLog  # noqa: E402,F401
+# Phase 7B Task I.
+from apps.payroll.models_gl_journal import GLMapping, JournalEntry  # noqa: E402,F401
+# Phase 7B Task J.
+from apps.payroll.models_statutory_file import StatutoryFileTemplate, GeneratedStatutoryFile  # noqa: E402,F401
+# Phase 7B Task K.
+from apps.payroll.models_payslip_template import PayslipTemplate  # noqa: E402,F401
+# Phase 7B Task O.
+from apps.payroll.models_ops_v2 import PayrollOpsV2Entitlement  # noqa: E402,F401
 

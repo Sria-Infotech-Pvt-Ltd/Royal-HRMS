@@ -87,3 +87,8 @@ class AnnouncementReaction(models.Model):
 
     def __str__(self) -> str:
         return f'{self.user_id} → {self.announcement_id}'
+
+# Phase 8B Task D — audience rules + acknowledgement tracking (additive).
+from apps.announcements.models_v2 import (  # noqa: E402,F401
+    AnnouncementAudienceRule, AnnouncementAcknowledgement, AnnouncementSchedule, AnnouncementTranslation,
+)

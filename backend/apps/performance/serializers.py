@@ -100,21 +100,37 @@ class PerformanceReviewSerializer(serializers.ModelSerializer):
         """Lightweight, derived-only activity feed — no separate audit
         model, just the timestamped milestones already on the cycle and
         this review, in chronological order. Raw ISO timestamps are sent
-        as-is; the frontend formats them (see formatDate/formatDateTime)."""
+        as-is; the frontend formats them (see formatDate/formatDateTime).
+
+        "Draft saved" has no dedicated timestamp field of its own — it's
+        derived from `updated_at` whenever the review has been edited since
+        the cycle opened but not yet submitted, so an in-progress draft
+        shows a real "last saved" moment instead of nothing."""
         entries = [
-            {'label': 'Cycle opened', 'actor': 'HR Operations', 'at': obj.cycle.created_at},
+            {'label': 'Cycle opened', 'actor': 'HR Operations', 'at': obj.cycle.created_at,
+             'note': 'Goals and weights agreed'},
         ]
+        if not obj.self_submitted_at and obj.updated_at > obj.cycle.created_at:
+            entries.append({'label': 'Draft saved', 'actor': obj.employee.full_name, 'at': obj.updated_at,
+                             'note': 'Self-review remains editable'})
         if obj.self_submitted_at:
-            entries.append({'label': 'Self-review submitted', 'actor': obj.employee.full_name, 'at': obj.self_submitted_at})
+            entries.append({'label': 'Self-review submitted', 'actor': obj.employee.full_name, 'at': obj.self_submitted_at,
+                             'note': 'Submitted for manager review'})
         if obj.manager_submitted_at:
-            entries.append({'label': 'Manager review submitted', 'actor': obj.manager.full_name if obj.manager_id else 'Manager', 'at': obj.manager_submitted_at})
+            entries.append({'label': 'Manager review submitted', 'actor': obj.manager.full_name if obj.manager_id else 'Manager', 'at': obj.manager_submitted_at,
+                             'note': 'Submitted to HR for calibration'})
         if obj.hr_calibrated_at:
-            entries.append({'label': 'HR calibration completed', 'actor': 'HR Operations', 'at': obj.hr_calibrated_at})
+            entries.append({'label': 'HR calibration completed', 'actor': 'HR Operations', 'at': obj.hr_calibrated_at,
+                             'note': 'Final rating confirmed'})
         if obj.published_at:
-            entries.append({'label': 'Outcome published', 'actor': 'HR Operations', 'at': obj.published_at})
+            entries.append({'label': 'Outcome published', 'actor': 'HR Operations', 'at': obj.published_at,
+                             'note': 'Visible to employee for acknowledgement'})
         if obj.acknowledged_at:
-            entries.append({'label': 'Outcome acknowledged', 'actor': obj.employee.full_name, 'at': obj.acknowledged_at})
-        entries.sort(key=lambda e: e['at'])
+            entries.append({'label': 'Outcome acknowledged', 'actor': obj.employee.full_name, 'at': obj.acknowledged_at,
+                             'note': 'Review cycle complete'})
+        # Newest first — matches the reference "Activity history" layout
+        # (most recent milestone, e.g. a draft save, listed above "Cycle opened").
+        entries.sort(key=lambda e: e['at'], reverse=True)
         return entries
 
 

@@ -188,3 +188,14 @@ class PerformanceReview(models.Model):
             self.status = REVIEW_SELF_REVIEW
         else:
             self.status = REVIEW_NOT_STARTED
+
+# Phase 8A Task C — review templates, rating scale, competencies, calibration, PIP (additive).
+from apps.performance.models_v2 import (  # noqa: E402,F401
+    RatingScale, Competency, ReviewTemplate, CalibrationSession, CalibrationAdjustment,
+    PerformanceImprovementPlan, PerformanceV2Entitlement,
+)
+
+# Phase 8A gap-closure — continuous feedback, 360 peer nomination/feedback, goal cascading, outcome actions (additive).
+from apps.performance.models_v2b import (  # noqa: E402,F401
+    FeedbackNote, PeerNomination, PeerFeedback, GoalAlignment, PerformanceOutcomeAction,
+)

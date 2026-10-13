@@ -208,3 +208,15 @@ class ReferralBonus(models.Model):
 
     def __str__(self):
         return f'{self.referrer.full_name} — {self.bonus_amount} ({self.status})'
+
+
+# Phase 8A Task A — new file, re-exported here (same convention apps.payroll
+# uses for its own additive model files this session).
+from apps.recruitment.models_v2 import (  # noqa: E402,F401
+    JobRequisition, JobOpening, PipelineTemplate, PipelineStage,
+    CandidateProfile, Application, InterviewRound, ScorecardTemplate, Scorecard,
+    Offer, BGVCheck, ReferralProgramRule, RecruitmentV2Entitlement,
+)
+
+# Phase 8A gap-closure — duplicate merge, consent, retention policy (additive).
+from apps.recruitment.models_v2b import CandidateDuplicateMerge, CandidateConsent, CandidateRetentionPolicy  # noqa: E402,F401

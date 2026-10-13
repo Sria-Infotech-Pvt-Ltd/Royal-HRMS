@@ -57,6 +57,15 @@ export interface CalendarResponse {
   year:     number;
 }
 
+export interface RecentPunchRow {
+  date:      string;
+  location:  string;
+  clockIn:   string | null;
+  clockOut:  string | null;
+  source:    string;
+  status:    "PRESENT" | "COMPLETE";
+}
+
 export interface HistoryRow {
   date:          string;
   day:           string;

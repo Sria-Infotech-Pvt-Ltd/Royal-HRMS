@@ -469,6 +469,59 @@ class MyPayslipPdfView(APIView):
         return response
 
 
+class MyForm16PdfView(APIView):
+    """Streams a real, on-demand-rendered annual "Form 16" tax summary PDF
+    for the caller's own financial year, built entirely from their own real
+    EmployeePayslip rows and EmployeeTaxDeclaration — see
+    services_form16_pdf.py for exactly what this is (and is not)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, fy_start_year: int):
+        from datetime import date
+        from apps.accounts.utils import get_company_financial_year_config
+        from apps.payroll.models import EmployeeTaxDeclaration
+        from apps.payroll.services_form16_pdf import render_form16_pdf
+
+        if not _has_perm(request.user, 'payroll.view_own'):
+            return error('You do not have permission to view payslips.', http_status=403)
+
+        config = get_company_financial_year_config()
+        month_names = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December',
+        ]
+        fy_start_month = month_names.index(config['financial_year_start_month']) + 1
+        fy_start_date = date(fy_start_year, fy_start_month, 1)
+        fy_end_date = date(fy_start_year + 1, fy_start_month, 1)
+
+        payslips = list(
+            EmployeePayslip.objects
+            .filter(employee=request.user, cycle__cycle_start__gte=fy_start_date, cycle__cycle_start__lt=fy_end_date)
+            .select_related('cycle')
+            .order_by('cycle__cycle_start')
+        )
+        if not payslips:
+            return error('No payslips found for this financial year.', http_status=404)
+
+        declaration = EmployeeTaxDeclaration.objects.filter(
+            employee=request.user, financial_year_start=fy_start_year,
+        ).first()
+        regime_label = (
+            'New Tax Regime' if not declaration or declaration.tax_regime == 'new' else 'Old Tax Regime'
+        )
+
+        fy_label = f'{fy_start_year}-{str(fy_start_year + 1)[-2:]}'
+        pdf_bytes = render_form16_pdf(
+            request.user, fy_label, payslips, regime_label,
+            declaration.declared_investments if declaration else {},
+        )
+        filename = f'form16-FY{fy_label}.pdf'
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
 class LogPayslipDownloadView(APIView):
     """Records an audit-trail entry when an employee downloads their own
     payslip PDF — backs the "Downloads are ... recorded in the audit trail"

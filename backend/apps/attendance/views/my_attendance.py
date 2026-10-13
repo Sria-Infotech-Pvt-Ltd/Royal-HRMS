@@ -41,6 +41,7 @@ from apps.attendance.serializers_my_attendance import (
     MonthlySummarySerializer,
     MyCorrectionsFilterSerializer,
     PunchWriteSerializer,
+    RecentPunchRowSerializer,
     StatsSerializer,
     TodayAttendanceSerializer,
 )
@@ -342,6 +343,28 @@ class AttendanceCalendarView(APIView):
             'month':    params['month'],
             'year':     params['year'],
         })
+
+
+# ── Recent Punches ────────────────────────────────────────────────────────────
+
+class RecentPunchesView(APIView):
+    """GET /api/attendance/recent-punches/?limit=3 — ESS "Recent punches" card."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        target, err = _resolve_target_user(request)
+        if err:
+            return err
+
+        try:
+            limit = int(request.query_params.get('limit', 3))
+        except ValueError:
+            limit = 3
+        limit = max(1, min(limit, 10))
+
+        rows = AttendanceDashboardService.get_recent_punches(target, limit=limit)
+        return success('Recent punches retrieved successfully.', RecentPunchRowSerializer(rows, many=True).data)
 
 
 # ── Attendance Correction Request ─────────────────────────────────────────────

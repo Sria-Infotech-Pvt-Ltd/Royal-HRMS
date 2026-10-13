@@ -73,24 +73,32 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    e.target.value = ""; // always reset so choosing the same file twice still fires onChange
-    if (!files || files.length === 0) return;
+    const input = e.target;
+    const files = input.files;
+    // Read everything needed from `files` BEFORE touching input.value below —
+    // resetting .value in some browsers invalidates the live FileList in
+    // place, which made files.length read back as 0 immediately after, so a
+    // real, valid selection silently landed on the "No photo selected" state
+    // with no error at all.
+    if (!files || files.length === 0) { input.value = ""; return; }
     // The <input> has no `multiple` attribute so the browser only ever offers
     // one, but a defensive check costs nothing and covers pasted/dropped lists.
     if (files.length > 1) {
       setValidationError("Please select only one photo.");
+      input.value = "";
       return;
     }
     const file = files[0];
     if (!ACCEPTED_TYPES.includes(file.type)) {
       setValidationError("Only JPG, JPEG, and PNG files are allowed.");
+      input.value = "";
       return;
     }
     // No client-side size gate — the backend re-encodes/resizes whatever is
     // uploaded to fit its storage size band, so any reasonable photo (a
     // multi-MB phone/camera shot included) just works.
     applySelection(file);
+    input.value = ""; // reset after reading, so choosing the same file twice still fires onChange
   }
 
   function handleRetake() {
@@ -238,11 +246,18 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
             </div>
           )}
 
-          {mode === "device" && !previewUrl && validationError && (
+          {/* Covers BOTH the real validation-error case and the otherwise
+              blank dead end that used to happen when the OS file picker was
+              cancelled (or closed with no file chosen) — mode had already
+              left "choose" by then, so nothing rendered at all and the only
+              way out was closing the whole modal. */}
+          {mode === "device" && !previewUrl && (
             <FaceStatusPanel
-              icon="ti-alert-circle" iconColor="var(--error)" iconBg="rgba(239,68,68,0.08)"
-              title="That photo won't work"
-              message={validationError}
+              icon={validationError ? "ti-alert-circle" : "ti-photo"}
+              iconColor={validationError ? "var(--error)" : "var(--primary)"}
+              iconBg={validationError ? "rgba(239,68,68,0.08)" : "rgba(124,58,237,0.08)"}
+              title={validationError ? "That photo won't work" : "No photo selected"}
+              message={validationError ?? "Choose a JPG or PNG from your device to continue."}
               action={{ label: "Choose Another", onClick: handleChooseDevice }}
               secondaryAction={{ label: "Cancel", onClick: handleClose }}
             />

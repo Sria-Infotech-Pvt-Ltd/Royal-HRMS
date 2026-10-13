@@ -4,11 +4,9 @@
 // opens the exact same read-only Employee Drawer Admin sees from the
 // Employee Directory (self-service mode: no edit/reveal-sensitive controls)
 // — matching this page's own subtitle ("The same employee record and
-// layout used by Admin"). "Edit my details" opens ProfileEditModal, saving
-// straight to the record via PATCH API.employees.me — no HR approval step;
-// a separate, still-available "Request a profile correction" entry lives
-// under My Requests (EmployeeRequestModal.tsx) for anyone who wants a
-// tracked request instead.
+// layout used by Admin"). All corrections go through the HR-approved
+// request flow (ProfileCorrectionModal) — no direct self-edit path, even
+// for accounts holding employees.edit_own_profile.
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
@@ -16,7 +14,6 @@ import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
 import EmployeeDrawer from "@/app/dashboard/employees/_components/EmployeeDrawer";
-import ProfileEditModal from "@/app/dashboard/employees/_components/ProfileEditModal";
 import ProfileCorrectionModal from "./ProfileCorrectionModal";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import ProfilePhotoModal from "@/components/ProfilePhotoModal";
@@ -35,7 +32,7 @@ interface ProfileSummaryData {
   date_of_joining:  string | null;
   date_joined:      string | null;
   work_location:    string | null;
-  status:           string | null;
+  employment_status_display: string | null;
   reporting_manager?: { name: string | null } | null;
   profile:          {
     date_of_birth: string | null;
@@ -82,12 +79,10 @@ function toDrawerEmployee(d: ProfileSummaryData, photoUrl?: string | null): Empl
 }
 
 export default function ProfileSummaryTab() {
-  const { data, refetch } = useFetch<ProfileSummaryData>(API.employees.me);
+  const { data } = useFetch<ProfileSummaryData>(API.employees.me);
   const canEditOwnProfile = usePermission("employees.edit_own_profile");
   const [showRecord, setShowRecord] = useState(false);
-  const [showEdit, setShowEdit] = useState(false);
   const [showCorrection, setShowCorrection] = useState(false);
-  const [savedJustNow, setSavedJustNow] = useState(false);
   const [correctionSubmitted, setCorrectionSubmitted] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [photoOverride, setPhotoOverride] = useState<string | null | undefined>(undefined);
@@ -137,12 +132,6 @@ export default function ProfileSummaryTab() {
         />
       )}
 
-      {savedJustNow && (
-        <div className="alert alert-success mb-16">
-          <i className="ti ti-circle-check" /> Your profile was updated.
-        </div>
-      )}
-
       {correctionSubmitted && (
         <div className="alert alert-success mb-16">
           <i className="ti ti-circle-check" /> Correction request submitted — track it under My Requests.
@@ -163,25 +152,14 @@ export default function ProfileSummaryTab() {
             <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>View employee record</div>
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Personal, employment, pay, statutory, leave and audit details</div>
           </button>
-          {canEditOwnProfile ? (
-            <button
-              type="button"
-              onClick={() => setShowEdit(true)}
-              style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Edit my details</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Update your mobile number, address or emergency contact</div>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowCorrection(true)}
-              style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Request profile correction</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Submit a change for HR to review and apply</div>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowCorrection(true)}
+            style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
+          >
+            <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Request profile correction</div>
+            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Submit a change for HR to review and apply</div>
+          </button>
         </div>
       </div>
 
@@ -221,7 +199,7 @@ export default function ProfileSummaryTab() {
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>EMPLOYMENT STATUS</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4, textTransform: "capitalize" }}>{data?.status || "—"}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.employment_status_display || "—"}</div>
           </div>
         </div>
       </div>
@@ -233,14 +211,9 @@ export default function ProfileSummaryTab() {
           onClose={() => setShowRecord(false)}
           onRequestCorrection={() => {
             setShowRecord(false);
-            // Direct-edit is only offered when the account actually holds
-            // employees.edit_own_profile — otherwise this must go through
-            // the real HR-approved request flow (ProfileCorrectionModal),
-            // never a silent bypass straight to the editable form.
-            if (canEditOwnProfile) setShowEdit(true);
-            else setShowCorrection(true);
+            setShowCorrection(true);
           }}
-          correctionLabel={canEditOwnProfile ? "Edit my details" : "Request profile correction"}
+          correctionLabel="Request profile correction"
         />
       )}
 
@@ -251,13 +224,6 @@ export default function ProfileSummaryTab() {
         />
       )}
 
-      {showEdit && data && (
-        <ProfileEditModal
-          profile={data}
-          onClose={() => setShowEdit(false)}
-          onSaved={() => { setShowEdit(false); setSavedJustNow(true); refetch(); }}
-        />
-      )}
     </div>
   );
 }

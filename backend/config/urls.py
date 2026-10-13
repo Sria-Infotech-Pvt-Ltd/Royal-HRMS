@@ -3,8 +3,11 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 
+from apps.platform_core.views_health import HealthCheckView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('health/', HealthCheckView.as_view(), name='health-check'),
     path('api/', include('apps.accounts.urls')),
     path('api/branch/', include('apps.branch.urls')),
     path('api/announcements/', include('apps.announcements.urls')),

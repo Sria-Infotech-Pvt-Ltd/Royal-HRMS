@@ -13,9 +13,10 @@ can see a plausible breakdown before committing to a CTC figure.
 from decimal import Decimal
 
 from apps.payroll.models import BranchPayrollConfig, PayrollSettings, SalaryComponent
-
-_PF_DEFAULT_RATE = Decimal('12.00')
-_PF_DEFAULT_CEILING = Decimal('15000.00')
+# Phase 7A Task A — read the one source of truth (apps.payroll.engine.legacy)
+# instead of duplicating these two values under a second name here; values
+# are unchanged (12.00 / 15000.00), only the duplication is removed.
+from apps.payroll.engine.legacy import _PF_DEFAULT_RATE, _PF_DEFAULT_CEILING
 # Fixed-point convergence: Annual CTC, by definition, already INCLUDES the
 # employer's PF/EPS/gratuity/ESI contributions — it is not the same figure
 # as gross earnings. Gross earnings must be solved for such that

@@ -13,7 +13,7 @@ import type { ProfileForm } from "./_types";
 import DynamicStepFields from "./_components/DynamicStepFields";
 import TabDocuments, { type UploadedDoc } from "./_components/TabDocuments";
 import TabFaceId from "./_components/TabFaceId";
-import StepIndicator from "./_components/StepIndicator";
+import OnboardingSidebar from "./_components/OnboardingSidebar";
 import BasicDetailsCard, { type BasicDetails } from "./_components/BasicDetailsCard";
 import EducationChecklist, { type EducationEntry } from "./_components/EducationChecklist";
 import ExperienceList, { type ExperienceEntry } from "./_components/ExperienceList";
@@ -951,41 +951,43 @@ export default function OnboardingPage() {
   }
 
   // ── Wizard ─────────────────────────────────────────────────────────────────
+  // Same two-pane layout as the Hire wizard (left step rail + right content,
+  // .wiz/.wiz-nav/.wiz-main/.stephead/.wiz-body/.modal-foot from
+  // aira-theme.css) instead of the old centered-card + horizontal step
+  // circles — no fields changed, this is a pure layout/visual pass.
+  const completedCount = Math.min(highestSaved + 1, steps.length);
+  const progressPct = steps.length > 0 ? Math.round((completedCount / steps.length) * 100) : 0;
+
   return (
-    <div style={ROOT_STYLE}>
-      <div style={{ width: "100%", maxWidth: 820 }}>
-
-        {/* ── Header ── */}
-        <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
+    <div style={WIZARD_ROOT_STYLE}>
+      <div className="modal-head" style={{ flex: "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo-icon.png"
-            alt="Aira HRMS"
-            style={{ height: 56, width: "auto", objectFit: "contain", margin: "0 auto 1.25rem", display: "block" }}
-          />
-          <h1 style={{ fontSize: "1.75rem", fontWeight: 700, color: "var(--on-bg)", marginBottom: ".5rem", letterSpacing: "-.02em" }}>
-            Complete Your Profile
-          </h1>
-          <p style={{ color: "var(--on-variant)", fontSize: ".95rem" }}>
-            Fill in your details to get started. Your information is kept secure.
-          </p>
+          <img src="/logo-icon.png" alt="Aira HRMS" style={{ height: 34, width: "auto", objectFit: "contain" }} />
+          <div>
+            <h2 style={{ fontSize: 18 }}>Complete your profile</h2>
+            <p>Fill in your details to get started. Your information is kept secure.</p>
+          </div>
         </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--primary)" }}>{progressPct}% complete</div>
+          <div style={{ height: 5, width: 120, borderRadius: 3, background: "var(--outline-v)", overflow: "hidden", marginTop: 4 }}>
+            <div style={{ height: "100%", width: `${progressPct}%`, background: "var(--primary)", borderRadius: 3, transition: "width 0.3s ease" }} />
+          </div>
+        </div>
+      </div>
 
-        {/* ── Step Indicator ── */}
-        <StepIndicator steps={steps} currentStep={tab} highestSaved={highestSaved} onStepClick={setTab} />
+      <div className="wiz" style={{ flex: 1, minHeight: 0 }}>
+        <OnboardingSidebar steps={steps} currentStep={tab} highestSaved={highestSaved} onStepClick={i => { if (i <= highestSaved + 1) setTab(i); }} />
 
-        {/* ── Form card ── */}
-        <div style={CARD_STYLE}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: "1.5rem", paddingBottom: "1rem", borderBottom: "1px solid var(--outline-v)" }}>
-            <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(124,58,237,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <i className={`ti ${steps[tab].icon}`} style={{ fontSize: 18, color: "var(--primary)" }} />
-            </div>
+        <div className="wiz-main">
+          <div className="stephead">
             <div>
-              <div style={{ fontSize: ".7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--outline)", marginBottom: 2 }}>Step {tab + 1} of {steps.length}</div>
-              <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--on-bg)" }}>{steps[tab].label}</div>
+              <h3>{steps[tab].label}</h3>
+              <p>Step {tab + 1} of {steps.length}</p>
             </div>
             {steps[tab].kind === "fields" && autosaveStatus !== "idle" && (
-              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: ".78rem", color: autosaveStatus === "saved" ? "var(--success)" : "var(--on-variant)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".78rem", color: autosaveStatus === "saved" ? "var(--success)" : "var(--on-variant)" }}>
                 {autosaveStatus === "saving"
                   ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 13 }} /> Saving…</>
                   : <><i className="ti ti-cloud-check" style={{ fontSize: 13 }} /> All changes saved</>
@@ -994,6 +996,7 @@ export default function OnboardingPage() {
             )}
           </div>
 
+        <div className="wiz-body">
           {saveErr && <div className="alert alert-error"  style={{ marginBottom: "1.25rem" }}>{saveErr}</div>}
           {saveMsg && <div className="alert alert-success" style={{ marginBottom: "1.25rem" }}>{saveMsg}</div>}
 
@@ -1120,46 +1123,47 @@ export default function OnboardingPage() {
               onEditStep={setTab}
             />
           )}
+        </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2rem", paddingTop: "1.25rem", borderTop: "1px solid var(--outline-v)" }}>
-            <button className="btn btn-ghost" onClick={() => setTab(t => t - 1)} disabled={tab === 0 || saving} type="button">
-              <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> Previous
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={() => setTab(t => t - 1)} disabled={tab === 0 || saving} type="button">
+            <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> Previous
+          </button>
+          {tab < steps.length - 1 ? (
+            <button className="btn btn-filled" onClick={next} disabled={saving} type="button">
+              {saving
+                ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Saving…</>
+                : <>Save & Continue <i className="ti ti-arrow-right" style={{ fontSize: 14 }} /></>
+              }
             </button>
-            {tab < steps.length - 1 ? (
-              <button className="btn btn-filled" onClick={next} disabled={saving} type="button">
-                {saving
-                  ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Saving…</>
-                  : <>Save & Continue <i className="ti ti-arrow-right" style={{ fontSize: 14 }} /></>
-                }
-              </button>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: ".5rem" }}>
-                <div style={{ display: "flex", gap: ".75rem" }}>
-                  <button className="btn btn-ghost" onClick={saveSection} disabled={saving} type="button">
-                    {saving ? "Saving…" : "Save Draft"}
-                  </button>
-                  <button
-                    className="btn btn-filled"
-                    onClick={handleSubmit}
-                    disabled={saving || !canSubmit}
-                    type="button"
-                    style={{ background: "var(--success)", borderColor: "var(--success)" }}
-                    title={canSubmit ? undefined : "Complete Face ID registration (Step 6) before submitting."}
-                  >
-                    {saving
-                      ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Submitting…</>
-                      : <><i className="ti ti-check" style={{ fontSize: 14 }} /> Submit for Approval</>
-                    }
-                  </button>
-                </div>
-                {!canSubmit && (
-                  <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>
-                    Complete Face ID registration (Step 6) to enable submission.
-                  </span>
-                )}
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: ".5rem" }}>
+              <div style={{ display: "flex", gap: ".75rem" }}>
+                <button className="btn btn-ghost" onClick={saveSection} disabled={saving} type="button">
+                  {saving ? "Saving…" : "Save Draft"}
+                </button>
+                <button
+                  className="btn btn-filled"
+                  onClick={handleSubmit}
+                  disabled={saving || !canSubmit}
+                  type="button"
+                  style={{ background: "var(--success)", borderColor: "var(--success)" }}
+                  title={canSubmit ? undefined : "Complete Face ID registration (Step 6) before submitting."}
+                >
+                  {saving
+                    ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Submitting…</>
+                    : <><i className="ti ti-check" style={{ fontSize: 14 }} /> Submit for Approval</>
+                  }
+                </button>
               </div>
-            )}
-          </div>
+              {!canSubmit && (
+                <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>
+                  Complete Face ID registration (Step 6) to enable submission.
+                </span>
+              )}
+            </div>
+          )}
+        </div>
         </div>
       </div>
 
@@ -1221,4 +1225,17 @@ const CARD_STYLE: React.CSSProperties = {
   padding: "2rem",
   boxShadow: "0 4px 24px rgba(124,58,237,0.08), 0 1px 4px rgba(0,0,0,0.04)",
   border: "1px solid rgba(124,58,237,0.08)",
+};
+
+// The wizard screen itself (not the "submitted" screen above, which keeps
+// ROOT_STYLE's centered-card look) fills the full height with the Hire
+// wizard's own two-pane layout (.wiz/.wiz-nav/.wiz-main from aira-theme.css)
+// instead of a centered, padded card — no inner alignItems/padding here,
+// since .wiz-body supplies its own scroll region and .modal-foot its own
+// padding.
+const WIZARD_ROOT_STYLE: React.CSSProperties = {
+  height: "100vh",
+  background: "linear-gradient(140deg, #f0f4ff 0%, #e9effe 45%, #f3f0ff 100%)",
+  display: "flex",
+  flexDirection: "column",
 };

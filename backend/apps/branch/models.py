@@ -59,7 +59,7 @@ class Branch(models.Model):
     # not state-level (e.g. Pune is non-metro despite being in Maharashtra
     # alongside metro Mumbai) — deliberately on Branch, not State, for that
     # reason. Read by SalaryComponent.CALC_METRO_HRA in payroll's HRA
-    # computation (apps/payroll/views/cycles.py:_compute_employee_payslip).
+    # computation (apps/payroll/engine/legacy.py:_compute_employee_payslip).
     is_metro = models.BooleanField(default=False)
     # Which of the company's (state-wise) GST registrations this branch's own
     # invoices/documents should use — needed once a state has more than one

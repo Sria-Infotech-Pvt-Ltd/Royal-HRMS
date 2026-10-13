@@ -40,13 +40,13 @@ export default function MyAttendanceClient({ autoOpenNew = false }: Props) {
       <AttendanceTab />
 
       <div className="mb-16" />
-      <WeeklyTimesheetCard />
-
-      <div className="mb-16" />
-      <AttendanceCorrectionsTab
-        key={openCorrectionKey}
-        autoOpenNew={pendingAutoOpen}
-      />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "stretch" }}>
+        <WeeklyTimesheetCard />
+        <AttendanceCorrectionsTab
+          key={openCorrectionKey}
+          autoOpenNew={pendingAutoOpen}
+        />
+      </div>
     </div>
   );
 }

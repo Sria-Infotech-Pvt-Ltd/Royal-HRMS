@@ -8,19 +8,28 @@ from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 def _volatile_claims(user) -> dict:
     """
     Claims that can change mid-session (onboarding submitted/approved,
-    assessment completed, role reassigned) — factored out so both
-    RoleBasedRefreshToken.for_user (login) and FreshClaimsTokenRefreshSerializer
-    (every subsequent /token/refresh/) derive them the exact same way.
+    assessment completed, role reassigned, an HR-side password-reset/
+    forced-change flag) — factored out so both RoleBasedRefreshToken.for_user
+    (login) and FreshClaimsTokenRefreshSerializer (every subsequent
+    /token/refresh/) derive them the exact same way.
     frontend/proxy.ts reads these straight off the signed access token for
     its onboarding/assessment/superuser route gates — see that file's
     getOnboardingStatus/getAssessmentStatus/getCanManageTeam/getCanManageBranch/getIsSuperuser.
+
+    `must_change_password` belongs here too: it used to be set only once in
+    RoleBasedRefreshToken.for_user at login, so any HR-side fix to this flag
+    (or a stale True value from before a completed password change) stayed
+    frozen in an already-issued access/refresh token until the user fully
+    logged out and back in — the user would keep being bounced to "change
+    your password" even after the DB was already correct.
     """
     return {
-        'onboarding_status': user.onboarding_status,
-        'assessment_status': user.assessment_status,
-        'can_manage_team':   bool(user.role and user.role.can_manage_team),
-        'can_manage_branch': bool(user.role and user.role.can_manage_branch),
-        'is_superuser':      user.is_superuser,
+        'onboarding_status':     user.onboarding_status,
+        'assessment_status':     user.assessment_status,
+        'can_manage_team':       bool(user.role and user.role.can_manage_team),
+        'can_manage_branch':     bool(user.role and user.role.can_manage_branch),
+        'is_superuser':          user.is_superuser,
+        'must_change_password':  user.must_change_password,
     }
 
 
@@ -35,7 +44,6 @@ class RoleBasedRefreshToken(RefreshToken):
         token['employee_id']          = user.employee_id or ''
         token['department']           = user.department or ''
         token['branch']               = user.branch or ''
-        token['must_change_password'] = user.must_change_password
         token['permissions'] = (
             [rp.permission.codename for rp in user.role.role_permissions.all()]
             if user.role else []

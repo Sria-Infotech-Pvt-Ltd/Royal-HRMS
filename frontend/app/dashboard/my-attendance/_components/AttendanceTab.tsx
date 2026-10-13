@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useAttendanceDashboard } from "@/hooks/useAttendanceDashboard";
-import ClockWidget from "./ClockWidget";
 import CalendarAndHistory from "./CalendarAndHistory";
 import CorrectionModal from "./CorrectionModal";
+import RecentPunchesCard from "./RecentPunchesCard";
 
 function Spinner() {
   return <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />;
@@ -21,7 +21,7 @@ export default function AttendanceTab() {
   const [year,  setYear]  = useState(initYear);
   const [correctionDate, setCorrectionDate] = useState<string | null>(null);
 
-  const { stats, summary, calendar, history, isLoading, refetch } = useAttendanceDashboard({ month, year });
+  const { stats, calendar, history, isLoading, refetch } = useAttendanceDashboard({ month, year });
 
   function prev() {
     if (month === 1) { setMonth(12); setYear(y => y - 1); }
@@ -43,115 +43,51 @@ export default function AttendanceTab() {
   const regularized   = stats?.late_arrivals_regularized ?? 0;
   const workHours     = stats ? `${Math.round(stats.total_work_minutes / 60)}h` : "—";
   const workHoursPct  = stats?.work_hours_percentage ?? 0;
-  const presentPct    = stats && stats.working_days ? (stats.days_present / stats.working_days) * 100 : 0;
-  const latePct       = stats && stats.working_days ? (stats.late_arrivals / stats.working_days) * 100 : 0;
-  const missingPct    = stats && stats.working_days ? (stats.missing_punch / stats.working_days) * 100 : 0;
 
   return (
     <div>
-      {/* Top row: ClockWidget + 4 stat cards */}
-      <div className="attendance-top-row" style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 16, marginBottom: 16 }}>
-        <ClockWidget />
+      {/* Top row: 4 plain stat tiles */}
+      <div className="attendance-top-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <div className="stat-card">
+          <div className="stat-label">Present</div>
+          <div className="stat-value">{isLoading ? <Spinner /> : daysPresent}</div>
+          <div className="stat-sub">{isLoading ? "" : `of ${workingDays} working days`}</div>
+        </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 12 }}>
-          <div className="stat-card">
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-              <div>
-                <div className="stat-label">Present</div>
-                <div className="stat-value">{isLoading ? <Spinner /> : daysPresent}</div>
-                <div className="stat-sub">{isLoading ? "" : `of ${workingDays} working days`}</div>
-              </div>
-              <div className="stat-icon si-success"><i className="ti ti-user-check" /></div>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${Math.min(presentPct, 100)}%`, background: "var(--success)" }} />
-            </div>
-          </div>
+        <div className="stat-card">
+          <div className="stat-label">Work Hours</div>
+          <div className="stat-value">{isLoading ? <Spinner /> : workHours}</div>
+          <div className="stat-sub">{isLoading ? "" : `${workHoursPct}% of expected`}</div>
+        </div>
 
-          <div className="stat-card">
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-              <div>
-                <div className="stat-label">Work Hours</div>
-                <div className="stat-value">{isLoading ? <Spinner /> : workHours}</div>
-                <div className="stat-sub">{isLoading ? "" : `${workHoursPct}% of expected`}</div>
-              </div>
-              <div className="stat-icon si-info"><i className="ti ti-clock" /></div>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${Math.min(workHoursPct, 100)}%`, background: "var(--info)" }} />
-            </div>
-          </div>
+        <div className="stat-card">
+          <div className="stat-label">Late Arrivals</div>
+          <div className="stat-value" style={{ color: "var(--warn)" }}>{isLoading ? <Spinner /> : lateArrivals}</div>
+          <div className="stat-sub">{isLoading ? "" : `${regularized} regularized`}</div>
+        </div>
 
-          <div className="stat-card">
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-              <div>
-                <div className="stat-label">Late Arrivals</div>
-                <div className="stat-value" style={{ color: "var(--warn)" }}>{isLoading ? <Spinner /> : lateArrivals}</div>
-                <div className="stat-sub">{isLoading ? "" : `${regularized} regularized`}</div>
-              </div>
-              <div className="stat-icon si-warn"><i className="ti ti-clock-exclamation" /></div>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${Math.min(latePct, 100)}%`, background: "var(--warn)" }} />
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-              <div>
-                <div className="stat-label">Missing Punch</div>
-                <div className="stat-value" style={{ color: "var(--error)" }}>{isLoading ? <Spinner /> : missingPunch}</div>
-                <div className="stat-sub">no action required</div>
-              </div>
-              <div className="stat-icon si-error"><i className="ti ti-alert-triangle" /></div>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${Math.min(missingPct, 100)}%`, background: "var(--error)" }} />
-            </div>
-          </div>
+        <div className="stat-card">
+          <div className="stat-label">Missing Punch</div>
+          <div className="stat-value" style={{ color: "var(--error)" }}>{isLoading ? <Spinner /> : missingPunch}</div>
+          <div className="stat-sub">no action required</div>
         </div>
       </div>
 
-      {/* Monthly Summary */}
-      <div className="card mb-16">
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-calendar-stats" /> Monthly Summary</div>
-        </div>
-        <div className="card-body">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 0 }}>
-            {[
-              { label: "Working Days", value: summary?.working_days ?? "—", color: "var(--on-bg)"   },
-              { label: "Days Present", value: summary?.days_present ?? "—", color: "var(--success)" },
-              { label: "Days Absent",  value: summary?.days_absent  ?? "—", color: "var(--error)"   },
-              { label: "Leave Days",   value: summary?.leave_days   ?? "—", color: "var(--info)"    },
-              { label: "Half Days",    value: summary?.half_days    ?? "—", color: "var(--primary)" },
-              { label: "OT Hours",     value: summary?.ot_hours     ?? "—", color: "var(--success)" },
-            ].map((item, idx) => (
-              <div
-                key={item.label}
-                style={{ padding: "14px 16px", borderRight: idx < 5 ? "1px solid var(--outline-v)" : "none", textAlign: "center" }}
-              >
-                <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 6 }}>{item.label}</div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: item.color, fontVariantNumeric: "tabular-nums" }}>
-                  {isLoading ? <Spinner /> : item.value}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* Calendar + Recent punches */}
+      <div className="attendance-mid-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16, alignItems: "stretch" }}>
+        <CalendarAndHistory
+          month={month}
+          year={year}
+          calendar={calendar}
+          history={history}
+          isLoading={isLoading}
+          onPrev={prev}
+          onNext={next}
+          onRegularize={date => setCorrectionDate(date)}
+          hideControls
+        />
+        <RecentPunchesCard />
       </div>
-
-      {/* Calendar and History tabs */}
-      <CalendarAndHistory
-        month={month}
-        year={year}
-        calendar={calendar}
-        history={history}
-        isLoading={isLoading}
-        onPrev={prev}
-        onNext={next}
-        onRegularize={date => setCorrectionDate(date)}
-      />
 
       <CorrectionModal
         key={correctionDate ?? ""}
@@ -163,7 +99,8 @@ export default function AttendanceTab() {
 
       <style jsx>{`
         @media (max-width: 768px) {
-          .attendance-top-row {
+          .attendance-top-row,
+          .attendance-mid-row {
             grid-template-columns: 1fr !important;
           }
         }

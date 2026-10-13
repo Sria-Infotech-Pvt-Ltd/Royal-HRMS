@@ -35,7 +35,7 @@ export default function LeavePolicyGuidanceCard() {
           </div>
         </div>
       </div>
-      <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="card-body" style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: 20 }}>
         {policyDoc ? (
           <a href={policyDoc.file_url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm" style={{ justifyContent: "flex-start" }}>
             <i className="ti ti-file-text" /> Read leave policy

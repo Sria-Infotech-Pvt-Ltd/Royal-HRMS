@@ -195,8 +195,10 @@ export default function DynamicStepFields({
           lookupIfsc(normalized).then(info => {
             if (!info) return;
             if (latestIfscRef.current !== normalized) return; // superseded by a newer edit
-            if (info.bank) onBuiltinChange("bank_name" as keyof ProfileForm, info.bank);
-            if (info.branch) onBuiltinChange("bank_branch_name" as keyof ProfileForm, info.branch);
+            // Convenience auto-fill only — never clobber something the user
+            // already typed themselves into these two fields.
+            if (info.bank && !(form.bank_name as string)?.trim()) onBuiltinChange("bank_name" as keyof ProfileForm, info.bank);
+            if (info.branch && !(form.bank_branch_name as string)?.trim()) onBuiltinChange("bank_branch_name" as keyof ProfileForm, info.branch);
           });
         }
       }

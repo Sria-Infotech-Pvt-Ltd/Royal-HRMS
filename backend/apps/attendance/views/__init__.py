@@ -33,6 +33,7 @@ from apps.attendance.views.my_attendance import (
     AttendanceCalendarView,
     AttendanceCorrectionView,
     MyCorrectionsListView,
+    RecentPunchesView,
 )
 from apps.attendance.views.geofence_check import AttendanceGeofenceCheckView
 from apps.attendance.views.dashboard_list_detail import (
@@ -110,6 +111,7 @@ __all__ = [
     'AttendanceCalendarView',
     'AttendanceCorrectionView',
     'MyCorrectionsListView',
+    'RecentPunchesView',
     'AttendanceGeofenceCheckView',
     # HR Management
     'HRAttendanceDashboardView',

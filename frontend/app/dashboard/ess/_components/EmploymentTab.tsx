@@ -61,8 +61,10 @@ export default function EmploymentTab({ onNavigateToDocuments }: Props) {
         </button>
       </div>
 
-      <CurrentAssignmentCard profile={profile} />
-      <EmploymentDocumentsCard onNavigateToDocuments={onNavigateToDocuments} />
+      <div className="grid-2" style={{ alignItems: "stretch", marginBottom: 16 }}>
+        <CurrentAssignmentCard profile={profile} />
+        <EmploymentDocumentsCard onNavigateToDocuments={onNavigateToDocuments} />
+      </div>
       <LifecycleRequestsCard requests={requests} loading={sepLoading} error={sepError} />
 
       {showResign && (
@@ -87,7 +89,7 @@ function Tile({ label, value }: { label: string; value: string }) {
 
 function CurrentAssignmentCard({ profile }: { profile: EmploymentProfileData | null | undefined }) {
   return (
-    <div className="card mb-16">
+    <div className="card">
       <div className="card-header">
         <div className="card-title"><i className="ti ti-id-badge-2" /> Current assignment</div>
       </div>
@@ -105,7 +107,7 @@ function CurrentAssignmentCard({ profile }: { profile: EmploymentProfileData | n
 
 function EmploymentDocumentsCard({ onNavigateToDocuments }: { onNavigateToDocuments: () => void }) {
   return (
-    <div className="card mb-16">
+    <div className="card">
       <div className="card-header">
         <div className="card-title"><i className="ti ti-file-certificate" /> Employment documents</div>
       </div>
@@ -149,11 +151,11 @@ function LifecycleRequestsCard({ requests, loading, error }: {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-list-check" /> Lifecycle requests</div>
+        <div>
+          <div className="card-title"><i className="ti ti-list-check" /> Lifecycle requests</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>Formal requests require manager and HR review; submitting does not change your status immediately.</div>
+        </div>
       </div>
-      <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-        Formal requests require manager and HR review; submitting does not change your status immediately.
-      </p>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
         <div className="empty-state">
@@ -161,13 +163,11 @@ function LifecycleRequestsCard({ requests, loading, error }: {
           <h3>Loading…</h3>
         </div>
       ) : requests.length === 0 ? (
-        // No pre-existing empty-state copy for this card (it is new) — this
-        // second line was authored for this task, matching the tone of the
-        // other ESS empty states in this file's siblings.
-        <div className="empty-state">
-          <i className="ti ti-list-check" />
-          <h3>No lifecycle actions pending</h3>
-          <p>Any resignation or employment letter request will appear here.</p>
+        <div style={{ padding: "4px 24px 20px" }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>No lifecycle actions pending</div>
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>
+            Any resignation or employment letter request will appear here.
+          </div>
         </div>
       ) : (
         <div className="table-wrap">

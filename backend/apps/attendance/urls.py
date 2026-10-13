@@ -19,6 +19,7 @@ from apps.attendance.views import (
     OvertimePolicyListCreateView,
     PunchRulesPolicyDetailView,
     PunchRulesPolicyListCreateView,
+    RecentPunchesView,
     TodayAttendanceView,
     MyShiftView,
     MyWeeklyTimesheetView,
@@ -99,6 +100,7 @@ urlpatterns = [
     path('stats/',      AttendanceStatsView.as_view(),    name='attendance-stats'),
     path('summary/',    AttendanceSummaryView.as_view(),  name='attendance-summary'),
     path('calendar/',   AttendanceCalendarView.as_view(), name='attendance-calendar'),
+    path('recent-punches/', RecentPunchesView.as_view(), name='attendance-recent-punches'),
     path('correction/', AttendanceCorrectionView.as_view(), name='attendance-correction'),
     path('corrections/my/', MyCorrectionsListView.as_view(), name='attendance-corrections-my'),
 

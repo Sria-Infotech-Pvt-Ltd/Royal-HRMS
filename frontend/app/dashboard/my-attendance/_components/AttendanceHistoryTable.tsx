@@ -33,14 +33,14 @@ const STATUS_LABEL: Record<string, string> = {
 export default function AttendanceHistoryTable({ data, onRegularize, readOnly = false }: Props) {
   if (data.length === 0) {
     return (
-      <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--on-variant)" }}>
+      <div style={{ padding: 32, textAlign: "center", color: "var(--on-variant)", borderTop: "1px solid var(--outline-v)" }}>
         No attendance records for this month.
       </div>
     );
   }
 
   return (
-    <div className="card">
+    <div style={{ borderTop: "1px solid var(--outline-v)" }}>
       <div className="table-wrap">
         <table>
           <thead>

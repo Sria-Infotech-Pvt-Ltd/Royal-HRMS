@@ -79,7 +79,7 @@ export default function AppraisalGoalCard({ goal, value, disabled, onChange }: P
           <label className="field-label">Evidence or link reference</label>
           <textarea
             className="field-input"
-            rows={2}
+            rows={4}
             disabled={disabled}
             placeholder="Metric, project or document reference"
             value={value.evidence_reference}
@@ -90,7 +90,7 @@ export default function AppraisalGoalCard({ goal, value, disabled, onChange }: P
           <label className="field-label">My comments</label>
           <textarea
             className="field-input"
-            rows={2}
+            rows={4}
             disabled={disabled}
             placeholder="What changed and why?"
             value={value.self_comments}

@@ -174,36 +174,29 @@ def _auto_assign_managers(employee: 'User') -> list:
     if employee.reporting_manager_id is not None:
         return changed
 
-    assigned = None
-    from_org_chart = False
+    # Reporting manager must come from the org chart only — the org unit's
+    # designated chief (Position.is_chief), walking up to the nearest
+    # ancestor unit with one filled if this employee's own unit has none.
+    # No arbitrary "first active manager in the branch" fallback anymore:
+    # that used to assign a reporting manager with no real org-chart
+    # relationship to the employee just because they happened to share a
+    # branch, which doesn't reflect who actually leads this person's unit.
+    # Leaving reporting_manager unset (for HR to assign deliberately, or
+    # for a future hire into the vacant chief seat to resolve naturally)
+    # is correct here, not a bug, when no unit in the chain has an active
+    # chief.
+    if not emp_dept:
+        return changed
 
-    # 1. Org Unit chief in same branch (most specific — preferred).
-    if emp_dept:
-        from apps.accounts.services_approval import resolve_employee_org_unit_chief
-        chief = resolve_employee_org_unit_chief(employee)
-        if (
-            chief and chief.pk != employee.pk
-            and chief.is_active
-            and (chief.branch or '').strip().lower() == emp_branch.lower()
-        ):
-            assigned = chief
-            from_org_chart = True
-
-    # 2. Fallback: first active manager in the branch (deterministic by id).
-    #    Handles branches with multiple managers when no dept-level manager is set.
-    if assigned is None:
-        assigned = (
-            User.objects
-            .filter(role__can_manage_team=True, branch__iexact=emp_branch, is_active=True)
-            .exclude(pk=employee.pk)
-            .order_by('id')
-            .first()
-        )
-        from_org_chart = False
-
-    if assigned is not None:
-        employee.reporting_manager = assigned
-        employee.reporting_manager_from_org_chart = from_org_chart
+    from apps.accounts.services_approval import resolve_employee_org_unit_chief
+    chief = resolve_employee_org_unit_chief(employee)
+    if (
+        chief and chief.pk != employee.pk
+        and chief.is_active
+        and (chief.branch or '').strip().lower() == emp_branch.lower()
+    ):
+        employee.reporting_manager = chief
+        employee.reporting_manager_from_org_chart = True
         changed.append('reporting_manager')
         changed.append('reporting_manager_from_org_chart')
 

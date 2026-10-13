@@ -822,6 +822,51 @@ class AttendanceDashboardService:
             })
         return rows
 
+    @classmethod
+    def get_recent_punches(cls, employee, limit: int = 3) -> list[dict]:
+        """
+        Powers the ESS "Recent punches" card — real IN/OUT events straight
+        from AttendancePunch (device/web source, resolved branch or mode
+        label), grouped by day, newest day first. Deliberately reads the raw
+        punch log rather than AttendanceRecord: the processed record only
+        keeps clock_in_display/clock_out_display strings, not which source
+        or location each individual punch came from.
+        """
+        punches = list(
+            AttendancePunch.objects
+            .filter(employee=employee)
+            .select_related('branch')
+            .order_by('-punched_at')[:limit * 6]
+        )
+        by_date: dict[date, list[AttendancePunch]] = {}
+        for p in punches:
+            local_date = timezone.localtime(p.punched_at, _IST).date()
+            by_date.setdefault(local_date, []).append(p)
+
+        rows = []
+        for day in sorted(by_date.keys(), reverse=True)[:limit]:
+            day_punches = sorted(by_date[day], key=lambda x: x.punched_at)
+            first_in = next((p for p in day_punches if p.punch_type == AttendancePunch.PUNCH_IN), None)
+            last_out = next((p for p in reversed(day_punches) if p.punch_type == AttendancePunch.PUNCH_OUT), None)
+            anchor = first_in or day_punches[0]
+
+            if anchor.attendance_mode == AttendancePunch.MODE_WFH:
+                location_label = 'Remote'
+            elif anchor.attendance_mode == AttendancePunch.MODE_OFFICE:
+                location_label = anchor.branch.branch_name if anchor.branch else '—'
+            else:
+                location_label = dict(AttendancePunch.ATTENDANCE_MODE_CHOICES).get(anchor.attendance_mode, '—')
+
+            rows.append({
+                'date':           day.strftime('%d %b'),
+                'location':       location_label,
+                'clockIn':        timezone.localtime(first_in.punched_at, _IST).strftime('%H:%M') if first_in else None,
+                'clockOut':       timezone.localtime(last_out.punched_at, _IST).strftime('%H:%M') if last_out else None,
+                'source':         dict(AttendancePunch.SOURCE_CHOICES).get(anchor.source, anchor.source),
+                'status':         'COMPLETE' if last_out else 'PRESENT',
+            })
+        return rows
+
     # ── Private ───────────────────────────────────────────────────────────────
 
     @staticmethod

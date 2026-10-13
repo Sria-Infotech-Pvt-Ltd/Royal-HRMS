@@ -3032,3 +3032,10 @@ from apps.accounts.models_family_skills import (  # noqa: E402,F401
 # ─── Phase 5B — employment lifecycle: actions, relationships (additive) ────
 from apps.accounts.models_relationships import EmployeeRelationship  # noqa: E402,F401
 from apps.accounts.models_actions import ActionType, EmploymentAction  # noqa: E402,F401
+
+# ─── Phase 8B Task E/F — policy document versions/acknowledgements, asset master/allocations (additive) ───
+from apps.accounts.models_policy_document_v2 import PolicyDocumentVersion, PolicyAcknowledgement  # noqa: E402,F401
+from apps.accounts.models_asset_v2 import Asset, AssetAllocation  # noqa: E402,F401
+
+# Phase 8B gap-closure — asset requests + depreciation rule table (additive).
+from apps.accounts.models_asset_v2b import AssetRequest, AssetDepreciationRule  # noqa: E402,F401

@@ -93,25 +93,26 @@ export default function ExpensesTab() {
         </div>
       )}
 
-      <div className="form-row cols-2" style={{ alignItems: "flex-start" }}>
+      <div className="form-row cols-2" style={{ alignItems: "stretch" }}>
         {/* My claims */}
         <div className="card">
           <div className="card-header">
-            <div className="card-title"><i className="ti ti-receipt" /> My claims</div>
+            <div>
+              <div className="card-title"><i className="ti ti-receipt" /> My claims</div>
+              <div className="page-sub" style={{ marginTop: 2 }}>Receipts, purpose and amount are required before submission.</div>
+            </div>
           </div>
-          <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-            Receipts, purpose and amount are required before submission.
-          </p>
           <div className="table-wrap">
             {loading ? (
               <div className="text-center py-10">
                 <i className="ti ti-loader-2 spin text-3xl" />
               </div>
             ) : claims.length === 0 ? (
-              <div className="empty-state">
-                <i className="ti ti-wallet" />
-                <h3>No claims submitted</h3>
-                <p>Your new claim will appear here and in My Requests.</p>
+              <div style={{ padding: "4px 24px 20px" }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>No claims submitted</div>
+                <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>
+                  Your new claim will appear here and in My Requests.
+                </div>
               </div>
             ) : (
               <table>

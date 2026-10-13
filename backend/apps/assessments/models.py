@@ -265,3 +265,11 @@ class CandidateResponse(models.Model):
         else:
             name = 'Unknown'
         return f'{name} — {self.item.title}'
+
+# Phase 8A Task D — question bank, courses, enrolments, mandatory training (additive).
+from apps.assessments.models_v2 import (  # noqa: E402,F401
+    Question, QuestionOption, Course, CourseSession, Enrolment, MandatoryTrainingPolicy, LearningV2Entitlement,
+)
+
+# Phase 8A gap-closure — question pools, manual grading queue, proctoring flags (additive).
+from apps.assessments.models_v2b import QuestionPool, ManualGradingTask, ProctoringFlag  # noqa: E402,F401

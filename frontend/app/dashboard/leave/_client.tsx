@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Modal from "@/components/Modal";
-import LeaveDashboard from "./_components/LeaveDashboard";
+import LeaveDashboard, { LeaveBalanceStats } from "./_components/LeaveDashboard";
 import ApplyLeaveForm from "./_components/ApplyLeaveForm";
 import TeamCalendar   from "./_components/TeamCalendar";
 import LeaveAnalytics from "./_components/LeaveAnalytics";
@@ -49,9 +49,6 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
           <div className="page-sub">Balances, requests, holidays and team coverage.</div>
         </div>
         <div className="page-actions" style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-ghost" onClick={() => setShowAnalytics(true)} suppressHydrationWarning>
-            <i className="ti ti-chart-bar" /> Analytics
-          </button>
           <button className="btn btn-filled" onClick={() => setShowApply(true)} suppressHydrationWarning>
             Request leave
           </button>
@@ -59,19 +56,19 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <LeaveDashboard
-          onApply={() => setShowApply(true)}
-          onViewCalendar={() => setShowCalendar(true)}
-        />
-        <UpcomingHolidaysCard />
-        <TeamCoverageCard onOpenFullCalendar={() => setShowCalendar(true)} />
-        <LeavePolicyGuidanceCard />
+        <LeaveBalanceStats />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "stretch" }}>
+          <LeaveDashboard />
+          <UpcomingHolidaysCard />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "stretch" }}>
+          <TeamCoverageCard />
+          <LeavePolicyGuidanceCard />
+        </div>
       </div>
 
       {showApply && (
-        <Modal title="Request leave" onClose={() => setShowApply(false)} size="lg" bodyStyle={{ padding: 0 }}>
-          <ApplyLeaveForm onCancel={() => setShowApply(false)} />
-        </Modal>
+        <ApplyLeaveForm onCancel={() => setShowApply(false)} />
       )}
 
       {showCalendar && (

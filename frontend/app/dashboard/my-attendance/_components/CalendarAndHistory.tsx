@@ -15,6 +15,8 @@ interface Props {
   onNext:       () => void;
   onRegularize: (date: string) => void;
   readOnly?:    boolean;
+  /** Calendar-only, no Calendar/History toggle or color legend chips — matches the plain calendar card in the reference ESS Attendance layout. */
+  hideControls?: boolean;
 }
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -31,12 +33,13 @@ const LEGEND = [
 
 type Tab = "calendar" | "history";
 
-export default function CalendarAndHistory({ month, year, calendar, history, isLoading, onPrev, onNext, onRegularize, readOnly = false }: Props) {
+export default function CalendarAndHistory({ month, year, calendar, history, isLoading, onPrev, onNext, onRegularize, readOnly = false, hideControls = false }: Props) {
   const [tab, setTab] = useState<Tab>("calendar");
+  const effectiveTab = hideControls ? "calendar" : tab;
 
   return (
-    <div>
-      <div className="card-header" style={{ flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+    <div className="card">
+      <div className="card-header" style={{ flexWrap: "wrap", gap: 8 }}>
         <div>
           <div className="card-title">
             {isLoading ? "Loading…" : `${MONTH_NAMES[month - 1]} ${year}`}
@@ -45,20 +48,22 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button
-              onClick={() => setTab("calendar")}
-              className={`btn btn-sm ${tab === "calendar" ? "btn-filled" : "btn-ghost"}`}
-            >
-              <i className="ti ti-calendar" /> Calendar
-            </button>
-            <button
-              onClick={() => setTab("history")}
-              className={`btn btn-sm ${tab === "history" ? "btn-filled" : "btn-ghost"}`}
-            >
-              <i className="ti ti-list-details" /> History
-            </button>
-          </div>
+          {!hideControls && (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => setTab("calendar")}
+                className={`btn btn-sm ${tab === "calendar" ? "btn-filled" : "btn-ghost"}`}
+              >
+                <i className="ti ti-calendar" /> Calendar
+              </button>
+              <button
+                onClick={() => setTab("history")}
+                className={`btn btn-sm ${tab === "history" ? "btn-filled" : "btn-ghost"}`}
+              >
+                <i className="ti ti-list-details" /> History
+              </button>
+            </div>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={onPrev} disabled={isLoading}>
             <i className="ti ti-chevron-left" />
           </button>
@@ -68,8 +73,8 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
         </div>
       </div>
 
-      {tab === "calendar" && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+      {effectiveTab === "calendar" && !hideControls && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "12px 20px" }}>
           {LEGEND.map(item => (
             <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 8px", background: item.bg, border: "1px solid var(--outline-v)", borderRadius: 6 }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: item.color, display: "inline-block" }} />
@@ -79,7 +84,7 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
         </div>
       )}
 
-      {tab === "calendar"
+      {effectiveTab === "calendar"
         ? <AttendanceCalendar year={year} month={month} data={calendar} onRegularize={onRegularize} readOnly={readOnly} />
         : <AttendanceHistoryTable data={history} onRegularize={onRegularize} readOnly={readOnly} />}
     </div>

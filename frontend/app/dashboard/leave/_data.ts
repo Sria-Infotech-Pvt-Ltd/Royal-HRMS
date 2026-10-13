@@ -2,7 +2,7 @@ import { formatDate } from "@/lib/formatDate";
 
 // ─── Leave type UI metadata ───────────────────────────────────────────────────
 
-export type LeaveTypeKey = "casual" | "earned" | "sick" | "lwp" | "maternity" | "paternity";
+export type LeaveTypeKey = "casual" | "earned" | "sick" | "lwp" | "maternity" | "paternity" | "bereavement" | "comp_off";
 export type DurationKey  = "full_day" | "half_morning" | "half_afternoon";
 export type ReqStatus    = "pending" | "l2_pending" | "approved" | "rejected" | "cancelled";
 
@@ -26,6 +26,11 @@ export const LEAVE_TYPE_CONFIG: Record<LeaveTypeKey, LeaveTypeConfig> = {
   lwp:       { key: "lwp",       label: "Leave Without Pay", shortLabel: "LWP", icon: "ti-coin-off",       color: "var(--warn)",      bg: "color-mix(in srgb, var(--warn) 10%, transparent)",      isLwp: true,  requiresDoc: false },
   maternity: { key: "maternity", label: "Maternity Leave",   shortLabel: "ML",  icon: "ti-heart",          color: "var(--primary-c)", bg: "color-mix(in srgb, var(--primary-c) 12%, transparent)", isLwp: false, requiresDoc: true  },
   paternity: { key: "paternity", label: "Paternity Leave",   shortLabel: "PL",  icon: "ti-baby-carriage",  color: "var(--primary-c)", bg: "color-mix(in srgb, var(--primary-c) 10%, transparent)", isLwp: false, requiresDoc: true  },
+  // Added for parity with the 8 real, DB-configured LeaveType rows
+  // (apps/hrms/models_leave_ledger.py) — this map previously only covered
+  // the 6 legacy LEAVE_TYPE_CHOICES codes, silently missing these two.
+  bereavement: { key: "bereavement", label: "Bereavement Leave",  shortLabel: "BL",  icon: "ti-heart-handshake", color: "var(--on-variant)", bg: "color-mix(in srgb, var(--on-variant) 10%, transparent)", isLwp: false, requiresDoc: false },
+  comp_off:    { key: "comp_off",    label: "Compensatory Off",   shortLabel: "CO",  icon: "ti-clock-plus",      color: "var(--success)",    bg: "color-mix(in srgb, var(--success) 10%, transparent)",    isLwp: false, requiresDoc: false },
 };
 
 export const LEAVE_TYPES_LIST = Object.values(LEAVE_TYPE_CONFIG);

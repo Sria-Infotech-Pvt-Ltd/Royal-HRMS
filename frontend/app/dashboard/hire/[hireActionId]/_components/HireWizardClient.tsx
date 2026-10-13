@@ -56,6 +56,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [tab, setTab] = useState(0);
   const [highestSaved, setHighestSaved] = useState(-1);
   const [stepErr, setStepErr] = useState("");
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const [salutation, setSalutation] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -475,6 +476,41 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     };
   }
 
+  // Continuous autosave — debounced, fires ~1.2s after the last edit to ANY
+  // field on the current step, independent of "Next"/step-jump saves (which
+  // only fire on navigation and would otherwise lose whatever was typed if
+  // the tab/browser closes mid-step). No dependency array: this effect must
+  // see every render, since buildFullDraftPayload() reads dozens of pieces
+  // of state and listing them all would be as fragile as missing one.
+  // lastSavedDraftRef starts at null so the very first run (right after the
+  // initial GET finishes loading) primes the baseline instead of firing a
+  // spurious save of data that was just loaded from the server, untouched.
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedDraftRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    const payload = buildFullDraftPayload();
+    const serialized = JSON.stringify(payload);
+    if (lastSavedDraftRef.current === null) {
+      lastSavedDraftRef.current = serialized;
+      return;
+    }
+    if (serialized === lastSavedDraftRef.current) return;
+
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      setAutosaveStatus("saving");
+      patchAction(payload)
+        .then(() => {
+          lastSavedDraftRef.current = serialized;
+          setAutosaveStatus("saved");
+        })
+        .catch(() => setAutosaveStatus("error"));
+    }, 1200);
+
+    return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
+  });
+
   // Jumping to another step via the sidebar (HireWizardSidebar's own
   // onStepClick) previously called setTab directly with no save at all —
   // whatever was typed on the step being left silently never reached
@@ -647,7 +683,16 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               <h3>{STEPS[tab].label.split(" ").slice(0, -1).join(" ")} <em className="hl">{STEPS[tab].label.split(" ").slice(-1)}</em></h3>
               <p>{STEPS[tab].sub}</p>
             </div>
-            <div className="stepcount">{String(tab + 1).padStart(2, "0")} / {String(STEPS.length).padStart(2, "0")}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {autosaveStatus !== "idle" && (
+                <span className="text-[11.5px]" style={{ color: autosaveStatus === "error" ? "var(--error)" : "var(--on-variant)", display: "flex", alignItems: "center", gap: 4 }}>
+                  {autosaveStatus === "saving" && <><i className="ti ti-loader-2 animate-spin" /> Saving…</>}
+                  {autosaveStatus === "saved" && <><i className="ti ti-circle-check" /> All changes saved</>}
+                  {autosaveStatus === "error" && <><i className="ti ti-alert-circle" /> Autosave failed</>}
+                </span>
+              )}
+              <div className="stepcount">{String(tab + 1).padStart(2, "0")} / {String(STEPS.length).padStart(2, "0")}</div>
+            </div>
           </div>
 
         <div className="wiz-body" ref={wizBodyRef}>

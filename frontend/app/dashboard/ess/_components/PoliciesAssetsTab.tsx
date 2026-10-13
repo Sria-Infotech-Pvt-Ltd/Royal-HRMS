@@ -39,9 +39,6 @@ interface ApiAsset {
 }
 interface PagedResponse<T> { results: T[]; count: number }
 
-const CONDITION_LABEL: Record<string, string> = {
-  new: "New", good: "Good", refurbished: "Refurbished",
-};
 const STATUS_BADGE: Record<string, string> = {
   open: "badge-warn", in_progress: "badge-info", resolved: "badge-success",
 };
@@ -81,17 +78,19 @@ export default function PoliciesAssetsTab() {
         </button>
       </div>
 
-      <CompanyPoliciesCard
-        policies={policyList}
-        loading={policiesLoading}
-        error={policiesError}
-      />
-      <AssignedAssetsCard
-        assets={assetList}
-        loading={assetsLoading}
-        error={assetsError}
-        onReportIssue={() => setIsRequestModalOpen(true)}
-      />
+      <div className="grid-2" style={{ alignItems: "stretch", marginBottom: 20 }}>
+        <CompanyPoliciesCard
+          policies={policyList}
+          loading={policiesLoading}
+          error={policiesError}
+        />
+        <AssignedAssetsCard
+          assets={assetList}
+          loading={assetsLoading}
+          error={assetsError}
+          onReportIssue={() => setIsRequestModalOpen(true)}
+        />
+      </div>
       <AssetRequestsCard requests={assetRequests} loading={requestsLoading} error={requestsError} />
       <PolicyQuickReferenceGrid />
 
@@ -109,16 +108,13 @@ function CompanyPoliciesCard({ policies, loading, error }: {
   policies: ApiDocument[]; loading: boolean; error: string | null;
 }) {
   return (
-    <div className="card" style={{ marginBottom: 20 }}>
-      <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div className="card-title"><i className="ti ti-file-text" /> Company policies</div>
-        <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
-          <i className="ti ti-folder" /> Document Center
-        </a>
+    <div className="card">
+      <div className="card-header">
+        <div>
+          <div className="card-title"><i className="ti ti-file-text" /> Company policies</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>Read the current published version before raising an exception.</div>
+        </div>
       </div>
-      <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-        Read the current published version before raising an exception.
-      </p>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
         <div className="empty-state">
@@ -162,13 +158,13 @@ function AssignedAssetsCard({ assets, loading, error, onReportIssue }: {
   assets: ApiAsset[]; loading: boolean; error: string | null; onReportIssue: () => void;
 }) {
   return (
-    <div className="card" style={{ marginBottom: 20 }}>
+    <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-device-laptop" /> Assigned assets</div>
+        <div>
+          <div className="card-title"><i className="ti ti-device-laptop" /> Assigned assets</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>Report a missing or damaged asset through an IT request.</div>
+        </div>
       </div>
-      <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-        Report a missing or damaged asset through an IT request.
-      </p>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
         <div className="empty-state">
@@ -176,42 +172,37 @@ function AssignedAssetsCard({ assets, loading, error, onReportIssue }: {
           <h3>Loading assets…</h3>
         </div>
       ) : assets.length === 0 ? (
-        <div className="empty-state">
-          <i className="ti ti-device-laptop" />
-          <h3>No assets issued yet</h3>
-          <p>Equipment issued to you (laptop, phone, access card) will be listed here.</p>
+        <div style={{ padding: "4px 24px 20px" }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>No assets issued yet</div>
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>
+            Equipment issued to you (laptop, phone, access card) will be listed here.
+          </div>
         </div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Asset</th>
-                <th>Tag / Serial</th>
-                <th>Condition</th>
-                <th>Issued</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map(a => (
-                <tr key={a.id}>
-                  <td style={{ fontWeight: 600 }}>{a.asset_type_display}</td>
-                  <td>{a.tag_number || "—"}</td>
-                  <td>{CONDITION_LABEL[a.condition] ?? a.condition}</td>
-                  <td style={{ color: "var(--on-variant)" }}>{formatDate(a.issued_at) || "—"}</td>
-                  <td>
-                    <span className={`badge ${a.returned_at ? "badge-neutral" : "badge-success"}`}>
-                      {a.returned_at ? "RETURNED" : "ASSIGNED"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ padding: "4px 24px 0" }}>
+          {assets.map((a, idx) => (
+            <div
+              key={a.id}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "12px 0", gap: 12,
+                borderBottom: idx === assets.length - 1 ? "none" : "1px solid var(--outline-v)",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{a.asset_type_display}</div>
+                <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                  Asset tag {a.tag_number || "—"} · Assigned {formatDate(a.issued_at) || "—"}
+                </div>
+              </div>
+              <span className={`badge ${a.returned_at ? "badge-neutral" : "badge-success"}`}>
+                {a.returned_at ? "RETURNED" : "ASSIGNED"}
+              </span>
+            </div>
+          ))}
         </div>
       )}
-      <div style={{ padding: "0 24px 20px" }}>
+      <div style={{ padding: "12px 24px 20px" }}>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onReportIssue}>
           <i className="ti ti-alert-triangle" /> Report asset issue
         </button>
@@ -235,10 +226,9 @@ function AssetRequestsCard({ requests, loading, error }: {
           <h3>Loading requests…</h3>
         </div>
       ) : requests.length === 0 ? (
-        <div className="empty-state">
-          <i className="ti ti-clipboard-list" />
-          <h3>No asset requests</h3>
-          <p>IT &amp; Facilities will track requests here.</p>
+        <div style={{ padding: "4px 24px 20px" }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>No asset requests</div>
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>IT &amp; Facilities will track requests here.</div>
         </div>
       ) : (
         <div className="table-wrap">

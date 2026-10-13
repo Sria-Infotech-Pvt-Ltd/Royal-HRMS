@@ -2,7 +2,7 @@ from django.urls import path
 
 from apps.platform_core import (
     views, views_attachments, views_events_notifications, views_import_export, views_list_views,
-    views_meta, views_rules, views_scheduler, views_workflow,
+    views_meta, views_privacy, views_rules, views_scheduler, views_workflow,
 )
 
 urlpatterns = [
@@ -33,6 +33,10 @@ urlpatterns = [
     path('import-jobs/<uuid:job_id>/rollback/', views_import_export.ImportJobRollbackView.as_view(), name='platform-import-job-rollback'),
     path('import-jobs/<uuid:job_id>/status/', views_import_export.ImportJobStatusView.as_view(), name='platform-import-job-status'),
     path('custom/<str:entity_code>/export/', views_import_export.ExportView.as_view(), name='platform-export'),
+
+    path('privacy/my-requests/', views_privacy.MyDataSubjectRequestListCreateView.as_view(), name='platform-privacy-my-requests'),
+    path('privacy/queue/', views_privacy.DataSubjectRequestQueueView.as_view(), name='platform-privacy-queue'),
+    path('privacy/requests/<uuid:pk>/fulfil/', views_privacy.DataSubjectRequestFulfilView.as_view(), name='platform-privacy-fulfil'),
 
     path('countries/', views.CountryListCreateView.as_view(), name='platform-country-list'),
     path('countries/<int:pk>/', views.CountryDetailView.as_view(), name='platform-country-detail'),

@@ -349,6 +349,7 @@ export const API = {
     stats: "/attendance/stats/",
     summary: "/attendance/summary/",
     calendar: "/attendance/calendar/",
+    recentPunches: "/attendance/recent-punches/",
     correction: "/attendance/correction/",
     geofencing: (branchPk: number) => `/branch/branches/${branchPk}/geofencing/`,
 
@@ -489,6 +490,7 @@ export const API = {
     acknowledgePayslip: (id: string) => `/payroll/my-payslips/${id}/acknowledge/`,
     logPayslipDownload: (id: string) => `/payroll/my-payslips/${id}/log-download/`,
     payslipPdf: (id: string) => `/payroll/my-payslips/${id}/pdf/`,
+    form16Pdf: (fyStartYear: number) => `/payroll/my-payslips/form16/${fyStartYear}/pdf/`,
 
     // Tax declarations
     taxDeclarations: "/payroll/tax-declarations/",

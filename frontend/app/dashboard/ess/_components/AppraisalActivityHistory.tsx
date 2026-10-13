@@ -12,6 +12,7 @@ export interface AppraisalActivityEntry {
   label: string;
   actor: string;
   at: string;
+  note?: string;
 }
 
 export default function AppraisalActivityHistory({ entries }: { entries: AppraisalActivityEntry[] }) {
@@ -36,7 +37,9 @@ export default function AppraisalActivityHistory({ entries }: { entries: Apprais
                   <div className="tl-dot tl-success"><i className="ti ti-check" /></div>
                   <div className="tl-body">
                     <div className="tl-title">{entry.label}</div>
-                    <div className="tl-desc">{entry.actor} · {formatDateTime(entry.at)}</div>
+                    <div className="tl-desc">
+                      {entry.actor} · {formatDateTime(entry.at)}{entry.note ? ` · ${entry.note}` : ""}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -45,15 +48,11 @@ export default function AppraisalActivityHistory({ entries }: { entries: Apprais
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-eye-off" /> Review visibility</div>
-        </div>
-        <div style={{ padding: "0 20px 16px" }}>
-          <p style={{ fontSize: 12, color: "var(--on-variant)", margin: 0 }}>
-            Manager notes and calibrated ratings stay hidden until the outcome is published. This demo does not make payroll or promotion changes.
-          </p>
-        </div>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 13 }}>Review visibility</div>
+        <p style={{ fontSize: 12, color: "var(--on-variant)", margin: "4px 0 0" }}>
+          Manager notes and calibrated ratings stay hidden until the outcome is published. This demo does not affect payroll or promotion changes.
+        </p>
       </div>
     </>
   );

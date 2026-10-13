@@ -17,6 +17,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { API_BASE } from "@/lib/config";
 import { formatDate } from "@/lib/formatDate";
 import ConfirmModal from "@/components/ConfirmModal";
 import TaxDeclarationModal from "./TaxDeclarationModal";
@@ -99,6 +100,8 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
 
   const [showNewDeclaration, setShowNewDeclaration] = useState(false);
 
+  const fyStartYear = currentFinancialYearStart(fyConfig?.financial_year_start_month ?? "April").getFullYear();
+
   const ytdTds = (() => {
     const payslips = payslipPage?.results ?? [];
     if (payslips.length === 0) return null;
@@ -135,7 +138,6 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
 
       <div className="stats-grid" style={{ marginBottom: 20 }}>
         <div className="stat-card">
-          <div className="stat-icon si-primary"><i className="ti ti-calendar" /></div>
           <div className="stat-label">Financial Year</div>
           <div className="stat-value">{mine?.financial_year ?? "—"}</div>
           <div className="stat-sub">
@@ -143,88 +145,85 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon si-info"><i className="ti ti-adjustments-horizontal" /></div>
           <div className="stat-label">Current Regime</div>
           <div className="stat-value">{mine ? (mine.tax_regime === "new" ? "New" : "Old") : "—"}</div>
           <div className="stat-sub">changes require payroll approval</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon si-warn"><i className="ti ti-receipt-tax" /></div>
           <div className="stat-label">YTD TDS</div>
           <div className="stat-value">{ytdTds !== null ? formatInr(Math.round(ytdTds)) : "—"}</div>
           <div className="stat-sub">Sum of income tax deducted this financial year&apos;s payslips</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon si-error"><i className="ti ti-calendar-due" /></div>
           <div className="stat-label">Proof Window</div>
           <div className="stat-value">—</div>
           <div className="stat-sub">No submission deadline is configured</div>
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-file-invoice" /> My declarations</div>
-        </div>
-        <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-          Submitted items are reviewed by Payroll Operations.
-        </p>
-        {loading ? (
-          <div className="empty-state">
-            <i className="ti ti-loader-2 spin" />
-            <h3>Loading declaration…</h3>
+      <div className="grid-2" style={{ alignItems: "stretch", marginBottom: 20 }}>
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title"><i className="ti ti-file-invoice" /> My declarations</div>
+              <div className="page-sub" style={{ marginTop: 2 }}>Submitted items are reviewed by Payroll Operations.</div>
+            </div>
           </div>
-        ) : !hasSubmitted ? (
-          <div className="empty-state">
-            <i className="ti ti-file-invoice" />
-            <h3>No declarations submitted</h3>
-            <p>Start a declaration to see its approval status here.</p>
-          </div>
-        ) : (
-          <div style={{ padding: "4px 24px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0" }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>Tax declaration — FY {mine!.financial_year}</div>
-                <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                  {mine!.tax_regime_display} · {sectionsSummary(mine!.declared_investments)}
+          {loading ? (
+            <div className="empty-state">
+              <i className="ti ti-loader-2 spin" />
+              <h3>Loading declaration…</h3>
+            </div>
+          ) : !hasSubmitted ? (
+            <div className="empty-state">
+              <i className="ti ti-file-invoice" />
+              <h3>No declarations submitted</h3>
+              <p>Start a declaration to see its approval status here.</p>
+            </div>
+          ) : (
+            <div style={{ padding: "4px 24px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0" }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>Tax declaration — FY {mine!.financial_year}</div>
+                  <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                    {mine!.tax_regime_display} · {sectionsSummary(mine!.declared_investments)}
+                  </div>
                 </div>
+                <span className={`badge ${STATUS_BADGE[mine!.status]}`}>{mine!.status_display}</span>
               </div>
-              <span className={`badge ${STATUS_BADGE[mine!.status]}`}>{mine!.status_display}</span>
             </div>
-          </div>
-        )}
-      </div>
-
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-folder" /> Tax documents</div>
+          )}
         </div>
-        <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-          Available statements and proof uploads.
-        </p>
-        <div style={{ padding: "4px 24px 8px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-v)", gap: 12 }}>
+
+        <div className="card">
+          <div className="card-header">
             <div>
-              <div style={{ fontWeight: 600 }}>Form 16 · FY {mine?.financial_year ?? "—"}</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Annual tax certificate · PDF</div>
+              <div className="card-title"><i className="ti ti-folder" /> Tax documents</div>
+              <div className="page-sub" style={{ marginTop: 2 }}>Available statements and proof uploads.</div>
             </div>
-            <button
-              className="btn btn-ghost btn-sm"
-              disabled
-              style={{ opacity: 0.5, cursor: "not-allowed" }}
-              title="Form 16 generation is not available in this system yet"
-            >
-              <i className="ti ti-download" /> Download
-            </button>
           </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", gap: 12 }}>
-            <div>
-              <div style={{ fontWeight: 600 }}>Upload investment proof</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Select Tax proof in Documents.</div>
+          <div style={{ padding: "4px 24px 8px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-v)", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>Form 16 · FY {mine?.financial_year ?? "—"}</div>
+                <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Annual tax certificate · PDF</div>
+              </div>
+              <a
+                href={`${API_BASE}${API.payroll.form16Pdf(fyStartYear)}`}
+                className="btn btn-ghost btn-sm"
+              >
+                <i className="ti ti-download" /> Download
+              </a>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={onNavigateToDocuments}>
-              <i className="ti ti-chevron-right" />
-            </button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>Upload investment proof</div>
+                <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Select Tax proof in Documents.</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={onNavigateToDocuments}>
+                <i className="ti ti-chevron-right" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

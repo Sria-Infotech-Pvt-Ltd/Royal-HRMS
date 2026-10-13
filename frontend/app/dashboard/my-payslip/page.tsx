@@ -106,17 +106,17 @@ export default function MyPayslipPage({ onNavigateToTax }: Props) {
       <PayslipBreakdown slip={slip} gratuityRate={gratuityRate} />
 
       <div className="flex flex-col lg:flex-row gap-4 items-start">
-        <div className="flex-1 min-w-0 flex flex-col gap-4">
+        <div className="flex-1 min-w-0">
           <PayslipYtdSummary monthRangeLabel={ytd.monthRangeLabel} ytdGross={ytd.gross} ytdNet={ytd.net} ytdIncomeTax={ytd.incomeTax} periodCount={ytd.periodCount} />
-          <PayslipStatements payslips={payslips} currentFinancialYearLabel={fyLabel} />
         </div>
-        <div className="w-full lg:w-72 shrink-0">
+        <div className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
           <PayslipTaxNotice
             financialYearLabel={taxDecl?.financial_year ? `FY ${taxDecl.financial_year}` : fyLabel}
             fyEndLabel={fyEndLabel(fyStart)}
             isApproved={taxDecl?.status === "approved"}
             onNavigateToTax={onNavigateToTax ?? (() => router.push("/dashboard/ess"))}
           />
+          <PayslipStatements payslips={payslips} currentFinancialYearLabel={fyLabel} fyStartYear={fyStart.getFullYear()} />
         </div>
       </div>
 

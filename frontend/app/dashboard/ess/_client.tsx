@@ -17,7 +17,7 @@ import LeavePageClient from "../leave/_client";
 import MyPayslipPage from "../my-payslip/page";
 import MyDocumentsTab from "./_components/MyDocumentsTab";
 import EmploymentTab from "./_components/EmploymentTab";
-import MyRequestsClient from "../my-requests/_client";
+import MyRequestsSummaryTab from "./_components/MyRequestsSummaryTab";
 
 type TabId = "home" | "profile" | "attendance" | "leave" | "payslips" | "tax" | "expenses" | "documents" | "growth" | "appraisals" | "assets" | "employment" | "requests" | "hrHelp";
 
@@ -84,7 +84,7 @@ export default function EssShellClient({ session: _session }: { session: Session
       {tab === "appraisals" && <AppraisalsTab />}
       {tab === "assets"     && <PoliciesAssetsTab />}
       {tab === "employment" && <EmploymentTab onNavigateToDocuments={() => setTab("documents")} />}
-      {tab === "requests"   && <MyRequestsClient initialTab="all" />}
+      {tab === "requests"   && <MyRequestsSummaryTab />}
       {tab === "hrHelp"     && <HrHelpTab />}
     </div>
   );

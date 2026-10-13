@@ -36,9 +36,10 @@ function StatementRow({ label, amountLabel, downloadHref, payslipId, disabledTit
 interface Props {
   payslips: ApiPayslip[];
   currentFinancialYearLabel: string;
+  fyStartYear: number;
 }
 
-export default function PayslipStatements({ payslips, currentFinancialYearLabel }: Props) {
+export default function PayslipStatements({ payslips, currentFinancialYearLabel, fyStartYear }: Props) {
   return (
     <div className="card">
       <div className="px-4 py-3 border-b" style={{ borderColor: "var(--outline-v)" }}>
@@ -50,22 +51,17 @@ export default function PayslipStatements({ payslips, currentFinancialYearLabel 
           <StatementRow
             key={p.id}
             label={fmtMonth(p.cycle_start)}
-            amountLabel={`Payslip · ${INR(p.net_pay)}`}
+            amountLabel={`${INR(p.net_pay)} · PDF`}
             downloadHref={`${API_BASE}${API.payroll.payslipPdf(p.id)}`}
             payslipId={p.id}
             disabledTitle="PDF not yet available for this payslip"
           />
         ))}
-        {/* Form 16 generation is explicitly out of scope for this build (no
-            generator/model/endpoint exists anywhere in apps/payroll) — the
-            row is shown per spec but its download is always disabled rather
-            than pointing at a fake or broken link. */}
         <StatementRow
           label={`Form 16 · ${currentFinancialYearLabel}`}
-          amountLabel="Annual tax certificate"
-          downloadHref={null}
+          amountLabel="Tax certificate · PDF"
+          downloadHref={`${API_BASE}${API.payroll.form16Pdf(fyStartYear)}`}
           payslipId={null}
-          disabledTitle="Form 16 generation is not yet available"
         />
       </div>
     </div>

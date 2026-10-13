@@ -239,6 +239,16 @@ class HistoryRowSerializer(serializers.Serializer):
     canRegularize = serializers.BooleanField()
 
 
+class RecentPunchRowSerializer(serializers.Serializer):
+    """One row in the ESS "Recent punches" card."""
+    date      = serializers.CharField()
+    location  = serializers.CharField()
+    clockIn   = serializers.CharField(allow_null=True)
+    clockOut  = serializers.CharField(allow_null=True)
+    source    = serializers.CharField()
+    status    = serializers.CharField()
+
+
 class CorrectionReadSerializer(serializers.Serializer):
     """Confirmation payload returned after a correction is submitted."""
     id         = serializers.UUIDField()

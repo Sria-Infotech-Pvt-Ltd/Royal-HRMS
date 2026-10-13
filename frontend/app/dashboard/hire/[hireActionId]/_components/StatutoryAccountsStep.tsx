@@ -65,9 +65,12 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
         if (latestIfscRef.current !== normalized) return;
         if (!info) { setIfscStatus("not_found"); return; }
         setIfscStatus("found");
-        if (info.bank) set("bank_name", info.bank);
+        // Convenience auto-fill only — never clobber something the user
+        // already typed themselves (manually, or by editing a previous
+        // auto-fill) into these two fields.
+        if (info.bank && !value.bank_name.trim()) set("bank_name", info.bank);
         const branchAddress = [info.branch, info.address, info.city, info.state].filter(Boolean).join(", ");
-        if (branchAddress) set("bank_branch_address", branchAddress);
+        if (branchAddress && !value.bank_branch_address.trim()) set("bank_branch_address", branchAddress);
       });
     } else {
       setIfscStatus("idle");

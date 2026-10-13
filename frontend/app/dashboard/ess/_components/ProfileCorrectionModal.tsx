@@ -31,7 +31,6 @@ interface Props {
 export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) {
   const [section, setSection] = useState(SECTIONS[0].value);
   const [field, setField] = useState("");
-  const [newValue, setNewValue] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,11 +38,10 @@ export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) 
   async function handleSubmit() {
     setError(null);
     if (!field.trim()) { setError("Please enter which field needs to change."); return; }
-    if (!newValue.trim()) { setError("Please enter the corrected value."); return; }
     if (reason.trim().length < 10) { setError("Please describe the reason in at least 10 characters."); return; }
     setSubmitting(true);
     try {
-      const message = `Section: ${section}. Field to change: ${field.trim()}. New value: ${newValue.trim()}. Reason: ${reason.trim()}`;
+      const message = `Section: ${section}. Field to change: ${field.trim()}. Reason: ${reason.trim()}`;
       await clientApi.post(API.hrHelp.list, { topic: PROFILE_CORRECTION_TOPIC, priority: "normal", message });
       onSubmitted();
     } catch (err: unknown) {
@@ -79,26 +77,15 @@ export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) 
           />
         </div>
       </div>
-      <div className="form-row cols-2">
-        <div className="field-group">
-          <label className="field-label">New value</label>
-          <input
-            className="field-input"
-            value={newValue}
-            onChange={e => setNewValue(e.target.value)}
-            placeholder="Enter corrected value"
-          />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Reason</label>
-          <textarea
-            className="field-input"
-            rows={3}
-            value={reason}
-            onChange={e => setReason(e.target.value)}
-            placeholder="Reason for correction"
-          />
-        </div>
+      <div className="field-group">
+        <label className="field-label">Reason</label>
+        <textarea
+          className="field-input"
+          rows={3}
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Reason for correction"
+        />
       </div>
     </RequestModal>
   );

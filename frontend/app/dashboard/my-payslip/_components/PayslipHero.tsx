@@ -43,14 +43,16 @@ export default function PayslipHero({
     .filter(Boolean);
 
   return (
-    <div className="rounded-2xl p-6" style={{ background: HERO_GRADIENT }}>
-      <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.65)" }}>
-        Net pay · {fmtMonth(slip.cycle_start)}
+    <div className="rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6" style={{ background: HERO_GRADIENT }}>
+      <div>
+        <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.65)" }}>
+          Net pay · {fmtMonth(slip.cycle_start)}
+        </div>
+        <div className="text-4xl font-extrabold mt-1" style={{ color: "#fff" }}>{INR(net)}</div>
+        <div className="text-xs mt-2" style={{ color: "rgba(255,255,255,0.7)" }}>{creditedParts.join(" · ")}</div>
       </div>
-      <div className="text-4xl font-extrabold mt-1" style={{ color: "#fff" }}>{INR(net)}</div>
-      <div className="text-xs mt-2" style={{ color: "rgba(255,255,255,0.7)" }}>{creditedParts.join(" · ")}</div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+      <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:min-w-[280px]">
         <StatTile label="Gross earnings" value={INR(gross)} />
         <StatTile label="Total deductions" value={INR(deductions)} />
         <StatTile label="Paid days" value={`${paidDays}/${totalDays}`} />

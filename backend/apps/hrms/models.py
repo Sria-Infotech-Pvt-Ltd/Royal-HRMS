@@ -893,6 +893,13 @@ HR_HELP_TOPIC_CHOICES = [
     # flow. Reuses this generic support-request model rather than a new
     # dedicated one, same as asset_request above.
     ('profile_correction', 'Profile correction'),
+    # Submitted from ESS -> Growth -> "Request feedback" — an employee asking
+    # a manager or colleague for focused feedback outside the formal review
+    # cycle. Peer-to-peer feedback has no dedicated model/workflow of its own
+    # (see apps/performance/models.py's own scope notes); this reuses the
+    # generic support-request model exactly like asset_request/profile_correction
+    # above rather than building a separate feedback-request subsystem.
+    ('feedback_request', 'Feedback request'),
     ('other',            'Other'),
 ]
 
@@ -1013,4 +1020,22 @@ class EmployeeDocumentSubmission(models.Model):
 from apps.hrms.models_leave_ledger import LeaveType, LeaveTransaction  # noqa: E402,F401
 from apps.hrms.models_holiday_calendar import (  # noqa: E402,F401
     HolidayCalendar, HolidayCalendarEntry, HolidayCalendarAssignment,
+)
+
+# ─── Phase 8A Task B — onboarding/offboarding checklists (additive) ────────
+from apps.hrms.models_checklist import (  # noqa: E402,F401
+    ChecklistTemplate, ChecklistTaskTemplate, ChecklistInstance, ChecklistTaskInstance,
+)
+
+# ─── Phase 8B Task A/B/C/H — expenses, separation links, help desk threads, v2 flags (additive) ───
+from apps.hrms.models_expense_v2 import ExpenseCategory, ExpenseClaim, ExpenseLine  # noqa: E402,F401
+from apps.hrms.models_separation_v2 import SeparationFinalSettlementLink, AlumniRecord  # noqa: E402,F401
+from apps.hrms.models_helpdesk_v2 import HelpDeskCategory, TicketThread, TicketMessage  # noqa: E402,F401
+from apps.hrms.models_v2_flags import ModuleV2Entitlement  # noqa: E402,F401
+
+# ─── Phase 8B gap-closure — travel requests, exit interviews, KB/satisfaction/merge/round-robin (additive) ───
+from apps.hrms.models_expense_v2b import TravelRequest, TravelExpenseClaimLink  # noqa: E402,F401
+from apps.hrms.models_separation_v2b import ExitInterview, SeparationChecklistLink  # noqa: E402,F401
+from apps.hrms.models_helpdesk_v2b import (  # noqa: E402,F401
+    KnowledgeBaseArticle, TicketSatisfactionRating, TicketMergeRecord, RoundRobinAssignmentState,
 )
