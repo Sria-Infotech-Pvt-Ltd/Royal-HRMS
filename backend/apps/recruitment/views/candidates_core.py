@@ -22,6 +22,7 @@ from apps.accounts.models import AuditLog, Company, User
 from apps.accounts.utils import send_template_email
 from core.pagination import paginate, paginated_data
 from core.template_context import candidate_context, candidate_interview_location, company_name, universal_context
+from .candidate_status import CandidateStatusView
 from ..models import Candidate, CandidateEmail, CandidateLog, ReferralBonus, ReferralRule
 from ..serializers import (
     CandidateBulkImportRowSerializer,

@@ -285,3 +285,26 @@ class CandidateCreateValidationTests(TestCase):
             interview_date=interview_date, interview_time='11:00:00', interviewer=self.interviewer.id,
         )
         self.assertEqual(second.status_code, 201, second.data)
+
+
+class CandidateListViewRegressionTests(TestCase):
+    """Regression test for CandidateListCreateView.get's NameError:
+    'CandidateStatusView' is not defined — caught live via the dev server
+    log, not by an existing test. candidates_core.py referenced a class
+    defined in the sibling candidate_status.py module without importing it;
+    worked by accident whenever views/__init__.py's `from .candidate_status
+    import *` had already run and left the name in sys.modules' shared
+    state for some code paths, but not for a direct, fresh request."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        role = make_role('recruiter_list_test', permission_codenames=['recruitment.view'])
+        self.user = make_user('recruiter-list@test.com', role=role, password='TestPass123!')
+        _login(self.client, 'recruiter-list@test.com')
+
+    def test_candidate_list_returns_status_choices_without_crashing(self):
+        resp = self.client.get(reverse('candidate-list-create'))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertIn('status_choices', resp.data['data'])
+        self.assertTrue(len(resp.data['data']['status_choices']) > 0)
