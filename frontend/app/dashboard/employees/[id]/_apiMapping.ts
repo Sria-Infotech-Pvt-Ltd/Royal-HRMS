@@ -14,8 +14,9 @@ import {
 } from "../_data";
 
 export interface ApiProfile {
+  salutation?: string; display_name?: string; nationality?: string; place_of_birth?: string;
   date_of_birth?: string; gender?: string; marital_status?: string;
-  father_name?: string; blood_group?: string;
+  father_name?: string; mother_name?: string; languages_known?: string; blood_group?: string;
   current_address?: string; current_address_line2?: string;
   current_village?: string; current_district?: string; current_state?: string; current_pin_code?: string;
   permanent_address?: string; permanent_address_line2?: string;
@@ -188,4 +189,3 @@ export function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeCo
     documents: buildDocEntries(u.documents ?? [], documentTypeConfig),
   };
 }
-

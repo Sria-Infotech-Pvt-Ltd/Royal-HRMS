@@ -1,14 +1,15 @@
 "use client";
 
-// The ESS hero — greeting, role · id · org unit, today's date + shift, and the
-// single white Punch in / Punch out button (reference: .ess-hero). Reuses the
-// same employee profile fetch (employees/me) and the existing ClockInButton /
-// useAttendanceStatus flow, so punching here is the exact same punch (with
-// geofence + face verification) as every other punch button in the app.
+// Purple/gradient greeting banner for the ESS Home tab. Reuses the same
+// employee profile fetch (employees/me — already used by ProfileClient and
+// DashboardShell for the header avatar) and the existing ClockInButton /
+// useAttendanceStatus hook so punching in here is the exact same flow as
+// every other punch-in button in the app, not a new one.
 
 import { useEffect } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import ClockInButton from "@/components/ClockInButton";
 import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
 import type { AttendanceStatus } from "@/types/employeeDashboard";
@@ -20,8 +21,6 @@ interface HomeProfile {
   employee_id:       string;
   department:        string;
   designation:       string;
-  org_unit_name?:    string | null;
-  position_title?:   string | null;
   branch:            string;
   profile_photo_url: string | null;
 }
@@ -37,62 +36,74 @@ function initials(name: string): string {
 }
 
 interface Props {
+  // Real per-employee "today" state, passed down from HomeTab so this and
+  // HomeTodayPanel share one fetch instead of two.
   status: AttendanceStatus | null;
   onPunchSuccess: () => void;
 }
 
 export default function HomeBanner({ status, onPunchSuccess }: Props) {
   const { data: profile, refetch: refetchProfile } = useFetch<HomeProfile>(API.employees.me);
-  const { data: shift } = useFetch<Shift | null>(API.attendance.myShift);
 
   useEffect(() => {
     function onPhotoUpdated() { refetchProfile(); }
     window.addEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
     return () => window.removeEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
   }, [refetchProfile]);
+  // Org-wide default shift (no per-employee shift assignment exists yet —
+  // see /attendance/my-shift/'s own docstring). Falls back to the real
+  // clock-in status line when no default is configured, rather than a
+  // fabricated shift string.
+  const { data: shift } = useFetch<Shift | null>(API.attendance.myShift);
 
+  const firstName = (profile?.full_name ?? "").split(" ")[0] || "there";
   const now = new Date();
-  const firstName = (profile?.full_name ?? "").split(" ")[0];
-  const subtitle = [
-    profile?.position_title || profile?.designation,
+  const greeting = `Good ${greetingWord(now.getHours())}, ${firstName}`;
+  const dateLabel = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+
+  const subtitleParts = [
+    profile?.designation,
     profile?.employee_id,
-    profile?.org_unit_name || profile?.department,
-  ].filter(Boolean).join(" · ");
+    profile?.department,
+  ].filter(Boolean);
 
   // shift is {} (not null) from the backend when no default shift is
   // configured — check for a real field, not just object truthiness.
-  const shiftLabel = shift?.start_time
-    ? `${shift.name} · ${shift.start_time}–${shift.end_time}`
+  const statusLabel = shift?.start_time
+    ? `${shift.name} · ${shift.start_time}-${shift.end_time}`
     : status?.clocked_in
       ? `Clocked in · ${status.clock_in_time ?? "—"}`
       : "Not clocked in yet";
 
   return (
-    <section className="ess-hero">
-      <div className="ess-person">
-        <div
-          className="ess-photo"
-          aria-hidden="true"
-          style={{
-            backgroundImage: profile?.profile_photo_url ? `url(${profile.profile_photo_url})` : "none",
-            backgroundSize: "cover", backgroundPosition: "center", backgroundColor: "rgba(255,255,255,.18)",
-            display: "grid", placeItems: "center", color: "#fff", fontWeight: 800, fontSize: 20,
-          }}
-        >
-          {!profile?.profile_photo_url && profile ? initials(profile.full_name) : null}
+    <div
+      className="mb-16"
+      style={{ background: "linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)", borderRadius: "var(--radius-lg)", padding: "26px 30px", position: "relative", overflow: "hidden" }}
+    >
+      {/* Text on this card always uses var(--on-primary) rather than a literal
+          white so it stays readable against the primary/secondary gradient's
+          lighter dark-mode tones, not just the darker light-mode ones. */}
+      <div style={{ position: "absolute", top: -50, right: -50, width: 180, height: 180, borderRadius: "50%", border: "1px solid color-mix(in srgb, var(--on-primary) 6%, transparent)", pointerEvents: "none" }} />
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", position: "relative" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <Avatar text={initials(profile?.full_name ?? firstName)} size={60} shape="square" photoUrl={profile?.profile_photo_url} />
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "var(--on-primary)", lineHeight: 1.25 }}>{greeting}</div>
+            <div style={{ fontSize: 13, color: "color-mix(in srgb, var(--on-primary) 72%, transparent)" }}>
+              {subtitleParts.length > 0 ? subtitleParts.join(" · ") : "Welcome to your workspace"}
+            </div>
+          </div>
         </div>
-        <div>
-          <h1>{firstName ? `Good ${greetingWord(now.getHours())}, ${firstName}` : `Good ${greetingWord(now.getHours())}`}</h1>
-          <p>{subtitle || "Welcome to your workspace"}</p>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-primary)" }}>{dateLabel}</div>
+            <div style={{ fontSize: 12, color: "color-mix(in srgb, var(--on-primary) 65%, transparent)" }}>{statusLabel}</div>
+          </div>
+          <ClockInButton onPunchSuccess={onPunchSuccess} />
         </div>
       </div>
-      <div className="ess-clock">
-        <div>
-          <b>{now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</b>
-          <span>{shiftLabel}</span>
-        </div>
-        <ClockInButton variant="ess" onPunchSuccess={onPunchSuccess} />
-      </div>
-    </section>
+    </div>
   );
 }

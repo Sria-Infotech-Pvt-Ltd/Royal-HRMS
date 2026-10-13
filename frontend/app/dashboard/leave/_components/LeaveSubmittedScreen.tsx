@@ -10,29 +10,20 @@ interface LeaveSubmittedScreenProps {
 
 export default function LeaveSubmittedScreen({ submitted, leaveType, onApplyAnother, onCancel }: LeaveSubmittedScreenProps) {
   const ltConfig = LEAVE_TYPE_CONFIG[leaveType];
+  const dayCount = `${submitted.total_days} day${submitted.total_days !== 1 ? "s" : ""}`;
   return (
-    <div className="min-h-[60vh] flex items-center justify-center p-6">
-      <div className="bg-[var(--surface)] rounded-3xl border border-[var(--outline-v)] shadow-lg p-10 text-center w-full max-w-md">
-        <div className="w-20 h-20 rounded-full bg-[var(--success-c)] flex items-center justify-center mx-auto mb-6">
-          <i className="ti ti-circle-check text-4xl text-[var(--success)]" />
-        </div>
-        <h2 className="text-xl font-bold text-[var(--on-bg)] mb-2">Request Submitted!</h2>
-        <p className="text-sm text-[var(--on-variant)] mb-1">
-          Your <strong className="text-[var(--primary)]">{ltConfig.label}</strong> request for{" "}
-          <strong className="text-[var(--primary)]">{submitted.total_days} day{submitted.total_days !== 1 ? "s" : ""}</strong> has been sent for approval.
-        </p>
-        <p className="text-xs text-[var(--on-variant)] mb-8">{fmtDate(submitted.start_date)} → {fmtDate(submitted.end_date)}</p>
-        <div className="flex gap-3 justify-center">
-          <button onClick={onApplyAnother}
-            className="px-5 py-2.5 rounded-xl border border-[var(--outline-v)] text-sm font-medium text-[var(--on-variant)] hover:bg-[var(--bg-low)]">
-            Apply Another
-          </button>
-          <button onClick={onCancel}
-            className="px-6 py-2.5 rounded-xl text-sm font-semibold text-[var(--on-primary)]"
-            style={{ background: "var(--primary)" }}>
-            Back to Dashboard
-          </button>
-        </div>
+    <div className="flex flex-col items-center px-6 py-12 text-center">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--success-c)]">
+        <i className="ti ti-check text-2xl text-[var(--success)]" />
+      </div>
+      <h2 className="mb-1 text-lg font-semibold text-[var(--on-bg)]">Request submitted</h2>
+      <p className="max-w-sm text-[13px] text-[var(--on-variant)]">
+        Your {ltConfig.label.toLowerCase()} request for {dayCount} ({fmtDate(submitted.start_date)}
+        {submitted.end_date !== submitted.start_date && ` – ${fmtDate(submitted.end_date)}`}) has been sent for approval.
+      </p>
+      <div className="mt-6 flex gap-2.5">
+        <button type="button" className="btn btn-ghost" onClick={onApplyAnother}>Request another</button>
+        <button type="button" className="btn btn-filled" onClick={onCancel}>Done</button>
       </div>
     </div>
   );

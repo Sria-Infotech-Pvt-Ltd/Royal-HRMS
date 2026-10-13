@@ -53,33 +53,40 @@ def _ensure_branch():
     )
 
 
+def create_missing_personas():
+    """Create whichever of the four persona logins do not exist yet (never changes an existing user).
+    Returns the emails created. Callers are responsible for the DEBUG / confirmation guard."""
+    _ensure_branch()
+    created = []
+    manager = None
+    for email, role_name, employee_id, full_name, branch, reports_to_manager in PERSONAS:
+        user = User.objects.filter(email=email).first()
+        if user is None:
+            role = Role.objects.filter(name=role_name).first()
+            if role is None:
+                raise CommandError(f'Role "{role_name}" does not exist — run the migrations first.')
+            user = User.objects.create_user(
+                email=email, password=PASSWORD, full_name=full_name, role=role, employee_id=employee_id,
+                branch=branch, phone='', date_of_joining=date(2024, 4, 1),
+                must_change_password=False, onboarding_status=User.ONBOARDING_COMPLETE,
+                assessment_status=User.ASSESSMENT_COMPLETE,
+                employment_status=User.EMPLOYMENT_STATUS_CONFIRMED, employee_type='Permanent',
+            )
+            created.append(email)
+        if role_name == 'manager':
+            manager = user
+        if reports_to_manager and manager is not None and user.reporting_manager_id is None:
+            User.objects.filter(pk=user.pk).update(reporting_manager=manager)
+    return created
+
+
 class Command(BaseCommand):
     help = 'Create the four demo persona logins (Payroll Admin, Reporting Manager, Employee, HR) if missing.'
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
             raise CommandError('Demo personas can only be created with DEBUG on.')
-        _ensure_branch()
-        created = []
-        manager = None
-        for email, role_name, employee_id, full_name, branch, reports_to_manager in PERSONAS:
-            user = User.objects.filter(email=email).first()
-            if user is None:
-                role = Role.objects.filter(name=role_name).first()
-                if role is None:
-                    raise CommandError(f'Role "{role_name}" does not exist — run the migrations first.')
-                user = User.objects.create_user(
-                    email=email, password=PASSWORD, full_name=full_name, role=role, employee_id=employee_id,
-                    branch=branch, phone='', date_of_joining=date(2024, 4, 1),
-                    must_change_password=False, onboarding_status=User.ONBOARDING_COMPLETE,
-                    assessment_status=User.ASSESSMENT_COMPLETE,
-                    employment_status=User.EMPLOYMENT_STATUS_CONFIRMED, employee_type='Permanent',
-                )
-                created.append(email)
-            if role_name == 'manager':
-                manager = user
-            if reports_to_manager and manager is not None and user.reporting_manager_id is None:
-                User.objects.filter(pk=user.pk).update(reporting_manager=manager)
+        created = create_missing_personas()
         self.stdout.write(self.style.SUCCESS(
             f'Created {len(created)} persona login(s): {", ".join(created) or "none (all already exist)"}.'
         ))

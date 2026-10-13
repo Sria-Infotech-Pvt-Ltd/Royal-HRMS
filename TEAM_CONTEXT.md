@@ -4156,6 +4156,32 @@ Opened Hire → Sales / Sales Associate, filled Personal identity, Employment (P
 - Removed 3 unused imports in new Python files. Known and left alone: old blanket import blocks in `accounts/views/shared.py`, `employees_list.py`, `hrms/views/leave_policy.py`, `leave_requests.py` (re-exported via `import *`); duplicate helpers (`initials` x5, `fmtDate` x4, `formatDate` x2, `avatarColor` x2, `toDisplayStatus` x2) and duplicate component names (`ClockWidget`, `AnnouncementCard`, `StatusBadge` vs `StatusPill`).
 - Local admin login `sriainfotech@gmail.com` had its password reset on 2026-10-12 at the user's request.
 
+## Session Log — 2026-10-13 (demo workforce seed for a demo/dev server)
+
+### `seed_demo_workforce` management command (new, uncommitted)
+Builds a realistic Indian demo workforce for a **demo/dev server only** (`--confirm-demo-server` required for any write; `--dry-run`, `--rehearse` = whole run in one transaction then rolled back, `--cleanup`, `--skip-payroll`, `--with-photos`, `--actor-email`, `--approve-as-any-manager`). Files: `accounts/management/commands/seed_demo_workforce.py` (orchestration), `accounts/demo_workforce_data.py` (roster of 24 people in Hyderabad/Bengaluru/Pune/Chennai, holidays, periods, PT slabs), `accounts/demo_workforce_attendance.py` (backdated records + punches + leave + corrections, deterministic per employee code, bulk_create so no signals/emails), `accounts/demo_workforce_payroll.py` (drives the REAL payroll endpoints in-process with APIClient + force_authenticate: create cycle → manager L1 → HR L2 → process → dispatch → employees acknowledge → confirm transfer → mark paid; idempotent, never advances a cycle it did not create), `accounts/tests_demo_workforce_data.py`. `seed_demo_personas.create_missing_personas()` and `seed_demo_employee_details.fill_user()` were extracted so the new command can reuse them without their DEBUG guards (the commands themselves behave as before).
+- All emails are `<first>.<last>.wf@example.com`, password `demo@1`; payroll `_send_email`/`_notify` and `send_template_email` are stubbed for the run.
+- Verified on a clean Postgres schema (all migrations applied): 24 employees, ~2.4k attendance rows, 68 approved leave requests (balances never overdrawn), 8 paid cycles (2 per office), idempotent re-run, `--cleanup` OK (needed transfer items → batches → payslips → cycles delete order). Persona API checks: manager sees 9 direct reports, payroll admin 11 (branch scope), employee 403 on the directory and 2 payslips.
+- Known limits: `--cleanup` leaves the offices, statutory configs, the four persona logins and their attendance; `manager@example.com` has a blank branch on purpose so gets no payslips; clean databases have no LeavePolicy rows (leave is skipped until policies exist).
+- The shared Neon dev DB is schema-drifted (e.g. `branch_branches.employees_count` and `attributes` NOT NULL, not in the repo) so ORM branch inserts fail there; the seed was NOT run on it. Intended target is a server whose schema matches the repo.
+
+**Note (this session's own in-progress build, see further down):** a second, independently-built
+`seed_demo_workforce` was under construction on `New-AI` at merge time (same feature name, same
+goal, different implementation — this session hadn't seen the above when it started). Both
+versions are described here for the record; whichever lands last on disk wins and needs a
+deliberate reconciliation pass (not a silent overwrite) before either is trusted — see the
+"Pending Tasks" note after this merge for the concrete next step.
+
+### Also committed in the same push (2026-10-13) — ESS tax declaration, documents and leave form work
+Changes made outside the demo-seed work, committed together so the branch is clean; summarised from the diff, check the code for detail.
+- **Tax declaration (ESS Tax tab):** new `payroll/tax_declaration_schema.py` + `tax_declaration_validation.py` (declaration sections and server-side validation), `services_income_tax.estimate_monthly_tds` now also takes basic and HRA, `tax_declarations.py` view/serializer changes, tests in `payroll/tests_tax_declaration.py`. Frontend: `TaxTab`, `TaxDeclarationModal` and new `Tax*` components (sections, summary, rent, previous employer, proofs, HR queue), `hooks/useTaxDeclaration.ts`, `lib/taxDeclarationForm.ts` (+ test), `types/taxDeclaration.ts`.
+- **Employee documents:** `EmployeeDocumentSubmission` now keeps the uploaded file in private storage (migration `hrms/0037_employeedocumentsubmission_file`) and can be tax proof for one declaration item (`tax_item`, `reference_number`; migration `hrms/0038_employeedocumentsubmission_tax_proof`). Frontend `MyDocumentsTab`, `DocumentSubmissionForm`, `useMyDocuments`, `lib/documentFile.ts`.
+- **Backdated claims:** `accounts/utils.py` gained `get_financial_year_bounds` and `get_backdated_claim_window`; the expense form/serializer use a 4-month look-back (`EXPENSE_BACKDATE_MONTHS`).
+- **Request-leave form:** `ApplyLeaveForm` split into `LeaveTypePicker`, `LeaveDurationDates`, `LeaveHandoverFields`, `LeaveSupportingDocument`, `LeaveRequestSummary`; new `.leave-request-layout` CSS (fields left, summary panel right).
+- **Personnel action dialog:** separation summary now shows "Notice period starts" and "Not set" instead of dashes.
+- Verified before the push: `npm run build` OK, `manage.py check` clean, `makemigrations --check` no changes, backend tests (tax declaration + demo seed data) 35 OK, vitest 66/66. Migrations `hrms/0037`/`0038` are already applied on the shared Neon dev DB; the other developer's unpushed `hrms` migrations on that DB (e.g. a leave-ledger `0037`) may collide with these numbers at merge time — use a merge migration, do not renumber.
+- Pushed to branch `employee` only (not `New-AI`, so no production deploy).
+
 ## Session Log — 2026-10-13 — Merged `origin/employee` into `New-AI`
 
 Merged the `employee` branch (Employee Directory layout, DD/MM/YYYY date fields, personnel actions,
@@ -4202,3 +4228,78 @@ Verification before pushing: `manage.py check` clean, `makemigrations --check --
 (`apps.accounts apps.performance apps.payroll`) was kicked off in the background to run
 concurrently with the merge work; see git log around this date for its outcome if picking this up
 later and the run wasn't captured here.
+
+**Important caveat on that merge (commit `1f9af02`), found and partially corrected in a follow-up
+pass the same day**: because `New-AI` had not touched most of these files since the two branches'
+real fork point, git silently took `origin/employee`'s side wholesale for over 100 files with no
+conflict marker at all — including a full redesign of the ESS Home tab (`HomeBanner.tsx`,
+`HomeTab.tsx`, `HomeTodayPanel.tsx`, `HomeStatTiles.tsx`, `HomeQuickActions.tsx`,
+`HomeRequestsList.tsx`, `HomePayslipsPanel.tsx`) and `aira-theme.css`/`globals.css`, overwriting
+this session's earlier "strict reference-replication" build of those exact screens. **No one
+reviewed that silent replacement at the time it landed.** The user caught it later and asked for
+the ESS Home/theme portion specifically reverted (not a full revert of the merge — the rest of
+`origin/employee`'s UI changes, e.g. the Employee Directory/drawer family, stay as merged). Fixed
+by restoring the 7 Home-tab files + `aira-theme.css` + `globals.css` to their pre-merge content,
+deleting the now ESS-Home-only `ess-theme.css`... **then un-deleting it** once it turned out the
+ESS shell's own tab bar (`ess/_client.tsx`'s `.ess-tabs`/`.ess-tab`) depends on rules `origin/employee`
+had moved into that file — so `ess-theme.css` and its `layout.tsx` import were restored, only the
+Home-tab components and the two theme files were actually reverted. Also caught and fixed:
+wholesale-reverting `aira-theme.css` to the pre-merge version would have silently dropped the
+`.wf-kpi.clickable` rule added by a *later*, same-day commit (`6739ae9`, the dashboard-KPI-cards-
+clickable work) — re-added by hand after confirming via `git log 1f9af02..<tip> -- <path>` that it
+was the only commit to touch any of the reverted files since the morning merge. Lesson for next
+time: before reverting any file to an old commit's blob wholesale, check whether anything landed
+on top of it since that commit, not just what the merge itself changed.
+
+If re-reviewing this merge further: the full list of files `origin/employee` replaced
+wholesale (no New-AI-side changes since the fork) is large — this pass only addressed the ESS
+Home/theme corner of it, at the user's explicit, scoped request. Anything else silently overwritten
+elsewhere by that merge (Employee Directory family, performance/appraisal screens, etc.) was left
+as-is on purpose, not because it was checked and found fine.
+
+## Session Log — 2026-10-13 (later the same day) — Second `origin/employee` pull + ESS Home/theme revert
+
+Pulled `origin/employee` into `New-AI` again (it had moved to `11d125c` since the morning merge
+above — new tax-declaration/document/leave-form work, see that branch's own log). 6 real conflicts
+this time, all resolved by hand:
+- `TEAM_CONTEXT.md` — both sides' session logs kept, concatenated.
+- `backend/apps/payroll/views/shared.py` — `origin/employee` still had the pre-refactor inline
+  payroll-calculation block (`_compute_employee_payslip`, `process_payroll_cycle`, etc.); this
+  session had already moved all of it into `apps/payroll/engine/legacy.py` verbatim. Confirmed
+  function-for-function identical before deleting origin's copy — kept the re-export-only version.
+- `backend/apps/payroll/tests_tax_declaration.py` — add/add conflict, two genuinely different test
+  suites (this session's `TaxDeclarationWindow`/`TaxProofSubmission`/`services_tax_declaration`
+  tests vs. `origin/employee`'s `tax_declaration_schema`/`validate_declared_investments` tests, both
+  real, both for code that exists) — concatenated, both kept.
+- `frontend/app/dashboard/ess/_components/TaxTab.tsx` — combined: kept `origin/employee`'s
+  componentized `TaxDeclarationSummary`/`TaxProofsCard` cards, kept this session's Form 16 PDF
+  download row (origin's version didn't have it).
+- `frontend/app/dashboard/ess/_components/ExpensesTab.tsx` — trivial, a comment.
+- `frontend/app/dashboard/leave/_client.tsx` — took `origin/employee`'s `Modal`-wrapped
+  `ApplyLeaveForm` (this session's version rendered it unwrapped, which doesn't overlay correctly).
+- `backend/apps/accounts/demo_workforce_*.py` / `seed_demo_workforce.py` / `tests_demo_workforce_data.py`
+  — this session had independently built an in-progress (still-buggy) version of the exact same
+  feature `origin/employee` already shipped, complete and verified (24 employees, ~2.4k attendance
+  rows, 8 paid payroll cycles, idempotent, `--cleanup` tested). Took `origin/employee`'s version
+  wholesale rather than keep debugging a duplicate; this session's own in-progress copies were never
+  committed, so nothing was lost by preferring theirs.
+- `backend/apps/hrms` had two independently-added migration leaves (`0038`/`0044`) — resolved with
+  `manage.py makemigrations --merge` (empty `operations = []`, confirmed non-conflicting).
+
+**Real bug the auto-merge introduced silently** (caught by the backend test suite, not by a conflict
+marker): `services_income_tax.py` auto-merged to `origin/employee`'s version wholesale (no textual
+overlap with this session's changes, so git didn't flag it) — but that version replaced the flat
+`CAP_80D`/`CAP_80CCD_1B` constants with a senior/standard/total split living in
+`tax_declaration_schema.py`, breaking `seed_tax_year_config.py` (and everything that calls it,
+13 test failures) which still referenced the old flat names. Fixed by re-exporting `CAP_80D` (=
+`CAP_80D_STANDARD`) and `CAP_80CCD_1B` as backward-compat aliases in `services_income_tax.py` rather
+than reverting either side's work.
+
+Also found and fixed, while re-auditing the *morning's* merge at the user's request: see the caveat
+appended to that merge's own log entry above (ESS Home tab + theme CSS had been silently overwritten
+by that earlier merge; the Home-tab portion was reverted back to this session's pre-merge version).
+
+Verification before pushing: `manage.py check` clean, `makemigrations --check --dry-run` clean
+(after the 1 hrms merge migration), `npx tsc --noEmit` clean (0 errors), `npm run lint` clean (same
+10 pre-existing warnings, 0 errors), full `apps.payroll` + `apps.accounts.tests_demo_workforce_data`
+suite: 178 tests, OK.

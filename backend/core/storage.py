@@ -171,6 +171,10 @@ def leave_document_upload_path(instance, filename) -> str:
     return f'leave_documents/{filename}'
 
 
+def employee_document_submission_upload_path(instance, filename) -> str:
+    return f'employee_document_submissions/{filename}'
+
+
 def document_center_upload_path(instance, filename) -> str:
     # Matches the year/month partitioning the old upload_to='documents/%Y/%m/'
     # string gave for free — a callable upload_to doesn't get Django's

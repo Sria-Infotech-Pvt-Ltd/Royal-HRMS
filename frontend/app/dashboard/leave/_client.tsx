@@ -68,7 +68,9 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
       </div>
 
       {showApply && (
-        <ApplyLeaveForm onCancel={() => setShowApply(false)} />
+        <Modal title="Request leave" onClose={() => setShowApply(false)} size="lg" maxWidth={940} bodyStyle={{ padding: 0 }}>
+          <ApplyLeaveForm onCancel={() => setShowApply(false)} />
+        </Modal>
       )}
 
       {showCalendar && (

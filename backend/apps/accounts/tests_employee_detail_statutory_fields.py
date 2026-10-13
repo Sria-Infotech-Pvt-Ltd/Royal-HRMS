@@ -74,6 +74,38 @@ class EmployeeDetailStatutoryFieldsTests(TestCase):
         self.assertEqual(profile.core_skills, 'React, payroll operations')
         self.assertEqual(profile.certifications, 'AWS SA, 2021')
 
+    def test_put_and_get_support_edit_record_identity_fields(self):
+        resp = self.client.put(
+            reverse('employee-detail', args=[self.employee.employee_id]),
+            {
+                'salutation': 'Ms.', 'display_name': 'Ms. Emp Test',
+                'nationality': 'Indian', 'place_of_birth': 'Pune',
+                'father_name': 'Test Father', 'mother_name': 'Test Mother',
+                'languages_known': 'English, Hindi',
+            },
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+        profile = EmployeeProfile.objects.get(user=self.employee)
+        self.assertEqual(profile.display_name, 'Ms. Emp Test')
+        self.assertEqual(profile.nationality, 'Indian')
+        self.assertEqual(profile.place_of_birth, 'Pune')
+        self.assertEqual(profile.father_name, 'Test Father')
+        self.assertEqual(profile.mother_name, 'Test Mother')
+        self.assertEqual(profile.languages_known, 'English, Hindi')
+
+        resp = self.client.get(reverse('employee-detail', args=[self.employee.employee_id]))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        details = resp.data['data']['profile']
+        self.assertEqual(details['salutation'], 'Ms.')
+        self.assertEqual(details['display_name'], 'Ms. Emp Test')
+        self.assertEqual(details['nationality'], 'Indian')
+        self.assertEqual(details['place_of_birth'], 'Pune')
+        self.assertEqual(details['father_name'], 'Test Father')
+        self.assertEqual(details['mother_name'], 'Test Mother')
+        self.assertEqual(details['languages_known'], 'English, Hindi')
+
 
 class EmployeeDetailEmploymentFieldsTests(TestCase):
     """Regression test for the Edit-record modal's Employment section

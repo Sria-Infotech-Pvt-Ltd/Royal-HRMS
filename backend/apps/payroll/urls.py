@@ -45,6 +45,7 @@ from apps.payroll.views.attendance_approval import (
 )
 from apps.payroll.views.tax_declarations import (
     MyTaxDeclarationView,
+    TaxDeclarationSchemaView,
     SubmitTaxDeclarationView,
     TaxDeclarationListView,
     ApproveTaxDeclarationView,
@@ -162,6 +163,7 @@ urlpatterns = [
 
     # ── Tax declarations ─────────────────────────────────────────────────────
     path('tax-declarations/', TaxDeclarationListView.as_view(), name='tax-declaration-list'),
+    path('tax-declarations/schema/', TaxDeclarationSchemaView.as_view(), name='tax-declaration-schema'),
     path('tax-declarations/me/', MyTaxDeclarationView.as_view(), name='my-tax-declaration'),
     path('tax-declarations/me/submit/', SubmitTaxDeclarationView.as_view(), name='submit-tax-declaration'),
     path('tax-declarations/<uuid:pk>/approve/', ApproveTaxDeclarationView.as_view(), name='approve-tax-declaration'),

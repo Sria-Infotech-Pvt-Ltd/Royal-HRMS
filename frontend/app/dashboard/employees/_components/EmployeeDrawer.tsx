@@ -24,7 +24,8 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
   const router = useRouter();
   const isAdmin = mode === "admin";
   const isSelf  = mode === "self";
-  // "Edit full record" opens the HR edit page — only offered to roles that can actually edit.
+  // Full-record editing uses the sectioned edit modal; the detail page remains
+  // available separately for read-only profile tabs and history.
   const canEditRecord = usePermission("employees.edit");
   const mouseDownOnOverlay = useRef(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -68,14 +69,9 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
             </>
           )}
           {isAdmin && canEditRecord && (
-            <>
-              <button className="rvbtn" onClick={() => setEditOpen(true)}>
-                Quick edit
-              </button>
-              <button className="rvbtn pri" onClick={() => router.push(`/dashboard/employees/${employee.id}`)}>
-                Edit full record
-              </button>
-            </>
+            <button className="rvbtn pri" onClick={() => setEditOpen(true)}>
+              Edit full record
+            </button>
           )}
         </div>
       </div>

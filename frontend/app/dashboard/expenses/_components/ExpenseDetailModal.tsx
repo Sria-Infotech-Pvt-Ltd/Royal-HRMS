@@ -108,7 +108,7 @@ export default function ExpenseDetailModal({ initialData, onClose }: Props) {
                       rel="noreferrer"
                       className="flex items-center gap-2 text-sm text-[var(--primary)] hover:underline"
                     >
-                      <i className="ti ti-paperclip" /> Receipt {idx + 1}
+                      <i className="ti ti-eye" /> View receipt {idx + 1}
                     </a>
                   )
                 ))}

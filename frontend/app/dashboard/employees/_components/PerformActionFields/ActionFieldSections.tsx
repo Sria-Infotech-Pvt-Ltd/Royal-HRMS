@@ -101,7 +101,7 @@ export function ConfirmationFields({ currentStatusLabel }: { currentStatusLabel:
     <div className="g2">
       <div className="f">
         <label>Employee status</label>
-        <div className="finput" style={{ cursor: "not-allowed" }}>{currentStatusLabel} → Confirmed</div>
+        <div className="finput" style={{ cursor: "not-allowed", display: "flex", alignItems: "center" }}>{currentStatusLabel} → Confirmed</div>
       </div>
     </div>
   );
@@ -123,7 +123,7 @@ export function SeparationFields({
       </div>
       <div className="f">
         <label>Employee status</label>
-        <div className="finput" style={{ cursor: "not-allowed" }}>{resultingStatusLabel}</div>
+        <div className="finput" style={{ cursor: "not-allowed", display: "flex", alignItems: "center" }}>{resultingStatusLabel}</div>
       </div>
     </div>
   );

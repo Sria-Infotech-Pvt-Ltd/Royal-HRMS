@@ -93,6 +93,7 @@ export default function ExpensesTab() {
         </div>
       )}
 
+      {/* Stretch (not flex-start) so the two cards are always the same height, whichever has more content. */}
       <div className="form-row cols-2" style={{ alignItems: "stretch" }}>
         {/* My claims */}
         <div className="card">

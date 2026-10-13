@@ -49,7 +49,7 @@ function nextPayday(payDay: number | undefined): string {
   const target = now.getDate() <= payDay
     ? new Date(now.getFullYear(), now.getMonth(), payDay)
     : new Date(now.getFullYear(), now.getMonth() + 1, payDay);
-  return target.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return target.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export type EssTabId =
@@ -98,60 +98,64 @@ export default function HomeTab({ onNavigate, status }: Props) {
 
   const tiles = [
     {
-      label: "ATTENDANCE",
+      icon: "ti-clock-check", label: "ATTENDANCE",
       value: attStats ? `${attStats.days_present}/${attStats.working_days}` : "—",
       sub: "days present this month", linkText: "View details",
       onClick: () => onNavigate("attendance"),
     },
     {
-      label: "LEAVE BALANCE",
+      icon: "ti-beach", label: "LEAVE BALANCE",
       value: balances ? leaveBalanceTotal.toFixed(1) : "—",
       sub: "days available", linkText: "View details",
       onClick: () => onNavigate("leave"),
     },
     {
-      label: "NEXT PAYDAY",
+      icon: "ti-calendar-event", label: "NEXT PAYDAY",
       value: payrollSettings ? nextPayday(payrollSettings.pay_day) : "—",
       sub: latestPayslip ? "payslip follows approval" : "no payslips yet", linkText: "View details",
       onClick: () => onNavigate("payslips"),
     },
     {
-      label: "MY REQUESTS",
+      icon: "ti-list-check", label: "MY REQUESTS",
       value: String(openRequestCount),
       sub: "open and recent requests", linkText: "View all",
       onClick: () => onNavigate("requests"),
     },
   ];
 
-  const actions = [
-    { glyph: "＋", title: "Request leave",         sub: "Check balance and submit dates",              onClick: () => onNavigate("leave") },
-    { glyph: "✓",  title: "Regularize attendance", sub: "Correct a missing or late punch",             onClick: () => onNavigate("attendance") },
-    { glyph: "₹",  title: "Download payslip",      sub: "View monthly salary statements",              onClick: () => onNavigate("payslips") },
-    { glyph: "⌁",  title: "View my full profile",  sub: "Open the same employee record used by Admin", onClick: () => onNavigate("profile") },
-    { glyph: "⇧",  title: "Upload document",       sub: "Submit declarations or certificates",         onClick: () => onNavigate("documents") },
-    { glyph: "?",  title: "Ask HR",                sub: "Raise and track a support request",           onClick: () => onNavigate("hrHelp") },
-    { glyph: "₹",  title: "Claim an expense",      sub: "Submit a work expense for approval",          onClick: () => onNavigate("expenses") },
-    { glyph: "✦",  title: "Complete appraisal",    sub: "Self-review, outcome and development plan",   onClick: () => onNavigate("appraisals") },
-    { glyph: "▣",  title: "Read policies",         sub: "Company guidance and assigned assets",        onClick: () => onNavigate("assets") },
+  const primaryActions = [
+    { icon: "ti-beach",       title: "Request leave",            sub: "Check balance and submit dates",             onClick: () => onNavigate("leave") },
+    { icon: "ti-clock-edit",  title: "Regularize attendance",     sub: "Correct a missing or late punch",            onClick: () => onNavigate("attendance") },
+    { icon: "ti-receipt",     title: "Download payslip",          sub: "View monthly salary statements",             onClick: () => onNavigate("payslips") },
+    { icon: "ti-user-circle", title: "View my full profile",      sub: "Open the same employee record used by Admin", onClick: () => onNavigate("profile") },
+    { icon: "ti-folder",      title: "Upload document",           sub: "Submit declarations or certificates",        onClick: () => onNavigate("documents") },
+    { icon: "ti-headset",     title: "Ask HR",                    sub: "Raise and track a support request",          onClick: () => onNavigate("hrHelp") },
+  ];
+
+  const secondaryActions = [
+    { icon: "ti-wallet",         title: "Claim an expense",   sub: "Submit a work expense for approval",          onClick: () => onNavigate("expenses") },
+    { icon: "ti-file-text",      title: "Complete appraisal", sub: "Self-review, outcome and development plan",   onClick: () => onNavigate("appraisals") },
+    { icon: "ti-shield-check",   title: "Read policies",      sub: "Company guidance and assigned assets",        onClick: () => onNavigate("assets") },
   ];
 
   return (
-    <section className="ess-page">
+    <div>
       <HomeStatTiles tiles={tiles} />
 
-      <div className="ess-grid">
-        <HomeQuickActions actions={actions} />
-        <HomeTodayPanel status={status} onNavigate={onNavigate} />
-      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, alignItems: "start" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+          <HomeQuickActions primary={primaryActions} secondary={secondaryActions} />
+          <HomeRequestsList items={requestItems.slice(0, 5)} onViewAll={() => onNavigate("requests")} />
+        </div>
 
-      <div className="ess-grid">
-        <HomeRequestsList items={requestItems.slice(0, 3)} onViewAll={() => onNavigate("requests")} />
-        <HomePayslipsPanel
-          payslips={payslips?.results ?? []}
-          onViewAll={() => onNavigate("payslips")}
-          onNavigate={onNavigate}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+          <HomeTodayPanel status={status} />
+          <HomePayslipsPanel
+            payslips={payslips?.results ?? []}
+            onViewAll={() => onNavigate("payslips")}
+          />
+        </div>
       </div>
-    </section>
+    </div>
   );
 }

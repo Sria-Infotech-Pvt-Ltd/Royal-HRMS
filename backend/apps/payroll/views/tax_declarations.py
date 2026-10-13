@@ -7,8 +7,9 @@ from rest_framework.views import APIView
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 
-from ..models import EmployeeTaxDeclaration
+from ..models import EmployeePayslip, EmployeeTaxDeclaration
 from ..serializers import EmployeeTaxDeclarationSaveSerializer, EmployeeTaxDeclarationSerializer
+from ..tax_declaration_schema import schema_payload
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,23 @@ def _current_fy_start() -> int:
     from datetime import date
     config = get_company_financial_year_config()
     return get_fy_start_year(date.today(), config['financial_year_start_month'])
+
+
+def _serializer_context(user) -> dict:
+    """Latest payslip's monthly basic/HRA, so the HRA exemption can be worked out from declared rent."""
+    payslip = EmployeePayslip.objects.filter(employee=user).order_by('-cycle__cycle_start').first()
+    if payslip is None:
+        return {}
+    return {'monthly_basic': payslip.basic, 'monthly_hra': payslip.hra}
+
+
+class TaxDeclarationSchemaView(APIView):
+    """GET /payroll/tax-declarations/schema/ — the items an employee can declare and their limits,
+    so the form is driven by the same definitions the server validates and calculates with."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return success('Tax declaration form retrieved.', schema_payload())
 
 
 class MyTaxDeclarationView(APIView):
@@ -36,7 +54,10 @@ class MyTaxDeclarationView(APIView):
 
     def get(self, request):
         declaration = self._get_or_create(request.user)
-        return success('Tax declaration retrieved.', EmployeeTaxDeclarationSerializer(declaration).data)
+        return success(
+            'Tax declaration retrieved.',
+            EmployeeTaxDeclarationSerializer(declaration, context=_serializer_context(request.user)).data,
+        )
 
     def patch(self, request):
         declaration = self._get_or_create(request.user)
@@ -46,7 +67,10 @@ class MyTaxDeclarationView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
         serializer.save()
-        return success('Declaration saved.', EmployeeTaxDeclarationSerializer(declaration).data)
+        return success(
+            'Declaration saved.',
+            EmployeeTaxDeclarationSerializer(declaration, context=_serializer_context(request.user)).data,
+        )
 
 
 class SubmitTaxDeclarationView(APIView):
@@ -57,6 +81,9 @@ class SubmitTaxDeclarationView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Form 124 is a signed statement — the employee must confirm the information is true.
+        if request.data.get('confirm') is not True:
+            return error('Please confirm that the information you have declared is correct.')
         declaration, _ = EmployeeTaxDeclaration.objects.get_or_create(
             employee=request.user, financial_year_start=_current_fy_start(),
         )
@@ -66,7 +93,10 @@ class SubmitTaxDeclarationView(APIView):
         declaration.submitted_at = timezone.now()
         declaration.save(update_fields=['status', 'submitted_at', 'updated_at'])
         logger.info('Tax declaration submitted by %s for FY start %s', request.user.email, declaration.financial_year_start)
-        return success('Declaration submitted for HR review.', EmployeeTaxDeclarationSerializer(declaration).data)
+        return success(
+            'Declaration submitted for HR review.',
+            EmployeeTaxDeclarationSerializer(declaration, context=_serializer_context(request.user)).data,
+        )
 
 
 class TaxDeclarationListView(APIView):

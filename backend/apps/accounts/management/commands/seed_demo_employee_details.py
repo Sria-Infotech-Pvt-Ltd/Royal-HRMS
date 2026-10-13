@@ -214,6 +214,24 @@ def _add_photo(user, redraw=False):
     return True
 
 
+def fill_user(user, today, skip_photos=False):
+    """Complete one existing employee's record (profile, pay, leave, seat, photo). Returns what was added."""
+    counts = {'profile': 0, 'pay': 0, 'seated': 0, 'photo': 0}
+    number = demo.employee_number(user.employee_id)
+    joined = _lifecycle(user, number, today)
+    if user.email in QA_POSITIONS and _seat_qa_user(user, joined):
+        counts['seated'] += 1
+    user.refresh_from_db()
+    filled, gender_corrected = _fill_profile(user, number)
+    counts['profile'] += filled
+    counts['pay'] += _fill_salary(user, joined)
+    _fill_leave(user, number, joined, today)
+    if not skip_photos:
+        user.refresh_from_db()
+        counts['photo'] += _add_photo(user, redraw=gender_corrected)
+    return counts
+
+
 class Command(BaseCommand):
     help = "Fill blank details on the existing @example.com demo employees (profile, pay, leave, photo, reporting line)."
 
@@ -234,18 +252,8 @@ class Command(BaseCommand):
         today = timezone.localdate()
         counts = {'profile': 0, 'pay': 0, 'seated': 0, 'photo': 0}
         for user in targets:
-            number = demo.employee_number(user.employee_id)
-            joined = _lifecycle(user, number, today)
-            if user.email in QA_POSITIONS and _seat_qa_user(user, joined):
-                counts['seated'] += 1
-            user.refresh_from_db()
-            filled, gender_corrected = _fill_profile(user, number)
-            counts['profile'] += filled
-            counts['pay'] += _fill_salary(user, joined)
-            _fill_leave(user, number, joined, today)
-            if not options['skip_photos']:
-                user.refresh_from_db()
-                counts['photo'] += _add_photo(user, redraw=gender_corrected)
+            for key, value in fill_user(user, today, skip_photos=options['skip_photos']).items():
+                counts[key] += value
         lines = _assign_reporting_lines(list(User.objects.exclude(employee_id='').filter(email__iendswith='@example.com')))
         self.stdout.write(self.style.SUCCESS(
             f"Done: {len(targets)} employees checked; profiles filled {counts['profile']}, pay added {counts['pay']}, "

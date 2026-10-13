@@ -28,13 +28,16 @@ These are the real, statutory rates, not invented figures:
     Both regimes: 4% Health & Education cess on tax after rebate.
 
 SIMPLIFICATIONS (flagged honestly, not hidden):
-  - Old-regime declared investments (80C/80D/80CCD(1B)/HRA) are subtracted
-    from gross annual salary at real statutory caps (80C: Rs 1,50,000; 80D:
-    Rs 25,000 — the non-senior-citizen self+family cap, the common case for
-    this workforce; 80CCD(1B): Rs 50,000) before slabs are applied. HRA is
-    taken at the employee's declared exemption amount as-is (no re-derivation
-    of the three-way HRA exemption formula — that requires actual rent paid
-    and city-metro status per month, which isn't modelled here).
+  - Old-regime declared investments are subtracted from gross annual salary at
+    the statutory caps in tax_declaration_schema (80C Rs 1,50,000 across all
+    its items; 80CCD(1B) Rs 50,000; 80D Rs 25,000 / Rs 50,000 for self+family
+    and again for parents depending on the senior-citizen answer, Rs 1,00,000
+    in all; 24(b) Rs 2,00,000; 80E and 80G as declared) before slabs apply.
+  - HRA: when the employee declared rent (monthly rent, months, metro or not)
+    the exemption is the usual three-way minimum — HRA received, rent paid
+    minus 10% of basic, 50% (metro) / 40% of basic — per month, over the
+    months of rent declared, using this payslip's basic and HRA. Without rent
+    details it falls back to the legacy self-computed 'HRA' exemption amount.
   - No other exemptions (LTA, other perquisites, surcharge for very high
     incomes, marginal-relief-on-surcharge) are modelled — this is a real,
     correct core slab+cess+87A computation, not a full statutory return.
@@ -54,6 +57,23 @@ SIMPLIFICATIONS (flagged honestly, not hidden):
 """
 from decimal import ROUND_HALF_UP, Decimal
 
+from .tax_declaration_schema import (
+    CAP_80C,
+    CAP_80CCD_1B,
+    CAP_80D_SENIOR,
+    CAP_80D_STANDARD,
+    CAP_80D_TOTAL,
+    DETAILS_KEY,
+    FIELD_CAPS,
+    KEYS_80C,
+)
+
+# Backward-compat aliases: seed_tax_year_config.py (and the simpler, flat
+# TaxSection-based declaration feature it seeds) predate the senior/standard
+# split tax_declaration_schema introduced — CAP_80D now means the standard
+# (non-senior-citizen) cap, same value it always held.
+CAP_80D = CAP_80D_STANDARD
+
 TWO_PLACES = Decimal('0.01')
 
 STANDARD_DEDUCTION_NEW = Decimal('75000')
@@ -61,10 +81,6 @@ STANDARD_DEDUCTION_OLD = Decimal('50000')
 
 REBATE_THRESHOLD_NEW = Decimal('1200000')
 REBATE_THRESHOLD_OLD = Decimal('500000')
-
-CAP_80C = Decimal('150000')
-CAP_80D = Decimal('25000')
-CAP_80CCD_1B = Decimal('50000')
 
 CESS_RATE = Decimal('0.04')
 
@@ -138,32 +154,77 @@ def estimate_annual_tax(annual_taxable_income: Decimal, regime: str) -> Decimal:
     return _round(tax_with_cess)
 
 
-def _capped_old_regime_deductions(declared_investments: dict) -> Decimal:
-    """Real statutory caps applied to declared amounts — an employee
-    declaring Rs 5,00,000 under 80C still only reduces taxable income by
-    Rs 1,50,000, never the full declared figure."""
-    declared_investments = declared_investments or {}
+def _amount(source: dict, key: str) -> Decimal:
+    try:
+        return max(Decimal('0'), Decimal(str(source.get(key, 0) or 0)))
+    except (ValueError, ArithmeticError):
+        return Decimal('0')
 
-    def _amount(key: str) -> Decimal:
-        try:
-            return Decimal(str(declared_investments.get(key, 0) or 0))
-        except (ValueError, ArithmeticError):
-            return Decimal('0')
 
-    sec_80c = min(_amount('80C'), CAP_80C)
-    sec_80d = min(_amount('80D'), CAP_80D)
-    sec_80ccd_1b = min(_amount('80CCD1B'), CAP_80CCD_1B)
-    hra_exemption = max(Decimal('0'), _amount('HRA'))
-    return sec_80c + sec_80d + sec_80ccd_1b + hra_exemption
+def _hra_exemption(details: dict, declared: dict, monthly_basic: Decimal | None, monthly_hra: Decimal | None) -> Decimal:
+    """Annual HRA exemption: the three-way minimum from declared rent when we
+    know this payslip's basic and HRA, else the legacy self-computed amount."""
+    hra = (details or {}).get('hra') or {}
+    monthly_rent = _amount(hra, 'monthly_rent')
+    if monthly_rent > 0 and monthly_basic is not None and monthly_hra is not None:
+        months = min(max(int(hra.get('months', 12) or 12), 1), 12)
+        share_of_basic = Decimal('0.50') if hra.get('metro') else Decimal('0.40')
+        per_month = min(Decimal(monthly_hra), monthly_rent - Decimal('0.10') * Decimal(monthly_basic), share_of_basic * Decimal(monthly_basic))
+        return max(Decimal('0'), per_month) * months
+    return _amount(declared, 'HRA')
+
+
+def deduction_breakdown(
+    declared_investments: dict | None,
+    monthly_basic: Decimal | None = None,
+    monthly_hra: Decimal | None = None,
+) -> dict[str, Decimal]:
+    """Old-regime deduction the declaration actually earns per head, after the
+    statutory caps — an employee declaring Rs 5,00,000 under 80C still only
+    reduces taxable income by Rs 1,50,000, never the full declared figure."""
+    declared = declared_investments or {}
+    details = declared.get(DETAILS_KEY) or {}
+
+    sec_80c = min(_amount(declared, '80C') + sum((_amount(declared, key) for key in KEYS_80C), Decimal('0')), CAP_80C)
+    sec_80ccd_1b = min(_amount(declared, '80CCD1B'), FIELD_CAPS['80CCD1B'])
+    self_family_cap = CAP_80D_SENIOR if details.get('senior_self_family') else CAP_80D_STANDARD
+    parents_cap = CAP_80D_SENIOR if details.get('senior_parents') else CAP_80D_STANDARD
+    sec_80d = min(
+        min(_amount(declared, '80D_SELF_FAMILY'), self_family_cap)
+        + min(_amount(declared, '80D_PARENTS'), parents_cap)
+        + min(_amount(declared, '80D'), CAP_80D_STANDARD),
+        CAP_80D_TOTAL,
+    )
+    return {
+        '80C': sec_80c,
+        '80CCD1B': sec_80ccd_1b,
+        '80D': sec_80d,
+        '24B': min(_amount(declared, '24B'), FIELD_CAPS['24B']),
+        '80E': _amount(declared, '80E'),
+        '80G': _amount(declared, '80G'),
+        'HRA': _hra_exemption(details, declared, monthly_basic, monthly_hra),
+    }
+
+
+def _capped_old_regime_deductions(
+    declared_investments: dict,
+    monthly_basic: Decimal | None = None,
+    monthly_hra: Decimal | None = None,
+) -> Decimal:
+    return sum(deduction_breakdown(declared_investments, monthly_basic, monthly_hra).values(), Decimal('0'))
 
 
 def estimate_monthly_tds(
     monthly_gross_earnings: Decimal, regime: str, declared_investments: dict | None = None,
+    monthly_basic: Decimal | None = None, monthly_hra: Decimal | None = None,
 ) -> Decimal:
     """The one real entry point both the live payroll-cycle computation
     (_compute_employee_payslip, which doesn't have a persisted EmployeePayslip
     to read from yet) and monthly_tds_for_payslip() below funnel through, so
     the annualization/regime/deduction logic is defined exactly once.
+
+    `monthly_basic`/`monthly_hra` let the HRA exemption be worked out from the
+    employee's declared rent; they are optional so older callers still work.
 
     See this module's docstring for why annual income is projected as
     monthly_gross_earnings x 12 rather than a running per-FY reconciliation.
@@ -172,7 +233,7 @@ def estimate_monthly_tds(
     annual_gross = monthly_gross_earnings * 12
 
     if regime == 'old':
-        taxable = annual_gross - _capped_old_regime_deductions(declared_investments)
+        taxable = annual_gross - _capped_old_regime_deductions(declared_investments, monthly_basic, monthly_hra)
     else:
         taxable = annual_gross
 
@@ -199,4 +260,6 @@ def monthly_tds_for_payslip(payslip) -> Decimal:
     regime = declaration.tax_regime if declaration else EmployeeTaxDeclaration.REGIME_NEW
     declared_investments = declaration.declared_investments if declaration else {}
 
-    return estimate_monthly_tds(payslip.gross_earnings, regime, declared_investments)
+    return estimate_monthly_tds(
+        payslip.gross_earnings, regime, declared_investments, payslip.basic, payslip.hra,
+    )

@@ -1,9 +1,15 @@
 "use client";
 
-// "Payslips & documents" card — the latest published payslips with real
-// download links, plus shortcuts to Form 16 / the employment letter.
-
-import type { EssTabId } from "./HomeTab";
+// Right-column "Payslips & documents" panel. Payslip rows come from the same
+// /payroll/my-payslips/ fetch HomeTab.tsx already makes for the stat tile —
+// this just renders the most recent few plus a download link. "Form 16" and
+// "Employment letter" are company-issued documents with no dedicated
+// endpoint/document-type in this repo, so those two quick links go straight
+// to the shared Document Center (/dashboard/documents, category=form/other)
+// rather than a fabricated direct-download URL. They intentionally do NOT
+// route into the ESS "Documents" tab — that tab is MyDocumentsTab, a
+// personal "submit my own document for verification" screen, not a place to
+// browse company-provided forms/letters.
 
 interface HomePayslipRow {
   cycle:       string;
@@ -13,40 +19,53 @@ interface HomePayslipRow {
 }
 
 interface Props {
-  payslips:   HomePayslipRow[];
-  onViewAll:  () => void;
-  onNavigate: (tab: EssTabId) => void;
+  payslips:  HomePayslipRow[];
+  onViewAll: () => void;
 }
 
-export default function HomePayslipsPanel({ payslips, onViewAll, onNavigate }: Props) {
+export default function HomePayslipsPanel({ payslips, onViewAll }: Props) {
   return (
-    <section className="ess-card">
-      <h2>Payslips &amp; documents</h2>
-      <p>Your latest secure employee documents.</p>
-      <div className="ess-list">
-        {payslips.slice(0, 3).map(p => (
-          <div key={p.cycle} className="ess-row">
-            <button type="button" className="ess-row ess-row-link" onClick={onViewAll}>
-              <div><b>{p.cycle} payslip</b><small>₹{Number(p.net_pay).toLocaleString("en-IN")} · PDF</small></div>
-              <span className="row-go" aria-hidden="true">›</span>
-            </button>
-            {p.payslip_pdf
-              ? <a className="btn btn-ghost btn-sm" href={p.payslip_pdf} target="_blank" rel="noopener noreferrer">Download</a>
-              : <span className="state">PENDING</span>}
-          </div>
-        ))}
-        {payslips.length === 0 && (
-          <div className="ess-row"><div><b>No payslips yet</b><small>Published payslips will appear here.</small></div></div>
-        )}
-        <button type="button" className="ess-row ess-row-link" onClick={() => onNavigate("payslips")}>
-          <div><b>Form 16</b><small>Annual tax certificate · PDF</small></div>
-          <span className="row-go" aria-hidden="true">›</span>
-        </button>
-        <button type="button" className="ess-row ess-row-link" onClick={() => onNavigate("employment")}>
-          <div><b>Employment letter</b><small>Verified document · PDF</small></div>
-          <span className="row-go" aria-hidden="true">›</span>
+    <div className="card">
+      <div className="card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="card-title"><i className="ti ti-receipt" /> Payslips &amp; documents</div>
+        <button onClick={onViewAll} className="btn btn-ghost btn-sm">
+          View all <i className="ti ti-arrow-right" />
         </button>
       </div>
-    </section>
+
+      {payslips.length === 0 ? (
+        <div className="empty-state" style={{ padding: "28px 20px" }}>
+          <i className="ti ti-file-off" />
+          <p>No payslips yet.</p>
+        </div>
+      ) : (
+        <div>
+          {payslips.slice(0, 4).map(p => (
+            <div key={p.cycle} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", borderBottom: "1px solid var(--outline-v)" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{p.cycle}</div>
+                <div style={{ fontSize: 11, color: "var(--on-variant)" }}>₹{Number(p.net_pay).toLocaleString("en-IN")}</div>
+              </div>
+              {p.payslip_pdf ? (
+                <a href={p.payslip_pdf} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm">
+                  <i className="ti ti-download" /> Download
+                </a>
+              ) : (
+                <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Not available</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, padding: "14px 20px", borderTop: "1px solid var(--outline-v)" }}>
+        <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
+          <i className="ti ti-file-invoice" /> Form 16
+        </a>
+        <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
+          <i className="ti ti-mail" /> Employment letter
+        </a>
+      </div>
+    </div>
   );
 }

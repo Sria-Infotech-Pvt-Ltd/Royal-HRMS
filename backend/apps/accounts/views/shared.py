@@ -262,12 +262,17 @@ def _employee_dict(user: User) -> dict:
 
     profile_data = {
         # Personal
+        'salutation':        p.salutation        if p else '',
+        'display_name':      p.display_name      if p else '',
         'date_of_birth':     str(p.date_of_birth) if (p and p.date_of_birth) else '',
         'gender':            p.gender            if p else '',
         'marital_status':    p.marital_status    if p else '',
         'father_name':       p.father_name       if p else '',
+        'mother_name':       p.mother_name       if p else '',
+        'languages_known':   p.languages_known   if p else '',
         'blood_group':       p.blood_group       if p else '',
         'nationality':       p.nationality       if p else '',
+        'place_of_birth':    p.place_of_birth    if p else '',
         'current_address':   p.current_address   if p else '',
         'current_address_line2': p.current_address_line2 if p else '',
         'current_village':   p.current_village   if p else '',

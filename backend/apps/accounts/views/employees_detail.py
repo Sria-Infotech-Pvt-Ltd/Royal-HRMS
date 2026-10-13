@@ -131,7 +131,8 @@ from apps.accounts.views.shared import *  # noqa: F401,F403
 # the matching read-side list (date_of_birth/current_address excluded here,
 # see the comment at the call site).
 _PROFILE_FIELD_KEYS = frozenset({
-    'gender', 'marital_status', 'father_name', 'blood_group', 'permanent_address',
+    'salutation', 'display_name', 'nationality', 'place_of_birth',
+    'gender', 'marital_status', 'father_name', 'mother_name', 'languages_known', 'blood_group', 'permanent_address',
     # current_* address sub-fields are excluded for the same reason
     # current_address itself already is (see the comment above _PROFILE_FIELD_KEYS'
     # call site) — permanent_* sub-fields follow permanent_address into this

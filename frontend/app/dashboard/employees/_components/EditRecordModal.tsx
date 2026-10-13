@@ -58,6 +58,7 @@ import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import PhoneInput from "@/components/PhoneInput";
 import CountrySelect from "@/components/CountrySelect";
+import LanguagesSelect from "@/components/LanguagesSelect";
 import type { HireDocument } from "@/components/DocUploadButton";
 import type { DetailValues, Employee } from "../_data";
 import Avatar from "./Avatar";
@@ -93,6 +94,19 @@ const NOMINATION_SCHEMES = [
 
 let tempId = 0;
 const nextTempId = () => `temp-${++tempId}`;
+
+function ageFromDateOfBirth(value: string): number | null {
+  if (!value) return null;
+  const dateOfBirth = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(dateOfBirth.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - dateOfBirth.getFullYear();
+  if (
+    today.getMonth() < dateOfBirth.getMonth() ||
+    (today.getMonth() === dateOfBirth.getMonth() && today.getDate() < dateOfBirth.getDate())
+  ) age -= 1;
+  return age >= 0 ? age : null;
+}
 
 // Flat section nav for this modal — deliberately NOT HireWizardSidebar.
 // That component is built for linear wizard progress (numbered circles,
@@ -133,20 +147,19 @@ function EditRecordSidebar({ currentStep, onStepClick, hasMissing }: { currentSt
 // ── Personal-identity local state — same fields/order/labels as
 // HireWizardClient's own step-0 JSX (it has no separate component file to
 // import; this reconstructs it field-for-field). Fields with no backend
-// column at all (salutation, middle name, display name, nationality, place
-// of birth, mother's name, languages known, specially abled, international
-// worker, category) are LOCAL ONLY in this pass — rendered for visual/field
-// parity with Hire, but not sent on save. Flagged plainly, not hidden.
+// column at all (middle name, specially abled, international worker,
+// category) are LOCAL ONLY in this pass — rendered for visual/field parity
+// with Hire, but not sent on save. Flagged plainly, not hidden.
 interface PersonalIdentityDraft {
   salutation: string; firstName: string; middleName: string; lastName: string; displayName: string;
   dateOfBirth: string; gender: string; bloodGroup: string; maritalStatus: string; nationality: string; placeOfBirth: string;
-  motherName: string; languagesKnown: string[]; speciallyAbled: string; internationalWorker: string; category: string;
+  fatherName: string; motherName: string; languagesKnown: string; speciallyAbled: string; internationalWorker: string; category: string;
   personalEmail: string; mobileNumber: string; alternateMobile: string;
 }
 const EMPTY_PERSONAL: PersonalIdentityDraft = {
   salutation: "", firstName: "", middleName: "", lastName: "", displayName: "",
   dateOfBirth: "", gender: "", bloodGroup: "", maritalStatus: "single", nationality: "", placeOfBirth: "",
-  motherName: "", languagesKnown: [], speciallyAbled: "no", internationalWorker: "no", category: "prefer_not_to_say",
+  fatherName: "", motherName: "", languagesKnown: "", speciallyAbled: "no", internationalWorker: "no", category: "prefer_not_to_say",
   personalEmail: "", mobileNumber: "", alternateMobile: "",
 };
 
@@ -267,10 +280,15 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       setPersonal(p => ({
         ...p,
         firstName: emp.firstName ?? "", lastName: emp.lastName ?? "",
-        displayName: `${emp.firstName ?? ""} ${emp.lastName ?? ""}`.trim(),
+        salutation: raw.profile?.salutation ?? "",
+        displayName: raw.profile?.display_name || `${emp.firstName ?? ""} ${emp.lastName ?? ""}`.trim(),
+        nationality: raw.profile?.nationality ?? "",
+        placeOfBirth: raw.profile?.place_of_birth ?? "",
         dateOfBirth: emp.details.dateOfBirth ?? "", gender: emp.details.gender ?? "",
         bloodGroup: emp.details.bloodGroup ?? "", maritalStatus: (emp.details.maritalStatus ?? "single").toLowerCase(),
-        motherName: typeof rawRecord.mother_name === "string" ? rawRecord.mother_name : "",
+        fatherName: raw.profile?.father_name ?? "",
+        motherName: raw.profile?.mother_name ?? "",
+        languagesKnown: raw.profile?.languages_known ?? "",
         personalEmail: emp.email ?? "", mobileNumber: emp.phone ?? "",
       }));
 
@@ -466,10 +484,17 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         probation_period_months: employment.probation_period_months || null,
         notice_period_days: employment.notice_period_days || null,
         // Personal identity
+        salutation: personal.salutation || "",
+        display_name: personal.displayName || "",
+        nationality: personal.nationality || "",
+        place_of_birth: personal.placeOfBirth || "",
         date_of_birth: personal.dateOfBirth || null,
         gender: personal.gender || "",
         marital_status: personal.maritalStatus || "",
         blood_group: personal.bloodGroup || "",
+        father_name: familyEntries.find(entry => entry.relationship === "father")?.name || personal.fatherName || "",
+        mother_name: familyEntries.find(entry => entry.relationship === "mother")?.name || personal.motherName || "",
+        languages_known: personal.languagesKnown || "",
         current_address: values.currentAddress || "",
         current_address_line2: values.currentAddressLine2 || "",
         current_village: values.currentVillage || "",
@@ -561,6 +586,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   }
 
   const totalExperienceYears = useMemo(() => null, []); // no server-computed total for an existing employee in this pass
+  const personalAge = ageFromDateOfBirth(personal.dateOfBirth);
 
   return (
     <Modal
@@ -656,7 +682,15 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                     </div>
                     <div>
                       <label className="block text-[12.5px] font-semibold mb-1.5">Display name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>auto</span></label>
-                      <input value={personal.displayName} onChange={e => setPersonal(p => ({ ...p, displayName: e.target.value }))} className="field-input" />
+                      <div className="flex gap-2">
+                        <input value={personal.displayName} onChange={e => setPersonal(p => ({ ...p, displayName: e.target.value }))} className="field-input" />
+                        <button
+                          type="button"
+                          onClick={() => setPersonal(p => ({ ...p, displayName: [p.salutation, p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ") }))}
+                          className="btn btn-sm"
+                          style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}
+                        >+ Suggest</button>
+                      </div>
                       <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Shown across the app and in approvals.</p>
                     </div>
                     <div>
@@ -670,6 +704,11 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                     <div>
                       <label className="block text-[12.5px] font-semibold mb-1.5">Date of birth <span style={{ color: "var(--error)" }}>*</span></label>
                       <input type="date" value={personal.dateOfBirth} onChange={e => setPersonal(p => ({ ...p, dateOfBirth: e.target.value }))} className="field-input" />
+                      {personalAge !== null && (
+                        <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>
+                          Age {personalAge}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-[12.5px] font-semibold mb-1.5">Gender <span style={{ color: "var(--error)" }}>*</span></label>
@@ -694,12 +733,42 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Nationality <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>not yet stored post-hire</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">Nationality <span style={{ color: "var(--error)" }}>*</span></label>
                       <CountrySelect value={personal.nationality} onChange={v => setPersonal(p => ({ ...p, nationality: v }))} mode="demonym" />
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Place of birth <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL, not yet stored post-hire</span></label>
-                      <input value={personal.placeOfBirth} onChange={e => setPersonal(p => ({ ...p, placeOfBirth: e.target.value }))} placeholder="City / town" className="field-input" />
+                      <label className="block text-[12.5px] font-semibold mb-1.5">Place of birth <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                      <div className="flex gap-2">
+                        <input value={personal.placeOfBirth} onChange={e => setPersonal(p => ({ ...p, placeOfBirth: e.target.value }))} placeholder="City / town" className="field-input" />
+                        <button
+                          type="button"
+                          onClick={() => setPersonal(p => ({ ...p, placeOfBirth: values.currentVillage || values.currentDistrict }))}
+                          className="btn btn-sm"
+                          style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}
+                        >+ Suggest</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 mb-5">
+                    <div>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">Father&apos;s name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>FROM FAMILY</span></label>
+                      <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
+                        {familyEntries.find(entry => entry.relationship === "father")?.name || personal.fatherName || "Set in Family & nomination"}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">Mother&apos;s name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>FROM FAMILY</span></label>
+                      <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
+                        {familyEntries.find(entry => entry.relationship === "mother")?.name || personal.motherName || "Set in Family & nomination"}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">Languages known <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                      <LanguagesSelect
+                        value={personal.languagesKnown}
+                        onChange={languagesKnown => setPersonal(p => ({ ...p, languagesKnown }))}
+                      />
                     </div>
                   </div>
 
