@@ -19,6 +19,7 @@ interface Props {
   listEndpoint: string;
   onSelect:     (uuid: string | null, name: string | null) => void;
   allowClear?:  boolean;  // adds a "None" option that clears the selection
+  excludeId?:   string;   // hides this person (e.g. the employee being edited)
 }
 
 const BORDER   = "#d3dae8";
@@ -27,7 +28,7 @@ const BASE_CLS =
   "w-full px-3.5 py-[7px] rounded-md border text-[13px] outline-none transition-all";
 
 export function EmployeePickerInline({
-  label, value, selectedId, disabled, listEndpoint, onSelect, allowClear = false,
+  label, value, selectedId, disabled, listEndpoint, onSelect, allowClear = false, excludeId,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -35,7 +36,7 @@ export function EmployeePickerInline({
   const { data: optionsRaw, loading } = useFetch<EmployeeResult[]>(
     disabled || !open ? null : listEndpoint
   );
-  const options = optionsRaw ?? [];
+  const options = (optionsRaw ?? []).filter(emp => !excludeId || emp.id !== excludeId);
 
   function handlePick(emp: EmployeeResult) {
     onSelect(emp.id, emp.full_name);

@@ -32,7 +32,8 @@ import ProfileSidebar from "./_components/ProfileSidebar";
 import ProfileForm from "./_components/ProfileForm";
 import { EmployeePickerInline } from "./_components/ReportingManagerCard";
 import {
-  MANAGER_RM_NOTE, isManagerRole, reportingManagerListEndpoint, shouldClearReportingManager,
+  MANAGER_APPROVER_NOTE, MANAGER_RM_NOTE, isManagerRole, reportingApproverListEndpoint,
+  reportingManagerListEndpoint, shouldClearReportingManager,
 } from "@/lib/reportingManager";
 import { ApprovalMatrixTab } from "./_components/ApprovalMatrixTab";
 import { WishesTab } from "./_components/WishesTab";
@@ -700,6 +701,7 @@ export default function EmployeeProfilePage({
                         disabled={false}
                         listEndpoint={reportingManagerListEndpoint(API.employees.managerList, values.branch, managerRole)}
                         allowClear={managerRole}
+                        excludeId={managerRole ? employeeUuid : undefined}
                         onSelect={(uuid, name) =>
                           setValues(v => ({ ...v, reportingManager: name ?? "", reportingManagerId: uuid ?? "" }))
                         }
@@ -714,16 +716,23 @@ export default function EmployeeProfilePage({
                   // Read mode: let ProfileForm show the value as a standard readonly field (always visible)
                   if (disabled) return null;
                   return (
-                    <EmployeePickerInline
-                      label="Reporting Approver"
-                      value={values.reportingApprover ?? ""}
-                      selectedId={values.reportingApproverId ?? ""}
-                      disabled={false}
-                      listEndpoint={values.branch ? `${API.employees.managerList}?branch=${encodeURIComponent(values.branch)}` : API.employees.managerList}
-                      onSelect={(uuid, name) =>
-                        setValues(v => ({ ...v, reportingApprover: name ?? "", reportingApproverId: uuid ?? "" }))
-                      }
-                    />
+                    <div>
+                      <EmployeePickerInline
+                        label="Reporting Approver"
+                        value={values.reportingApprover ?? ""}
+                        selectedId={values.reportingApproverId ?? ""}
+                        disabled={false}
+                        listEndpoint={reportingApproverListEndpoint(API.employees.managerList, values.branch, managerRole)}
+                        allowClear={managerRole}
+                        excludeId={managerRole ? employeeUuid : undefined}
+                        onSelect={(uuid, name) =>
+                          setValues(v => ({ ...v, reportingApprover: name ?? "", reportingApproverId: uuid ?? "" }))
+                        }
+                      />
+                      {managerRole && (
+                        <p style={{ fontSize: 11.5, color: "var(--on-variant)", margin: "4px 0 0 152px" }}>{MANAGER_APPROVER_NOTE}</p>
+                      )}
+                    </div>
                   );
                 }
                 if (key === "hr") {

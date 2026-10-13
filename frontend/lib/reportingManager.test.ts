@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { isManagerRole, reportingManagerListEndpoint, shouldClearReportingManager } from "./reportingManager";
+import {
+  isManagerRole, reportingApproverListEndpoint, reportingManagerListEndpoint, shouldClearReportingManager,
+} from "./reportingManager";
 
 const MANAGER_ROLES = ["manager", "manager__team_lead"];
 const BASE = "/employees/managers/";
@@ -21,6 +23,18 @@ describe("reportingManagerListEndpoint", () => {
   it("keeps the existing branch-filtered list for other roles", () => {
     expect(reportingManagerListEndpoint(BASE, "Mumbai HQ", false)).toBe(`${BASE}?branch=Mumbai%20HQ`);
     expect(reportingManagerListEndpoint(BASE, "", false)).toBe(BASE);
+  });
+});
+
+describe("reportingApproverListEndpoint", () => {
+  it("offers the COO, branch HR and Branch Admin for a manager role", () => {
+    expect(reportingApproverListEndpoint(BASE, "Mumbai HQ", true)).toBe(`${BASE}?manager_approvers=1&branch=Mumbai%20HQ`);
+    expect(reportingApproverListEndpoint(BASE, "", true)).toBe(`${BASE}?manager_approvers=1`);
+  });
+
+  it("keeps the existing list for other roles", () => {
+    expect(reportingApproverListEndpoint(BASE, "Mumbai HQ", false)).toBe(`${BASE}?branch=Mumbai%20HQ`);
+    expect(reportingApproverListEndpoint(BASE, "", false)).toBe(BASE);
   });
 });
 

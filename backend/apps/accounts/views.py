@@ -46,6 +46,29 @@ def _is_coo(user) -> bool:
     """
     return bool(user and user.role and user.role.name == COO_ROLE_NAME)
 
+
+def _manager_approver_candidates(branch: str):
+    """
+    Who may be a Manager's Reporting Approver: the people the existing workflows
+    already route a Manager's own requests to — the COO (leave L1 via the Manager's
+    reporting manager), the branch HR (leave L2 / separation stage 1, same "HR"
+    definition as HRListView) and the branch's Branch Admin (separation stage 2).
+    """
+    from django.db.models import Q as _Q
+
+    q = _Q(role__name=COO_ROLE_NAME)
+    branch = (branch or '').strip()
+    if branch:
+        hr_ids = (
+            User.objects
+            .filter(role__role_permissions__permission__codename='onboarding.approve')
+            .exclude(role__role_permissions__permission__codename='settings.edit')
+            .filter(_Q(branch__iexact=branch) | _Q(managed_branches__branch_name__iexact=branch))
+            .values('id')
+        )
+        q |= _Q(role__can_manage_branch=True, branch__iexact=branch) | _Q(id__in=hr_ids)
+    return User.objects.filter(q, is_active=True).distinct()
+
 from django.conf import settings
 from django.core import signing
 from django.core.exceptions import ValidationError
@@ -3433,8 +3456,9 @@ class EmployeeDetailView(APIView):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         # Captured before any submitted change (role included) is applied.
-        stored_reporting_manager_id = employee.reporting_manager_id
-        was_manager                 = bool(employee.role and employee.role.can_manage_team)
+        stored_reporting_manager_id  = employee.reporting_manager_id
+        stored_reporting_approver_id = employee.reporting_approver_id
+        was_manager                  = bool(employee.role and employee.role.can_manage_team)
 
         data          = request.data
         update_fields = ['updated_at']
@@ -3654,6 +3678,14 @@ class EmployeeDetailView(APIView):
                     return error('Reporting approver not found or is inactive.')
                 if ra_user.pk == employee.pk:
                     return error('An employee cannot be their own reporting approver.')
+                # Managers only: a new approver must be someone who already approves a
+                # Manager's requests. An existing manager's unchanged value is kept as-is.
+                if (
+                    employee.role and employee.role.can_manage_team
+                    and not (was_manager and ra_user.pk == stored_reporting_approver_id)
+                    and not _manager_approver_candidates(employee.branch).filter(pk=ra_user.pk).exists()
+                ):
+                    return error("A Manager's Reporting Approver must be the COO, their branch HR or their Branch Admin.")
                 employee.reporting_approver = ra_user
             else:
                 employee.reporting_approver = None
@@ -6031,6 +6063,13 @@ class ManagerListView(APIView):
     def get(self, request):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        if (request.query_params.get('manager_approvers') or '').strip().lower() in ('1', 'true', 'yes'):
+            approvers = _manager_approver_candidates(request.query_params.get('branch') or '').order_by('full_name')
+            return success('Managers retrieved.', data=[
+                {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
+                 'department': u.department, 'branch': u.branch}
+                for u in approvers[:_HR_MANAGER_LIST_CAP]
+            ])
         if (request.query_params.get('coo_only') or '').strip().lower() in ('1', 'true', 'yes'):
             coos = User.objects.filter(role__name=COO_ROLE_NAME, is_active=True).order_by('full_name')
             return success('Managers retrieved.', data=[

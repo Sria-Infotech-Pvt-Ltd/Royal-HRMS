@@ -2001,3 +2001,99 @@ class ManagerListCooOnlyTests(TestCase):
         _login(self.client, 'noview.mgrlist@test.com')
         self.assertEqual(self.client.get(self.url, {'coo_only': '1'}).status_code, 403)
 
+
+class ManagerReportingApproverTests(TestCase):
+    """A Manager's Reporting Approver must be the COO, their branch HR or their
+    Branch Admin (who already approve a Manager's leave/separation). Other roles
+    are unchanged; an existing manager's unchanged value is preserved."""
+
+    BRANCH = 'Mumbai HQ'
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        editor_role = make_role('approver_editor', permission_codenames=['employees.view', 'employees.edit'])
+        make_user('editor.appr@test.com', role=editor_role, employee_id='EMPAPED1', full_name='Editor', branch=self.BRANCH)
+
+        self.coo = make_user('coo.appr@test.com', role=make_role(COO_ROLE_NAME, can_manage_team=False),
+                             employee_id='EMPAPCO1', full_name='COO', branch='Delhi HQ')
+        hr_role = make_role('approver_hr', permission_codenames=['onboarding.approve'])
+        self.hr = make_user('hr.appr@test.com', role=hr_role, employee_id='EMPAPHR1', full_name='Branch HR', branch=self.BRANCH)
+        self.other_hr = make_user('hr2.appr@test.com', role=hr_role, employee_id='EMPAPHR2', full_name='Other HR', branch='Delhi HQ')
+        self.inactive_hr = make_user('hr3.appr@test.com', role=hr_role, employee_id='EMPAPHR3', full_name='Gone HR',
+                                     branch=self.BRANCH, is_active=False)
+        self.org_admin = make_user(
+            'admin.appr@test.com', role=make_role('approver_org_admin', permission_codenames=['onboarding.approve', 'settings.edit']),
+            employee_id='EMPAPOA1', full_name='Org Admin', branch=self.BRANCH,
+        )
+        ba_role = make_role('approver_branch_admin')
+        ba_role.can_manage_branch = True
+        ba_role.save()
+        self.branch_admin = make_user('ba.appr@test.com', role=ba_role, employee_id='EMPAPBA1', full_name='Branch Admin', branch=self.BRANCH)
+
+        self.manager_role = make_role('approver_manager', can_manage_team=True)
+        self.peer = make_user('peer.appr@test.com', role=self.manager_role, employee_id='EMPAPPM1', full_name='Peer Manager', branch=self.BRANCH)
+        self.manager = make_user('mgr.appr@test.com', role=self.manager_role, employee_id='EMPAPMG1', full_name='Manager', branch=self.BRANCH)
+        self.employee_role = make_role('approver_staff')
+        self.employee = make_user('emp.appr@test.com', role=self.employee_role, employee_id='EMPAPEM1', full_name='Employee', branch=self.BRANCH)
+        _login(self.client, 'editor.appr@test.com')
+
+    def _put(self, employee, payload):
+        return self.client.put(reverse('employee-detail', kwargs={'employee_id': employee.employee_id}), payload, format='json')
+
+    def test_approver_list_for_managers(self):
+        resp = self.client.get(reverse('employee-manager-list'), {'manager_approvers': '1', 'branch': self.BRANCH})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual({r['employee_id'] for r in resp.data['data']}, {'EMPAPCO1', 'EMPAPHR1', 'EMPAPBA1'})
+
+    def test_manager_may_have_coo_branch_hr_or_branch_admin(self):
+        for approver in (self.coo, self.hr, self.branch_admin):
+            with self.subTest(approver=approver.employee_id):
+                resp = self._put(self.manager, {'reporting_approver_id': str(approver.pk)})
+                self.assertEqual(resp.status_code, 200, resp.data)
+                self.manager.refresh_from_db()
+                self.assertEqual(self.manager.reporting_approver_id, approver.pk)
+
+    def test_manager_rejects_other_approvers(self):
+        for approver in (self.peer, self.other_hr, self.org_admin):
+            with self.subTest(approver=approver.employee_id):
+                resp = self._put(self.manager, {'reporting_approver_id': str(approver.pk)})
+                self.assertEqual(resp.status_code, 400)
+                self.assertIn("Reporting Approver must be the COO", resp.data['message'])
+        self.manager.refresh_from_db()
+        self.assertIsNone(self.manager.reporting_approver_id)
+
+    def test_manager_cannot_be_own_approver(self):
+        resp = self._put(self.manager, {'reporting_approver_id': str(self.manager.pk)})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('own reporting approver', resp.data['message'])
+
+    def test_existing_value_preserved_on_unrelated_save(self):
+        self.manager.reporting_approver = self.peer
+        self.manager.save(update_fields=['reporting_approver'])
+        resp = self._put(self.manager, {'reporting_approver_id': str(self.peer.pk), 'phone': '9000000077'})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.manager.refresh_from_db()
+        self.assertEqual((self.manager.reporting_approver_id, self.manager.phone), (self.peer.pk, '9000000077'))
+
+    def test_manager_can_clear_approver(self):
+        self.manager.reporting_approver = self.hr
+        self.manager.save(update_fields=['reporting_approver'])
+        self.assertEqual(self._put(self.manager, {'reporting_approver_id': None}).status_code, 200)
+        self.manager.refresh_from_db()
+        self.assertIsNone(self.manager.reporting_approver_id)
+
+    def test_other_roles_unchanged(self):
+        resp = self._put(self.employee, {'reporting_approver_id': str(self.peer.pk)})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.reporting_approver_id, self.peer.pk)
+
+    def test_promotion_to_manager_in_same_save_is_checked(self):
+        self.employee.reporting_approver = self.peer
+        self.employee.save(update_fields=['reporting_approver'])
+        resp = self._put(self.employee, {'role': self.manager_role.name, 'reporting_approver_id': str(self.peer.pk)})
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.role_id, self.employee_role.pk)
+
