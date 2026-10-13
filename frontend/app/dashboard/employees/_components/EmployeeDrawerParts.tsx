@@ -14,11 +14,13 @@ export const STATUS_CHIP: Record<string, string> = {
 };
 
 /** Boxed, titled section of the record — the reference's `.rvcard`. Key/value
-    rows go in a `.kvlist`; pass `list={false}` for free-form content. */
-export function SectionCard({ title, children, list = true }: { title: string; children: ReactNode; list?: boolean }) {
+    rows go in a `.kvlist`; pass `list={false}` for free-form content. `icon`
+    is optional (e.g. the Candidate Review onboarding drawer's section
+    headers) — omit it for the reference's plain uppercase-title style. */
+export function SectionCard({ icon, title, children, list = true }: { icon?: string; title: string; children: ReactNode; list?: boolean }) {
   return (
     <div className="rvcard">
-      <h4>{title.toUpperCase()}</h4>
+      <h4>{icon && <i className={`ti ${icon}`} />} {title.toUpperCase()}</h4>
       {list ? <div className="kvlist">{children}</div> : children}
     </div>
   );
