@@ -24,7 +24,24 @@ from .fields import EntityDefinition
 # once, so it needs a storage that actually supports reading. Local disk
 # under MEDIA_ROOT, not the public media namespace — these are internal
 # processing artifacts, not something any endpoint serves directly.
-_import_storage = FileSystemStorage(location=str(settings.MEDIA_ROOT / 'platform_imports_private'))
+class ImportFileStorage(FileSystemStorage):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('location', str(settings.MEDIA_ROOT / 'platform_imports_private'))
+        super().__init__(*args, **kwargs)
+
+    # Deliberately NOT the default FileSystemStorage.deconstruct(), which
+    # serializes the resolved `location` kwarg — an ABSOLUTE path baked from
+    # settings.MEDIA_ROOT at the time `makemigrations` ran. MEDIA_ROOT differs
+    # between a dev machine and CI, so the committed migration's recorded
+    # location never matched a fresh `makemigrations --check` run in CI,
+    # which kept reporting a phantom "field changed" diff on every PR. This
+    # class path alone is a stable reference — the real location is computed
+    # fresh by __init__ above wherever this storage is actually loaded.
+    def deconstruct(self):
+        return ('apps.platform_core.models.imports.ImportFileStorage', [], {})
+
+
+_import_storage = ImportFileStorage()
 
 
 class ImportJob(models.Model):
