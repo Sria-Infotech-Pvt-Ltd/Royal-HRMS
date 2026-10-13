@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { usePermission } from "@/hooks/usePermission";
 import { useEmployees } from "@/hooks/useEmployees";
 import Pagination from "@/components/shared/Pagination";
@@ -25,12 +25,20 @@ const STATUS_FILTERS: { value: "all" | EmployeeStatusFilter; label: string }[] =
   { value: "inactive",       label: "Exited"         },
 ];
 
+// useSearchParams (reads ?action=hire for the admin dashboard's "Hire an
+// employee" quick-action deep link) requires a Suspense boundary around it
+// for the production build — same convention as settings/audit/page.tsx.
 export default function EmployeesPage() {
-  return <EmployeesPageInner />;
+  return (
+    <Suspense fallback={null}>
+      <EmployeesPageInner />
+    </Suspense>
+  );
 }
 
 function EmployeesPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const canCreate = usePermission("employees.create");
   const canEdit = usePermission("employees.edit");
   const canEditOnboarding = usePermission("onboarding.edit");
@@ -49,6 +57,16 @@ function EmployeesPageInner() {
     if (found) { setDrawerEmployee(found); return; }
     router.push(`/dashboard/employees/${id}`);
   }
+
+  // Lets other pages (e.g. the admin dashboard's "Hire an employee" quick
+  // action) deep-link straight into the real Hire wizard instead of just
+  // landing on the directory — same pattern as the ESS shell's own
+  // `?tab=` deep link. Only honored when the user can actually create an
+  // employee, matching the gate the directory's own "Hire employee" button
+  // already applies.
+  useEffect(() => {
+    if (canCreate && searchParams.get("action") === "hire") setShowModal(true);
+  }, [canCreate, searchParams]);
 
   return (
     <div className="emp-fit">

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { KpiCard, OverviewItem, QuickTile, AttendanceTrend, AttendanceInsights, WfIcon } from "@/components/dashboard/WorkforceWidgets";
 import WorkforceOperations from "@/components/dashboard/WorkforceOperations";
 import { useDashboardOverview } from "@/hooks/useDashboardOverview";
+import { usePermission } from "@/hooks/usePermission";
 import type { SessionPayload } from "@/lib/session";
 
 interface Props { session: SessionPayload }
@@ -14,6 +15,15 @@ const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 :
 export default function HRDashboard({ session }: Props) {
   const router = useRouter();
   const { data, loading } = useDashboardOverview();
+  // This dashboard is shown to anyone holding employees.view (or a
+  // superuser) — a strictly broader group than employees.create (see
+  // app/dashboard/page.tsx's resolveDashboard) — so the "Hire an employee"
+  // tile must be gated separately, same as the Employee Directory's own
+  // "Hire employee" button. Without this, a view-only HR role saw the tile,
+  // clicked it, landed on the directory, and nothing visibly happened — the
+  // directory page itself silently no-ops the deep link for a user who
+  // can't create employees, rather than erroring.
+  const canHire = usePermission("employees.create");
 
   // Date/greeting depend on the viewer's clock, so they're filled in after
   // mount — computing them during render would risk a server/client mismatch.
@@ -38,11 +48,11 @@ export default function HRDashboard({ session }: Props) {
   const compliancePct = data?.compliance_pct ?? 0;
 
   const quickActions = [
-    { title: "Hire an employee", sub: "Start the guided onboarding flow", href: "/dashboard/candidate-review", icon: WfIcon.userPlus, tone: "brand" as const },
+    canHire && { title: "Hire an employee", sub: "Start the guided onboarding flow", href: "/dashboard/employees?action=hire", icon: WfIcon.userPlus, tone: "brand" as const },
     { title: "Review leave", sub: `${openRequests} requests need a decision`, href: "/dashboard/approvals", icon: WfIcon.calendar, tone: "info" as const },
     { title: "Run payroll checks", sub: `Resolve ${payrollBlocked} blocked records`, href: "/dashboard/payroll", icon: WfIcon.wallet, tone: "warn" as const },
     { title: "Export workforce report", sub: "Download the current snapshot", href: "/dashboard/reports", icon: WfIcon.report, tone: "ok" as const },
-  ];
+  ].filter((a): a is Exclude<typeof a, false> => Boolean(a));
 
   return (
     <div className="wf-dashboard">
