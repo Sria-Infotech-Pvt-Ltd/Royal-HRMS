@@ -125,3 +125,9 @@ def company_logo_upload_path(instance, filename) -> str:
     # intentionally public (shown pre-login) via PublicCompanyBrandingView;
     # only the path needs tenant-scoping.
     return f'{_tenant_schema()}/company/{filename}'
+
+
+def id_card_upload_path(instance, filename) -> str:
+    # ID card reference PDF and authorised-signature image — private
+    # (AuthenticatedRawMediaCloudinaryStorage), served only via signed URLs.
+    return f'{_tenant_schema()}/id_card/{filename}'

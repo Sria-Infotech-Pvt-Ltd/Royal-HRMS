@@ -589,6 +589,7 @@ export default function EmployeeProfilePage({
         employee={employee}
         canResetPassword={canEdit}
         onResetPassword={() => setShowResetPassword(true)}
+        idCardHref={isPendingOnboarding ? undefined : `/dashboard/employees/${encodeURIComponent(id)}/id-card`}
       />
 
       {showResetPassword && (

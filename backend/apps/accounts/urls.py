@@ -58,6 +58,7 @@ from apps.accounts.views import (
     ResolveTemplateVariablesView,
 )
 from apps.accounts.views_profile_photo import ProfilePhotoView
+from apps.accounts.views_id_card import EmployeeIdCardView, IdCardSettingsView
 
 urlpatterns = [
     # Auth
@@ -83,6 +84,7 @@ urlpatterns = [
     path('employees/<str:employee_id>/approval-matrix/',         EmployeeApprovalMatrixView.as_view(),   name='employee-approval-matrix'),
     path('employees/<str:employee_id>/documents/',               EmployeeProfileDocumentView.as_view(),  name='employee-documents'),
     path('employees/<str:employee_id>/custom-file-fields/',      EmployeeCustomFieldFileValueView.as_view(), name='employee-custom-file-fields'),
+    path('employees/<str:employee_id>/id-card/',                 EmployeeIdCardView.as_view(),           name='employee-id-card'),
     path('employees/<str:employee_id>/reset-password/',          EmployeeResetPasswordView.as_view(),    name='employee-reset-password'),
     path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
     path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
@@ -123,6 +125,7 @@ urlpatterns = [
     # Company (singleton)
     path('settings/company/',                     CompanyRetrieveUpdateView.as_view(),     name='company'),
     path('settings/company/financial-year/',      CompanyFinancialYearView.as_view(),      name='company-financial-year'),
+    path('settings/id-card/',          IdCardSettingsView.as_view(),         name='id-card-settings'),
     path('settings/employee-code/',    EmployeeCodeSettingsView.as_view(),   name='employee-code-settings'),
     path('settings/approval-rules/',   ApprovalWorkflowRuleView.as_view(),   name='approval-workflow-rules'),
 

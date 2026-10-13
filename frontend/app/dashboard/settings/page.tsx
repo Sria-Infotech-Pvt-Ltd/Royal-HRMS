@@ -20,6 +20,7 @@ const SETTINGS_ITEMS = [
   { id: "smtp",               cat: "comm",    icon: "ti-server",          iconClass: "sc-comm",    label: "SMTP Settings",         desc: "Outgoing email server configuration" },
   { id: "notifications",      cat: "comm",    icon: "ti-bell",            iconClass: "sc-comm",    label: "Notifications",         desc: "In-app and email notification preferences" },
   { id: "employee-code",      cat: "company", icon: "ti-id-badge",        iconClass: "sc-company", label: "Employee ID Format",    desc: "Prefix, padding, and starting number for employee codes" },
+  { id: "id-card",            cat: "company", icon: "ti-id",              iconClass: "sc-company", label: "ID Card",               desc: "Employee ID card design, terms and authorised signature" },
   { id: "audit",              cat: "system",  icon: "ti-history",         iconClass: "sc-system",  label: "Audit Log",             desc: "View all system actions and changes" },
 ] as const;
 
@@ -41,6 +42,7 @@ const ITEM_ROUTES: Record<string, string> = {
   "email-templates":      "/dashboard/settings/email-templates",
   audit:                  "/dashboard/settings/audit",
   "employee-code":        "/dashboard/settings/employee-code",
+  "id-card":              "/dashboard/settings/id-card",
   "leave-policy":         "/dashboard/settings/leave-policy",
   "holiday-calendar":     "/dashboard/settings/holiday-calendar",
   "approval-rules":       "/dashboard/settings/approval-rules",

@@ -18,6 +18,7 @@ from core.storage import (
     company_logo_upload_path,
     document_center_upload_path,
     email_template_attachment_upload_path,
+    id_card_upload_path,
     profile_photo_upload_path,
 )
 
@@ -798,6 +799,56 @@ class EmployeeCodeSettings(models.Model):
                 suffix += 1
 
         return candidate
+
+
+# ─── ID Card Settings (singleton) ────────────────────────────────────────────
+
+class IdCardSettings(models.Model):
+    """
+    Singleton row (pk=1) for Settings → ID Card.
+
+    The uploaded PDF is kept only as the approved design reference — a
+    flattened design export can't be filled in with another employee's
+    data, so cards are rendered from the built-in HTML/CSS template. The
+    company logo and website come from Company; nothing is duplicated here.
+    """
+    DEFAULT_SIGNATORY_LABEL = 'Authorised Signatory'
+
+    reference_pdf      = models.FileField(
+                             upload_to=id_card_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage(),
+                             null=True, blank=True,
+                         )
+    reference_pdf_name = models.CharField(max_length=255, blank=True)
+    reference_pdf_size = models.PositiveIntegerField(null=True, blank=True, help_text='File size in bytes')
+    signature_image    = models.FileField(
+                             upload_to=id_card_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage(),
+                             null=True, blank=True,
+                         )
+    signatory_label    = models.CharField(max_length=60, default=DEFAULT_SIGNATORY_LABEL)
+    terms              = models.TextField(
+                             blank=True,
+                             help_text='One condition per line; {company} is replaced with the company name. '
+                                       'Blank uses the default conditions.',
+                         )
+    show_date_of_birth       = models.BooleanField(default=True)
+    show_residential_address = models.BooleanField(default=True)
+    show_contact_details     = models.BooleanField(default=True)
+    updated_at         = models.DateTimeField(auto_now=True)
+    updated_by         = models.ForeignKey(
+                             User, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='id_card_settings_updates',
+                         )
+
+    class Meta:
+        db_table = 'hrms_id_card_settings'
+
+    def __str__(self) -> str:
+        return 'ID card settings'
+
+    @classmethod
+    def get(cls) -> 'IdCardSettings':
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
 
 
 # ─── Birthday Settings (singleton) ───────────────────────────────────────────

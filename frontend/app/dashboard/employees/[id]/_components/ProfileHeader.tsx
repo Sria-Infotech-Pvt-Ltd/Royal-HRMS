@@ -20,9 +20,11 @@ interface Props {
    *  matches every other admin action already on this page. */
   canResetPassword?: boolean;
   onResetPassword?: () => void;
+  /** Link to the employee's ID card preview/print page. */
+  idCardHref?: string;
 }
 
-export default function ProfileHeader({ employee, canResetPassword, onResetPassword }: Props) {
+export default function ProfileHeader({ employee, canResetPassword, onResetPassword, idCardHref }: Props) {
   const router = useRouter();
   const user = useCurrentUser();
   const exp = experienceFrom(employee.dateOfJoining);
@@ -51,6 +53,20 @@ export default function ProfileHeader({ employee, canResetPassword, onResetPassw
         </div>
 
         <div className="flex items-center gap-2">
+          {idCardHref && (
+            <Link
+              href={idCardHref}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors"
+              style={{
+                borderColor: "var(--outline-v)",
+                color: "var(--on-bg)",
+                background: "#fff",
+              }}
+            >
+              <i className="ti ti-id text-[14px]" />
+              ID Card
+            </Link>
+          )}
           {canResetPassword && onResetPassword && (
             <button
               onClick={onResetPassword}
