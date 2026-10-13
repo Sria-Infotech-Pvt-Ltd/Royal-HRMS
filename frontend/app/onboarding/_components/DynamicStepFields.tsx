@@ -220,96 +220,97 @@ export default function DynamicStepFields({
   const hasIdentityFields = firstIdentityRunIndex !== -1;
   const sameAsCurrent = (form as unknown as Record<string, string>).permanent_same_as_current === "true";
 
-  const sectionHeading = (text: string) => (
-    <h4
-      key={`heading-${text}`}
-      style={{
-        display: "flex", alignItems: "center", gap: 8,
-        fontSize: ".8rem", fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase",
-        color: "var(--on-variant)", margin: "22px 0 10px",
-        paddingBottom: 8, borderBottom: "1px solid var(--outline-v)",
-      }}
-    >
-      <span style={{ width: 4, height: 14, borderRadius: 2, background: "var(--primary)", flexShrink: 0 }} />
-      {text}
-    </h4>
-  );
+  // Groups of consecutive runs rendered as one Hire-wizard-style card each
+  // (bg-[var(--surface)] rounded-2xl border shadow-sm p-5) — same visual
+  // language as HireWizardClient's step 0 (Identity/Basic details), without
+  // hardcoding which fields exist: a new card starts only where a REAL
+  // heading boundary (Current/Permanent Address, Identity & Declarations)
+  // already exists; every run before the first boundary is one unlabeled
+  // card (this step's "Basic details" equivalent), whatever fields that
+  // actually turns out to be for this company's configured field set.
+  const groupLabelFor = (i: number): string | null =>
+    hasCurrentFields && i === firstCurrentRunIndex ? "Current Address"
+    : hasPermanentFields && i === firstPermanentRunIndex ? "Permanent Address"
+    : hasIdentityFields && i === firstIdentityRunIndex ? "Identity & Declarations"
+    : null;
+
+  interface Group { heading: string | null; runIndexes: number[] }
+  const groups: Group[] = [];
+  runs.forEach((_run, i) => {
+    const label = groupLabelFor(i);
+    if (label !== null || groups.length === 0) groups.push({ heading: label, runIndexes: [i] });
+    else groups[groups.length - 1].runIndexes.push(i);
+  });
+
+  function renderRun(run: Run, i: number) {
+    if (run.kind === "grid") {
+      return (
+        <div className="field-group-row" key={`grid-${i}`}>
+          {run.items.map(config => (
+            <DynamicField key={config.field_key} config={config} value={valueFor(config)} onChange={onChangeFor(config)} pairedState={pairedStateFor(config)} />
+          ))}
+        </div>
+      );
+    }
+    if (run.kind === "addressPair") {
+      return (
+        <div className="field-group-row" style={{ gridTemplateColumns: "1fr 1fr" }} key={`addr-${i}`}>
+          <DynamicField config={run.line1} value={valueFor(run.line1)} onChange={onChangeFor(run.line1)} pairedState={pairedStateFor(run.line1)} />
+          <DynamicField config={run.line2} value={valueFor(run.line2)} onChange={onChangeFor(run.line2)} pairedState={pairedStateFor(run.line2)} />
+        </div>
+      );
+    }
+    if (run.item.field_type === "file") {
+      return (
+        <div key={run.item.field_key}>
+          <CustomFieldFileUpload
+            fieldKey={run.item.field_key}
+            label={run.item.label}
+            required={run.item.required}
+            allowMultiple={run.item.allow_multiple}
+            value={customFileValues.filter(v => v.field_key === run.item.field_key)}
+            uploading={uploadingFileKey === run.item.field_key}
+            onUpload={onCustomFileUpload}
+            onDelete={onCustomFileDelete}
+          />
+        </div>
+      );
+    }
+    return (
+      <DynamicField key={run.item.field_key} config={run.item} value={valueFor(run.item)} onChange={onChangeFor(run.item)} pairedState={pairedStateFor(run.item)} />
+    );
+  }
 
   return (
     <div>
       {hasFileField && fileUploadError && (
         <div className="alert alert-error" style={{ marginBottom: 14 }}>{fileUploadError}</div>
       )}
-      {runs.map((run, i) => {
-        const heading = hasCurrentFields && i === firstCurrentRunIndex
-          ? sectionHeading("Current Address")
-          : hasPermanentFields && i === firstPermanentRunIndex
-          ? sectionHeading("Permanent Address")
-          : hasIdentityFields && i === firstIdentityRunIndex
-          ? sectionHeading("Identity & Declarations")
-          : null;
-        const toggle = hasPermanentFields && i === firstPermanentRunIndex && (
-          <label key="permanent-same-as-current" className="module-check" style={{ margin: "4px 0 12px" }}>
-            <input
-              type="checkbox"
-              checked={sameAsCurrent}
-              onChange={e => onBuiltinChange("permanent_same_as_current", e.target.checked ? "true" : "false")}
-            />
-            <span>Permanent address is the same as current address</span>
-          </label>
-        );
-        if (isPermanentRun(run) && sameAsCurrent) return (<div key={`wrap-${i}`}>{heading}{toggle}</div>);
-
-        if (run.kind === "grid") {
-          return (
-            <div key={`wrap-grid-${i}`}>
-              {heading}
-              {toggle}
-              <div className="field-group-row">
-                {run.items.map(config => (
-                  <DynamicField key={config.field_key} config={config} value={valueFor(config)} onChange={onChangeFor(config)} pairedState={pairedStateFor(config)} />
-                ))}
-              </div>
-            </div>
-          );
-        }
-        if (run.kind === "addressPair") {
-          return (
-            <div key={`wrap-addr-${i}`}>
-              {heading}
-              {toggle}
-              <div className="field-group-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
-                <DynamicField config={run.line1} value={valueFor(run.line1)} onChange={onChangeFor(run.line1)} pairedState={pairedStateFor(run.line1)} />
-                <DynamicField config={run.line2} value={valueFor(run.line2)} onChange={onChangeFor(run.line2)} pairedState={pairedStateFor(run.line2)} />
-              </div>
-            </div>
-          );
-        }
-        if (run.item.field_type === "file") {
-          return (
-            <div key={`wrap-${run.item.field_key}`}>
-              {heading}
-              {toggle}
-              <div style={{ marginTop: 14 }}>
-                <CustomFieldFileUpload
-                  fieldKey={run.item.field_key}
-                  label={run.item.label}
-                  required={run.item.required}
-                  allowMultiple={run.item.allow_multiple}
-                  value={customFileValues.filter(v => v.field_key === run.item.field_key)}
-                  uploading={uploadingFileKey === run.item.field_key}
-                  onUpload={onCustomFileUpload}
-                  onDelete={onCustomFileDelete}
-                />
-              </div>
-            </div>
-          );
-        }
+      {groups.map((group, gi) => {
+        const isPermanentGroup = group.heading === "Permanent Address";
+        const collapsed = isPermanentGroup && sameAsCurrent;
         return (
-          <div key={`wrap-${run.item.field_key}`}>
-            {heading}
-            {toggle}
-            <DynamicField config={run.item} value={valueFor(run.item)} onChange={onChangeFor(run.item)} pairedState={pairedStateFor(run.item)} />
+          <div key={`group-${gi}`} className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm p-5 mb-4">
+            {group.heading && (
+              <div className="text-[11px] font-bold uppercase tracking-wide mb-3" style={{ color: "var(--on-variant)" }}>
+                {group.heading}
+              </div>
+            )}
+            {isPermanentGroup && (
+              <label className="module-check" style={{ margin: "0 0 12px" }}>
+                <input
+                  type="checkbox"
+                  checked={sameAsCurrent}
+                  onChange={e => onBuiltinChange("permanent_same_as_current", e.target.checked ? "true" : "false")}
+                />
+                <span>Permanent address is the same as current address</span>
+              </label>
+            )}
+            {!collapsed && (
+              <div className="flex flex-col gap-3">
+                {group.runIndexes.map(i => renderRun(runs[i], i))}
+              </div>
+            )}
           </div>
         );
       })}

@@ -94,7 +94,9 @@ export default function DynamicField({ config, value, onChange, placeholder, pai
   const label = (
     <label className="field-label">
       {config.label}
-      {config.required && <Req />}
+      {config.required
+        ? <Req />
+        : <span style={{ color: "var(--on-variant)", fontWeight: 400, marginLeft: 6, fontSize: 10.5 }}>OPTIONAL</span>}
     </label>
   );
 

@@ -14,7 +14,6 @@ import DynamicStepFields from "./_components/DynamicStepFields";
 import TabDocuments, { type UploadedDoc } from "./_components/TabDocuments";
 import TabFaceId from "./_components/TabFaceId";
 import OnboardingSidebar from "./_components/OnboardingSidebar";
-import BasicDetailsCard, { type BasicDetails } from "./_components/BasicDetailsCard";
 import EducationChecklist, { type EducationEntry } from "./_components/EducationChecklist";
 import ExperienceList, { type ExperienceEntry } from "./_components/ExperienceList";
 import FamilyNominationStep, { type FamilyEntry, type NomineeEntry } from "./_components/FamilyNominationStep";
@@ -82,33 +81,6 @@ export default function OnboardingPage() {
   const [faceRegistration, setFaceRegistration] = useState<Partial<FaceRegistrationRequest> | null>(null);
   const [showFaceCapture, setShowFaceCapture] = useState(false);
 
-  // "Basic details" — read-only here (self-service). An employee must never
-  // be able to change their own Role/Company Code, so this whole section is
-  // view-only, not just those two fields — see BasicDetailsCard's own header
-  // comment for the full reasoning.
-  const [basicDetails, setBasicDetails] = useState<BasicDetails | null>(null);
-  useEffect(() => {
-    clientApi.get<{ data: Record<string, unknown> }>(API.employees.me).then(r => {
-      const d = r.data?.data;
-      if (!d) return;
-      setBasicDetails({
-        full_name:       String(d.full_name ?? ""),
-        email:           String(d.email ?? ""),
-        phone:           String(d.phone ?? ""),
-        employee_type:   String(d.employee_type ?? ""),
-        date_of_joining: String(d.date_of_joining ?? ""),
-        // /employees/me/ (MyProfileSerializer) names this role_name, not
-        // role — different from /employees/<id>/'s _employee_dict() shape,
-        // normalized here so BasicDetailsCard itself stays endpoint-agnostic.
-        role:            String(d.role_name ?? ""),
-        role_display:    String(d.role_display ?? ""),
-        branch:          String(d.branch ?? ""),
-        department:      String(d.department ?? ""),
-        designation:     String(d.designation ?? ""),
-        org_unit_name:   d.org_unit_name != null ? String(d.org_unit_name) : null,
-      });
-    }).catch(() => {});
-  }, []);
 
   // Education + Experience — both real add/remove lists, see BUILTIN_STEPS'
   // comment above for why these are their own bespoke steps. Add/edit/remove
@@ -999,17 +971,6 @@ export default function OnboardingPage() {
         <div className="wiz-body">
           {saveErr && <div className="alert alert-error"  style={{ marginBottom: "1.25rem" }}>{saveErr}</div>}
           {saveMsg && <div className="alert alert-success" style={{ marginBottom: "1.25rem" }}>{saveMsg}</div>}
-
-          {tab === 0 && basicDetails && (
-            // employeeId is unused in read-only mode (save() is only ever
-            // reachable from the editable branch) — passed empty here.
-            <BasicDetailsCard
-              employeeId=""
-              details={basicDetails}
-              editable={false}
-              onSaved={setBasicDetails}
-            />
-          )}
 
           {steps[tab].kind === "fields" && steps[tab].step === 2 && bankChangeStatus === "pending" && (
             <div style={{
