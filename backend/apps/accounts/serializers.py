@@ -572,7 +572,9 @@ class CompanySerializer(serializers.ModelSerializer):
             'website', 'official_phone', 'portal_url', 'updated_at',
         ]
         read_only_fields = ['id', 'updated_at', 'logo_url']
-        extra_kwargs     = {'logo': {'required': False, 'allow_null': True}}
+        # The original filename isn't stored (core.storage.company_logo_upload_path
+        # generates a short one), so its length needn't fit the 100-char column.
+        extra_kwargs     = {'logo': {'required': False, 'allow_null': True, 'max_length': None}}
 
     def get_logo_url(self, obj: Company) -> str | None:
         if not obj.logo:

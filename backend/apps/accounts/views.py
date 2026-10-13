@@ -2779,7 +2779,13 @@ class CompanyRetrieveUpdateView(APIView):
 
         company = Company.objects.first()
         is_new  = company is None
+        previous_logo = company.logo.name if company and company.logo else ''
 
+        # Logo files live in Cloudinary, which a DB rollback can't undo — so a
+        # replaced/removed logo file is deleted only after the row commits.
+        # Deleting it first (as before) left the row pointing at a deleted
+        # file whenever the save then failed.
+        stale_logos = set()
         with transaction.atomic():
             serializer = CompanySerializer(
                 company,
@@ -2790,18 +2796,26 @@ class CompanyRetrieveUpdateView(APIView):
             if not serializer.is_valid():
                 return error(first_error(serializer.errors), data=serializer.errors)
 
-            # Replace old logo file when a new one is uploaded
-            if not is_new and 'logo' in request.FILES and company.logo:
-                company.logo.delete(save=False)
-
             instance = serializer.save(updated_by=request.user)
 
             # Handle explicit logo removal
             remove_logo = str(request.data.get('remove_logo', '')).lower() == 'true'
             if remove_logo and instance.logo:
-                instance.logo.delete(save=False)
+                stale_logos.add(instance.logo.name)
                 instance.logo = None
                 instance.save(update_fields=['logo'])
+
+            if previous_logo and previous_logo != (instance.logo.name or ''):
+                stale_logos.add(previous_logo)
+
+        # Best-effort cleanup: the update already succeeded, so a storage
+        # error here is logged rather than failing the request.
+        logo_storage = Company._meta.get_field('logo').storage
+        for name in stale_logos:
+            try:
+                logo_storage.delete(name)
+            except Exception:
+                logger.warning('Could not delete replaced company logo file %s', name, exc_info=True)
 
         AuditLog.objects.create(
             user=request.user,

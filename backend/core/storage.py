@@ -23,7 +23,9 @@ schema name, the same way apps.accounts.models._employee_doc_path already
 namespaces EmployeeDocument by employee_id.
 """
 import os
+import re
 import time
+import uuid
 
 import cloudinary
 import cloudinary.uploader
@@ -81,6 +83,26 @@ def _tenant_schema() -> str:
     return getattr(connection, 'schema_name', None) or 'public'
 
 
+# Stored names must fit the ImageField's varchar(100). The default Cloudinary
+# storage saves the public_id it gets back, which is longer than the path
+# built here: it prepends the 'media/' prefix (MEDIA_URL) and appends a
+# 7-character '_xxxxxx' uniqueness suffix. So the original filename is never
+# used — only its extension — and the random part shrinks to fit. Tenant
+# schemas are 'tenant_' + a company_code of at most 50 characters (<= 57),
+# which leaves at least 9 random hex characters even under 'profile_photos'.
+_IMAGE_NAME_MAX_LENGTH       = 100
+_CLOUDINARY_NAME_OVERHEAD    = len('media/') + len('_xxxxxx')
+_UPLOAD_EXTENSION_RE         = re.compile(r'\.[a-z0-9]{1,5}')
+
+
+def _short_upload_name(directory: str, filename: str) -> str:
+    ext = os.path.splitext(filename or '')[1].lower()
+    if not _UPLOAD_EXTENSION_RE.fullmatch(ext):
+        ext = ''
+    room = _IMAGE_NAME_MAX_LENGTH - _CLOUDINARY_NAME_OVERHEAD - len(directory) - 1 - len(ext)
+    return f'{directory}/{uuid.uuid4().hex[:max(8, min(16, room))]}{ext}'
+
+
 def expense_receipt_upload_path(instance, filename) -> str:
     return f'{_tenant_schema()}/expenses/receipts/{filename}'
 
@@ -117,14 +139,14 @@ def profile_photo_upload_path(instance, filename) -> str:
     # since a signed/expiring URL would break long-lived <img> caching. Only
     # the path gets tenant-scoped, closing the cross-tenant path-collision
     # gap without changing who can view a photo.
-    return f'{_tenant_schema()}/profile_photos/{filename}'
+    return _short_upload_name(f'{_tenant_schema()}/profile_photos', filename)
 
 
 def company_logo_upload_path(instance, filename) -> str:
     # Same reasoning as profile_photo_upload_path — a company logo is
     # intentionally public (shown pre-login) via PublicCompanyBrandingView;
     # only the path needs tenant-scoping.
-    return f'{_tenant_schema()}/company/{filename}'
+    return _short_upload_name(f'{_tenant_schema()}/company', filename)
 
 
 def id_card_upload_path(instance, filename) -> str:
