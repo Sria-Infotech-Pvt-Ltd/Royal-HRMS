@@ -557,6 +557,9 @@ main>div:has(>.wf-dashboard){padding:0}
 /* KPI cards */
 .wf-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 .wf-kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 2px rgba(16,18,40,.04),0 6px 18px rgba(16,18,40,.03)}
+.wf-kpi.clickable{cursor:pointer;transition:box-shadow .15s ease,transform .15s ease;text-align:left;width:100%}
+.wf-kpi.clickable:hover{box-shadow:0 2px 6px rgba(16,18,40,.06),0 10px 24px rgba(16,18,40,.06);transform:translateY(-1px)}
+.wf-kpi.clickable:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 .wf-kpi-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .wf-kpi-label{font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--muted)}
 .wf-kpi-num{font-size:32px;font-weight:800;letter-spacing:-.04em;line-height:1.1;min-height:35px;display:flex;align-items:center;font-variant-numeric:tabular-nums}

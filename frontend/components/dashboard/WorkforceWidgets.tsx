@@ -33,7 +33,7 @@ export function Skel({ w = 56, h = 14 }: { w?: number | string; h?: number }) {
   return <span className="wf-skel" style={{ width: w, height: h }} aria-hidden="true" />;
 }
 
-export function KpiCard({ label, icon, tone, loading, value, sub, trend, progress }: {
+export function KpiCard({ label, icon, tone, loading, value, sub, trend, progress, onClick }: {
   label: string;
   icon: ReactNode;
   tone: Tone;
@@ -44,9 +44,17 @@ export function KpiCard({ label, icon, tone, loading, value, sub, trend, progres
   trend?: { text: string; tone: Tone } | null;
   /** 0–100 — renders a thin meter under the number. Omit when there's no real ratio. */
   progress?: number | null;
+  /** Navigates to the detail page this figure comes from (e.g. Total
+   * headcount -> Employee Directory). Omit for a card with no sensible
+   * drill-down target — it renders as a plain, non-interactive card. */
+  onClick?: () => void;
 }) {
+  const Root = onClick ? "button" : "div";
   return (
-    <div className="wf-kpi">
+    <Root
+      className={`wf-kpi${onClick ? " clickable" : ""}`}
+      {...(onClick ? { type: "button" as const, onClick } : {})}
+    >
       <div className="wf-kpi-top">
         <span className="wf-kpi-label">{label}</span>
         <span className={`wf-ico ${tone}`}>{icon}</span>
@@ -65,7 +73,7 @@ export function KpiCard({ label, icon, tone, loading, value, sub, trend, progres
           </>
         )}
       </div>
-    </div>
+    </Root>
   );
 }
 

@@ -75,21 +75,25 @@ export default function HRDashboard({ session }: Props) {
           label="TOTAL HEADCOUNT" icon={WfIcon.people} tone="brand" loading={loading}
           value={totalHeadcount} sub="new this month"
           trend={newThisMonth > 0 ? { text: `+${newThisMonth}`, tone: "ok" } : null}
+          onClick={() => router.push("/dashboard/employees")}
         />
         <KpiCard
           label="PRESENT TODAY" icon={WfIcon.check} tone="ok" loading={loading}
           value={presentToday} sub={`${attendancePct}% attendance`}
           progress={attendancePct}
+          onClick={() => router.push("/dashboard/attendance")}
         />
         <KpiCard
           label="PAYROLL READY" icon={WfIcon.wallet} tone="info" loading={loading}
           value={payrollReady} sub={`${payrollBlocked} records blocked`}
           trend={payrollBlocked > 0 ? { text: "Action", tone: "warn" } : null}
           progress={pct(payrollReady, payrollTotal)}
+          onClick={() => router.push("/dashboard/payroll")}
         />
         <KpiCard
           label="OPEN REQUESTS" icon={WfIcon.inbox} tone="warn" loading={loading}
           value={openRequests} sub={`${openRequests} awaiting you`}
+          onClick={() => router.push("/dashboard/approvals")}
         />
       </div>
 
