@@ -10,19 +10,28 @@ import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import type { ProfileForm } from "@/app/onboarding/_types";
 import DynamicStepFields from "@/app/onboarding/_components/DynamicStepFields";
 import TabDocuments, { type UploadedDoc } from "@/app/onboarding/_components/TabDocuments";
-import StepIndicator from "@/app/onboarding/_components/StepIndicator";
 import BasicDetailsCard, { type BasicDetails } from "@/app/onboarding/_components/BasicDetailsCard";
 import EducationChecklist, { type EducationEntry } from "@/app/onboarding/_components/EducationChecklist";
 import ExperienceList, { type ExperienceEntry } from "@/app/onboarding/_components/ExperienceList";
 import FamilyNominationStep, { type FamilyEntry, type NomineeEntry } from "@/app/onboarding/_components/FamilyNominationStep";
 import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/AssetsList";
+import HireWizardSidebar from "@/app/dashboard/hire/[hireActionId]/_components/HireWizardSidebar";
 import { EMPTY, PAN_RE, BUILTIN_STEPS, DOCUMENTS_STEP, type WizardStep } from "./_wizardSteps";
 
 // HR/Admin-side onboarding wizard — fills in an employee's onboarding profile
 // on their behalf (walk-in hires, or anyone who can't complete it themselves).
 // Reuses the exact same step-field components as the self-service wizard
-// (app/onboarding/page.tsx); the container logic here is deliberately
-// simpler — no step-locking (HR can jump freely), no login/logout chrome,
+// (app/onboarding/page.tsx), and now the same two-pane .wiz/.wiz-nav/
+// .wiz-main/.stephead/.wiz-body shell (aira-theme.css) the self-service
+// wizard and the Hire wizard both use — so all three onboarding-shaped
+// flows read as one consistent product instead of three different UIs for
+// the same underlying step-by-step idea. The nav here is still its own
+// small inline bit of markup (not a shared component) because the one
+// genuine behavioral difference stays: every step is always clickable
+// (free-jump, like HireWizardSidebar) rather than locked until the
+// previous step is saved (like OnboardingSidebar) — HR filling this out
+// needs to be able to jump ahead, e.g. to Documents, without being forced
+// through every step in order first. No login/logout chrome here either,
 // and Face ID is handled by pointing at the existing Face ID Registrations
 // admin page rather than an inline capture flow (that's an in-person capture
 // UX, not something to half-build here).
@@ -696,6 +705,9 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
     );
   }
 
+  const completedCount = Math.min(highestSaved + 1, steps.length);
+  const progressPct = steps.length > 0 ? Math.round((completedCount / steps.length) * 100) : 0;
+
   return (
     <>
       <div className="page-header">
@@ -708,14 +720,34 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
         </button>
       </div>
 
-      <StepIndicator
-        steps={steps}
-        currentStep={tab}
-        highestSaved={highestSaved}
-        onStepClick={setTab}
-      />
+      <div className="card" style={{ padding: 0, display: "flex", flexDirection: "column", height: "calc(100vh - 230px)", minHeight: 520 }}>
+        <div className="wiz" style={{ flex: 1, minHeight: 0 }}>
+          <HireWizardSidebar
+            steps={steps.map(s => ({ label: s.shortLabel, sub: s.label }))}
+            currentStep={tab}
+            highestSaved={highestSaved}
+            onStepClick={setTab}
+            missingByStep={{}}
+          />
 
-      <div className="card" style={{ padding: "1.75rem" }}>
+          <div className="wiz-main">
+            <div className="stephead">
+              <div>
+                <h3>{steps[tab].label.split(" ").slice(0, -1).join(" ")} <em className="hl">{steps[tab].label.split(" ").slice(-1)}</em></h3>
+                <p>Step {tab + 1} of {steps.length}</p>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--primary)" }}>{progressPct}% complete</div>
+                  <div style={{ height: 5, width: 100, borderRadius: 3, background: "var(--outline-v)", overflow: "hidden", marginTop: 4 }}>
+                    <div style={{ height: "100%", width: `${progressPct}%`, background: "var(--primary)", borderRadius: 3, transition: "width 0.3s ease" }} />
+                  </div>
+                </div>
+                <div className="stepcount">{String(tab + 1).padStart(2, "0")} / {String(steps.length).padStart(2, "0")}</div>
+              </div>
+            </div>
+
+      <div className="wiz-body">
         {saveErr && <div className="alert alert-error" style={{ marginBottom: "1.25rem" }}>{saveErr}</div>}
         {saveMsg && <div className="alert alert-success" style={{ marginBottom: "1.25rem" }}>{saveMsg}</div>}
 
@@ -804,8 +836,11 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
             error={assetErr}
           />
         )}
+      </div>
+          </div>
+        </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2rem", paddingTop: "1.25rem", borderTop: "1px solid var(--outline-v)" }}>
+        <div className="modal-foot">
           <button className="btn btn-ghost" onClick={() => setTab(t => Math.max(0, t - 1))} disabled={tab === 0 || saving} type="button">
             <i className="ti ti-arrow-left" /> Previous
           </button>
