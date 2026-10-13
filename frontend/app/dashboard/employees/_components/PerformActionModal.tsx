@@ -156,10 +156,11 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
     }
     if (actionType === "separation") {
       rows.push({ key: "employment_status", label: "Employee status", before: "Active", after: "Notice Period" });
-      rows.push({ key: "last_working_day", label: "Last working day", before: "—", after: lastWorkingDay ? DATE_FMT(lastWorkingDay) : null });
+      rows.push({ key: "notice_period_start", label: "Notice period starts", before: "Not set", after: effectiveFrom ? DATE_FMT(effectiveFrom) : null });
+      rows.push({ key: "last_working_day", label: "Last working day", before: "Not set", after: lastWorkingDay ? DATE_FMT(lastWorkingDay) : null });
     }
     return rows;
-  }, [actionType, positionId, positionOptions, annualCtc, managerId, managerOptions, workLocation, detail, employee, currentStatusLabel, lastWorkingDay, currentManagerName]);
+  }, [actionType, positionId, positionOptions, annualCtc, managerId, managerOptions, workLocation, detail, employee, currentStatusLabel, lastWorkingDay, effectiveFrom, currentManagerName]);
 
   const orgUnitLabel = employee.orgUnitName
     ? (employee.orgUnitParentName ? `${employee.orgUnitName} › ${employee.orgUnitParentName}` : employee.orgUnitName)

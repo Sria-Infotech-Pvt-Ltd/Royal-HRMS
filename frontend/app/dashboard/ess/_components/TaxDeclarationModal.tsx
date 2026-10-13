@@ -1,112 +1,143 @@
 "use client";
 
-// "New declaration" modal for TaxTab. The real backend model
-// (apps.payroll.models.EmployeeTaxDeclaration) has one row per employee per
-// financial year, with `declared_investments` as a single dict covering all
-// sections at once — it has no concept of a free-form "declaration type" +
-// single "amount" per submission. This modal reconciles that by treating
-// "Declaration type" as a select over the same fixed SECTIONS this app
-// already declares tax sections with (80C/80D/80CCD1B/HRA), and "Amount" as
-// the value to set for that one section — equivalent to what the section
-// grid this modal replaces already did per-field, just presented as one
-// focused action. Submitting merges that section into the existing
-// declared_investments dict (so other sections aren't wiped) and then calls
-// the real submit endpoint, so the declaration moves to "submitted" and
-// shows up for HR review immediately, the same as the old Save+Submit flow.
-//
-// "Financial year" is NOT employee-choosable — MyTaxDeclarationView.get_or_
-// create always resolves the current FY from company config, so this field
-// is rendered read-only rather than as a real select.
+// Tax declaration form. One declaration per employee per financial year (the server
+// creates it on first load), saved as a draft or sent to payroll for review. Follows
+// how Keka, Zoho Payroll and greytHR collect declarations and the particulars of
+// Form 124 (the Income-tax Act 2025 successor to Form 12BB):
+//   1. choose the tax regime (the deduction sections only apply to the old regime),
+//   2. house rent with landlord details, then the itemised investments and payments,
+//   3. income from a previous employer, and
+//   4. a confirmation that the information is correct — proofs are uploaded item by
+//      item afterwards from the Tax page (TaxProofsCard).
+// What can be declared, and each limit, comes from the server's schema.
 
 import { useState } from "react";
-import RequestModal from "@/components/RequestModal";
-import clientApi from "@/lib/clientApi";
-import { API } from "@/lib/api/endpoints";
-import { SECTIONS, type ApiTaxDeclaration } from "./TaxTab";
+import Modal from "@/components/Modal";
+import { useTaxDeclarationActions, useTaxDeclarationSchema } from "@/hooks/useTaxDeclaration";
+import { buildDeclaredInvestments, formStateFromDeclaration, validateHomeLoan, validateRent } from "@/lib/taxDeclarationForm";
+import type { ApiTaxDeclaration, TaxFormState, TaxRegime } from "@/types/taxDeclaration";
+import TaxDeclarationSections from "./TaxDeclarationSections";
+import TaxRentFields from "./TaxRentFields";
+import TaxPreviousEmployerFields from "./TaxPreviousEmployerFields";
 
 interface Props {
   current: ApiTaxDeclaration | null;
   onClose: () => void;
-  onSubmitted: () => void;
+  onSaved: () => void;
 }
 
-export default function TaxDeclarationModal({ current, onClose, onSubmitted }: Props) {
-  const [regime, setRegime] = useState<"old" | "new">(current?.tax_regime ?? "new");
-  const [section, setSection] = useState(SECTIONS[0].key);
-  const [amount, setAmount] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+const REGIME_OPTIONS: { value: TaxRegime; title: string; description: string }[] = [
+  {
+    value: "new", title: "New regime (Section 115BAC)",
+    description: "Lower slab rates and a ₹75,000 standard deduction. HRA, 80C, 80D and loan interest can't be claimed.",
+  },
+  {
+    value: "old", title: "Old regime",
+    description: "Higher slab rates, but you can claim HRA, 80C, 80D, home loan interest and other deductions.",
+  },
+];
+
+export default function TaxDeclarationModal({ current, onClose, onSaved }: Props) {
+  const { data: schema, loading: isLoadingSchema, error: schemaError } = useTaxDeclarationSchema();
+  const { isBusy, error, setError, save, saveAndSubmit } = useTaxDeclarationActions();
+  const [form, setForm] = useState<TaxFormState>(() => formStateFromDeclaration(current));
+  const [isConfirmed, setIsConfirmed] = useState(false);
+
+  const isOldRegime = form.regime === "old";
+
+  function buildInput() {
+    return { tax_regime: form.regime, declared_investments: buildDeclaredInvestments(form, current) };
+  }
+
+  function findProblem(): string | null {
+    if (!schema) return "The form is still loading.";
+    return isOldRegime ? validateRent(form, schema) ?? validateHomeLoan(form) : null;
+  }
+
+  async function handleSave() {
+    const problem = findProblem();
+    if (problem) { setError(problem); return; }
+    if (await save(buildInput())) onSaved();
+  }
 
   async function handleSubmit() {
-    setError(null);
-    if (amount.trim() === "" || Number(amount) < 0) {
-      setError("Enter a valid amount of zero or more.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const declared_investments = { ...(current?.declared_investments ?? {}), [section]: Number(amount) };
-      await clientApi.patch(API.payroll.myTaxDeclaration, { tax_regime: regime, declared_investments });
-      await clientApi.post(API.payroll.submitTaxDeclaration);
-      onSubmitted();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg ?? "Failed to submit declaration.");
-    } finally {
-      setSubmitting(false);
-    }
+    const problem = findProblem();
+    if (problem) { setError(problem); return; }
+    if (!isConfirmed) { setError("Please confirm that the information you have declared is correct."); return; }
+    if (await saveAndSubmit(buildInput())) onSaved();
   }
 
   return (
-    <RequestModal
-      title="Tax declaration"
+    <Modal
+      title={<><i className="ti ti-receipt-tax" style={{ marginRight: 8 }} />Tax declaration — FY {current?.financial_year ?? ""}</>}
       onClose={onClose}
-      onSubmit={handleSubmit}
-      submitting={submitting}
-      error={error}
+      closeDisabled={isBusy}
+      maxWidth={820}
+      scrollBody
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose} disabled={isBusy}>Cancel</button>
+          <button className="btn btn-ghost" onClick={handleSave} disabled={isBusy || !schema}>Save draft</button>
+          <button className="btn btn-filled" onClick={handleSubmit} disabled={isBusy || !schema}>
+            {isBusy ? "Saving…" : "Submit for review"}
+          </button>
+        </>
+      }
     >
-      <div className="form-row cols-2 mb-16">
-        <div className="field-group">
-          <label className="field-label">Financial Year</label>
-          <select className="field-input field-select" value={current?.financial_year ?? ""} disabled>
-            <option value={current?.financial_year ?? ""}>{current?.financial_year ?? "Current year"}</option>
-          </select>
-        </div>
-        <div className="field-group">
-          <label className="field-label">Tax Regime</label>
-          <select
-            className="field-input field-select"
-            value={regime}
-            onChange={e => setRegime(e.target.value as "old" | "new")}
-          >
-            <option value="new">New Regime (115BAC)</option>
-            <option value="old">Old Regime</option>
-          </select>
-        </div>
+      <div className="alert alert-info" style={{ marginBottom: 16 }}>
+        <i className="ti ti-info-circle" />
+        <span>
+          Tell payroll what you plan to claim this year so the right tax is deducted each month. You can submit the
+          proofs (receipts, certificates) item by item on the Tax page after you submit.
+        </span>
       </div>
-      <div className="form-row cols-2">
-        <div className="field-group">
-          <label className="field-label">Declaration Type</label>
-          <select
-            className="field-input field-select"
-            value={section}
-            onChange={e => setSection(e.target.value)}
-          >
-            {SECTIONS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-        </div>
-        <div className="field-group">
-          <label className="field-label">Amount (₹)</label>
-          <input
-            className="field-input"
-            type="number"
-            min={0}
-            placeholder="0"
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-          />
-        </div>
+
+      {(error || schemaError) && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error ?? schemaError}</div>}
+
+      <h4 style={{ margin: "0 0 8px", fontSize: 14 }}>Tax regime</h4>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, marginBottom: 20 }}>
+        {REGIME_OPTIONS.map(option => {
+          const isSelected = form.regime === option.value;
+          return (
+            <label
+              key={option.value}
+              style={{
+                display: "flex", gap: 10, padding: 14, borderRadius: 12, cursor: "pointer",
+                border: `1.5px solid ${isSelected ? "var(--primary)" : "var(--outline-v)"}`,
+                background: isSelected ? "color-mix(in srgb, var(--primary) 6%, transparent)" : "transparent",
+              }}
+            >
+              <input type="radio" name="tax-regime" checked={isSelected} onChange={() => setForm({ ...form, regime: option.value })} />
+              <span>
+                <span style={{ display: "block", fontWeight: 600, fontSize: 14 }}>{option.title}</span>
+                <span style={{ display: "block", fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>{option.description}</span>
+              </span>
+            </label>
+          );
+        })}
       </div>
-    </RequestModal>
+
+      {isLoadingSchema && <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>Loading form…</h3></div>}
+
+      {schema && isOldRegime && (
+        <>
+          <TaxRentFields schema={schema} form={form} onChange={setForm} />
+          <TaxDeclarationSections schema={schema} form={form} onChange={setForm} />
+        </>
+      )}
+      {schema && !isOldRegime && (
+        <div className="alert alert-info" style={{ marginBottom: 16 }}>
+          <i className="ti ti-info-circle" />
+          <span>No investments or rent to declare under the new regime. Switch to the old regime if you want to claim deductions.</span>
+        </div>
+      )}
+
+      {schema && <TaxPreviousEmployerFields form={form} onChange={setForm} />}
+
+      <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, marginTop: 4 }}>
+        <input type="checkbox" checked={isConfirmed} onChange={event => setIsConfirmed(event.target.checked)} style={{ marginTop: 3 }} />
+        I declare that the information given above is true and complete, and I will submit proofs when payroll asks for them.
+      </label>
+    </Modal>
   );
 }

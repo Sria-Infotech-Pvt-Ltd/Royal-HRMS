@@ -59,5 +59,6 @@ from .hr_help import (
     HRHelpRequestDetailView,
 )
 from .employee_documents import (
+    EmployeeDocumentSubmissionDetailView,
     EmployeeDocumentSubmissionListCreateView,
 )

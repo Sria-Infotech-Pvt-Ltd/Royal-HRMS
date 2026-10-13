@@ -1,9 +1,11 @@
 "use client";
 
-// ESS "Documents" self-service submission list — a small, metadata-only
-// "submit a document for verification" record. Deliberately separate from
-// the org-wide Document Center (app/dashboard/documents), which keeps its
-// own data layer in that route's _data.ts untouched.
+// ESS "Documents" self-service submission list — an employee submits a
+// document (category, optional expiry, the file itself) for HR to verify, can
+// view it again afterwards, and can delete it until HR has verified it.
+// Deliberately separate from the org-wide Document Center
+// (app/dashboard/documents), which keeps its own data layer in that route's
+// _data.ts untouched.
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
@@ -18,7 +20,12 @@ export interface ApiDocumentSubmission {
   category: DocumentCategory;
   category_display: string;
   file_name: string;
+  /** Short-lived signed link; null for submissions made before files were stored. */
+  file_url: string | null;
   expiry_date: string | null;
+  /** Key of the tax declaration item this document is proof for ("" for ordinary documents). */
+  tax_item: string;
+  reference_number: string;
   status: DocumentStatus;
   status_display: string;
   submitted_at: string;
@@ -30,30 +37,60 @@ export interface ApiDocumentSubmission {
 interface PagedResponse<T> { results: T[]; count: number }
 
 export interface DocumentSubmissionInput {
-  category: DocumentCategory;
-  file_name: string;
-  expiry_date: string | null;
+  /** Not needed for tax proofs — giving a tax_item makes it a tax proof. */
+  category?: DocumentCategory;
+  file: File;
+  expiry_date?: string | null;
+  tax_item?: string;
+  reference_number?: string;
+}
+
+function extractMessage(err: unknown, fallback: string): string {
+  const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  return message ?? fallback;
 }
 
 export function useMyDocuments() {
   const { data, loading, error, refetch } =
-    useFetch<PagedResponse<ApiDocumentSubmission>>(`${API.myDocuments.submissions}?page_size=20`);
+    useFetch<PagedResponse<ApiDocumentSubmission>>(`${API.myDocuments.submissions}?page_size=100`);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function submit(input: DocumentSubmissionInput): Promise<boolean> {
     setSubmitError(null);
     setSubmitting(true);
     try {
-      await clientApi.post(API.myDocuments.submissions, input);
+      const formData = new FormData();
+      if (input.category) formData.append("category", input.category);
+      formData.append("file", input.file);
+      if (input.expiry_date) formData.append("expiry_date", input.expiry_date);
+      if (input.tax_item) formData.append("tax_item", input.tax_item);
+      if (input.reference_number) formData.append("reference_number", input.reference_number);
+      await clientApi.post(API.myDocuments.submissions, formData);
       refetch();
       return true;
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setSubmitError(msg ?? "Failed to submit document. Please try again.");
+      setSubmitError(extractMessage(err, "Failed to submit document. Please try again."));
       return false;
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function remove(id: string): Promise<boolean> {
+    setDeleteError(null);
+    setDeletingId(id);
+    try {
+      await clientApi.delete(API.myDocuments.submissionDetail(id));
+      refetch();
+      return true;
+    } catch (err: unknown) {
+      setDeleteError(extractMessage(err, "Failed to delete document. Please try again."));
+      return false;
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -61,8 +98,12 @@ export function useMyDocuments() {
     submissions: data?.results ?? [],
     loading,
     error,
+    refetch,
     submitting,
     submitError,
     submit,
+    remove,
+    deletingId,
+    deleteError,
   };
 }

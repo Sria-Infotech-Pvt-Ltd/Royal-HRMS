@@ -12,6 +12,7 @@ from .views import (
     ExpenseListCreateView,
     ExpenseStatsView,
     ExpenseStatusListView,
+    EmployeeDocumentSubmissionDetailView,
     EmployeeDocumentSubmissionListCreateView,
     HolidayDetailView,
     HolidayListCreateView,
@@ -144,4 +145,5 @@ urlpatterns = [
     # defines "documents/<str:pk>/" for the shared Document Center, which
     # would swallow "documents/submissions/" as pk="submissions".
     path('document-submissions/', EmployeeDocumentSubmissionListCreateView.as_view(), name='employee-document-submission-list-create'),
+    path('document-submissions/<uuid:pk>/', EmployeeDocumentSubmissionDetailView.as_view(), name='employee-document-submission-detail'),
 ]

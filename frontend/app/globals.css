@@ -1143,6 +1143,79 @@ textarea.field-input {
   .voice-bot-float { animation: none; }
 }
 
+/* Request-leave form: fields on the left, a summary panel on the right (stacked on narrow screens). */
+.leave-request-layout {
+  display: grid;
+  gap: 32px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .leave-request-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+
+  .leave-request-layout > aside {
+    position: sticky;
+    top: 0;
+  }
+}
+
+/* Selectable option cards (e.g. the leave type picker) — a plain bordered tile whose
+   selected state is a primary border + faint tint. Written as real CSS rather than
+   Tailwind utilities because the global `button { border: none }` reset above beats
+   Tailwind's layered border utilities on <button> elements. */
+.option-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid var(--outline-v);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color 0.12s, background-color 0.12s, box-shadow 0.12s;
+}
+
+.option-card:hover {
+  border-color: var(--outline);
+}
+
+.option-card--selected,
+.option-card--selected:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+/* Segmented control — a few mutually exclusive options in one pill (e.g. leave duration). */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--outline-v);
+  border-radius: var(--radius);
+  background: var(--bg-mid);
+}
+
+.segmented button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--on-variant);
+  font-size: 13px;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.segmented button:hover {
+  color: var(--on-bg);
+}
+
+.segmented button[aria-checked="true"] {
+  background: var(--surface);
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(20, 21, 31, 0.1);
+}
+
 /* Upload zone */
 .upload-zone {
   border: 2px dashed var(--outline-v);

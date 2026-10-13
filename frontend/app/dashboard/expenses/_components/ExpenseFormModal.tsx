@@ -3,6 +3,9 @@
 import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useFetch } from "@/hooks/useFetch";
+import { formatDateSlash } from "@/lib/formatDate";
+import { currentFinancialYearStart, financialYearLabel } from "@/app/dashboard/my-payslip/_components/types";
 import RequestModal from "@/components/RequestModal";
 import DateInput from "@/components/shared/DateInput";
 
@@ -31,6 +34,29 @@ const CATEGORY_LABEL: Record<ExpenseCategory, string> = Object.fromEntries(
   CATEGORIES.map(c => [c.value, c.label]),
 ) as Record<ExpenseCategory, string>;
 
+// A bill may be dated up to this many months before the current financial year starts
+// (the backend enforces the same window — EXPENSE_BACKDATE_MONTHS in hrms/serializers.py).
+const BACKDATE_MONTHS = 4;
+const RECEIPT_PREVIEW_LIFETIME_MS = 60_000;
+
+function toIsoDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** Earliest/latest allowed expense date for the company's current financial year, plus a label for the hint. */
+function getExpenseDateWindow(startMonthName: string) {
+  const fyStart = currentFinancialYearStart(startMonthName);
+  const earliest = new Date(fyStart.getFullYear(), fyStart.getMonth() - BACKDATE_MONTHS, 1);
+  const latest = new Date(fyStart.getFullYear() + 1, fyStart.getMonth(), 0);
+  return { min: toIsoDate(earliest), max: toIsoDate(latest), fyLabel: financialYearLabel(fyStart), earliest, latest };
+}
+
+function openReceiptPreview(file: File) {
+  const url = URL.createObjectURL(file);
+  window.open(url, "_blank", "noopener");
+  setTimeout(() => URL.revokeObjectURL(url), RECEIPT_PREVIEW_LIFETIME_MS);
+}
+
 const EMPTY: FormState = { amount: "", category: "", date: "", description: "" };
 
 type FormErrors = Partial<Record<keyof FormState | "receipt" | "submit", string>>;
@@ -41,6 +67,8 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
   const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const [submitting,   setSubmitting]   = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { data: fyConfig } = useFetch<{ financial_year_start_month: string }>(API.settings.financialYear);
+  const dateWindow = fyConfig ? getExpenseDateWindow(fyConfig.financial_year_start_month) : null;
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -75,7 +103,11 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
     if (!form.amount)                  errs.amount   = "Amount is required.";
     else if (Number(form.amount) <= 0) errs.amount   = "Amount must be greater than zero.";
     if (!form.category)                errs.category = "Please select a category.";
-    if (!form.date)                    errs.date     = "Date is required.";
+    if (!form.date) {
+      errs.date = dateWindow
+        ? `Enter a date between ${formatDateSlash(dateWindow.earliest)} and ${formatDateSlash(dateWindow.latest)}.`
+        : "Date is required.";
+    }
     if (receiptFiles.length === 0)     errs.receipt  = "At least one receipt is required.";
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -147,8 +179,20 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
               <label className="field-label">
                 Expense Date <span style={{ color: "var(--error)" }}>*</span>
               </label>
-              <DateInput className={`field-input${errors.date ? " field-error" : ""}`} value={form.date} onChange={isoDate => setField("date", isoDate)} />
-              {errors.date && <p className="field-error-msg">{errors.date}</p>}
+              <DateInput
+                className={`field-input${errors.date ? " field-error" : ""}`}
+                value={form.date}
+                min={dateWindow?.min}
+                max={dateWindow?.max}
+                onChange={isoDate => setField("date", isoDate)}
+              />
+              {errors.date
+                ? <p className="field-error-msg">{errors.date}</p>
+                : dateWindow && (
+                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--on-variant)" }}>
+                    {dateWindow.fyLabel}: allowed {formatDateSlash(dateWindow.earliest)} – {formatDateSlash(dateWindow.latest)}
+                  </p>
+                )}
             </div>
           </div>
 
@@ -203,6 +247,15 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
                     <span style={{ color: "var(--on-variant)", fontSize: 11 }}>
                       {(file.size / 1024).toFixed(0)} KB
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => openReceiptPreview(file)}
+                      title="View receipt"
+                      aria-label={`View receipt ${file.name}`}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--on-variant)", padding: 2 }}
+                    >
+                      <i className="ti ti-eye" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => removeReceipt(idx)}

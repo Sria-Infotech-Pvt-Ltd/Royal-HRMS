@@ -1,6 +1,9 @@
 import re
 
 from rest_framework import serializers
+
+from .tax_declaration_schema import DETAILS_KEY
+from .tax_declaration_validation import validate_declared_investments
 from .models import (
     PayrollSettings,
     StatutoryConfig,
@@ -588,15 +591,26 @@ class EmployeeTaxDeclarationSerializer(serializers.ModelSerializer):
     status_display    = serializers.CharField(source='get_status_display', read_only=True)
     financial_year    = serializers.SerializerMethodField()
     approved_by_name  = serializers.SerializerMethodField()
+    deduction_summary = serializers.SerializerMethodField()
 
     class Meta:
         model  = EmployeeTaxDeclaration
         fields = [
             'id', 'employee_name', 'financial_year_start', 'financial_year',
-            'tax_regime', 'tax_regime_display', 'declared_investments',
+            'tax_regime', 'tax_regime_display', 'declared_investments', 'deduction_summary',
             'status', 'status_display', 'submitted_at', 'approved_at', 'approved_by_name',
             'created_at', 'updated_at',
         ]
+
+    def get_deduction_summary(self, obj: EmployeeTaxDeclaration) -> dict[str, float]:
+        """What each head is actually worth after the statutory limits (old regime only).
+        The view passes the employee's latest payslip basic/HRA in the context so the HRA
+        exemption can be worked out from declared rent."""
+        from .services_income_tax import deduction_breakdown
+        breakdown = deduction_breakdown(
+            obj.declared_investments, self.context.get('monthly_basic'), self.context.get('monthly_hra'),
+        )
+        return {head: float(amount) for head, amount in breakdown.items()}
 
     def get_financial_year(self, obj: EmployeeTaxDeclaration) -> str:
         return f'{obj.financial_year_start}-{str(obj.financial_year_start + 1)[2:]}'
@@ -616,12 +630,15 @@ class EmployeeTaxDeclarationSaveSerializer(serializers.ModelSerializer):
         fields = ['tax_regime', 'declared_investments']
 
     def validate_declared_investments(self, value):
-        if not isinstance(value, dict):
-            raise serializers.ValidationError('declared_investments must be an object of section -> amount.')
-        for section, amount in value.items():
-            try:
-                if float(amount) < 0:
-                    raise serializers.ValidationError(f'"{section}" amount cannot be negative.')
-            except (TypeError, ValueError):
-                raise serializers.ValidationError(f'"{section}" amount must be a number.')
+        try:
+            validate_declared_investments(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc))
+        details = value.get(DETAILS_KEY) or {}
+        hra = details.get('hra')
+        if hra and hra.get('landlord_pan'):
+            hra['landlord_pan'] = str(hra['landlord_pan']).strip().upper()
+        loan = details.get('home_loan')
+        if loan and loan.get('lender_pan'):
+            loan['lender_pan'] = str(loan['lender_pan']).strip().upper()
         return value

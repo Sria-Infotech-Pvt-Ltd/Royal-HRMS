@@ -229,7 +229,7 @@ def _compute_employee_payslip(
         Decimal('0'),
     )
 
-    income_tax = estimate_monthly_tds(gross, tax_regime, declared_investments)
+    income_tax = estimate_monthly_tds(gross, tax_regime, declared_investments, basic, hra)
 
     total_deductions = (
         lop_deduction + pf_employee + esi_employee + pt + lwf_employee + income_tax + adj_deduction

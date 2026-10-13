@@ -4,24 +4,15 @@
 // verification" screen. Deliberately NOT the org-wide Document Center
 // (app/dashboard/documents, still reachable from the sidebar's "Document
 // Center" nav item and from PoliciesAssetsTab's "Company policies" card):
-// that is a shared policies/forms/templates repository with real file
-// upload/preview/delete. This screen is a personal, per-employee record of
-// "I submitted document X for HR to verify" — per the spec, no file bytes
-// are stored, only submission metadata (category, filename, expiry).
+// that is a shared policies/forms/templates repository. This screen is a
+// personal, per-employee record of "I submitted document X for HR to verify"
+// — the employee can open the file again and delete it until HR verifies it.
 
-import { useRef, useState } from "react";
-import { useMyDocuments, type ApiDocumentSubmission, type DocumentCategory, type DocumentStatus } from "@/hooks/useMyDocuments";
+import { useState } from "react";
+import { useMyDocuments, type ApiDocumentSubmission, type DocumentStatus } from "@/hooks/useMyDocuments";
 import { formatDate } from "@/lib/formatDate";
-import DateInput from "@/components/shared/DateInput";
-
-const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
-  { value: "identity",   label: "Identity" },
-  { value: "education",  label: "Education" },
-  { value: "employment", label: "Employment" },
-  { value: "tax_proof",  label: "Tax proof" },
-  { value: "benefits",   label: "Benefits" },
-  { value: "other",      label: "Other" },
-];
+import ConfirmModal from "@/components/ConfirmModal";
+import DocumentSubmissionForm from "./DocumentSubmissionForm";
 
 const STATUS_BADGE: Record<DocumentStatus, string> = {
   pending:  "badge-warn",
@@ -29,8 +20,21 @@ const STATUS_BADGE: Record<DocumentStatus, string> = {
   rejected: "badge-error",
 };
 
+const ICON_BUTTON_STYLE = {
+  display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30,
+  border: "1px solid var(--outline-v)", borderRadius: 8, background: "var(--surface)",
+  color: "var(--on-variant)", cursor: "pointer", textDecoration: "none", flexShrink: 0,
+} as const;
+
 export default function MyDocumentsTab() {
-  const { submissions, loading, error, submitting, submitError, submit } = useMyDocuments();
+  const { submissions, loading, error, submitting, submitError, submit, remove, deletingId, deleteError } = useMyDocuments();
+  const [pendingDelete, setPendingDelete] = useState<ApiDocumentSubmission | null>(null);
+
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    await remove(pendingDelete.id);
+    setPendingDelete(null);
+  }
 
   return (
     <div>
@@ -41,109 +45,35 @@ export default function MyDocumentsTab() {
         </p>
       </div>
 
-      <SubmissionForm submitting={submitting} submitError={submitError} onSubmit={submit} />
+      <DocumentSubmissionForm submitting={submitting} submitError={submitError} onSubmit={submit} />
 
-      <MyDocumentsList submissions={submissions} loading={loading} error={error} />
-    </div>
-  );
-}
-
-function SubmissionForm({ submitting, submitError, onSubmit }: {
-  submitting: boolean;
-  submitError: string | null;
-  onSubmit: (input: { category: DocumentCategory; file_name: string; expiry_date: string | null }) => Promise<boolean>;
-}) {
-  const [category, setCategory]     = useState<DocumentCategory | "">("");
-  const [expiryDate, setExpiryDate] = useState("");
-  const [fileName, setFileName]     = useState("");
-  const [formError, setFormError]   = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  function handleFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
-    const picked = e.target.files?.[0];
-    // Spec: "This demo records submission metadata; it does not retain the
-    // file" — only the picked filename is captured, nothing is uploaded.
-    setFileName(picked ? picked.name : "");
-  }
-
-  async function handleSubmit() {
-    setFormError(null);
-    if (!category) {
-      setFormError("Please choose a document category.");
-      return;
-    }
-    if (!fileName) {
-      setFormError("Please choose a file.");
-      return;
-    }
-    const ok = await onSubmit({ category, file_name: fileName, expiry_date: expiryDate || null });
-    if (ok) {
-      setCategory("");
-      setExpiryDate("");
-      setFileName("");
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
-  return (
-    <div className={`upload-zone${fileName ? " upload-zone--active" : ""}`} style={{ marginBottom: 20, cursor: "default" }}>
-      <i className="ti ti-cloud-upload" />
-      <p style={{ fontWeight: 600, color: "var(--on-bg)", marginBottom: 2 }}>
-        Submit a document for verification
-      </p>
-      <small style={{ display: "block", marginBottom: 16 }}>
-        PDF, JPG or PNG · Maximum 10 MB. Only the document details are recorded; the file itself is not stored here, so keep the original ready for verification.
-      </small>
-
-      {(formError || submitError) && (
-        <div className="alert alert-error" style={{ marginBottom: 16, textAlign: "left" }}>
-          {formError ?? submitError}
-        </div>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, textAlign: "left", marginBottom: 16 }}>
-        <div className="field-group">
-          <label className="field-label">Document category</label>
-          <select
-            className="field-input field-select"
-            value={category}
-            onChange={e => setCategory(e.target.value as DocumentCategory)}
-          >
-            <option value="">Choose category</option>
-            {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div className="field-group">
-          <label className="field-label">Expiry date (if applicable)</label>
-          <DateInput className="field-input" value={expiryDate} onChange={isoDate => setExpiryDate(isoDate)} />
-        </div>
-      </div>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.jpg,.jpeg,.png"
-        onChange={handleFilePicked}
-        style={{ display: "none" }}
-        id="my-documents-file-input"
+      <MyDocumentsList
+        submissions={submissions}
+        loading={loading}
+        error={error ?? deleteError}
+        onDelete={setPendingDelete}
       />
-      <label htmlFor="my-documents-file-input" className="btn btn-ghost" style={{ cursor: "pointer" }}>
-        <i className="ti ti-file" /> {fileName || "Choose file"}
-      </label>
 
-      <div style={{ marginTop: 16 }}>
-        <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
-          {submitting ? "Submitting…" : "Submit for verification"}
-        </button>
-      </div>
+      {pendingDelete && (
+        <ConfirmModal
+          title="Delete this document?"
+          body={`This will permanently delete "${pendingDelete.file_name}" and the file stored with it. This cannot be undone.`}
+          confirmLabel="Delete"
+          danger
+          saving={deletingId === pendingDelete.id}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 }
 
-function MyDocumentsList({ submissions, loading, error }: {
+function MyDocumentsList({ submissions, loading, error, onDelete }: {
   submissions: ApiDocumentSubmission[];
   loading: boolean;
   error: string | null;
+  onDelete: (doc: ApiDocumentSubmission) => void;
 }) {
   return (
     <div className="card">
@@ -167,19 +97,44 @@ function MyDocumentsList({ submissions, loading, error }: {
         </div>
       ) : (
         <div style={{ padding: "4px 24px 16px" }}>
-          {submissions.map(doc => (
-            <div key={doc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-v)", gap: 12 }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{doc.file_name}</div>
-                <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                  {doc.category_display} · {doc.expiry_date ? formatDate(doc.expiry_date) : "No expiry"}
-                </div>
-              </div>
-              <span className={`badge ${STATUS_BADGE[doc.status]}`}>{doc.status_display.toUpperCase()}</span>
-            </div>
-          ))}
+          {submissions.map(doc => <DocumentRow key={doc.id} doc={doc} onDelete={onDelete} />)}
         </div>
       )}
+    </div>
+  );
+}
+
+function DocumentRow({ doc, onDelete }: { doc: ApiDocumentSubmission; onDelete: (doc: ApiDocumentSubmission) => void }) {
+  // HR-verified documents are part of the employee's record — the server refuses to delete them, so no button.
+  const canDelete = doc.status !== "verified";
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-v)", gap: 12 }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.file_name}</div>
+        <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
+          {doc.category_display} · {doc.expiry_date ? formatDate(doc.expiry_date) : "No expiry"}
+          {!doc.file_url && " · File not stored (submitted before uploads were kept)"}
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <span className={`badge ${STATUS_BADGE[doc.status]}`}>{doc.status_display.toUpperCase()}</span>
+        {doc.file_url && (
+          <a href={doc.file_url} target="_blank" rel="noopener noreferrer" title="View document" aria-label={`View ${doc.file_name}`} style={ICON_BUTTON_STYLE}>
+            <i className="ti ti-eye" style={{ fontSize: 16 }} />
+          </a>
+        )}
+        {canDelete && (
+          <button
+            type="button"
+            title="Delete document"
+            aria-label={`Delete ${doc.file_name}`}
+            onClick={() => onDelete(doc)}
+            style={{ ...ICON_BUTTON_STYLE, color: "var(--error)" }}
+          >
+            <i className="ti ti-trash" style={{ fontSize: 16 }} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

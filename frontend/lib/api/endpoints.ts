@@ -243,6 +243,7 @@ export const API = {
   // DOCUMENTS_BASE, which stays untouched for that shared repository).
   myDocuments: {
     submissions: "/document-submissions/",
+    submissionDetail: (id: string) => `/document-submissions/${id}/`,
   },
 
   expenses: {
@@ -505,6 +506,7 @@ export const API = {
 
     // Tax declarations
     taxDeclarations: "/payroll/tax-declarations/",
+    taxDeclarationSchema: "/payroll/tax-declarations/schema/",
     myTaxDeclaration: "/payroll/tax-declarations/me/",
     submitTaxDeclaration: "/payroll/tax-declarations/me/submit/",
     approveTaxDeclaration: (id: string) => `/payroll/tax-declarations/${id}/approve/`,

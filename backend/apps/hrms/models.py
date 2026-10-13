@@ -5,6 +5,7 @@ from django.db import models
 
 from core.storage import (
     AuthenticatedImageKitStorage,
+    employee_document_submission_upload_path,
     expense_receipt_upload_path,
     leave_document_upload_path,
     separation_document_upload_path,
@@ -936,8 +937,9 @@ class HRHelpRequest(models.Model):
 # DocumentListCreateView) — that model is a shared policies/forms/templates
 # repository with real file upload/preview/delete. This is a much smaller,
 # self-service "submit a document of mine for HR to verify" record. Per the
-# ESS Documents spec ("This demo records submission metadata; it does not
-# retain the file"), no file is actually stored — only the picked filename.
+# ESS Documents screen. The uploaded file is kept in private (signed-URL only)
+# storage so the employee can view it again; rows created before the file was
+# stored have no file, only the picked filename.
 
 EMP_DOC_IDENTITY   = 'identity'
 EMP_DOC_EDUCATION  = 'education'
@@ -969,13 +971,19 @@ EMPLOYEE_DOCUMENT_STATUS_CHOICES = [
 class EmployeeDocumentSubmission(models.Model):
     """A single employee's 'submit a document for verification' record —
     category + filename + optional expiry date in, a pending/verified/
-    rejected review state out. No file bytes are stored (see module note
-    above); `reviewed_at`/`reviewed_by` are provided for a future HR review
-    step, kept null until that review UI exists."""
+    rejected review state out. `file` is null only for rows submitted before
+    files were stored; `reviewed_at`/`reviewed_by` are provided for a future
+    HR review step, kept null until that review UI exists."""
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     employee     = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='document_submissions')
     category     = models.CharField(max_length=20, choices=EMPLOYEE_DOCUMENT_CATEGORY_CHOICES)
     file_name    = models.CharField(max_length=255)
+    file         = models.FileField(upload_to=employee_document_submission_upload_path, storage=AuthenticatedImageKitStorage(), null=True, blank=True)
+    # Set when the document is proof for one item of the employee's tax declaration
+    # (a key of payroll.tax_declaration_schema, or 'HRA'); blank for ordinary documents.
+    tax_item         = models.CharField(max_length=40, blank=True, default='', db_index=True)
+    # Policy / account / receipt number quoted on the proof, so HR can cross-check it.
+    reference_number = models.CharField(max_length=60, blank=True, default='')
     expiry_date  = models.DateField(null=True, blank=True)
     status       = models.CharField(max_length=10, choices=EMPLOYEE_DOCUMENT_STATUS_CHOICES, default=EMP_DOC_PENDING, db_index=True)
     reviewed_at  = models.DateTimeField(null=True, blank=True)

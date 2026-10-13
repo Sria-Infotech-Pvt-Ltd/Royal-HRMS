@@ -4,7 +4,7 @@ import logging
 import re
 import secrets
 import string
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from email.utils import formataddr
 
 from django.conf import settings
@@ -39,6 +39,22 @@ def get_financial_years(today: date, start_month_name: str) -> dict:
         'current_financial_year':  _fy_label(current_start),
         'next_financial_year':     _fy_label(current_start + 1),
     }
+
+
+def get_financial_year_bounds(today: date, start_month_name: str) -> tuple[date, date]:
+    """Return the (first day, last day) of the financial year containing `today`."""
+    start_month = datetime.strptime(start_month_name, '%B').month
+    start_year = get_fy_start_year(today, start_month_name)
+    return date(start_year, start_month, 1), date(start_year + 1, start_month, 1) - timedelta(days=1)
+
+
+def get_backdated_claim_window(today: date, start_month_name: str, lookback_months: int) -> tuple[date, date]:
+    """Return the (earliest, latest) date a claim/bill may carry: the current
+    financial year plus the last `lookback_months` months of the previous one
+    (e.g. FY Apr 2026 - Mar 2027 with 4 months back -> 1 Dec 2025 to 31 Mar 2027)."""
+    fy_start, fy_end = get_financial_year_bounds(today, start_month_name)
+    month_index = fy_start.year * 12 + (fy_start.month - 1) - lookback_months
+    return date(month_index // 12, month_index % 12 + 1, 1), fy_end
 
 
 def get_company_financial_year_config() -> dict:

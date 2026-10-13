@@ -15,11 +15,12 @@
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
-import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { formatDate } from "@/lib/formatDate";
-import ConfirmModal from "@/components/ConfirmModal";
 import TaxDeclarationModal from "./TaxDeclarationModal";
+import TaxDeclarationSummary from "./TaxDeclarationSummary";
+import TaxHrQueue from "./TaxHrQueue";
+import TaxProofsCard from "./TaxProofsCard";
+import type { ApiTaxDeclaration } from "@/types/taxDeclaration";
 import type { PagedResponse } from "@/app/dashboard/my-payslip/_components/types";
 import { currentFinancialYearStart } from "@/app/dashboard/my-payslip/_components/types";
 
@@ -28,36 +29,10 @@ interface PayslipTdsRow {
   income_tax: string;
 }
 
-export interface ApiTaxDeclaration {
-  id: string;
-  employee_name: string;
-  financial_year_start: number;
-  financial_year: string;
-  tax_regime: "old" | "new";
-  tax_regime_display: string;
-  declared_investments: Record<string, number>;
-  status: "draft" | "submitted" | "approved";
-  status_display: string;
-  submitted_at: string | null;
-  approved_at: string | null;
-  approved_by_name: string;
-}
-
 interface FinancialYearConfig {
   financial_year_start_month: string;
   current_financial_year: string;
 }
-
-export const SECTIONS = [
-  { key: "80C",     label: "Section 80C (PF, ELSS, life insurance, etc.)" },
-  { key: "80D",     label: "Section 80D (health insurance premium)" },
-  { key: "80CCD1B", label: "Section 80CCD(1B) (NPS)" },
-  { key: "HRA",     label: "HRA exemption (rent receipts)" },
-];
-
-const STATUS_BADGE: Record<string, string> = {
-  draft: "badge-neutral", submitted: "badge-warn", approved: "badge-success",
-};
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -73,14 +48,6 @@ function fyCaption(startMonthName: string, startYear: number): string {
 
 function formatInr(amount: number): string {
   return `₹${amount.toLocaleString("en-IN")}`;
-}
-
-function sectionsSummary(investments: Record<string, number>): string {
-  const parts = SECTIONS
-    .map(s => ({ key: s.key, amount: investments[s.key] ?? 0 }))
-    .filter(p => p.amount > 0)
-    .map(p => `${p.key} ${formatInr(p.amount)}`);
-  return parts.length > 0 ? parts.join(" · ") : "No investments declared yet";
 }
 
 interface Props {
@@ -109,7 +76,7 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
   })();
 
   const isLocked = mine?.status === "approved";
-  const hasSubmitted = !!mine && mine.status !== "draft";
+  const hasStarted = !!mine && (mine.status !== "draft" || Object.keys(mine.declared_investments).length > 0);
 
   return (
     <div>
@@ -126,7 +93,7 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
             title={isLocked ? "This financial year's declaration is already approved and can no longer be changed." : undefined}
             suppressHydrationWarning
           >
-            <i className="ti ti-plus" /> New declaration
+            <i className={`ti ${hasStarted ? "ti-edit" : "ti-plus"}`} /> {hasStarted ? "Edit declaration" : "Declare investments"}
           </button>
         </div>
       </div>
@@ -162,38 +129,9 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-file-invoice" /> My declarations</div>
-        </div>
-        <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-          Submitted items are reviewed by Payroll Operations.
-        </p>
-        {loading ? (
-          <div className="empty-state">
-            <i className="ti ti-loader-2 spin" />
-            <h3>Loading declaration…</h3>
-          </div>
-        ) : !hasSubmitted ? (
-          <div className="empty-state">
-            <i className="ti ti-file-invoice" />
-            <h3>No declarations submitted</h3>
-            <p>Start a declaration to see its approval status here.</p>
-          </div>
-        ) : (
-          <div style={{ padding: "4px 24px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0" }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>Tax declaration — FY {mine!.financial_year}</div>
-                <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                  {mine!.tax_regime_display} · {sectionsSummary(mine!.declared_investments)}
-                </div>
-              </div>
-              <span className={`badge ${STATUS_BADGE[mine!.status]}`}>{mine!.status_display}</span>
-            </div>
-          </div>
-        )}
-      </div>
+      <TaxDeclarationSummary declaration={mine ?? null} isLoading={loading} />
+
+      <TaxProofsCard declaration={mine ?? null} />
 
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
@@ -219,8 +157,8 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", gap: 12 }}>
             <div>
-              <div style={{ fontWeight: 600 }}>Upload investment proof</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Select Tax proof in Documents.</div>
+              <div style={{ fontWeight: 600 }}>Other tax documents</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Upload anything else under Documents → Tax proof.</div>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={onNavigateToDocuments}>
               <i className="ti ti-chevron-right" />
@@ -235,98 +173,7 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
         <TaxDeclarationModal
           current={mine ?? null}
           onClose={() => setShowNewDeclaration(false)}
-          onSubmitted={() => { setShowNewDeclaration(false); refetch(); }}
-        />
-      )}
-    </div>
-  );
-}
-
-function TaxHrQueue() {
-  const { data: all, loading, error, refetch } = useFetch<ApiTaxDeclaration[]>(API.payroll.taxDeclarations);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [approveErr, setApproveErr] = useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<ApiTaxDeclaration | null>(null);
-
-  async function approve(id: string) {
-    setConfirmTarget(null);
-    setBusyId(id);
-    setApproveErr(null);
-    try {
-      await clientApi.post(API.payroll.approveTaxDeclaration(id));
-      refetch();
-    } catch (err: unknown) {
-      const msg = (err as { message?: string })?.message || "Failed to approve this declaration. Please try again.";
-      setApproveErr(msg);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  const list = all ?? [];
-
-  return (
-    <div className="card">
-      <div className="card-header">
-        <div className="card-title"><i className="ti ti-list-details" /> HR review queue</div>
-      </div>
-      {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
-      {approveErr && (
-        <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>
-          <i className="ti ti-alert-circle" /> {approveErr}
-        </div>
-      )}
-      {loading ? (
-        <div className="empty-state">
-          <i className="ti ti-loader-2 spin" />
-          <h3>Loading…</h3>
-        </div>
-      ) : list.length === 0 ? (
-        <div className="empty-state">
-          <i className="ti ti-file-invoice" />
-          <h3>No declarations yet</h3>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Regime</th>
-                <th>Status</th>
-                <th>Submitted</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map(d => (
-                <tr key={d.id}>
-                  <td style={{ fontWeight: 600 }}>{d.employee_name}</td>
-                  <td>{d.tax_regime_display}</td>
-                  <td><span className={`badge ${STATUS_BADGE[d.status]}`}>{d.status_display}</span></td>
-                  <td style={{ color: "var(--on-variant)" }}>{d.submitted_at ? formatDate(d.submitted_at) : "—"}</td>
-                  <td>
-                    {d.status === "submitted" && (
-                      <button className="btn btn-filled btn-sm" onClick={() => setConfirmTarget(d)} disabled={busyId === d.id}>
-                        {busyId === d.id ? "Approving…" : "Approve"}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {confirmTarget && (
-        <ConfirmModal
-          title="Approve this tax declaration?"
-          body={`This locks ${confirmTarget.employee_name}'s FY ${confirmTarget.financial_year} declaration (${confirmTarget.tax_regime_display}, ${sectionsSummary(confirmTarget.declared_investments)}) — they will no longer be able to change their regime or declared investments for this financial year.`}
-          confirmLabel="Approve"
-          saving={busyId === confirmTarget.id}
-          onConfirm={() => approve(confirmTarget.id)}
-          onCancel={() => setConfirmTarget(null)}
+          onSaved={() => { setShowNewDeclaration(false); refetch(); }}
         />
       )}
     </div>

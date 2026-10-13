@@ -26,11 +26,14 @@ from .models import (
     HRHelpRequest,
     HR_HELP_RESOLVED,
     EmployeeDocumentSubmission,
+    EMP_DOC_TAX_PROOF,
 )
 
 logger = logging.getLogger(__name__)
 
 MAX_RECEIPT_SIZE   = 5 * 1024 * 1024
+# A bill may be dated up to this many months before the current financial year starts.
+EXPENSE_BACKDATE_MONTHS = 4
 ALLOWED_MIME_TYPES = {'image/jpeg', 'image/png', 'application/pdf'}
 
 
@@ -85,6 +88,18 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
     def validate_amount(self, value):
         if value <= 0:
             raise serializers.ValidationError('Amount must be greater than zero.')
+        return value
+
+    def validate_expense_date(self, value):
+        from django.utils import timezone
+        from apps.accounts.utils import get_backdated_claim_window, get_company_financial_year_config
+        start_month = get_company_financial_year_config()['financial_year_start_month']
+        earliest, latest = get_backdated_claim_window(timezone.localdate(), start_month, EXPENSE_BACKDATE_MONTHS)
+        if not earliest <= value <= latest:
+            raise serializers.ValidationError(
+                f'Expense date must be between {earliest:%d/%m/%Y} and {latest:%d/%m/%Y} '
+                '(the current financial year plus the last few months of the previous one).'
+            )
         return value
 
     def validate_category(self, value):
@@ -1181,26 +1196,65 @@ class HRHelpRequestRespondSerializer(serializers.ModelSerializer):
         return attrs
 
 
+MAX_EMPLOYEE_DOCUMENT_SIZE = 5 * 1024 * 1024
+
+
 class EmployeeDocumentSubmissionSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     status_display    = serializers.CharField(source='get_status_display', read_only=True)
+    file_url          = serializers.SerializerMethodField()
 
     class Meta:
         model  = EmployeeDocumentSubmission
         fields = [
-            'id', 'category', 'category_display', 'file_name', 'expiry_date',
+            'id', 'category', 'category_display', 'file_name', 'file_url', 'expiry_date',
+            'tax_item', 'reference_number',
             'status', 'status_display', 'submitted_at', 'reviewed_at', 'created_at', 'updated_at',
         ]
 
+    def get_file_url(self, obj: EmployeeDocumentSubmission) -> str | None:
+        # Short-lived signed URL (private storage) — null for rows submitted
+        # before files were stored.
+        return obj.file.url if obj.file else None
+
 
 class EmployeeDocumentSubmissionCreateSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(required=True, allow_empty_file=False)
+    # Optional when `tax_item` is given — proof for a tax declaration item is always 'tax_proof'.
+    category = serializers.ChoiceField(choices=EmployeeDocumentSubmission._meta.get_field('category').choices, required=False)
+
     class Meta:
         model  = EmployeeDocumentSubmission
-        fields = ['category', 'file_name', 'expiry_date']
+        fields = ['category', 'file', 'expiry_date', 'tax_item', 'reference_number']
 
-    def validate_file_name(self, value):
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError('Please choose a file.')
+    def validate_tax_item(self, value):
+        from apps.payroll.tax_declaration_schema import AMOUNT_KEYS
+        if value and value not in AMOUNT_KEYS | {'HRA'}:
+            raise serializers.ValidationError('This is not an item of the tax declaration.')
         return value
-        extra_kwargs = {'response': {'required': False}, 'assigned_to': {'required': False}}
+
+    def validate_reference_number(self, value):
+        return value.strip()
+
+    def validate(self, attrs):
+        if attrs.get('tax_item'):
+            attrs['category'] = EMP_DOC_TAX_PROOF
+        elif not attrs.get('category'):
+            raise serializers.ValidationError({'category': 'Please choose a document category.'})
+        return attrs
+
+    def validate_file(self, value):
+        if value.size > MAX_EMPLOYEE_DOCUMENT_SIZE:
+            raise serializers.ValidationError('Document must be under 5 MB.')
+        content_type = getattr(value, 'content_type', '')
+        if content_type not in ALLOWED_MIME_TYPES:
+            raise serializers.ValidationError('Only PDF, JPG, and PNG documents are accepted.')
+        content_error = _validate_file_content(value, content_type)
+        if content_error:
+            raise serializers.ValidationError(content_error)
+        return value
+
+    def create(self, validated_data):
+        # The display name is always the uploaded file's own name — never client-supplied separately.
+        validated_data['file_name'] = validated_data['file'].name[:255]
+        return super().create(validated_data)
