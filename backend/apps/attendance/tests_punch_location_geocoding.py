@@ -161,6 +161,58 @@ class ReverseGeocodeServiceTests(SimpleTestCase):
             self.assertIn(part, (long_name.strip(), 'R' * 60, 'S' * 40, 'Hyderabad', 'Telangana', 'India'))
 
     @patch('apps.attendance.services_geocoding.requests.get')
+    def test_real_street_level_response_keeps_house_number_and_road(self, mock_get):
+        # Shape captured from a live Nominatim zoom-18 response (public landmark).
+        mock_get.return_value = self._mock_full_response({
+            'amenity': 'State Bank of India', 'house_number': 'Q3', 'road': 'Cyber Towers–Madhapur Main Road',
+            'suburb': 'Madhapur', 'city_district': 'Greater Hyderabad Municipal Corporation West Zone',
+            'city': 'Hyderabad', 'county': 'Serilingampalle mandal', 'state_district': 'Ranga Reddy',
+            'state': 'Telangana', 'postcode': '500081', 'country': 'India', 'country_code': 'in',
+        }, name='State Bank of India')
+        self.assertEqual(
+            reverse_geocode(OFFICE_LAT, OFFICE_LON),
+            'State Bank of India, Q3, Cyber Towers–Madhapur Main Road, Madhapur, Hyderabad, Telangana, India, 500081',
+        )
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_real_response_without_road_invents_nothing(self, mock_get):
+        # Shape captured live: an unnamed road in OSM — no road/house data exists.
+        mock_get.return_value = self._mock_full_response({
+            'city': 'Surat', 'state_district': 'Surat', 'state': 'Gujarat',
+            'postcode': '359009', 'country': 'India', 'country_code': 'in',
+        }, name='')
+        self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), 'Surat, Gujarat, India, 359009')
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_apartment_complex_name_kept_when_matched_object_is_unnamed(self, mock_get):
+        mock_get.return_value = self._mock_full_response({
+            'residential': 'Sunshine Apartments', 'road': 'MG Road', 'suburb': 'Kondapur',
+            'city': 'Hyderabad', 'state': 'Telangana', 'country': 'India', 'postcode': '500084',
+        }, name='')
+        self.assertEqual(
+            reverse_geocode(OFFICE_LAT, OFFICE_LON),
+            'Sunshine Apartments, MG Road, Kondapur, Hyderabad, Telangana, India, 500084',
+        )
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_building_name_and_house_number_before_road(self, mock_get):
+        mock_get.return_value = self._mock_full_response({
+            'building': 'Tower A', 'house_number': '12', 'road': 'MG Road', 'neighbourhood': 'Kondapur',
+            'city': 'Hyderabad', 'state': 'Telangana', 'country': 'India', 'postcode': '500084',
+        }, name='')
+        self.assertEqual(
+            reverse_geocode(OFFICE_LAT, OFFICE_LON),
+            'Tower A, 12, MG Road, Kondapur, Hyderabad, Telangana, India, 500084',
+        )
+
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_road_kept_without_house_number_or_building(self, mock_get):
+        mock_get.return_value = self._mock_full_response({
+            'road': 'MG Road', 'hamlet': 'Gachibowli Village', 'city': 'Hyderabad', 'country': 'India',
+        }, name='')
+        self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), 'MG Road, Gachibowli Village, Hyderabad, India')
+
+    @patch('apps.attendance.services_geocoding.requests.get')
     def test_single_component_over_255_is_cut_to_fit(self, mock_get):
         mock_get.return_value = self._mock_full_response({'country': 'India'}, name='X' * 300)
         self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), 'X' * 255)

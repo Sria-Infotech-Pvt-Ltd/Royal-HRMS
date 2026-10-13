@@ -38,8 +38,14 @@ _TIMEOUT_SECONDS = 5
 
 _MAX_LABEL_LENGTH = 255  # AttendancePunch.location_label's max_length
 
+# Named building / apartment / complex / place keys Nominatim may return in the
+# address breakdown even when the matched object itself has no name.
+_PLACE_KEYS = (
+    'building', 'residential', 'amenity', 'shop', 'office', 'tourism', 'leisure',
+    'commercial', 'industrial', 'retail', 'craft', 'man_made', 'historic',
+)
 # Locality components, all kept when present (duplicates are dropped below).
-_LOCALITY_KEYS = ('neighbourhood', 'suburb', 'quarter')
+_LOCALITY_KEYS = ('hamlet', 'neighbourhood', 'suburb', 'quarter')
 _CITY_KEYS = ('city', 'town', 'village', 'municipality', 'county')
 
 
@@ -91,6 +97,7 @@ def reverse_geocode(latitude: float, longitude: float) -> str | None:
     candidates = [
         data.get('name'),
         address.get('house_name'),
+        *(address.get(k) for k in _PLACE_KEYS),
         address.get('house_number'),
         address.get('road'),
         *(address.get(k) for k in _LOCALITY_KEYS),
