@@ -6,6 +6,7 @@ import {
   COUNTRY_OPTIONS, ENTITY_TYPE_OPTIONS_FOREIGN, ENTITY_TYPE_OPTIONS_INDIA,
   REGISTRATION_NUMBER_CONFIG, entityComplianceHint, parseCin, parsePan,
 } from "../_data";
+import DateInput from "@/components/shared/DateInput";
 
 function Chip({ label, value, error }: { label: string; value: string; error?: boolean }) {
   return (
@@ -87,13 +88,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
         </div>
         <div className="field-group">
           <label className="field-label">Date of Incorporation</label>
-          <input
-            className="field-input"
-            type="date"
-            value={form.date_of_incorporation}
-            disabled={!canEdit}
-            onChange={e => onFieldChange("date_of_incorporation", e.target.value)}
-          />
+          <DateInput className="field-input" value={form.date_of_incorporation} disabled={!canEdit} onChange={isoDate => onFieldChange("date_of_incorporation", isoDate)} />
         </div>
       </div>
 

@@ -13,6 +13,7 @@ import BranchFilterSelect from "@/components/BranchFilterSelect";
 import type { DashboardData, PaginatedAttendance } from "@/types/attendance";
 import ImportModal from "./ImportModal";
 import AttendanceDetailDrawer from "./AttendanceDetailDrawer";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   onMutated?: () => void;
@@ -143,14 +144,7 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
         >
           <i className="ti ti-chevron-left" />
         </button>
-        <input
-          type="date"
-          className="field-input"
-          style={{ width: 160 }}
-          value={date}
-          max={todayISO()}
-          onChange={e => { setDate(e.target.value); setPage(1); }}
-        />
+        <DateInput className="field-input" style={{ width: 160 }} value={date} max={todayISO()} onChange={isoDate => { setDate(isoDate); setPage(1); }} />
         <button
           className="btn btn-ghost btn-sm"
           style={{ padding: "0 8px" }}

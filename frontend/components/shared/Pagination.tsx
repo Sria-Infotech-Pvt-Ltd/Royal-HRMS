@@ -16,43 +16,23 @@ interface Props {
 }
 
 export default function Pagination({ page, totalPages, totalCount, pageSize, itemLabel, onPageChange }: Props) {
-  if (totalPages <= 1) return null;
+  if (totalCount <= 0) return null;
 
   const rangeStart = (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, totalCount);
+  const lastPage = Math.max(totalPages, 1);
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16, flexWrap: "wrap", gap: 8 }}>
-      <span style={{ fontSize: 13, color: "var(--on-variant)" }}>
-        Showing {rangeStart}–{rangeEnd} of {totalCount} {itemLabel}
-      </span>
-      <div style={{ display: "flex", gap: 4 }}>
-        <button
-          className="btn btn-ghost btn-sm"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-          suppressHydrationWarning
-        >
-          <i className="ti ti-chevron-left" /> Prev
-        </button>
-        {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-          <button
-            key={p}
-            className={`btn btn-sm ${p === page ? "btn-filled" : "btn-ghost"}`}
-            onClick={() => onPageChange(p)}
-            suppressHydrationWarning
-          >
-            {p}
+    <div className="pager">
+      <span className="txt">Showing {rangeStart}–{rangeEnd} of {totalCount} {itemLabel}</span>
+      <div className="pgbtns">
+        <button className="pgbtn" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} suppressHydrationWarning>‹ Prev</button>
+        {Array.from({ length: lastPage }, (_, index) => index + 1).map(number => (
+          <button key={number} type="button" className={`pgbtn${number === page ? " on" : ""}`} onClick={() => onPageChange(number)} suppressHydrationWarning>
+            {number}
           </button>
         ))}
-        <button
-          className="btn btn-ghost btn-sm"
-          disabled={page >= totalPages}
-          onClick={() => onPageChange(page + 1)}
-          suppressHydrationWarning
-        >
-          Next <i className="ti ti-chevron-right" />
-        </button>
+        <button className="pgbtn" type="button" disabled={page >= lastPage} onClick={() => onPageChange(page + 1)} suppressHydrationWarning>Next ›</button>
       </div>
     </div>
   );

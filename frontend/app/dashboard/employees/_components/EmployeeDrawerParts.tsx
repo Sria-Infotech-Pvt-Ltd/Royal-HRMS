@@ -4,22 +4,22 @@
 
 import type { ReactNode } from "react";
 
-export const STATUS_BADGE: Record<string, string> = {
-  Active: "badge-success",
-  "Notice Period": "badge-warn",
-  Onboarding: "badge-info",
-  Exited: "badge-neutral",
+/** Status chip colours, as the reference's STATUS_CHIP map. */
+export const STATUS_CHIP: Record<string, string> = {
+  Active: "ok",
+  Onboarding: "warn",
+  Probation: "brand",
+  "Notice Period": "crit",
+  Exited: "",
 };
 
-/** Boxed, labelled section — the record's fields are grouped into these
-    cards (two per row on wide screens) rather than one long stacked list. */
-export function SectionCard({ icon, title, children }: { icon: string; title: string; children: ReactNode }) {
+/** Boxed, titled section of the record — the reference's `.rvcard`. Key/value
+    rows go in a `.kvlist`; pass `list={false}` for free-form content. */
+export function SectionCard({ title, children, list = true }: { title: string; children: ReactNode; list?: boolean }) {
   return (
-    <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "14px 16px", marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", marginBottom: 12 }}>
-        <i className={`ti ${icon}`} /> {title}
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>{children}</div>
+    <div className="rvcard">
+      <h4>{title.toUpperCase()}</h4>
+      {list ? <div className="kvlist">{children}</div> : children}
     </div>
   );
 }
@@ -29,13 +29,17 @@ export function Row({ label, value, valueNode, mono }: {
   label: string; value?: string | null; valueNode?: ReactNode; mono?: boolean;
 }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-      <div style={{ fontSize: 13, color: "var(--on-variant)" }}>{label}</div>
-      <div style={{ fontSize: 13, fontWeight: 700, textAlign: "right", fontFamily: mono ? "Menlo, Consolas, monospace" : undefined }}>
-        {valueNode ?? (value || "—")}
-      </div>
+    <div className="kv">
+      <span>{label}</span>
+      <b style={mono ? { fontFamily: "Menlo, Consolas, monospace" } : undefined}>{valueNode ?? (value || "—")}</b>
     </div>
   );
+}
+
+/** 'male' / 'single' -> 'Male' / 'Single' (the API stores these lower-case). */
+export function titleCase(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 /** Whole years between an ISO date-of-birth and today. */

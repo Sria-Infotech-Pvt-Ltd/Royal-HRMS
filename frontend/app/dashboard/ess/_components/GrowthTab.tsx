@@ -4,7 +4,7 @@
 // real "Request feedback" action, goals for the active review cycle and a
 // self/manager review timeline side by side, then a feedback-requests card.
 // Split into GrowthAppraisalBanner / GrowthGoalsCard / GrowthReviewTimeline /
-// GrowthFeedbackRequestsCard to keep this file under the project's line
+// FeedbackRequestsCard to keep this file under the project's line
 // guideline.
 
 import { useState } from "react";
@@ -13,9 +13,9 @@ import { API } from "@/lib/api/endpoints";
 import GrowthAppraisalBanner from "./GrowthAppraisalBanner";
 import GrowthGoalsCard, { GrowthGoal } from "./GrowthGoalsCard";
 import GrowthReviewTimeline from "./GrowthReviewTimeline";
-import GrowthFeedbackRequestsCard from "./GrowthFeedbackRequestsCard";
-import GrowthFeedbackRequestModal from "./GrowthFeedbackRequestModal";
 import { AppraisalActivityEntry } from "./AppraisalActivityHistory";
+import FeedbackRequestModal from "./FeedbackRequestModal";
+import FeedbackRequestsCard from "./FeedbackRequestsCard";
 
 interface ApiReview {
   cycle_name: string;
@@ -38,9 +38,9 @@ function cycleOpenedDate(review: ApiReview | null | undefined): string | null {
 }
 
 export default function GrowthTab({ onNavigateToAppraisals }: Props) {
-  const { data: goals, loading, error } = useFetch<GrowthGoal[]>(API.performance.myGoals);
+  const { data: goals, loading, error, refetch } = useFetch<GrowthGoal[]>(API.performance.myGoals);
   const { data: review } = useFetch<ApiReview>(API.performance.myReview);
-  const [showFeedbackRequest, setShowFeedbackRequest] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackKey, setFeedbackKey] = useState(0);
 
   const list = goals ?? [];
@@ -52,20 +52,24 @@ export default function GrowthTab({ onNavigateToAppraisals }: Props) {
         <GrowthAppraisalBanner cycleName={review.cycle_name} onNavigateToAppraisals={onNavigateToAppraisals} />
       )}
 
-      <div className="page-header">
-        <div>
-          <div className="page-title">Growth &amp; feedback</div>
-          <div className="page-sub">See your goals, review cycle and career conversations.</div>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-filled" onClick={() => setShowFeedbackRequest(true)} suppressHydrationWarning>
+      <div className="card mb-16">
+        <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div className="card-title"><i className="ti ti-heart-handshake" /> Growth &amp; feedback</div>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setShowFeedbackModal(true)}>
             Request feedback
           </button>
         </div>
+        <div style={{ padding: "0 20px 16px" }}>
+          <p style={{ margin: 0, fontSize: 12.5, color: "var(--on-variant)" }}>
+            See your goals, review cycle and career conversations.
+          </p>
+        </div>
       </div>
 
+      <FeedbackRequestsCard refreshKey={feedbackKey} />
+
       <div className="grid-2" style={{ alignItems: "stretch", marginBottom: 16 }}>
-        <GrowthGoalsCard cycleName={cycleName} goals={list} loading={loading} error={error} />
+        <GrowthGoalsCard cycleName={cycleName} goals={list} loading={loading} error={error} refetch={refetch} />
         {review && (
           <GrowthReviewTimeline
             input={{
@@ -80,13 +84,11 @@ export default function GrowthTab({ onNavigateToAppraisals }: Props) {
         )}
       </div>
 
-      <GrowthFeedbackRequestsCard key={feedbackKey} />
-
-      {showFeedbackRequest && (
-        <GrowthFeedbackRequestModal
+      {showFeedbackModal && (
+        <FeedbackRequestModal
           cycleName={cycleName}
-          onClose={() => setShowFeedbackRequest(false)}
-          onSubmitted={() => { setShowFeedbackRequest(false); setFeedbackKey(k => k + 1); }}
+          onClose={() => setShowFeedbackModal(false)}
+          onSent={() => setFeedbackKey(k => k + 1)}
         />
       )}
     </div>

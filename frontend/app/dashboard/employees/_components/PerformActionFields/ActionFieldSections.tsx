@@ -8,6 +8,7 @@
 import type { FieldOption } from "../../_data";
 import type { ReasonOption } from "./types";
 import SearchableSelect from "@/components/SearchableSelect";
+import DateInput from "@/components/shared/DateInput";
 
 interface SelectFieldProps {
   label: string;
@@ -118,7 +119,7 @@ export function SeparationFields({
       <SelectField label="Separation type" value={separationType} onChange={setSeparationType} options={typeOptions} placeholder="Select a type" />
       <div className="f">
         <label>Last working day <span className="req">*</span></label>
-        <input type="date" value={lastWorkingDay} onChange={e => setLastWorkingDay(e.target.value)} className="finput" />
+        <DateInput value={lastWorkingDay} onChange={isoDate => setLastWorkingDay(isoDate)} className="finput" />
       </div>
       <div className="f">
         <label>Employee status</label>

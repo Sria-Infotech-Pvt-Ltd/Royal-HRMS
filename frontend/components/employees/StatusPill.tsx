@@ -5,13 +5,14 @@
 // etc.) can label/tone it for whatever state they're showing (Active,
 // Notice Period, Onboarding, Inactive, ...).
 
-export type StatusPillTone = "success" | "warn" | "error" | "neutral";
+export type StatusPillTone = "success" | "warn" | "error" | "neutral" | "brand";
 
 const TONE_CLASS: Record<StatusPillTone, string> = {
   success: "ok",
   warn:    "warn",
   error:   "crit",
   neutral: "",
+  brand:   "brand",
 };
 
 interface Props {

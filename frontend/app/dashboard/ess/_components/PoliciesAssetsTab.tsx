@@ -273,7 +273,7 @@ function PolicyQuickReferenceGrid() {
         <div className="card-title"><i className="ti ti-info-circle" /> Policy quick reference</div>
       </div>
       <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-        Illustrative demo guidance only; the actual company policy must be supplied and approved before operational use.
+        A short summary only — the published policy document above is the authority if the two differ.
       </p>
       <div style={{ padding: "4px 24px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         {QUICK_REFERENCE.map(tile => (

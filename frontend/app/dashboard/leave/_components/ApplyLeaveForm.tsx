@@ -1,80 +1,91 @@
 "use client";
 
-// Compact "Leave request" modal, matching the reference layout exactly:
-// Leave type / Duration, From / To, Reason / Balance preview, then the
-// shared RequestModal footer. Leave type options come from the real,
-// DB-configured LeavePolicy rows (GET /leave/policy/) — all 8 of them
-// (casual/earned/sick/lwp/maternity/paternity/bereavement/comp_off), not
-// a hardcoded frontend subset.
-
 import { useState, useMemo } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
-import RequestModal from "@/components/RequestModal";
-import Modal from "@/components/Modal";
+import { useToast } from "@/components/ToastProvider";
 import { getLeaveYear } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
-  calcWorkingDays,
+  LEAVE_TYPES_LIST, LEAVE_TYPE_CONFIG,
+  calcWorkingDays, fmtDate,
 } from "../_data";
-import { type LeaveForm, BLANK } from "./applyLeaveFormHelpers";
+import { type LeaveForm, BLANK, Lbl, Err, dayName } from "./applyLeaveFormHelpers";
 import LeaveSubmittedScreen from "./LeaveSubmittedScreen";
-
-const DURATION_OPTIONS = [
-  { value: "full_day" as const,       label: "Full day"   },
-  { value: "half_morning" as const,   label: "First half" },
-  { value: "half_afternoon" as const, label: "Second half" },
-];
+import DateInput from "@/components/shared/DateInput";
 
 export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
-  const [form,       setForm]       = useState<LeaveForm>(BLANK);
-  const [reasonErr,  setReasonErr]  = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
-  const [submitted,  setSubmitted]  = useState<LeaveRequest | null>(null);
+  const { showToast } = useToast();
+  const [form,          setForm]          = useState<LeaveForm>(BLANK);
+  const [errors,        setErrors]        = useState<Record<string, string>>({});
+  const [submitting,    setSubmitting]    = useState(false);
+  const [submitted,     setSubmitted]     = useState<LeaveRequest | null>(null);
+  const [docFile,       setDocFile]       = useState<File | null>(null);
 
   const currentYear = getLeaveYear();
   const { data: balances } = useFetch<LeaveBalance[]>(API.leave.balance + `?year=${currentYear}`);
   const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
 
-  const balanceMap  = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
-  const leaveOptions = (policies ?? []).filter(p => p.is_active);
-  const balance     = balanceMap[form.leave_type];
-  const isHalfDay   = form.duration !== "full_day";
-  const toDate      = isHalfDay ? form.from_date : form.to_date;
+  const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
+  const policyMap  = Object.fromEntries((policies ?? []).map(p => [p.leave_type, p]));
 
-  const workDays = useMemo(
-    () => calcWorkingDays(form.from_date, toDate, form.duration, false),
-    [form.from_date, toDate, form.duration]
+  const ltConfig   = LEAVE_TYPE_CONFIG[form.leave_type];
+  const balance    = balanceMap[form.leave_type];
+  const policy     = policyMap[form.leave_type];
+  const isHalfDay       = form.duration !== "full_day";
+  const sandwichEnabled = policy?.sandwich_leave_enabled ?? false;
+  const workDays        = useMemo(
+    () => calcWorkingDays(form.from_date, form.to_date, form.duration, sandwichEnabled),
+    [form.from_date, form.to_date, form.duration, sandwichEnabled]
   );
+  const available     = balance ? Number(balance.available_days) : 0;
+  const convertToLop   = policy?.convert_to_lop ?? false;
+  const exceedsBalance = !ltConfig.isLwp && workDays > available && workDays > 0;
+  // With convert_to_lop on, exceeding balance is allowed — the shortfall is
+  // processed as LOP by the backend rather than blocking submission. This is
+  // only the instant client estimate; once the server preview loads it takes over.
+  const overLimit = exceedsBalance && !convertToLop;
 
-  const previewUrl = (form.leave_type && form.from_date && toDate)
+  // Server-side preview — fires once leave_type, start_date, and end_date are
+  // all selected. Gives the authoritative breakdown (holidays, week-offs,
+  // balance) that the client-side calcWorkingDays estimate above can't see.
+  const previewEndDate = isHalfDay ? form.from_date : form.to_date;
+  const canPreview      = !!(form.leave_type && form.from_date && previewEndDate);
+  const previewUrl = canPreview
     ? `${API.leave.requests}?action=preview`
       + `&leave_type=${encodeURIComponent(form.leave_type)}`
       + `&start_date=${encodeURIComponent(form.from_date)}`
-      + `&end_date=${encodeURIComponent(toDate)}`
+      + `&end_date=${encodeURIComponent(previewEndDate)}`
       + `&duration=${encodeURIComponent(form.duration)}`
     : null;
-  const { data: preview } = useFetch<LeavePreview>(previewUrl);
+  const { data: preview, loading: previewLoading } = useFetch<LeavePreview>(previewUrl);
 
-  const requestedDays = preview?.actual_leave_days ?? (workDays > 0 ? workDays : 0);
-  const available     = balance ? Number(balance.available_days) : null;
+  const previewHolidays = preview?.company_holidays ?? [];
+  const previewWeekOffs = preview?.week_offs ?? [];
   const insufficientBalance = !!preview && !preview.sufficient_balance && !preview.lop_enabled;
 
   function setField<K extends keyof LeaveForm>(key: K, val: LeaveForm[K]) {
+    setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
     setForm(prev => ({ ...prev, [key]: val }));
   }
 
   function validate(): boolean {
-    setError(null);
-    setReasonErr(null);
-    if (!form.from_date) { setError("Please select a start date."); return false; }
-    if (!isHalfDay && !form.to_date) { setError("Please select an end date."); return false; }
-    if (!isHalfDay && form.to_date < form.from_date) { setError("End date must be on or after start date."); return false; }
-    if (form.reason.trim().length < 10) { setReasonErr("Reason must be at least 10 characters."); return false; }
-    if (insufficientBalance) { setError("Insufficient leave balance for the selected dates."); return false; }
-    return true;
+    const e: Record<string, string> = {};
+    if (!form.from_date)                                    e.from_date = "Start date is required.";
+    if (!isHalfDay && !form.to_date)                        e.to_date   = "End date is required.";
+    if (!isHalfDay && form.from_date && form.to_date && form.to_date < form.from_date)
+                                                            e.to_date   = "End date must be on or after start date.";
+    if (!form.reason.trim())                                e.reason    = "Please provide a reason.";
+    if (form.reason.trim().length < 10)                     e.reason    = "Reason must be at least 10 characters.";
+    if (ltConfig.requiresDoc && !docFile)                   e.doc       = "Supporting document is required for this leave type.";
+    // Once the server preview has loaded, it's authoritative — defer to
+    // insufficientBalance below instead of this local, holiday-blind estimate.
+    if (!preview && overLimit)                              e.from_date = `Only ${available} working day(s) available.`;
+    if (workDays <= 0 && form.from_date)                    e.from_date = "Selected date range has no working days.";
+    if (insufficientBalance)                                e.from_date = "Insufficient leave balance for the selected dates.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
   }
 
   async function handleSubmit() {
@@ -82,123 +93,380 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
     setSubmitting(true);
     try {
       const fd = new FormData();
-      fd.append("leave_type", form.leave_type);
-      fd.append("duration",   form.duration);
-      fd.append("start_date", form.from_date);
-      fd.append("end_date",   toDate);
-      fd.append("reason",     form.reason);
+      fd.append("leave_type",          form.leave_type);
+      fd.append("duration",            form.duration);
+      fd.append("start_date",          form.from_date);
+      fd.append("end_date",            isHalfDay ? form.from_date : form.to_date);
+      fd.append("reason",              form.reason);
+      fd.append("contact_during_leave", form.contact_during_leave);
+      fd.append("handover_to",         form.handover_to);
+      fd.append("handover_notes",      form.handover_notes);
+      if (docFile) fd.append("document", docFile);
+
       const res = await clientApi.post(API.leave.requests, fd);
       setSubmitted(res.data.data as LeaveRequest);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || "Failed to submit leave request. Please try again.");
+      showToast(msg || "Failed to submit leave request. Please try again.", "error");
     } finally {
       setSubmitting(false);
     }
   }
 
+  // ── Success screen ───────────────────────────────────────────────────────────
+
   if (submitted) {
     return (
-      <Modal title="Leave request" onClose={onCancel} size="lg" bodyStyle={{ padding: 0 }}>
-        <LeaveSubmittedScreen
-          submitted={submitted}
-          leaveType={form.leave_type}
-          onApplyAnother={() => { setForm(BLANK); setSubmitted(null); }}
-          onCancel={onCancel}
-        />
-      </Modal>
+      <LeaveSubmittedScreen
+        submitted={submitted}
+        leaveType={form.leave_type}
+        onApplyAnother={() => { setForm(BLANK); setDocFile(null); setSubmitted(null); }}
+        onCancel={onCancel}
+      />
     );
   }
 
-  const balancePreviewText = form.duration && available !== null
-    ? `${available} days available · ${requestedDays || 0} day${requestedDays === 1 ? "" : "s"} requested`
-    : requestedDays
-      ? `No balance tracked · ${requestedDays} day${requestedDays === 1 ? "" : "s"} requested`
-      : "Select dates to preview";
+  const INPUT     = "w-full border border-[var(--outline-v)] rounded-xl px-3.5 py-2.5 text-sm text-[var(--on-bg)] bg-[var(--surface)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-c)] placeholder:text-[var(--on-variant)]";
+  const INPUT_ERR = "w-full border border-[var(--error)] rounded-xl px-3.5 py-2.5 text-sm text-[var(--on-bg)] bg-[var(--error-c)] outline-none";
 
   return (
-    <RequestModal
-      title="Leave request"
-      onClose={onCancel}
-      onSubmit={handleSubmit}
-      submitting={submitting}
-      error={error}
-      submitLabel="Submit request"
-    >
-      <div className="form-row cols-2 mb-16">
-        <div className="field-group">
-          <label className="field-label">Leave type</label>
-          <select
-            className="field-input field-select"
-            value={form.leave_type}
-            onChange={e => setField("leave_type", e.target.value as LeaveForm["leave_type"])}
-          >
-            {leaveOptions.map(p => (
-              <option key={p.leave_type} value={p.leave_type}>{p.leave_type_display}</option>
-            ))}
-          </select>
-        </div>
-        <div className="field-group">
-          <label className="field-label">Duration</label>
-          <select
-            className="field-input field-select"
-            value={form.duration}
-            onChange={e => setField("duration", e.target.value as LeaveForm["duration"])}
-          >
-            {DURATION_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
+    <div className="flex flex-col gap-0">
+
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-xs text-[var(--on-variant)] mb-4">
+        <button onClick={onCancel} className="hover:text-[var(--on-bg)]">Leave Management</button>
+        <i className="ti ti-chevron-right text-[var(--outline-v)]" />
+        <span className="text-[var(--on-bg)] font-medium">Apply for Leave</span>
       </div>
 
-      <div className="form-row cols-2 mb-16">
-        <div className="field-group">
-          <label className="field-label">From</label>
-          <input
-            type="date" className="field-input"
-            value={form.from_date}
-            onChange={e => setField("from_date", e.target.value)}
-          />
-        </div>
-        <div className="field-group">
-          <label className="field-label">To</label>
-          <input
-            type="date" className="field-input"
-            value={toDate}
-            min={form.from_date}
-            disabled={isHalfDay}
-            onChange={e => setField("to_date", e.target.value)}
-            style={isHalfDay ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
-          />
-        </div>
-      </div>
+      <div className="flex flex-col md:flex-row gap-5 items-start">
 
-      <div className="form-row cols-2">
-        <div className="field-group">
-          <label className="field-label">Reason</label>
-          <textarea
-            className="field-input"
-            rows={3}
-            value={form.reason}
-            onChange={e => setField("reason", e.target.value)}
-            placeholder="Reason for leave"
-          />
-          {reasonErr && <p style={{ fontSize: 11, color: "var(--error)", marginTop: 4 }}>{reasonErr}</p>}
-        </div>
-        <div className="field-group">
-          <label className="field-label">Balance preview</label>
-          <div
-            style={{
-              fontSize: 13, color: "var(--on-bg)", background: "var(--bg-low)",
-              border: "1px solid var(--outline-v)", borderRadius: "var(--radius)",
-              padding: "10px 14px", minHeight: 76, display: "flex", alignItems: "center",
-            }}
-          >
-            {balancePreviewText}
+        {/* ── Left column — form ───────────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 flex flex-col gap-4">
+
+          {/* Leave type selector */}
+          <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm p-5">
+            <Lbl text="Select Leave Type" required />
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-1">
+              {LEAVE_TYPES_LIST.map(lt => {
+                const selected = form.leave_type === lt.key;
+                const bal      = balanceMap[lt.key];
+                const avail    = bal ? Number(bal.available_days) : 0;
+                const total    = bal ? Number(bal.total_days) : 0;
+                const pct      = total > 0 ? Math.min(100, Math.round((avail / total) * 100)) : 0;
+                return (
+                  <button key={lt.key} onClick={() => setField("leave_type", lt.key)}
+                    className={["relative text-left p-3.5 rounded-xl border-2 transition-all",
+                      selected ? "shadow-md" : "border-[var(--outline-v)] hover:border-[var(--outline)] bg-[var(--bg-low)] hover:bg-[var(--surface)]"].join(" ")}
+                    style={selected ? { borderColor: lt.color, background: lt.bg } : {}}>
+                    {selected && (
+                      <span className="absolute top-2.5 right-2.5 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: lt.color }}>
+                        <i className="ti ti-check text-white" style={{ fontSize: 9 }} />
+                      </span>
+                    )}
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-2.5" style={{ background: lt.bg }}>
+                      <i className={`ti ${lt.icon} text-sm`} style={{ color: lt.color }} />
+                    </div>
+                    <div className="text-xs font-bold text-[var(--on-bg)] mb-0.5">{lt.label}</div>
+                    {lt.isLwp ? (
+                      <div className="text-xs text-[var(--on-variant)]">Unpaid · Unlimited</div>
+                    ) : (
+                      <>
+                        <div className="text-xs font-semibold mb-1.5" style={{ color: lt.color }}>{avail}d left</div>
+                        <div className="h-1.5 rounded-full bg-[var(--bg-high)] overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: lt.color }} />
+                        </div>
+                        {/* Only worth surfacing once something has actually been carried forward. */}
+                        {bal && bal.carried_forward > 0 && (
+                          <div className="text-[10px] text-[var(--on-variant)] mt-1">
+                            {bal.carry_forward_expiry_date ? `Expires ${fmtDate(bal.carry_forward_expiry_date)}` : "No expiry"}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {policy?.policy_note && (
+              <div className="mt-3 flex items-start gap-2 text-xs text-[var(--on-variant)] bg-[var(--bg-low)] rounded-xl px-3.5 py-2.5 border border-[var(--outline-v)]">
+                <i className="ti ti-info-circle mt-0.5 flex-shrink-0" style={{ color: ltConfig.color }} />
+                <span>{policy.policy_note}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Duration + dates */}
+          <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm p-5">
+            <div className="flex flex-col gap-5">
+              <div>
+                <Lbl text="Duration" />
+                <div className="flex gap-2 flex-wrap">
+                  {([
+                    { val: "full_day"       as const, icon: "ti-sun",      label: "Full Day"            },
+                    { val: "half_morning"   as const, icon: "ti-sun-high", label: "Half Day · Morning"  },
+                    { val: "half_afternoon" as const, icon: "ti-sunset-2", label: "Half Day · Afternoon"},
+                  ]).map(opt => (
+                    <button key={opt.val}
+                      onClick={() => { setField("duration", opt.val); if (opt.val !== "full_day") setField("to_date", ""); }}
+                      className={["flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all",
+                        form.duration === opt.val ? "text-[var(--on-primary)] border-[var(--primary)]" : "border-[var(--outline-v)] text-[var(--on-variant)] bg-[var(--bg-low)] hover:bg-[var(--surface)]"].join(" ")}
+                      style={form.duration === opt.val ? { background: "var(--primary)" } : {}}>
+                      <i className={`ti ${opt.icon} text-sm`} />
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Lbl text="Start Date" required />
+                  <div className="relative">
+                    <i className="ti ti-calendar absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--on-variant)] text-sm pointer-events-none" />
+                    <DateInput value={form.from_date} onChange={isoDate => setField("from_date", isoDate)} className={[(errors.from_date ? INPUT_ERR : INPUT), "pl-9"].join(" ")} />
+                  </div>
+                  {form.from_date && !errors.from_date && (
+                    <p className="text-xs text-[var(--on-variant)] mt-1">{dayName(form.from_date)}, {fmtDate(form.from_date)}</p>
+                  )}
+                  <Err msg={errors.from_date} />
+                </div>
+                <div>
+                  <Lbl text="End Date" required={!isHalfDay} />
+                  <div className="relative">
+                    <i className="ti ti-calendar absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--on-variant)] text-sm pointer-events-none" />
+                    <DateInput value={isHalfDay ? form.from_date : form.to_date} min={form.from_date} disabled={isHalfDay} onChange={isoDate => setField("to_date", isoDate)} className={[(errors.to_date ? INPUT_ERR : INPUT), "pl-9", isHalfDay ? "opacity-40 cursor-not-allowed" : ""].join(" ")} />
+                  </div>
+                  <Err msg={errors.to_date} />
+                </div>
+              </div>
+
+              {/* Instant client-side estimate — shown only until the authoritative
+                  server preview below arrives, so the two never disagree on screen. */}
+              {!preview && workDays > 0 && (
+                <div className={["flex items-center justify-between gap-3 rounded-xl px-4 py-3 border",
+                  overLimit ? "bg-[var(--error-c)] border-[var(--error)]" : "border-[var(--primary-c)]"].join(" ")}
+                  style={overLimit ? {} : { background: "color-mix(in srgb, var(--primary) 5%, transparent)" }}>
+                  <div className="flex items-center gap-2">
+                    <i className={`ti ${overLimit ? "ti-alert-triangle text-[var(--error)]" : "ti-calendar-check"} text-sm`}
+                      style={!overLimit ? { color: "var(--primary)" } : {}} />
+                    <span className={`text-sm font-bold ${overLimit ? "text-[var(--error)]" : "text-[var(--primary)]"}`}>
+                      {workDays} working day{workDays !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  {!ltConfig.isLwp && overLimit && (
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[var(--error-c)] text-[var(--error)]">
+                      Exceeds balance by {workDays - available}d
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {previewLoading && canPreview && (
+                <div className="flex items-center gap-1.5 text-xs text-[var(--on-variant)]">
+                  <i className="ti ti-loader-2 animate-spin" /> Checking balance and holidays…
+                </div>
+              )}
+
+              {preview && (
+                <div className="rounded-xl border border-[var(--outline-v)] bg-[var(--bg-low)] px-4 py-3.5 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={["text-sm font-bold", preview.lop_days > 0 ? "text-[var(--warn)]" : "text-[var(--primary)]"].join(" ")}>
+                      {preview.actual_leave_days} working day{preview.actual_leave_days !== 1 ? "s" : ""}
+                    </span>
+                    {preview.lop_days > 0 && (
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[var(--warn-c)] text-[var(--warn)]">
+                        {preview.lop_days}d will be LOP
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-y-1.5 text-sm border-t border-[var(--outline-v)] pt-3">
+                    <span className="text-[var(--on-variant)]">Calendar Days</span>
+                    <span className="font-semibold text-[var(--on-bg)] text-right">{preview.calendar_days}</span>
+                    <span className="text-[var(--on-variant)]">Actual Leave Days</span>
+                    <span className="font-semibold text-[var(--on-bg)] text-right">{preview.actual_leave_days}</span>
+                    <span className="text-[var(--on-variant)]">Available Balance</span>
+                    <span className="font-semibold text-[var(--on-bg)] text-right">{preview.available_balance}</span>
+                    <span className="text-[var(--on-variant)]">Leave Days Used</span>
+                    <span className="font-semibold text-[var(--on-bg)] text-right">{preview.leave_days_used}</span>
+                    <span className="text-[var(--on-variant)]">LOP Days</span>
+                    <span className={["font-semibold text-right", preview.lop_days > 0 ? "text-[var(--warn)]" : "text-[var(--on-bg)]"].join(" ")}>
+                      {preview.lop_days}
+                    </span>
+                  </div>
+
+                  {previewHolidays.length > 0 && (
+                    <div className="border-t border-[var(--outline-v)] pt-2.5">
+                      <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1.5">Company Holidays</p>
+                      <div className="flex flex-col gap-1">
+                        {previewHolidays.map(h => (
+                          <div key={`${h.date}-${h.name}`} className="flex items-center justify-between text-xs text-[var(--on-variant)]">
+                            <span>{h.name}</span>
+                            {/* Backend sends a pre-formatted display string (e.g. "15 Aug"),
+                                not an ISO date — render as-is, do not pass through fmtDate. */}
+                            <span className="text-[var(--on-variant)]">{h.date}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {previewWeekOffs.length > 0 && (
+                    <div className="border-t border-[var(--outline-v)] pt-2.5">
+                      <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1.5">Week-Offs</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {previewWeekOffs.map(w => (
+                          <span key={w.date} className="text-xs text-[var(--on-variant)] bg-[var(--surface)] border border-[var(--outline-v)] rounded-full px-2.5 py-0.5">
+                            {fmtDate(w.date)} · {w.day}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {preview?.warning && (
+                <div className="flex items-start gap-2 text-xs text-[var(--info)] bg-[var(--info-c)] border border-[var(--info)] rounded-lg px-3.5 py-2.5">
+                  <i className="ti ti-info-circle mt-0.5 flex-shrink-0" />
+                  <span>{preview.warning}</span>
+                </div>
+              )}
+
+              {insufficientBalance && (
+                <div className="flex items-start gap-2 text-xs text-[var(--error)] bg-[var(--error-c)] border border-[var(--error)] rounded-lg px-3.5 py-2.5">
+                  <i className="ti ti-alert-triangle mt-0.5 flex-shrink-0" />
+                  <span>Insufficient leave balance for the selected dates. This request cannot be submitted.</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Reason + Document */}
+          <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm p-5 flex flex-col gap-5">
+            <div>
+              <Lbl text="Reason for Leave" required />
+              <textarea value={form.reason} onChange={e => setField("reason", e.target.value)}
+                placeholder="Briefly describe the reason for your leave request…"
+                rows={4} maxLength={500}
+                className={[(errors.reason ? INPUT_ERR : INPUT), "resize-none"].join(" ")} />
+              <div className="flex justify-between mt-1">
+                <Err msg={errors.reason} />
+                <span className={`text-xs ml-auto ${form.reason.length > 450 ? "text-[var(--warn)]" : "text-[var(--on-variant)]"}`}>
+                  {form.reason.length}/500
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Lbl text="Supporting Document" />
+                {ltConfig.requiresDoc
+                  ? <span className="text-xs font-semibold text-[var(--error)] -mt-1.5">(Required)</span>
+                  : <span className="text-xs text-[var(--on-variant)] -mt-1.5">(Optional)</span>}
+              </div>
+              {docFile ? (
+                <div className="flex items-center gap-3 p-3.5 bg-[var(--success-c)] border border-[var(--success)] rounded-xl">
+                  <i className="ti ti-file-check text-[var(--success)] text-lg" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[var(--success)] truncate">{docFile.name}</p>
+                    <p className="text-xs text-[var(--success)]">Attached successfully</p>
+                  </div>
+                  <button onClick={() => setDocFile(null)} className="text-[var(--on-variant)] hover:text-[var(--error)]">
+                    <i className="ti ti-x" />
+                  </button>
+                </div>
+              ) : (
+                <label className={["flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl py-7 px-4 cursor-pointer transition-all",
+                  errors.doc ? "border-[var(--error)] bg-[var(--error-c)]" : "border-[var(--outline-v)] bg-[var(--bg-low)] hover:border-[var(--primary)] hover:bg-[color-mix(in_srgb,var(--primary)_6%,transparent)]"].join(" ")}>
+                  <i className="ti ti-cloud-upload text-[var(--on-variant)] text-2xl" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-[var(--on-bg)]">Click to upload or drag & drop</p>
+                    <p className="text-xs text-[var(--on-variant)] mt-0.5">PDF, JPG, PNG · Max 5 MB</p>
+                  </div>
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) setDocFile(f); }} />
+                </label>
+              )}
+              <Err msg={errors.doc} />
+            </div>
+          </div>
+
+          {/* Handover */}
+          <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm p-5 flex flex-col gap-4">
+            <div className="flex items-center gap-2 mb-1">
+              <i className="ti ti-arrow-forward text-sm" style={{ color: "var(--primary)" }} />
+              <span className="text-sm font-semibold text-[var(--on-bg)]">Handover & Contact</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Lbl text="Handover To" />
+                <input type="text" value={form.handover_to} onChange={e => setField("handover_to", e.target.value)}
+                  placeholder="Colleague name" className={INPUT} />
+              </div>
+              <div>
+                <Lbl text="Emergency Contact" />
+                <input type="text" value={form.contact_during_leave} onChange={e => setField("contact_during_leave", e.target.value)}
+                  placeholder="+91 9876543210" className={INPUT} />
+              </div>
+            </div>
+            <div>
+              <Lbl text="Handover Notes" />
+              <textarea value={form.handover_notes} onChange={e => setField("handover_notes", e.target.value)}
+                placeholder="Pending tasks, important context…" rows={2} maxLength={300}
+                className={[INPUT, "resize-none"].join(" ")} />
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between gap-3 flex-wrap py-2">
+            <button onClick={onCancel}
+              className="px-5 py-2.5 rounded-xl border border-[var(--outline-v)] text-sm font-medium text-[var(--on-variant)] hover:bg-[var(--bg-low)]">
+              Cancel
+            </button>
+            <button onClick={handleSubmit} disabled={submitting || insufficientBalance}
+              className="flex items-center gap-2 px-7 py-2.5 rounded-xl text-sm font-semibold text-[var(--on-primary)] shadow-md"
+              style={{ background: submitting || insufficientBalance ? "var(--primary-c)" : "var(--primary)", cursor: submitting || insufficientBalance ? "not-allowed" : "pointer" }}>
+              {submitting
+                ? <><i className="ti ti-loader-2" /> Submitting…</>
+                : <><i className="ti ti-send" /> Submit Request</>}
+            </button>
           </div>
         </div>
+
+        {/* ── Right sidebar ────────────────────────────────────────────────────── */}
+        <div className="w-full md:w-72 flex-shrink-0 flex flex-col gap-4 sticky top-4">
+          <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm p-4">
+            <p className="text-xs font-bold text-[var(--on-variant)] uppercase tracking-wide mb-3">Leave Balance</p>
+            <div className="flex items-center gap-2 mb-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: ltConfig.bg }}>
+                <i className={`ti ${ltConfig.icon} text-sm`} style={{ color: ltConfig.color }} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[var(--on-bg)]">{ltConfig.label}</p>
+                {ltConfig.isLwp
+                  ? <p className="text-xs text-[var(--on-variant)]">Unpaid · No limit</p>
+                  : <p className="text-xs text-[var(--on-variant)]">{available} of {balance ? Number(balance.total_days) : 0} days left</p>
+                }
+              </div>
+            </div>
+            {!ltConfig.isLwp && balance && (
+              <>
+                <div className="h-2 rounded-full bg-[var(--bg-high)] overflow-hidden mb-1.5">
+                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.round((available / Number(balance.total_days)) * 100))}%`, background: ltConfig.color }} />
+                </div>
+                <div className="flex justify-between text-xs text-[var(--on-variant)]">
+                  <span>{Number(balance.used_days)} used</span>
+                  <span>{available} remaining</span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
       </div>
-    </RequestModal>
+
+    </div>
   );
 }

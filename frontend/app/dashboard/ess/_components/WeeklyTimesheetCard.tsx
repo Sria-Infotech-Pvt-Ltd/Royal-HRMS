@@ -45,7 +45,7 @@ export default function WeeklyTimesheetCard({ compact = false }: { compact?: boo
         <div>
           <div style={{ fontWeight: 700, fontSize: 15 }}>Weekly timesheet</div>
           <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>
-            {data.hours_logged} of {data.target_hours} hours logged for the current demo week.
+            {data.hours_logged} of {data.target_hours} hours logged for the current week.
           </div>
         </div>
         <button className="btn btn-filled btn-sm" onClick={submit} disabled={submitting || data.submitted}>

@@ -66,6 +66,7 @@ export const API = {
     promotions: (id: string) => `/employees/${id}/promotions/`,
     actionHistory: (id: string) => `/employees/${id}/action-history/`,
     auditTrail: (id: string) => `/employees/${id}/audit-trail/`,
+    actionRequests: (id: string) => `/employees/${id}/action-requests/`,
     profile: (id: string) => `/employees/${id}/profile/`,
     reportingManager: (id: string) => `/employees/${id}/reporting-manager/`,
     hr: (id: string) => `/employees/${id}/hr/`,
@@ -254,6 +255,12 @@ export const API = {
     approve: (id: string) => `/expenses/${id}/approve/`,
   },
 
+  actionRequests: {
+    list:    "/action-requests/",
+    approve: (id: string) => `/action-requests/${id}/approve/`,
+    reject:  (id: string) => `/action-requests/${id}/reject/`,
+    cancel:  (id: string) => `/action-requests/${id}/cancel/`,
+  },
   performance: {
     cycles:            "/performance/cycles/",
     cycleDetail:       (id: string) => `/performance/cycles/${id}/`,
@@ -264,6 +271,11 @@ export const API = {
     teamReviews:       "/performance/reviews/team/",
     reviewDetail:      (id: string) => `/performance/reviews/${id}/`,
     submitManagerReview: (id: string) => `/performance/reviews/${id}/submit/`,
+    returnReview:      (id: string) => `/performance/reviews/${id}/return/`,
+    reviewGoals:       (id: string) => `/performance/reviews/${id}/goals/`,
+    feedbackRequests:  "/performance/feedback-requests/",
+    feedbackColleagues: "/performance/feedback-requests/colleagues/",
+    feedbackRespond:   (id: string) => `/performance/feedback-requests/${id}/respond/`,
     calibrateReview:   (id: string) => `/performance/reviews/${id}/calibrate/`,
     publishReview:     (id: string) => `/performance/reviews/${id}/publish/`,
     acknowledgeReview: (id: string) => `/performance/reviews/${id}/acknowledge/`,
@@ -317,6 +329,8 @@ export const API = {
     balanceImport:         "/leave/balance/import/",
     balanceImportValidate: "/leave/balance/import/validate/",
     requests: "/leave/requests/",
+    /** HR records leave on an employee's behalf (needs leave.record). */
+    recordForEmployee: "/leave/requests/record/",
     requestDetail: (id: string) => `/leave/requests/${id}/`,
     approve: (id: string) => `/leave/requests/${id}/approve/`,
     stats: "/leave/stats/",

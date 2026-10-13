@@ -36,6 +36,9 @@ const ALL_NAV: NavEntry[] = [
   // page) — the ESS "Growth"/"Appraisals" self-service tabs still use the
   // same apps.performance backend and are unaffected; only this top-level
   // admin entry point is hidden.
+  // Reporting Managers only (performance.review_team): the appraisal review workspace.
+  // HR's cycle-management view stays reachable by URL but is deliberately not in the nav.
+  { id: "performance", icon: "ti-star", label: "Performance", path: "/dashboard/performance", permission: "performance.review_team" },
   { id: "branches", icon: "ti-building-skyscraper", label: "Company Codes", path: "/dashboard/branches", permission: "branches.view" },
 
   { section: "Time & Pay" },
@@ -46,7 +49,7 @@ const ALL_NAV: NavEntry[] = [
   { id: "expenses", icon: "ti-wallet", label: "Expenses", path: "/dashboard/expenses", permission: "expenses.view" },
 
   { section: "HR Ops" },
-  { id: "approvals", icon: "ti-checks", label: "Approvals", path: "/dashboard/approvals", permission: ["leave.approve", "expenses.approve"] },
+  { id: "approvals", icon: "ti-checks", label: "Approvals", path: "/dashboard/approvals", permission: ["leave.approve", "expenses.approve", "payroll.edit", "employees.approve", "employees.raise_action"] },
   // permission: null — every employee can create/view their own request here,
   // not just Manager/HR; the page itself scopes what each viewer sees.
   { id: "separation", icon: "ti-logout", label: "Separation & Exit", path: "/dashboard/separation", permission: null },

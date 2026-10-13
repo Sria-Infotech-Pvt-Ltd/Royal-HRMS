@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
+import DateInput from "@/components/shared/DateInput";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -196,13 +197,13 @@ function AuditLogPageInner() {
           {/* Date from */}
           <div className="field-group" style={{ minWidth: 140 }}>
             <label className="field-label">From</label>
-            <input className="field-input" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            <DateInput className="field-input" value={dateFrom} onChange={isoDate => setDateFrom(isoDate)} />
           </div>
 
           {/* Date to */}
           <div className="field-group" style={{ minWidth: 140 }}>
             <label className="field-label">To</label>
-            <input className="field-input" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+            <DateInput className="field-input" value={dateTo} onChange={isoDate => setDateTo(isoDate)} />
           </div>
 
           {/* Actor search */}

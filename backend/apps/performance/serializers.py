@@ -82,16 +82,38 @@ class PerformanceReviewSerializer(serializers.ModelSerializer):
             'metric_reference', 'what_changed', 'key_strengths', 'development_areas',
             'support_needed', 'next_cycle_goal', 'self_rating', 'self_submitted_at',
             'manager', 'manager_name', 'manager_rating', 'manager_notes', 'manager_submitted_at',
-            'hr_calibrated_at', 'published_at', 'acknowledged_at',
+            'manager_development_plan', 'manager_next_checkin', 'returned_at', 'return_reason',
+            'hr_calibrated_at', 'final_rating', 'calibration_note', 'published_at', 'acknowledged_at',
+            'acknowledgement_comment',
             'status', 'status_display', 'activity_history', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'employee', 'employee_name', 'employee_code', 'cycle', 'cycle_name',
             'cycle_self_review_due', 'cycle_manager_review_due',
             'self_submitted_at', 'manager', 'manager_name', 'manager_submitted_at',
-            'hr_calibrated_at', 'published_at', 'acknowledged_at',
+            'manager_development_plan', 'manager_next_checkin', 'returned_at', 'return_reason',
+            'hr_calibrated_at', 'final_rating', 'calibration_note', 'published_at', 'acknowledged_at',
+            'acknowledgement_comment',
             'status', 'status_display', 'activity_history', 'created_at', 'updated_at',
         ]
+
+    # What the review's own employee may NOT see before HR publishes the
+    # outcome: the manager's assessment and HR's calibrated rating. (The
+    # artifact's rule: "Manager notes and calibrated ratings stay hidden until
+    # the outcome is published".) Applied only when the requester is the
+    # employee; the reporting manager and HR always see everything.
+    _HIDDEN_FROM_EMPLOYEE_UNTIL_PUBLISHED = (
+        'manager_rating', 'manager_notes', 'manager_development_plan', 'manager_next_checkin',
+        'final_rating', 'calibration_note',
+    )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        if request and request.user.pk == instance.employee_id and not instance.published_at:
+            for field in self._HIDDEN_FROM_EMPLOYEE_UNTIL_PUBLISHED:
+                data[field] = None if field == 'manager_next_checkin' else ''
+        return data
 
     def get_manager_name(self, obj: PerformanceReview) -> str:
         return obj.manager.full_name if obj.manager_id else ''
@@ -116,6 +138,9 @@ class PerformanceReviewSerializer(serializers.ModelSerializer):
         if obj.self_submitted_at:
             entries.append({'label': 'Self-review submitted', 'actor': obj.employee.full_name, 'at': obj.self_submitted_at,
                              'note': 'Submitted for manager review'})
+        if obj.returned_at:
+            entries.append({'label': 'Returned for changes', 'actor': obj.manager.full_name if obj.manager_id else 'Manager', 'at': obj.returned_at,
+                            'note': obj.return_reason})
         if obj.manager_submitted_at:
             entries.append({'label': 'Manager review submitted', 'actor': obj.manager.full_name if obj.manager_id else 'Manager', 'at': obj.manager_submitted_at,
                              'note': 'Submitted to HR for calibration'})
@@ -146,4 +171,4 @@ class SelfReviewSaveSerializer(serializers.ModelSerializer):
 class ManagerReviewSaveSerializer(serializers.ModelSerializer):
     class Meta:
         model  = PerformanceReview
-        fields = ['manager_rating', 'manager_notes']
+        fields = ['manager_rating', 'manager_notes', 'manager_development_plan', 'manager_next_checkin']

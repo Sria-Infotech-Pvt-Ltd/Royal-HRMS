@@ -7,6 +7,7 @@ import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
 import type { Position } from "@/types/orgStructure";
 import type { EmployeeOption } from "./OrgStructureClient";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   position: Position | null;
@@ -89,22 +90,11 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
           <label className="field-label">Effective from <span style={{ color: "var(--error)" }}>*</span></label>
-          <input
-            className={`field-input${dateError ? " field-error" : ""}`}
-            type="date"
-            value={effectiveFrom}
-            onChange={e => { setEffectiveFrom(e.target.value); setDateError(null); }}
-          />
+          <DateInput className={`field-input${dateError ? " field-error" : ""}`} value={effectiveFrom} onChange={isoDate => { setEffectiveFrom(isoDate); setDateError(null); }} />
         </div>
         <div className="field-group">
           <label className="field-label">Effective to <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
-          <input
-            className="field-input"
-            type="date"
-            min={effectiveFrom}
-            value={effectiveTo}
-            onChange={e => { setEffectiveTo(e.target.value); setDateError(null); }}
-          />
+          <DateInput className="field-input" min={effectiveFrom} value={effectiveTo} onChange={isoDate => { setEffectiveTo(isoDate); setDateError(null); }} />
         </div>
       </div>
       {dateError && <p className="field-error-msg" style={{ marginTop: -10, marginBottom: 14 }}>{dateError}</p>}

@@ -12,6 +12,7 @@ import { useToast } from "@/components/ToastProvider";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
+import DateInput from "@/components/shared/DateInput";
 
 interface BranchOption { id: number; branch_name: string }
 
@@ -278,7 +279,7 @@ export default function WeeklyOffAssignmentTab() {
           </div>
           <div className="field-group">
             <label className="field-label">Effective From</label>
-            <input type="date" className="field-input" value={assignDate} onChange={e => setAssignDate(e.target.value)} />
+            <DateInput className="field-input" value={assignDate} onChange={isoDate => setAssignDate(isoDate)} />
           </div>
           <p style={{ fontSize: 11, color: "var(--on-variant)" }}>
             Past attendance is never affected — this pattern applies from the effective date forward only.
@@ -340,7 +341,7 @@ export default function WeeklyOffAssignmentTab() {
           </div>
           <div className="field-group">
             <label className="field-label">Effective From</label>
-            <input type="date" className="field-input" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
+            <DateInput className="field-input" value={bulkDate} onChange={isoDate => setBulkDate(isoDate)} />
           </div>
         </Modal>
       )}

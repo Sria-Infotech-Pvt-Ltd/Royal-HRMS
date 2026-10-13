@@ -12,6 +12,8 @@ interface Props {
   locked:    boolean;
   lockedBranchName?: string;
   width?:    number;
+  /** "reference" renders the Employee Directory reference's `.sel` dropdown instead of the app's field select. */
+  variant?:  "default" | "reference";
 }
 
 // Renders either a full "All Branches" dropdown (system_admin) or a single,
@@ -22,12 +24,17 @@ interface Props {
 // not Branch.branch_code — it was previously mislabeled "Company Code(s)",
 // which just doesn't match what it actually filters by. Labeled "Location"
 // here to match the real data source instead of relabeling the data.
-export default function BranchFilterSelect({ branches, value, onChange, locked, lockedBranchName, width = 180 }: Props) {
+export default function BranchFilterSelect({ branches, value, onChange, locked, lockedBranchName, width = 180, variant = "default" }: Props) {
+  const isReference = variant === "reference";
   if (locked) {
     const label = lockedBranchName || "—";
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 6 }} title="Scoped to your Location">
-        <select className="field-input field-select" style={{ width, background: "var(--bg-low)", cursor: "not-allowed" }} value={label} disabled>
+        <select
+          className={isReference ? "sel" : "field-input field-select"}
+          style={isReference ? { cursor: "not-allowed", opacity: 0.8 } : { width, background: "var(--bg-low)", cursor: "not-allowed" }}
+          value={label} disabled
+        >
           <option value={label}>{label}</option>
         </select>
         <i className="ti ti-lock" style={{ color: "var(--on-variant)", fontSize: 14 }} />
@@ -44,7 +51,10 @@ export default function BranchFilterSelect({ branches, value, onChange, locked, 
   // internal DOM value differs, which isn't safe to change without touching
   // every consumer.
   return (
-    <select className="field-input field-select" style={{ width }} value={value} onChange={e => onChange(e.target.value)}>
+    <select
+      className={isReference ? "sel" : "field-input field-select"}
+      style={isReference ? undefined : { width }} value={value} onChange={e => onChange(e.target.value)}
+    >
       <option value="">All Locations</option>
       {branches.map(b => <option key={b.id} value={b.branch_name}>{b.branch_name}</option>)}
     </select>

@@ -16,6 +16,7 @@ import AppraisalGoalCard, { AppraisalGoalFormValue } from "./AppraisalGoalCard";
 import AppraisalStageTracker from "./AppraisalStageTracker";
 import AppraisalActivityHistory, { AppraisalActivityEntry } from "./AppraisalActivityHistory";
 import AppraisalReflectionFields, { AppraisalReflectionForm } from "./AppraisalReflectionFields";
+import AppraisalOutcomeCard from "./AppraisalOutcomeCard";
 
 interface ApiGoal {
   id: string;
@@ -44,6 +45,15 @@ interface ApiReview {
   hr_calibrated_at: string | null;
   published_at: string | null;
   acknowledged_at: string | null;
+  returned_at: string | null;
+  return_reason: string;
+  manager_rating: string;
+  manager_notes: string;
+  manager_development_plan: string;
+  manager_next_checkin: string | null;
+  final_rating: string;
+  calibration_note: string;
+  acknowledgement_comment: string;
   status: string;
   status_display: string;
   activity_history: AppraisalActivityEntry[];
@@ -61,6 +71,7 @@ const EMPTY_GOAL_VALUE: AppraisalGoalFormValue = {
 
 const STATUS_LINK_LABEL: Record<string, string> = {
   not_started:    "Self-review draft",
+  returned:       "Returned for changes",
   self_review:    "Awaiting manager review",
   hr_calibration: "Awaiting HR calibration",
   published:      "Published",
@@ -155,11 +166,11 @@ export default function AppraisalsTab() {
     }
   }
 
-  async function handleAcknowledge(): Promise<void> {
+  async function handleAcknowledge(comment: string): Promise<void> {
     if (!review) return;
     setErr(null); setMsg(null); setAcknowledging(true);
     try {
-      await clientApi.post(API.performance.acknowledgeReview(review.id));
+      await clientApi.post(API.performance.acknowledgeReview(review.id), { comment });
       setMsg("Outcome acknowledged.");
       refetchReview();
     } catch (e: unknown) {
@@ -170,7 +181,9 @@ export default function AppraisalsTab() {
     }
   }
 
-  if (reviewLoading || goalsLoading) {
+  // Only block the page on the very first load — refetches after save/submit
+  // must not blank the form or swallow the success message.
+  if ((reviewLoading && !review) || (goalsLoading && !goals)) {
     return <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>Loading…</h3></div>;
   }
 
@@ -211,13 +224,14 @@ export default function AppraisalsTab() {
           Your self-review has been submitted and can no longer be edited.
         </div>
       )}
-      {needsAcknowledge && (
-        <div className="alert alert-info mb-16" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Your appraisal outcome has been published. Please review and acknowledge it.</span>
-          <button className="btn btn-filled btn-sm" onClick={handleAcknowledge} disabled={acknowledging}>
-            {acknowledging ? "Acknowledging…" : "Acknowledge outcome"}
-          </button>
+      {review.status === "returned" && (
+        <div className="pay-callout mb-16">
+          <b>Returned for changes</b>
+          <p>{review.return_reason || "Please revise your self-review."}</p>
         </div>
+      )}
+      {needsAcknowledge && (
+        <div className="alert alert-info mb-16">Your appraisal outcome has been published. Review it below and acknowledge it.</div>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, alignItems: "start" }}>
@@ -260,6 +274,9 @@ export default function AppraisalsTab() {
               )}
             </div>
           </div>
+          {review.published_at && (
+            <AppraisalOutcomeCard outcome={review} acknowledging={acknowledging} onAcknowledge={handleAcknowledge} />
+          )}
         </div>
 
         {showSubmitConfirm && (

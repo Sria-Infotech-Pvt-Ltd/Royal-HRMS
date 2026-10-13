@@ -12,12 +12,14 @@
 import { useEffect, useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { formatDate } from "@/lib/formatDate";
-import Modal from "@/components/Modal";
+import { formatDateSlash } from "@/lib/formatDate";
+import RefModal from "@/components/employees/RefModal";
 import { useFetch } from "@/hooks/useFetch";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import { getStoredUser } from "@/lib/auth";
-import { fullName, type Employee, type FieldOption } from "../_data";
+import { usePermission } from "@/hooks/usePermission";
+import { useToast } from "@/components/ToastProvider";
+import { directoryStatusLabel, fullName, type Employee, type FieldOption } from "../_data";
 import {
   ACTION_LABELS, approvalRouteFor, reversibilityNote,
   CONFIRMATION_REASONS, ORG_ASSIGNMENT_REASONS, PAY_CHANGE_REASONS, PROMOTION_REASONS,
@@ -27,7 +29,8 @@ import {
   ReasonSelect, PromotionFields, OrgAssignmentFields, PayChangeFields,
   ConfirmationFields, SeparationFields,
 } from "./PerformActionFields/ActionFieldSections";
-import ActionSummarySections from "./PerformActionFields/ActionSummarySections";
+import ActionSummarySections, { EmployeeDetailsCard } from "./PerformActionFields/ActionSummarySections";
+import DateInput from "@/components/shared/DateInput";
 
 interface SeparationTypeOption {
   value: string; label: string; reason_applicable: boolean; notice_period_applicable: boolean;
@@ -44,8 +47,8 @@ const dayBefore = (iso: string) => {
   return d.toISOString().slice(0, 10);
 };
 const DATE_FMT = (iso: string) => {
-  if (!iso || iso === "9999-12-31") return "31-12-9999";
-  return formatDate(iso);
+  if (!iso || iso === "9999-12-31") return "31/12/9999";
+  return formatDateSlash(iso);
 };
 
 export default function PerformActionModal({ employee, onClose, onApplied }: {
@@ -66,6 +69,16 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
   const [separationConfirmed, setSeparationConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+
+  // Anyone holding employees.edit (HR / Branch Admin / System Admin) applies
+  // these actions directly, exactly as before. A Reporting Manager only holds
+  // employees.raise_action: their submission becomes a pending request that
+  // the approvers on its route must approve (apps.accounts personnel-action
+  // requests). Separation is excluded — it has its own approval workflow.
+  const canEdit  = usePermission("employees.edit");
+  const canRaise = usePermission("employees.raise_action");
+  const { showToast } = useToast();
+  const raisesRequest = !canEdit && canRaise && actionType !== "separation";
 
   const { data: detail } = useFetch<EmployeeDetailSnapshot>(API.employees.detail(employee.code));
   const { data: history } = useFetch<ActionHistoryRow[]>(API.employees.actionHistory(employee.code));
@@ -148,16 +161,21 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
     return rows;
   }, [actionType, positionId, positionOptions, annualCtc, managerId, managerOptions, workLocation, detail, employee, currentStatusLabel, lastWorkingDay, currentManagerName]);
 
+  const orgUnitLabel = employee.orgUnitName
+    ? (employee.orgUnitParentName ? `${employee.orgUnitName} › ${employee.orgUnitParentName}` : employee.orgUnitName)
+    : (employee.department || "—");
+  const directoryStatus = directoryStatusLabel(employee);
+
   const notChangedRows: { label: string; value: string }[] = [
     { key: "position", label: "Position", value: employee.designation || "—" },
-    { key: "org_unit", label: "Org unit", value: employee.orgUnitName || employee.department || "—" },
-    { key: "work_location", label: "Work location", value: detail?.work_location || "—" },
+    { key: "org_unit", label: "Org unit", value: orgUnitLabel },
+    { key: "work_location", label: "Work location", value: detail?.work_location || employee.location || "—" },
     { key: "reporting_manager", label: "Reporting manager", value: currentManagerName || "CEO Office" },
-    { key: "employment_status", label: "Status", value: currentStatusLabel },
-    { key: "record_range", label: "Current record date range", value: currentRecord ? `${DATE_FMT(currentRecord.effective_from)} – ${DATE_FMT(currentRecord.effective_to)}` : "—" },
-  ].filter(r => r.key === "record_range" || !changedFieldKeys.includes(r.key === "position" ? "position" : r.key)).map(r => ({ label: r.label, value: r.value }));
+    { key: "employment_status", label: "Status", value: directoryStatus },
+    { key: "record_range", label: "Current record", value: currentRecord ? `${DATE_FMT(currentRecord.effective_from)} → ${DATE_FMT(currentRecord.effective_to)}` : "—" },
+  ].filter(r => r.key === "record_range" || r.key === "position" || !changedFieldKeys.includes(r.key)).map(r => ({ label: r.label, value: r.value }));
 
-  const route = actionType ? approvalRouteFor(actionType, currentManagerName, false) : "";
+  const route = actionType ? approvalRouteFor(actionType, currentManagerName, false, raisesRequest) : "";
   const reversibility = actionType ? reversibilityNote(actionType) : null;
 
   function validate(): string {
@@ -181,7 +199,18 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
     setSaving(true);
     setErr("");
     try {
-      if (actionType === "promotion") {
+      if (raisesRequest) {
+        await clientApi.post(API.employees.actionRequests(employee.code), {
+          action_type: actionType,
+          reason,
+          effective_from: effectiveFrom,
+          position: positionId || undefined,
+          annual_ctc: annualCtc || undefined,
+          reporting_manager_id: managerId || undefined,
+          work_location: workLocation || undefined,
+        });
+        showToast(`${ACTION_LABELS[actionType as ActionType]} sent for approval.`, "success");
+      } else if (actionType === "promotion") {
         await clientApi.put(API.employees.detail(employee.code), {
           position: positionId, effective_date: effectiveFrom, reason,
         });
@@ -223,25 +252,26 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
 
   const applyDisabled = saving || (actionType === "separation" && !separationConfirmed);
 
+  const footNote = effectiveFrom
+    ? `${raisesRequest ? "If approved, the current" : "Current"} record will be delimited to ${dayBefore(effectiveFrom) === "—" ? "—" : DATE_FMT(dayBefore(effectiveFrom))}; the new record runs ${DATE_FMT(effectiveFrom)} → 31/12/9999.`
+    : "";
+
   return (
-    <Modal
-      title={<h2 className="modal-title">Perform an <em style={{ color: "var(--brand-ink)" }}>action</em></h2>}
+    <RefModal
+      title="Perform an" accent="action"
+      subtitle={`${fullName(employee)} · ${employee.code} — current record runs ${currentRecord ? `${DATE_FMT(currentRecord.effective_from)} to ${DATE_FMT(currentRecord.effective_to)}` : "— to 31/12/9999"}.`}
       onClose={onClose}
-      size="lg"
-      footer={
+      closeDisabled={saving}
+      note={footNote}
+      actions={
         <>
-          <button onClick={onClose} disabled={saving} className="btn btn-ghost">Cancel</button>
-          <button onClick={submit} disabled={applyDisabled} className="btn btn-filled">
-            {saving ? "Applying…" : "Apply action"}
+          <button onClick={onClose} disabled={saving} className="rvbtn ghost" type="button">Cancel</button>
+          <button onClick={submit} disabled={applyDisabled} className="rvbtn pri" type="button">
+            {saving ? (raisesRequest ? "Sending…" : "Applying…") : (raisesRequest ? "Raise for approval" : "Apply action")}
           </button>
         </>
       }
     >
-      <div className="space-y-4">
-        <p className="hint">
-          {fullName(employee)} · {employee.code} — current record runs {currentRecord ? `${DATE_FMT(currentRecord.effective_from)} to ${DATE_FMT(currentRecord.effective_to)}` : "— to 31-12-9999"}
-        </p>
-
         {err && (
           <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg" style={{ background: "var(--crit-bg)", color: "var(--crit)" }}>
             <i className="ti ti-alert-circle text-[14px] mt-0.5 flex-shrink-0" />
@@ -249,7 +279,7 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
           </div>
         )}
 
-        <div className="section-label">Action</div>
+        <div className="sechead">ACTION</div>
         <div className="g3">
           <div className="f">
             <label>Action type <span className="req">*</span></label>
@@ -267,13 +297,16 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
           )}
           <div className="f">
             <label>Effective from <span className="req">*</span></label>
-            <input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} className="finput" />
+            <DateInput value={effectiveFrom} onChange={isoDate => setEffectiveFrom(isoDate)} className="finput" />
           </div>
         </div>
 
+        <div className="divider" />
+        <div className="sechead">{actionType ? `FIELDS THIS ${ACTION_LABELS[actionType].toUpperCase()} MAY CHANGE` : "FIELDS THIS ACTION MAY CHANGE"}</div>
+        {!actionType && <div className="hint">Choose an action above and the fields it may change will appear here.</div>}
+
         {actionType && (
           <>
-            <div className="section-label">Fields this {ACTION_LABELS[actionType].toUpperCase()} may change</div>
             {actionType === "promotion" && (
               <PromotionFields positionId={positionId} setPositionId={setPositionId} positionOptions={positionOptions} annualCtc={annualCtc} setAnnualCtc={setAnnualCtc} />
             )}
@@ -300,7 +333,7 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
               employee={employee}
               actionType={actionType}
               diffRows={diffRows}
-              notChangedRows={notChangedRows}
+              rows={notChangedRows}
               route={route}
               effectiveFromLabel={DATE_FMT(effectiveFrom)}
               raisedByName={currentUser?.name ?? "—"}
@@ -310,16 +343,16 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
               reversibility={reversibility as { text: string; tone: "purple" | "amber" }}
               separationConfirmed={separationConfirmed}
               setSeparationConfirmed={setSeparationConfirmed}
-              delimitedToLabel={dayBefore(effectiveFrom) === "—" ? "—" : DATE_FMT(dayBefore(effectiveFrom))}
-              newRecordFromLabel={DATE_FMT(effectiveFrom)}
+              requiresApproval={raisesRequest}
             />
           </>
         )}
 
+        {!actionType && <EmployeeDetailsCard employee={employee} rows={notChangedRows} />}
+
         {units.length === 0 && actionType === "promotion" && (
           <p className="hint">Loading org structure…</p>
         )}
-      </div>
-    </Modal>
+    </RefModal>
   );
 }

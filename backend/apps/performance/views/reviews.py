@@ -7,8 +7,11 @@ from rest_framework.views import APIView
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 
-from ..models import PerformanceReview
+from django.db import transaction
+
+from ..models import Goal, PerformanceReview
 from ..serializers import (
+    GoalSerializer,
     ManagerReviewSaveSerializer,
     PerformanceReviewSerializer,
     SelfReviewSaveSerializer,
@@ -37,7 +40,7 @@ class MyReviewView(APIView):
         if not cycle:
             return success('No active review cycle.', None)
         review = self._get_or_create(request.user, cycle)
-        return success('Review retrieved.', PerformanceReviewSerializer(review).data)
+        return success('Review retrieved.', PerformanceReviewSerializer(review, context={'request': request}).data)
 
     def patch(self, request):
         cycle = _active_cycle()
@@ -50,7 +53,7 @@ class MyReviewView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
         serializer.save()
-        return success('Self-review saved.', PerformanceReviewSerializer(review).data)
+        return success('Self-review saved.', PerformanceReviewSerializer(review, context={'request': request}).data)
 
 
 class SubmitMyReviewView(APIView):
@@ -69,7 +72,7 @@ class SubmitMyReviewView(APIView):
         review.recompute_status()
         review.save(update_fields=['self_submitted_at', 'status', 'updated_at'])
         logger.info('Self-review submitted by %s for cycle %s', request.user.email, cycle.name)
-        return success('Self-review submitted.', PerformanceReviewSerializer(review).data)
+        return success('Self-review submitted.', PerformanceReviewSerializer(review, context={'request': request}).data)
 
 
 # ─── Manager review ──────────────────────────────────────────────────────────
@@ -84,9 +87,15 @@ class TeamReviewListView(APIView):
         cycle = _active_cycle()
         if not cycle:
             return success('No active review cycle.', [])
+        # A review row normally appears when the employee first opens their
+        # own appraisal. The manager's workspace should list every active
+        # direct report from the start of the cycle, so make sure the row
+        # exists (idempotent: one row per employee per cycle).
+        for report in request.user.direct_reports.filter(is_active=True).exclude(employee_id=''):
+            PerformanceReview.objects.get_or_create(employee=report, cycle=cycle, defaults={'manager': request.user})
         reviews = PerformanceReview.objects.filter(
             cycle=cycle, employee__reporting_manager=request.user,
-        ).select_related('employee', 'manager')
+        ).select_related('employee', 'manager').order_by('employee__full_name')
         return success('Team reviews retrieved.', PerformanceReviewSerializer(reviews, many=True).data)
 
 
@@ -133,8 +142,64 @@ class SubmitManagerReviewView(APIView):
             return error('The employee has not submitted their self-review yet.', http_status=409)
         if review.manager_submitted_at:
             return error('Already submitted.', http_status=409)
+        # Rating + assessment are always required. The development plan and
+        # next check-in are required of the reporting manager; an HR override
+        # (performance.manage_cycles acting for a manager) may omit them.
+        if not review.manager_rating or not (review.manager_notes or '').strip():
+            return error('Add a rating and your assessment comments before sending to HR.')
+        is_reporting_manager = review.employee.reporting_manager_id == request.user.id
+        if is_reporting_manager and (not (review.manager_development_plan or '').strip() or not review.manager_next_checkin):
+            return error('Add a development plan and the next check-in date before sending to HR.')
         review.manager_submitted_at = timezone.now()
         review.recompute_status()
         review.save(update_fields=['manager_submitted_at', 'status', 'updated_at'])
         logger.info('Manager review submitted by %s for review %s', request.user.email, review.pk)
         return success('Manager review submitted.', PerformanceReviewSerializer(review).data)
+
+
+class ReturnReviewView(APIView):
+    """POST {reason} - the reporting manager (or HR acting for them) sends a
+    submitted self-review back to the employee for changes. Clears
+    self_submitted_at so the employee can edit and resubmit; the reason and
+    time are kept for the employee's banner and the activity history."""
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        try:
+            review = PerformanceReview.objects.select_for_update(of=('self',)).select_related('employee').get(pk=pk)
+        except PerformanceReview.DoesNotExist:
+            return error('Review not found.', http_status=404)
+        if review.employee.reporting_manager_id != request.user.id and not _has_perm(request.user, 'performance.manage_cycles'):
+            return error('Permission denied.', http_status=403)
+        if not review.self_submitted_at:
+            return error('The employee has no submitted self-review to return.', http_status=409)
+        if review.manager_submitted_at:
+            return error('This review has already been sent to HR and can no longer be returned.', http_status=409)
+        reason = str(request.data.get('reason') or '').strip()
+        if not reason:
+            return error('Enter what the employee should revise.')
+        review.self_submitted_at = None
+        review.returned_at = timezone.now()
+        review.return_reason = reason
+        review.recompute_status()
+        review.save(update_fields=['self_submitted_at', 'returned_at', 'return_reason', 'status', 'updated_at'])
+        logger.info('Review %s returned for changes by %s', review.pk, request.user.email)
+        return success('Returned to the employee.', PerformanceReviewSerializer(review).data)
+
+
+class ReviewGoalsView(APIView):
+    """GET - the review's employee's goals for that review's cycle, including
+    the self-review ratings/outcomes/evidence, so the reporting manager (or HR)
+    can assess them. Same access rule as the manager review endpoints."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            review = PerformanceReview.objects.select_related('employee').get(pk=pk)
+        except PerformanceReview.DoesNotExist:
+            return error('Review not found.', http_status=404)
+        if review.employee.reporting_manager_id != request.user.id and not _has_perm(request.user, 'performance.manage_cycles'):
+            return error('Permission denied.', http_status=403)
+        goals = Goal.objects.filter(employee=review.employee, cycle=review.cycle).order_by('due_date', 'created_at')
+        return success('Goals retrieved.', GoalSerializer(goals, many=True).data)

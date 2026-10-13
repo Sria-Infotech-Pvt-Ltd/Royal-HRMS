@@ -11,6 +11,7 @@ import { useState } from "react";
 import RequestModal from "@/components/RequestModal";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import DateInput from "@/components/shared/DateInput";
 
 // Matches the fields this tab reads off HRHelpRequestSerializer — kept local
 // (not the full ApiHrHelpRequest shape from HrHelpTab.tsx) since this tab
@@ -81,12 +82,7 @@ export default function AssetRequestModal({ onClose, onSubmitted }: Props) {
       </div>
       <div className="field-group mb-16">
         <label className="field-label">Needed by</label>
-        <input
-          type="date"
-          className="field-input"
-          value={neededBy}
-          onChange={e => setNeededBy(e.target.value)}
-        />
+        <DateInput className="field-input" value={neededBy} onChange={isoDate => setNeededBy(isoDate)} />
       </div>
       <div className="field-group">
         <label className="field-label">Business need</label>

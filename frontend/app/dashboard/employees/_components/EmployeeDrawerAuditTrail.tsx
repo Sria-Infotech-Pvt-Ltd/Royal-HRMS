@@ -6,8 +6,8 @@
 // it isn't duplicated per render. Split out purely to keep
 // EmployeeDrawer.tsx under this codebase's ~300-line guideline.
 
-import { formatDateTime } from "@/lib/formatDate";
-import { SectionCard } from "./EmployeeDrawerParts";
+import { formatDateSlash, formatTimeHm } from "@/lib/formatDate";
+import { Row, SectionCard } from "./EmployeeDrawerParts";
 
 export interface AuditTrailRow {
   id: number;
@@ -17,22 +17,37 @@ export interface AuditTrailRow {
   created_at: string;
 }
 
-export default function EmployeeDrawerAuditTrail({ rows }: { rows: AuditTrailRow[] | null }) {
+interface Props {
+  rows: AuditTrailRow[] | null;
+  /** The endpoint refused this viewer (needs audit.view): say so instead of
+      claiming nothing has been recorded. */
+  forbidden?: boolean;
+  /** Still fetching: do not claim "nothing recorded" before the answer is in. */
+  loading?: boolean;
+}
+
+export default function EmployeeDrawerAuditTrail({ rows, forbidden = false, loading = false }: Props) {
   return (
-    <SectionCard icon="ti-eye" title="Audit Trail">
-      {!rows || rows.length === 0 ? (
-        <p style={{ fontSize: 12, color: "var(--on-variant)" }}>No audit events recorded yet.</p>
+    <SectionCard title="Audit Trail" list={forbidden}>
+      {forbidden ? (
+        <Row label="Visibility" value="Permission required" />
+      ) : loading ? (
+        <p className="hint">Loading…</p>
+      ) : !rows || rows.length === 0 ? (
+        <p className="hint">No access recorded yet in this session.</p>
       ) : (
         rows.map(row => (
-          <div key={row.id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>{row.action === "profile_viewed_self" ? "Record viewed" : row.action}</div>
-              <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
+          <div key={row.id} className="actrow">
+            <span className="bar" />
+            <div className="meta">
+              <div className="t1">{row.action === "profile_viewed_self" ? "Record viewed" : row.action}</div>
+              <div className="t2">
                 {row.actor_name} · {row.action === "profile_viewed_self" ? "Employee (self-service)" : (row.actor_role || "Admin")}
               </div>
             </div>
-            <div style={{ fontSize: 11, color: "var(--on-variant)", whiteSpace: "nowrap" }}>
-              {formatDateTime(row.created_at)}
+            <div className="dates" style={{ textAlign: "right" }}>
+              {formatDateSlash(row.created_at)}
+              <div className="actdel">{formatTimeHm(row.created_at)}</div>
             </div>
           </div>
         ))

@@ -312,16 +312,22 @@ class EmployeeSalaryConfig(models.Model):
     salary history row must never disappear just because the promotion
     record it references does."""
 
+    REASON_INITIAL            = 'initial'
     REASON_PROMOTION          = 'promotion'
     REASON_INCREMENT          = 'increment'
     REASON_MARKET_CORRECTION  = 'market_correction'
+    REASON_CORRECTION         = 'correction'
     REASON_OTHER              = 'other'
     REASON_CHOICES = [
+        (REASON_INITIAL,           'Initial basic pay'),
         (REASON_PROMOTION,         'Promotion'),
         (REASON_INCREMENT,         'Annual Increment'),
         (REASON_MARKET_CORRECTION, 'Market Correction'),
+        (REASON_CORRECTION,        'Correction'),
         (REASON_OTHER,             'Other'),
     ]
+    # Keys HR may override in the Basic pay breakup (the rest is derived from CTC).
+    OVERRIDABLE_EARNINGS = ('basic', 'da', 'hra', 'conv', 'med', 'lta')
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     employee = models.ForeignKey(
@@ -354,6 +360,14 @@ class EmployeeSalaryConfig(models.Model):
         related_name='salary_revisions',
         help_text='The specific promotion (if any) this CTC revision was for',
     )
+    # Pay-scale details HR records alongside the CTC (the Basic pay dialog). The
+    # monthly breakup shown there is DERIVED from annual_ctc + these; only what
+    # HR deliberately overrides is stored. The payroll run itself still uses
+    # `salary_structure` — these fields describe the record, they do not change it.
+    pay_scale_group = models.CharField(max_length=5, blank=True)
+    pay_scale_level = models.CharField(max_length=3, blank=True)
+    basic_percent = models.PositiveSmallIntegerField(default=40, help_text='Basic as a percentage of monthly CTC')
+    earnings_override = models.JSONField(default=dict, blank=True, help_text='Monthly overrides keyed by earning code (basic, da, hra, conv, med, lta)')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

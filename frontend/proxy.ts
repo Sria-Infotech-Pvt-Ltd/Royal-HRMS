@@ -28,7 +28,7 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/payroll": "payroll.view",
   "/dashboard/leave": "leave.view",
   "/dashboard/expenses": "expenses.view",
-  "/dashboard/approvals": ["leave.approve", "expenses.approve"],
+  "/dashboard/approvals": ["leave.approve", "expenses.approve", "payroll.edit", "employees.approve", "employees.raise_action"],
   // /dashboard/separation intentionally absent — every employee can create
   // and view their own separation request, not just Manager/HR (same
   // self-service reasoning as my-payslip/my-attendance above). The page
@@ -37,6 +37,7 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/documents": "documents.view",
   "/dashboard/reports": "reports.view",
   "/dashboard/audit": "audit.view",
+  "/dashboard/performance": ["performance.manage_cycles", "performance.review_team"],
   "/dashboard/settings": "settings.view",
   "/dashboard/settings/leave-policy": "settings.view",
   "/dashboard/settings/leave-credit-rules": "settings.view",

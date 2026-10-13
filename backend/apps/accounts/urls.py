@@ -6,6 +6,13 @@ from apps.accounts.views_email_log import (
 )
 from apps.accounts.views_reset_password import EmployeePasswordResetView, EmployeeInviteStatusView, ResendInviteView
 from apps.accounts.views_external_api import ExternalEmployeeBasicListView
+from apps.accounts.views_personnel_actions import (
+    ActionRequestApproveView,
+    ActionRequestCancelView,
+    ActionRequestListView,
+    ActionRequestRejectView,
+    EmployeeActionRequestsView,
+)
 from apps.accounts.views_hire import (
     HireActionDetailView,
     HireActionDocumentDetailView,
@@ -162,6 +169,11 @@ urlpatterns = [
     path('employees/hrs/',                                       HRListView.as_view(),                   name='employee-hr-list'),
     path('employees/managers/',                                  ManagerListView.as_view(),              name='employee-manager-list'),
     path('employees/<str:employee_id>/promotions/',               EmployeePromotionHistoryView.as_view(), name='employee-promotion-history'),
+    path('employees/<str:employee_id>/action-requests/',          EmployeeActionRequestsView.as_view(), name='employee-action-requests'),
+    path('action-requests/',                                      ActionRequestListView.as_view(),      name='action-request-list'),
+    path('action-requests/<uuid:pk>/approve/',                    ActionRequestApproveView.as_view(),   name='action-request-approve'),
+    path('action-requests/<uuid:pk>/reject/',                     ActionRequestRejectView.as_view(),    name='action-request-reject'),
+    path('action-requests/<uuid:pk>/cancel/',                     ActionRequestCancelView.as_view(),    name='action-request-cancel'),
     path('employees/<str:employee_id>/action-history/',           EmployeeActionHistoryView.as_view(), name='employee-action-history'),
     path('employees/<str:employee_id>/as-of/',                    EmployeeAsOfView.as_view(),             name='employee-as-of'),
     path('employees/<str:employee_id>/lifecycle-timeline/',       EmployeeLifecycleTimelineView.as_view(), name='employee-lifecycle-timeline'),

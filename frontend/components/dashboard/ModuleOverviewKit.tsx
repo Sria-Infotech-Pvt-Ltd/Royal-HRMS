@@ -49,12 +49,15 @@ export function QuickActionTile({ title, sub, onClick }: { title: string; sub: s
   );
 }
 
-export function WeeklyBarChart({ data }: { data: { label: string; count: number }[] }) {
-  const maxCount = Math.max(1, ...data.map(d => d.count));
+// `total` (optional): when given, each bar is that day's share of `total`
+// (e.g. present-count ÷ headcount = attendance %), matching the AIRA reference
+// dashboard. Without it, bars scale relative to the busiest day.
+export function WeeklyBarChart({ data, total }: { data: { label: string; count: number }[]; total?: number }) {
+  const scale = total && total > 0 ? total : Math.max(1, ...data.map(d => d.count));
   return (
     <div className="chart-bars">
       {data.map((d, i) => (
-        <i key={i} style={{ height: `${Math.max(12, (d.count / maxCount) * 100)}%` }}>{d.label}</i>
+        <i key={i} style={{ height: `${Math.min(100, Math.max(12, (d.count / scale) * 100))}%` }}>{d.label}</i>
       ))}
     </div>
   );

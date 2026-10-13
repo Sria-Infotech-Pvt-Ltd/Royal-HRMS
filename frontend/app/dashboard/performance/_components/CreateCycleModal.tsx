@@ -3,6 +3,7 @@
 import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   onClose: () => void;
@@ -51,19 +52,19 @@ export default function CreateCycleModal({ onClose, onCreated }: Props) {
           <div className="form-row cols-2">
             <div className="field-group mb-16">
               <label className="field-label">Period Start</label>
-              <input className="field-input" type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)} />
+              <DateInput className="field-input" value={periodStart} onChange={isoDate => setPeriodStart(isoDate)} />
             </div>
             <div className="field-group mb-16">
               <label className="field-label">Period End</label>
-              <input className="field-input" type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} />
+              <DateInput className="field-input" value={periodEnd} onChange={isoDate => setPeriodEnd(isoDate)} />
             </div>
             <div className="field-group mb-16">
               <label className="field-label">Self-Review Due</label>
-              <input className="field-input" type="date" value={selfDue} onChange={e => setSelfDue(e.target.value)} />
+              <DateInput className="field-input" value={selfDue} onChange={isoDate => setSelfDue(isoDate)} />
             </div>
             <div className="field-group mb-16">
               <label className="field-label">Manager Review Due</label>
-              <input className="field-input" type="date" value={managerDue} onChange={e => setManagerDue(e.target.value)} />
+              <DateInput className="field-input" value={managerDue} onChange={isoDate => setManagerDue(isoDate)} />
             </div>
           </div>
         </div>

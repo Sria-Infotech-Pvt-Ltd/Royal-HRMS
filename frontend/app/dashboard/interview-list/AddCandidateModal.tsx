@@ -12,6 +12,7 @@ import {
 import { Branch, Candidate, InterviewMode, RECRUITMENT_API } from "./_data";
 import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   onClose: () => void;
@@ -184,7 +185,7 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Interview Date</label>
-              <input className="field-input" type="date" min={todayStr} value={form.interview_date} onChange={e => set("interview_date", e.target.value)} />
+              <DateInput className="field-input" min={todayStr} value={form.interview_date} onChange={isoDate => set("interview_date", isoDate)} />
             </div>
             <div className="field-group">
               <label className="field-label">Interview Time</label>

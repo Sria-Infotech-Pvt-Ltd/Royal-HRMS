@@ -1,4 +1,5 @@
 "use client";
+import DateInput from "@/components/shared/DateInput";
 
 // ── Step: Family & Nomination ────────────────────────────────────────────────
 // Two related repeatable lists in one step, matching the mockup's own
@@ -103,7 +104,7 @@ export default function FamilyNominationStep({
             </div>
             <div className="field-group">
               <label className="field-label">Date of Birth</label>
-              <input className="field-input" type="date" value={entry.date_of_birth} onChange={e => onFamilyFieldChange(entry.id, "date_of_birth", e.target.value)} />
+              <DateInput className="field-input" value={entry.date_of_birth} onChange={isoDate => onFamilyFieldChange(entry.id, "date_of_birth", isoDate)} />
             </div>
             <div className="field-group">
               <label className="field-label">Gender</label>

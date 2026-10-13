@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import SearchableSelect from "@/components/SearchableSelect";
+import DateInput from "@/components/shared/DateInput";
 
 // Shown at the top of the onboarding wizard's first step — the "basic
 // details" captured back at Add Employee time (name, contact, employment
@@ -212,7 +213,7 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
             </div>
             <div className="field-group">
               <label className="field-label">Date of Joining</label>
-              <input className="field-input" type="date" value={form.date_of_joining} onChange={e => set("date_of_joining", e.target.value)} />
+              <DateInput className="field-input" value={form.date_of_joining} onChange={isoDate => set("date_of_joining", isoDate)} />
             </div>
             <div className="field-group">
               <label className="field-label">Role</label>

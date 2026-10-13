@@ -12,12 +12,12 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
-import { formatDate } from "@/lib/formatDate";
+import { formatDateSlash } from "@/lib/formatDate";
 import EmployeeDrawer from "@/app/dashboard/employees/_components/EmployeeDrawer";
 import ProfileCorrectionModal from "./ProfileCorrectionModal";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import ProfilePhotoModal from "@/components/ProfilePhotoModal";
-import { initials } from "@/app/dashboard/employees/_data";
+import { directoryStatusLabel, initials } from "@/app/dashboard/employees/_data";
 import type { Employee } from "@/app/dashboard/employees/_data";
 
 interface ProfileSummaryData {
@@ -33,6 +33,9 @@ interface ProfileSummaryData {
   date_joined:      string | null;
   work_location:    string | null;
   employment_status_display: string | null;
+  status:           string | null;
+  employment_status?: string | null;
+  onboarding_status?: string | null;
   reporting_manager?: { name: string | null } | null;
   profile:          {
     date_of_birth: string | null;
@@ -60,7 +63,7 @@ function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  return formatDate(d);
+  return formatDateSlash(d);
 }
 
 function toDrawerEmployee(d: ProfileSummaryData, photoUrl?: string | null): Employee {
@@ -72,7 +75,8 @@ function toDrawerEmployee(d: ProfileSummaryData, photoUrl?: string | null): Empl
     department: d.department, designation: d.designation,
     dateOfJoining: d.date_of_joining ?? d.date_joined ?? "", dateOfBirth: "",
     location: d.branch, gender: "male",
-    status: "active", employmentStatus: "probation", confirmationDate: null,
+    status: d.onboarding_status === "pending" ? "onboarding" : "active",
+    employmentStatus: d.employment_status ?? "confirmed", confirmationDate: null,
     details: {}, tables: {},
     photoUrl: photoUrl ?? d.profile_photo_url ?? undefined,
   };
@@ -183,11 +187,11 @@ export default function ProfileSummaryTab() {
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>WORK LOCATION</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.work_location || "—"}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.work_location || data?.branch || "—"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>REPORTING MANAGER</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.reporting_manager?.name || "—"}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.reporting_manager?.name || "CEO Office"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>MOBILE NUMBER</div>
@@ -199,7 +203,9 @@ export default function ProfileSummaryTab() {
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>EMPLOYMENT STATUS</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.employment_status_display || "—"}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>
+              {data?.employment_status_display || (data ? directoryStatusLabel(toDrawerEmployee(data)) : "—")}
+            </div>
           </div>
         </div>
       </div>

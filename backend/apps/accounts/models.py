@@ -3039,3 +3039,7 @@ from apps.accounts.models_asset_v2 import Asset, AssetAllocation  # noqa: E402,F
 
 # Phase 8B gap-closure — asset requests + depreciation rule table (additive).
 from apps.accounts.models_asset_v2b import AssetRequest, AssetDepreciationRule  # noqa: E402,F401
+
+# Imported last so Django registers it with the app; kept in its own module
+# because models.py is already far beyond a reasonable file length.
+from .models_personnel_action import PersonnelActionRequest  # noqa: E402,F401

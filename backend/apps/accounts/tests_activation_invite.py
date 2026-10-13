@@ -91,7 +91,7 @@ class ActivationInviteTests(TestCase):
     @patch('apps.accounts.utils._get_smtp_connection', return_value=(None, 'noreply@test.com', None))
     def test_resend_invalidates_the_previous_link(self, _mock_conn, mock_build):
         mock_build.return_value.send.return_value = None
-        admin_role = make_role('admin_invite_test', permission_codenames=['employees.reset_password'])
+        admin_role = make_role('admin_invite_test', permission_codenames=['employees.reset_password', 'employees.edit'])
         admin = make_user('admin-invite@test.com', role=admin_role, password='TestPass123!')
 
         old_token = send_activation_invite(self.user)
@@ -114,7 +114,7 @@ class ActivationInviteTests(TestCase):
         self.user.must_change_password = False
         self.user.save(update_fields=['must_change_password'])
 
-        admin_role = make_role('admin_invite_test2', permission_codenames=['employees.reset_password'])
+        admin_role = make_role('admin_invite_test2', permission_codenames=['employees.reset_password', 'employees.edit'])
         admin = make_user('admin-invite2@test.com', role=admin_role, password='TestPass123!')
         client = APIClient()
         client.force_authenticate(user=admin)
@@ -126,7 +126,7 @@ class ActivationInviteTests(TestCase):
     @patch('apps.accounts.utils._get_smtp_connection', return_value=(None, 'noreply@test.com', None))
     def test_invite_status_endpoint_reflects_lifecycle(self, _mock_conn, mock_build):
         mock_build.return_value.send.return_value = None
-        admin_role = make_role('admin_invite_test3', permission_codenames=['employees.reset_password'])
+        admin_role = make_role('admin_invite_test3', permission_codenames=['employees.reset_password', 'employees.edit'])
         admin = make_user('admin-invite3@test.com', role=admin_role, password='TestPass123!')
         client = APIClient()
         client.force_authenticate(user=admin)

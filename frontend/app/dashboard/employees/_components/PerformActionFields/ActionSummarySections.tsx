@@ -1,103 +1,100 @@
 "use client";
 
-// The Before → After / Approval & reversibility / not-changed / footer-note
-// sections shared by every action type — split out of PerformActionModal
-// purely to keep that file under the file-length guideline.
+// The Before → After / Approval & reversibility / "not changed" sections shared by every action type, laid out
+// as the reference's cards. The "delimited to … the new record runs …" sentence lives in the dialog footer.
 
 import type { Employee } from "../../_data";
 import type { ActionType, FieldDiffRow } from "./types";
 
-interface Props {
+interface DetailsProps {
   employee: Employee;
+  rows: { label: string; value: string }[];
+}
+
+/** "Employee details — not changed by this action": shown from the start, before any action is chosen. */
+export function EmployeeDetailsCard({ employee, rows }: DetailsProps) {
+  return (
+    <>
+      <div className="divider" />
+      <div className="sechead">EMPLOYEE DETAILS — NOT CHANGED BY THIS ACTION</div>
+      <div className="rvcard">
+        <div className="kvlist">
+          <div className="kv"><span>Employee</span><b>{employee.firstName} {employee.lastName} · {employee.code}</b></div>
+          {rows.map(row => <div className="kv" key={row.label}><span>{row.label}</span><b>{row.value}</b></div>)}
+        </div>
+      </div>
+    </>
+  );
+}
+
+interface Props extends DetailsProps {
   actionType: ActionType;
   diffRows: FieldDiffRow[];
-  notChangedRows: { label: string; value: string }[];
   route: string;
   effectiveFromLabel: string;
   raisedByName: string;
   raisedByRole: string;
   reversibility: { text: string; tone: "purple" | "amber" };
   separationConfirmed: boolean;
-  setSeparationConfirmed: (v: boolean) => void;
-  delimitedToLabel: string;
-  newRecordFromLabel: string;
+  setSeparationConfirmed: (value: boolean) => void;
+  /** True when submitting raises a request that waits for approval instead of applying instantly. */
+  requiresApproval?: boolean;
 }
 
 export default function ActionSummarySections({
-  employee, actionType, diffRows, notChangedRows, route, effectiveFromLabel,
-  raisedByName, raisedByRole, reversibility, separationConfirmed, setSeparationConfirmed,
-  delimitedToLabel, newRecordFromLabel,
+  employee, rows, actionType, diffRows, route, effectiveFromLabel, raisedByName, raisedByRole,
+  reversibility, separationConfirmed, setSeparationConfirmed, requiresApproval = false,
 }: Props) {
+  const status = actionType === "separation"
+    ? "Pending approval — a real multi-stage approval chain runs on this request."
+    : requiresApproval
+      ? "Pending approval — nothing changes until every approver on the route has approved."
+      : "Applied immediately — no pending-approval queue exists for this action yet.";
+
   return (
     <>
-      <div className="section-label">Before → After</div>
-      <div className="rounded-lg p-3.5 space-y-1.5" style={{ background: "var(--sunken)" }}>
-        {diffRows.map(row => (
-          <div key={row.key} className="flex justify-between text-[12.5px]">
-            <span style={{ color: "var(--muted)" }}>{row.label}</span>
-            {row.after === null ? (
-              <span style={{ color: "var(--muted)" }}>unchanged</span>
-            ) : (
-              <span className="font-semibold" style={{ color: actionType === "separation" ? "var(--warn)" : "var(--on-bg)" }}>
-                {row.before} <i className="ti ti-arrow-right" style={{ margin: "0 4px" }} /> {row.after}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="section-label">Approval &amp; reversibility</div>
-      <div className="rounded-lg p-3.5 space-y-1.5" style={{ background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.18)" }}>
-        <div className="text-[12.5px]"><strong>Approval route:</strong> {route}</div>
-        <div className="text-[12.5px]">
-          <strong>Status on apply:</strong>{" "}
-          {actionType === "separation"
-            ? "Pending approval — a real multi-stage approval chain runs on this request."
-            : "Applied immediately — no pending-approval queue exists for this action yet."}
+      <div className="divider" />
+      <div className="sechead">BEFORE → AFTER</div>
+      <div className="rvcard">
+        <div className="kvlist">
+          {diffRows.map(row => (
+            <div className="kv" key={row.key}>
+              <span>{row.label}</span>
+              {row.after === null
+                ? <b style={{ fontWeight: 500, color: "var(--muted)" }}>unchanged</b>
+                : <b style={actionType === "separation" ? { color: "var(--warn)" } : undefined}>{row.before} → {row.after}</b>}
+            </div>
+          ))}
         </div>
-        <div className="text-[12.5px]"><strong>Effective date:</strong> {effectiveFromLabel}</div>
-        <div className="text-[12.5px]"><strong>Raised by:</strong> {raisedByName} ({raisedByRole})</div>
       </div>
 
-      <div
-        className="rounded-lg p-3 text-[12.5px] font-medium"
-        style={reversibility.tone === "amber"
-          ? { background: "var(--warn-c)", color: "var(--warn)" }
-          : { background: "rgba(124,58,237,0.10)", color: "var(--primary)" }}
-      >
-        {reversibility.text}
+      <div className="divider" />
+      <div className="sechead">APPROVAL &amp; REVERSIBILITY</div>
+      <div className="rvcard">
+        <div className="kvlist">
+          <div className="kv"><span>Approval route</span><b>{route}</b></div>
+          <div className="kv"><span>Status on apply</span><b>{status}</b></div>
+          <div className="kv"><span>Effective date</span><b>{effectiveFromLabel}</b></div>
+          <div className="kv"><span>Raised by</span><b>{raisedByName} · {raisedByRole}</b></div>
+        </div>
       </div>
+      <div className={`note ${reversibility.tone === "amber" ? "warn" : "info"}`}><b>Reversibility</b>{reversibility.text}</div>
 
       {actionType === "separation" && (
-        <>
-          <div className="rounded-lg p-3 text-[12.5px] font-medium" style={{ background: "var(--warn-c)", color: "var(--warn)" }}>
-            This cannot be undone: recording a separation ends the current record and starts the exit process.
-            It cannot be reversed — a returning employee needs a fresh Hire action.
+        <div className="note warn">
+          <div>
+            <b>This cannot be undone</b>
+            Recording a separation ends the current record and starts the exit process. It cannot be reversed — a
+            returning employee needs a fresh Hire action.
+            <label className="chkline" style={{ marginTop: 8 }}>
+              <input type="checkbox" checked={separationConfirmed} onChange={event => setSeparationConfirmed(event.target.checked)} />
+              <span>I have verified these values and I am authorised to apply this separation.</span>
+            </label>
           </div>
-          <label className="flex items-start gap-2 text-[13px]">
-            <input type="checkbox" className="mt-0.5" checked={separationConfirmed} onChange={e => setSeparationConfirmed(e.target.checked)} />
-            I have verified these values and I am authorised to apply this separation.
-          </label>
-        </>
+        </div>
       )}
 
-      <div className="section-label">Employee details — not changed by this action</div>
-      <div className="rounded-lg p-3.5 space-y-1.5" style={{ background: "var(--sunken)" }}>
-        <div className="flex justify-between text-[12.5px]">
-          <span style={{ color: "var(--muted)" }}>Employee</span>
-          <span className="font-semibold">{employee.firstName} {employee.lastName} · {employee.code}</span>
-        </div>
-        {notChangedRows.map(r => (
-          <div key={r.label} className="flex justify-between text-[12.5px]">
-            <span style={{ color: "var(--muted)" }}>{r.label}</span>
-            <span className="font-semibold">{r.value}</span>
-          </div>
-        ))}
-      </div>
-
-      <p className="hint">
-        Current record will be delimited to {delimitedToLabel}; the new record runs {newRecordFromLabel} → 31-12-9999.
-      </p>
+      <EmployeeDetailsCard employee={employee} rows={rows} />
     </>
   );
 }

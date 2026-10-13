@@ -7,6 +7,7 @@ import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
 import type { CorrectionRequest, CorrectionPunchType, CorrectionReason } from "@/types/myAttendance";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   onClose:    () => void;
@@ -106,13 +107,7 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
         <div className="form-row cols-2">
           <div className="field-group">
             <label className="field-label">Date</label>
-            <input
-              type="date"
-              className="field-input"
-              value={formDate}
-              onChange={e => setFormDate(e.target.value)}
-              required
-            />
+            <DateInput className="field-input" value={formDate} onChange={isoDate => setFormDate(isoDate)} required />
           </div>
           <div className="field-group">
             <label className="field-label">Punch Type</label>

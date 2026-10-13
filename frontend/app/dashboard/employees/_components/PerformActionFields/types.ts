@@ -89,7 +89,22 @@ export const ACTION_LABELS: Record<ActionType, string> = {
 // action's endpoint): Promotion/Org assignment/Confirmation are gated by a
 // single permission check with no queued approval step; Pay change likewise;
 // Separation alone has a genuine multi-stage SeparationApprovalStage chain.
-export function approvalRouteFor(action: ActionType, reportingManagerName: string | null, isManager: boolean): string {
+export function approvalRouteFor(
+  action: ActionType, reportingManagerName: string | null, isManager: boolean, requiresApproval = false,
+): string {
+  // A user without direct-edit authority (a Reporting Manager) raises these
+  // for approval instead — the real route enforced by
+  // apps.accounts.services_personnel_actions.BASE_ROUTES. The manager's own
+  // step is satisfied by raising it.
+  if (requiresApproval) {
+    switch (action) {
+      case "promotion":      return "Reporting manager (raises) → HR Business Partner, then Payroll Admin if a new CTC is included.";
+      case "org_assignment": return "Reporting manager (raises) → HR Business Partner.";
+      case "pay_change":     return "HR Business Partner → Payroll Admin.";
+      case "confirmation":   return "Reporting manager (raises) → HR Business Partner.";
+      default: break;
+    }
+  }
   switch (action) {
     case "promotion":
       return "Requires employees.edit — applied directly by whoever has that permission (typically the reporting manager or HR); no queued approval step exists for this action yet.";

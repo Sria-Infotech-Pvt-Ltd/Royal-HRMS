@@ -84,7 +84,7 @@ export interface BranchPayrollConfig {
   updated_at: string;
 }
 
-export type CtcRevisionReason = "promotion" | "increment" | "market_correction" | "other";
+export type CtcRevisionReason = "initial" | "promotion" | "increment" | "market_correction" | "correction" | "other";
 
 export interface EmployeeSalaryConfig {
   id: string;
@@ -106,6 +106,14 @@ export interface EmployeeSalaryConfig {
   linked_promotion: string | null;
   linked_promotion_designation: string | null;
   linked_promotion_effective_date: string | null;
+  // Pay-scale details HR records with the CTC (the Basic pay dialog). The monthly breakup is derived
+  // from annual_ctc + these; only deliberate overrides are stored.
+  pay_scale_group: string;
+  pay_scale_level: string;
+  basic_percent: number;
+  earnings_override: Record<string, number>;
+  /** The employee's own tax-regime election (read-only here). */
+  employee_tax_regime: "old" | "new" | "";
   is_active: boolean;
   created_at: string;
   updated_at: string;

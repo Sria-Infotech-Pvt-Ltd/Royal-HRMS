@@ -30,6 +30,17 @@ from apps.accounts.views import _employee_out_of_branch_scope
 
 logger = logging.getLogger(__name__)
 
+_NO_ACCOUNT_ADMIN = 'You do not have permission to manage other employees\' accounts.'
+
+
+def _can_manage_accounts(user) -> bool:
+    """Acting on ANOTHER person's login is an administrator action. The
+    dedicated permission alone is not trusted: a mis-granted
+    employees.reset_password (it was found on the plain 'employee' role, which
+    let any employee reset a colleague's password) must not be enough on its
+    own, so the actor must also be able to edit employee records."""
+    return has_perm(user, 'employees.reset_password') and has_perm(user, 'employees.edit')
+
 
 class EmployeePasswordResetView(APIView):
     """
@@ -40,7 +51,7 @@ class EmployeePasswordResetView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, pk) -> Response:
-        if not has_perm(request.user, 'employees.reset_password'):
+        if not _can_manage_accounts(request.user):
             return error(
                 'You do not have permission to reset employee passwords.',
                 http_status=status.HTTP_403_FORBIDDEN,
@@ -50,6 +61,10 @@ class EmployeePasswordResetView(APIView):
             target = User.objects.get(pk=pk, is_active=True)
         except (User.DoesNotExist, ValueError):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        # Only a superuser may reset a superuser's password.
+        if target.is_superuser and not request.user.is_superuser:
+            return error(_NO_ACCOUNT_ADMIN, http_status=status.HTTP_403_FORBIDDEN)
 
         if target.pk == request.user.pk:
             return error(
@@ -122,7 +137,7 @@ class ResendInviteView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, pk) -> Response:
-        if not has_perm(request.user, 'employees.reset_password'):
+        if not _can_manage_accounts(request.user):
             return error(
                 'You do not have permission to resend activation invites.',
                 http_status=status.HTTP_403_FORBIDDEN,
@@ -183,7 +198,7 @@ class EmployeeInviteStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request, pk) -> Response:
-        if not has_perm(request.user, 'employees.reset_password'):
+        if not _can_manage_accounts(request.user):
             return error(
                 'You do not have permission to view invite status.',
                 http_status=status.HTTP_403_FORBIDDEN,

@@ -7,6 +7,10 @@
 // keep EmployeeDrawer.tsx under this codebase's ~300-line guideline.
 
 import { useLeaveBalances } from "@/hooks/useEmployeeDashboard";
+import { useFetch } from "@/hooks/useFetch";
+import { API } from "@/lib/api/endpoints";
+import { financialYearRangeLabel } from "@/lib/formatDate";
+import { currentFinancialYearStart } from "@/app/dashboard/my-payslip/_components/types";
 import { SectionCard, Row } from "./EmployeeDrawerParts";
 
 // Real LeaveBalance.leave_type codes (apps/hrms/models.py LEAVE_TYPE_CHOICES)
@@ -25,10 +29,41 @@ const LEAVE_LABEL: Record<string, string> = {
 };
 const LEAVE_ORDER = ["earned", "casual", "sick"];
 
-export default function EmployeeDrawerLeaveCard() {
-  const { data: leaveData } = useLeaveBalances();
+interface AdminBalanceRow {
+  leave_type: string;
+  year: number;
+  total_days: string;
+  used_days: string;
+  carried_forward: string;
+  available_days: number;
+}
 
-  const leaveBalances = (leaveData?.balances ?? [])
+/** Another employee's balances (admin/manager view) — the server scopes who
+    may see whom; omit `employeeCode` for the signed-in user's own card. */
+export default function EmployeeDrawerLeaveCard({ employeeCode }: { employeeCode?: string }) {
+  const own = useLeaveBalances();
+  const { data: fyConfig } = useFetch<{ financial_year_start_month: string }>(API.settings.financialYear);
+  const other = useFetch<AdminBalanceRow[]>(employeeCode ? `${API.leave.balance}?employee_id=${encodeURIComponent(employeeCode)}` : null);
+
+  const leaveData = employeeCode
+    ? (other.data
+        ? {
+            year: other.data[0]?.year,
+            lop_days: Number(other.data.find(b => b.leave_type === "lwp")?.used_days ?? 0),
+            balances: other.data
+              .filter(b => b.leave_type !== "lwp")
+              .map(b => ({ leave_type: b.leave_type, remaining: b.available_days, total_days: Number(b.total_days) })),
+          }
+        : null)
+    : own.data;
+
+  const yearLabel = fyConfig ? financialYearRangeLabel(currentFinancialYearStart(fyConfig.financial_year_start_month)) : "";
+
+  // The reference lists the three standing entitlements; show the rest (maternity, comp-off ...) only
+  // when someone has none of them, so the card is never empty for a real balance.
+  const allBalances = leaveData?.balances ?? [];
+  const coreBalances = allBalances.filter(b => LEAVE_ORDER.includes(b.leave_type));
+  const leaveBalances = (coreBalances.length > 0 ? coreBalances : allBalances)
     .slice()
     .sort((a, b) => {
       const ai = LEAVE_ORDER.indexOf(a.leave_type);
@@ -37,9 +72,13 @@ export default function EmployeeDrawerLeaveCard() {
     });
 
   return (
-    <SectionCard icon="ti-beach" title={`Leave${leaveData?.year ? ` · ${leaveData.year}` : ""}`}>
-      {leaveBalances.length === 0 ? (
-        <p style={{ fontSize: 12, color: "var(--on-variant)" }}>No leave balances found. Contact HR to credit your leave.</p>
+    <SectionCard title={`Leave${yearLabel ? ` · ${yearLabel}` : ""}`} list={leaveBalances.length > 0}>
+      {leaveData === null && (employeeCode ? other.loading : own.loading) ? (
+        <p className="hint">Loading…</p>
+      ) : leaveBalances.length === 0 ? (
+        <p className="hint">
+          {employeeCode ? "No leave balances have been credited for this employee yet." : "No leave balances found. Contact HR to credit your leave."}
+        </p>
       ) : (
         <>
           {leaveBalances.map(b => (

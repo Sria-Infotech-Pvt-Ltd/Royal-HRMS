@@ -71,7 +71,7 @@ export default function EmployeeRowActionsMenu({ actions }: Props) {
         suppressHydrationWarning
         className="actbtn"
       >
-        <i className="ti ti-dots-vertical text-[16px]" />
+        <i className="ti ti-dots text-[16px]" />
       </button>
       {open && coords && createPortal(
         <div

@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
 import type { Holiday, HolidayFormPayload, HolidayType } from "@/types/holidays";
 import SearchableSelect from "@/components/SearchableSelect";
+import DateInput from "@/components/shared/DateInput";
 
 interface BranchOption { id: number; branch_name: string }
 
@@ -108,8 +109,7 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Date *</label>
-              <input className={errors.date ? INPUT_ERR : INPUT} type="date" value={form.date}
-                onChange={e => setField("date", e.target.value)} />
+              <DateInput className={errors.date ? INPUT_ERR : INPUT} value={form.date} onChange={isoDate => setField("date", isoDate)} />
               {errors.date && <p className="text-xs text-[var(--error)] mt-1">{errors.date}</p>}
             </div>
             <div>

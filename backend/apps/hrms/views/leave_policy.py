@@ -174,8 +174,13 @@ class LeaveBalanceView(APIView):
 
         if employee_id and _has_perm(request.user, 'employees.view'):
             from apps.accounts.models import User
+            from apps.accounts.views.shared import _employee_out_of_branch_scope
             employee = User.objects.filter(employee_id=employee_id).first()
-            if not employee:
+            # Same scoping every other employee-record endpoint applies: a
+            # manager only sees direct reports, branch-scoped roles only their
+            # own branch. Without this, employees.view alone exposed every
+            # employee's leave balances company-wide.
+            if not employee or (employee.id != request.user.id and _employee_out_of_branch_scope(request.user, employee)):
                 return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
         else:
             employee = request.user

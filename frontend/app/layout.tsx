@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import "./aira-theme.css";
+import "./ess-theme.css";
+import "./directory-theme.css";
 // Self-hosted (not an external CDN) so every icon in the app doesn't
 // depend on jsdelivr being reachable — imported (not a manual <link>) so
 // Next.js bundles it and resolves its font url()s itself.
@@ -13,6 +15,9 @@ import { ToastProvider } from "@/components/ToastProvider";
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
+  // Real italic cut — the highlighted title word (em.hl) otherwise renders a
+  // synthesized oblique that is narrower than the AIRA reference design.
+  style: ["normal", "italic"],
   display: "swap",
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import type { FieldDef } from "../_data";
+import DateInput from "@/components/shared/DateInput";
 
 // These reuse the app's shared tokens (globals.css) rather than one-off hex
 // literals so this shared field control stays correct in dark mode too.
@@ -159,13 +160,11 @@ export default function FormField({
 
       case "date":
         return (
-          <input
+          <DateInput
             id={`fld-${field.key}`}
-            type="date"
             value={value}
-            onChange={(e) => set(e.target.value)}
+            onChange={set}
             disabled={disabled}
-            suppressHydrationWarning
             className={INPUT + (disabled ? " cursor-not-allowed" : "")}
             style={{ borderColor: disabled ? BORDER : borderColor, background: disabled ? "var(--sec-c)" : undefined }}
           />

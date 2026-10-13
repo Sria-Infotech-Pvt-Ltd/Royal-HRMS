@@ -2,19 +2,23 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { fullName, initials, personAvatarTint, type Employee } from "../_data";
+import { directoryStatusLabel, fullName, initials, personAvatarTint, type DirectoryStatusLabel, type Employee } from "../_data";
+import type { StatusPillTone } from "@/components/employees/StatusPill";
 import Avatar from "./Avatar";
 import EmployeeRowActionsMenu, { type RowAction } from "./EmployeeRowActionsMenu";
 import PerformActionModal from "./PerformActionModal";
 import StatusPill from "@/components/employees/StatusPill";
-import { formatDate } from "@/lib/formatDate";
+import { formatDateSlash } from "@/lib/formatDate";
+import { usePermission } from "@/hooks/usePermission";
 
-// Standardized on the shared formatDate util (dd-mm-yyyy) instead of this
-// row's own ad-hoc dd/mm/yyyy formatter — the Directory table, its Drafts
-// panel, and the Hire wizard were each showing a different date format.
+// The Employee Directory reference shows dd/mm/yyyy, so the table (like its drawer) uses the slash style.
 function slashDate(iso: string | null | undefined): string {
-  return formatDate(iso) || "—";
+  return formatDateSlash(iso) || "—";
 }
+
+const STATUS_TONE: Record<DirectoryStatusLabel, StatusPillTone> = {
+  Active: "success", Onboarding: "warn", Probation: "brand", "Notice Period": "error", Exited: "neutral",
+};
 
 interface Props {
   employee: Employee;
@@ -29,10 +33,12 @@ interface Props {
 
 export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEdit, toggling, onOpen, onToggleStatus, onActionApplied }: Props) {
   const router = useRouter();
-  const onNotice = e.status === "active" && !!e.lastWorkingDay;
+  const rowStatus = directoryStatusLabel(e);
   const isExited = e.status === "inactive";
   const tint = personAvatarTint(e.id);
   const [showActionModal, setShowActionModal] = useState(false);
+  // A Reporting Manager has no employees.edit but may raise an action for approval.
+  const canRaiseAction = usePermission("employees.raise_action");
 
   const actions: RowAction[] = [
     { label: "View", icon: "ti-eye", onClick: () => onOpen(e.id) },
@@ -43,7 +49,7 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
     // the unified modal below) is the real offboarding path; a manually
     // reactivated/deactivated account outside that flow is still available
     // for admins directly on the Employee Detail page if ever needed.
-    ...(canEdit && !isExited
+    ...((canEdit || canRaiseAction) && !isExited
       ? [{ label: "Perform an action", icon: "ti-bolt", onClick: () => setShowActionModal(true) } satisfies RowAction]
       : []),
     ...(canEdit && isExited
@@ -71,18 +77,11 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
         {e.location || <span style={{ color: "var(--faint)" }}>—</span>}
       </div>
       <div>
-        {onNotice
-          ? <StatusPill label="Notice Period" tone="error" />
-          : e.status === "active"
-            ? <StatusPill label="Active" tone="success" />
-            : e.status === "onboarding"
-              ? <StatusPill label="Onboarding" tone="warn" />
-              : <StatusPill label="Exited" tone="neutral" />
-        }
+        <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
       </div>
       <div className="text-[13px] whitespace-nowrap" style={{ color: "var(--muted)" }}>{slashDate(e.dateOfJoining)}</div>
       <div className="text-[13px] whitespace-nowrap">
-        {onNotice || isExited
+        {rowStatus === "Notice Period" || isExited
           ? <span className="mgr" style={{ color: "var(--crit)", fontStyle: "italic" }}>Last day {slashDate(e.lastWorkingDay)}</span>
           : e.reportingManagerName
             ? <span className="mgr" style={{ color: "var(--ink)" }}>{e.reportingManagerName}</span>

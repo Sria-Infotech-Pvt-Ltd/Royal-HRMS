@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import RequestModal from "@/components/RequestModal";
+import DateInput from "@/components/shared/DateInput";
 
 type ExpenseCategory = "travel" | "meals" | "equipment" | "other";
 
@@ -146,13 +147,7 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
               <label className="field-label">
                 Expense Date <span style={{ color: "var(--error)" }}>*</span>
               </label>
-              <input
-                type="date"
-                className={`field-input${errors.date ? " field-error" : ""}`}
-                placeholder="dd-mm-yyyy"
-                value={form.date}
-                onChange={e => setField("date", e.target.value)}
-              />
+              <DateInput className={`field-input${errors.date ? " field-error" : ""}`} value={form.date} onChange={isoDate => setField("date", isoDate)} />
               {errors.date && <p className="field-error-msg">{errors.date}</p>}
             </div>
           </div>

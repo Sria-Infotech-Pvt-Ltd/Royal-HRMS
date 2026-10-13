@@ -8,6 +8,7 @@ import { API } from "@/lib/api/endpoints";
 import type { FieldOption } from "../../_data";
 import { formatDate } from "@/lib/formatDate";
 import SearchableSelect from "@/components/SearchableSelect";
+import DateInput from "@/components/shared/DateInput";
 
 interface Props {
   employeeId: string;
@@ -297,12 +298,7 @@ export default function PromotionTab({
 
               <div className="field-group">
                 <label className="field-label">Effective date</label>
-                <input
-                  className="field-input"
-                  type="date"
-                  value={reassignDate}
-                  onChange={e => { setReassignDate(e.target.value); setReassignError(null); }}
-                />
+                <DateInput className="field-input" value={reassignDate} onChange={isoDate => { setReassignDate(isoDate); setReassignError(null); }} />
               </div>
 
               <div className="field-group">

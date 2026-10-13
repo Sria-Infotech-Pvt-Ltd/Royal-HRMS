@@ -24,6 +24,7 @@ from .leave_policy import (
     LeaveBalanceView,
     LeaveBalanceAdjustView,
 )
+from .leave_record import LeaveRecordView
 from .leave_requests import (
     LeaveRequestListCreateView,
     LeaveRequestDetailView,
