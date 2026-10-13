@@ -67,6 +67,12 @@ const COUNTRY_NAME_FIELDS = new Set(['international_worker_country']);
 // hire time for the exact same field.
 const NATIONALITY_FIELDS = new Set(['nationality']);
 
+// father_name mirrors whatever Father entry exists in the Family & nomination
+// step (see page.tsx's family-sync effect) instead of being typed twice —
+// same "read-only, FROM FAMILY" treatment the Hire wizard's own Personal
+// identity step already gives this exact field.
+const FROM_FAMILY_FIELDS = new Set(['father_name']);
+
 // current_state/permanent_state and current_district/permanent_district get
 // the same real India state/district dropdowns the Hire wizard's own
 // AddressFields.tsx already uses (lib/indiaStatesDistricts.ts) instead of a
@@ -99,6 +105,20 @@ export default function DynamicField({ config, value, onChange, placeholder, pai
         : <span style={{ color: "var(--on-variant)", fontWeight: 400, marginLeft: 6, fontSize: 10.5 }}>OPTIONAL</span>}
     </label>
   );
+
+  if (FROM_FAMILY_FIELDS.has(config.field_key)) {
+    return (
+      <div className="field-group">
+        <label className="field-label">
+          {config.label}
+          <span style={{ color: "var(--on-variant)", fontWeight: 400, marginLeft: 6, fontSize: 10.5 }}>FROM FAMILY</span>
+        </label>
+        <div className={INP} style={{ background: "var(--bg-mid)", color: value ? "var(--on-bg)" : "var(--on-variant)" }}>
+          {value || `Set in Family & nomination`}
+        </div>
+      </div>
+    );
+  }
 
   if (choiceOptions) {
     return (

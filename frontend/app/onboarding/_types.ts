@@ -1,4 +1,9 @@
 export interface ProfileForm {
+  // Identity header fields (Hire-wizard-equivalent) — salutation/display_name
+  // are hardcoded/non-configurable (see views/shared.py's _step_all_field_keys
+  // step-0 special case); nationality/place_of_birth are real, seeded
+  // OnboardingFieldConfig rows (migration 0187).
+  salutation: string; display_name: string; nationality: string; place_of_birth: string;
   date_of_birth: string; gender: string; marital_status: string;
   father_name: string; blood_group: string;
   current_address: string; current_address_line2: string;

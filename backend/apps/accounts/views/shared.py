@@ -619,7 +619,12 @@ def _step_all_field_keys(step: int) -> frozenset:
         # own (it's a structural toggle, not a collectible field HR would
         # reorder/hide/require) — added explicitly so the request-filtering
         # loop below doesn't silently drop it.
-        keys = keys | {'permanent_same_as_current'}
+        # salutation/display_name are the same situation for a different
+        # reason: they render from the wizard's own hardcoded Identity
+        # header (matching the Hire wizard's equally-hardcoded Personal
+        # identity step — neither is admin-configurable via Settings >
+        # Onboarding Fields), so they also have no OnboardingFieldConfig row.
+        keys = keys | {'permanent_same_as_current', 'salutation', 'display_name'}
     return keys
 
 

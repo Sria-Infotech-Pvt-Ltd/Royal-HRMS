@@ -11,6 +11,7 @@ import type { OnboardingFieldConfigByStep, CustomFieldFileValue, OnboardingSecti
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import type { ProfileForm } from "./_types";
 import DynamicStepFields from "./_components/DynamicStepFields";
+import IdentityHeader from "./_components/IdentityHeader";
 import TabDocuments, { type UploadedDoc } from "./_components/TabDocuments";
 import TabFaceId from "./_components/TabFaceId";
 import OnboardingSidebar from "./_components/OnboardingSidebar";
@@ -621,6 +622,15 @@ export default function OnboardingPage() {
     setCustomValues(prev => ({ ...prev, [fieldKey]: value }));
   }
 
+  // Father's name on the Personal step mirrors whatever Father entry exists
+  // in Family & nomination (step 5), same read-only "FROM FAMILY" sync the
+  // Hire wizard's own Personal identity step already does for this exact
+  // field — not typed twice.
+  useEffect(() => {
+    const father = familyEntries.find(f => f.relationship === "father");
+    if (father && father.name !== form.father_name) set("father_name", father.name);
+  }, [familyEntries]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function saveSection(): Promise<boolean> {
     setSaveMsg(null); setSaveErr(null);
 
@@ -985,6 +995,7 @@ export default function OnboardingPage() {
               </div>
             </div>
           )}
+          {tab === 0 && <IdentityHeader form={form} onChange={set} />}
           {steps[tab].kind === "fields" && (
             <DynamicStepFields
               configs={(fieldConfig[String(steps[tab].step)] ?? []).filter(c => c.visible)}

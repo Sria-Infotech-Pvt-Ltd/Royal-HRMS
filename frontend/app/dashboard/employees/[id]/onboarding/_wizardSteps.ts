@@ -6,6 +6,7 @@
 import type { ProfileForm } from "@/app/onboarding/_types";
 
 export const EMPTY: ProfileForm = {
+  salutation: "", display_name: "", nationality: "", place_of_birth: "",
   date_of_birth: "", gender: "", marital_status: "", father_name: "", blood_group: "",
   current_address: "", current_address_line2: "",
   current_village: "", current_district: "", current_state: "", current_pin_code: "",

@@ -10,6 +10,7 @@ export const EMPTY_FORM: ProfileForm = {
   // is "Single", so an empty string here rendered as "Single" on screen
   // while the value actually saved was "" (QA report #41). Match the
   // default the UI already visibly shows.
+  salutation: "", display_name: "", nationality: "", place_of_birth: "",
   date_of_birth: "", gender: "", marital_status: "single", father_name: "", blood_group: "",
   current_address: "", current_address_line2: "", current_village: "", current_district: "",
   current_state: "", current_pin_code: "", permanent_address: "", permanent_address_line2: "",
