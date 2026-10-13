@@ -1,10 +1,4 @@
-"""
-Phase 5A Tasks F+H+I — emergency contacts, nominations (generalising
-EPFNominee), skills/certifications/languages, and statutory enrolments.
-Additive throughout — FamilyMember.first_name/last_name/is_nominee_eligible/
-occupation are new columns on the EXISTING FamilyMember model (Task F.1),
-not a new table.
-"""
+
 from __future__ import annotations
 
 import uuid
