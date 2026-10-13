@@ -2241,12 +2241,22 @@ class MyProfileSerializer(serializers.ModelSerializer):
         ]
 
     def _current_placement(self, obj: User):
+        # Cached on the instance (not just memoized per-serializer-call) —
+        # get_org_unit_name and get_position_title both need this same row,
+        # and without caching it here this ran the identical placements
+        # query twice per request to /employees/me (a real, measurable N+1
+        # on an endpoint DashboardShell's topbar avatar hits on every page).
+        cached = getattr(obj, '_cached_current_placement', 'unset')
+        if cached != 'unset':
+            return cached
         # Same "open, still-current" filter _employee_dict() (views/shared.py)
         # already uses elsewhere — an open-ended Placement (no effective_to)
         # is the one that's active right now.
-        return obj.placements.filter(effective_to__isnull=True).select_related(
+        placement = obj.placements.filter(effective_to__isnull=True).select_related(
             'position', 'position__org_unit',
         ).first()
+        obj._cached_current_placement = placement
+        return placement
 
     def get_org_unit_name(self, obj: User) -> str | None:
         placement = self._current_placement(obj)

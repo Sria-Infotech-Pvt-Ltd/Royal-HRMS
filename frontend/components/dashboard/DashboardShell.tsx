@@ -36,8 +36,16 @@ export default function DashboardShell({
 
   // Fetched independently of the server-rendered session cookie (name/role
   // only) so a photo change shows up immediately, without needing to log in
-  // again for the cookie to refresh.
-  const { data: myProfile, refetch: refetchMyProfile } = useFetch<{ profile_photo_url: string | null }>(API.employees.me);
+  // again for the cookie to refresh. Cached (5 min TTL): DashboardShell wraps
+  // every /dashboard page, so without `cache: true` this re-hit MyProfileView
+  // (a serializer with several SerializerMethodFields, each its own query —
+  // current placement, reporting manager, position title) on EVERY page
+  // navigation, which is both slow and showed the initials fallback flash
+  // back in on each nav while the photo re-fetched. The explicit
+  // PROFILE_PHOTO_UPDATED_EVENT listener below still calls refetch(), which
+  // always bypasses the cache — so an actual photo change still shows up
+  // immediately, this just stops the redundant refetch on ordinary navigation.
+  const { data: myProfile, refetch: refetchMyProfile } = useFetch<{ profile_photo_url: string | null }>(API.employees.me, { cache: true });
 
   useEffect(() => {
     function onPhotoUpdated() { refetchMyProfile(); }

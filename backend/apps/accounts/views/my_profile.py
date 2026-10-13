@@ -132,7 +132,13 @@ class MyProfileView(APIView):
         from apps.accounts.models import EmployeeProfile
         from apps.accounts.serializers import MyProfileSerializer
         EmployeeProfile.objects.get_or_create(user=request.user)
-        user = User.objects.select_related('role', 'profile').get(pk=request.user.pk)
+        # select_related every FK MyProfileSerializer's method fields touch
+        # (reporting_manager/reporting_approver/hr) — without these, each one
+        # was its own extra query on an endpoint hit on every dashboard page
+        # load (DashboardShell's topbar avatar fetch).
+        user = User.objects.select_related(
+            'role', 'profile', 'reporting_manager', 'reporting_approver', 'hr',
+        ).get(pk=request.user.pk)
         return success('Profile retrieved.', MyProfileSerializer(user, context={'request': request}).data)
 
     def patch(self, request):
