@@ -45,6 +45,14 @@ class IdentityFieldConfigSeedTests(TestCase):
         self.assertFalse(OnboardingFieldConfig.objects.filter(field_key='salutation').exists())
         self.assertFalse(OnboardingFieldConfig.objects.filter(field_key='display_name').exists())
 
+    def test_mother_name_and_languages_known_are_seeded_real_builtin_rows(self):
+        mother_name = OnboardingFieldConfig.objects.get(field_key='mother_name', step=PERSONAL_STEP)
+        languages_known = OnboardingFieldConfig.objects.get(field_key='languages_known', step=PERSONAL_STEP)
+        self.assertFalse(mother_name.is_custom)
+        self.assertFalse(mother_name.required)
+        self.assertFalse(languages_known.is_custom)
+        self.assertFalse(languages_known.required)
+
 
 class IdentityFieldSaveRoundTripTests(TestCase):
     def setUp(self):
@@ -91,6 +99,17 @@ class IdentityFieldSaveRoundTripTests(TestCase):
         profile = EmployeeProfile.objects.get(user=self.user)
         self.assertEqual(profile.nationality, 'American')
         self.assertEqual(profile.place_of_birth, 'Chicago')
+
+    def test_mother_name_and_languages_known_save(self):
+        resp = self.client.patch(
+            reverse('onboarding-step', args=[PERSONAL_STEP]),
+            {'mother_name': 'Test Mother', 'languages_known': 'English, Hindi'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        profile = EmployeeProfile.objects.get(user=self.user)
+        self.assertEqual(profile.mother_name, 'Test Mother')
+        self.assertEqual(profile.languages_known, 'English, Hindi')
 
     def test_unconfigured_random_key_is_still_dropped(self):
         # Confirms the step-0 allowlist addition is scoped to exactly

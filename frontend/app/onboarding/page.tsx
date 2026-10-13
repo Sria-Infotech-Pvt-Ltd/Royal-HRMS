@@ -629,6 +629,8 @@ export default function OnboardingPage() {
   useEffect(() => {
     const father = familyEntries.find(f => f.relationship === "father");
     if (father && father.name !== form.father_name) set("father_name", father.name);
+    const mother = familyEntries.find(f => f.relationship === "mother");
+    if (mother && mother.name !== form.mother_name) set("mother_name", mother.name);
   }, [familyEntries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveSection(): Promise<boolean> {

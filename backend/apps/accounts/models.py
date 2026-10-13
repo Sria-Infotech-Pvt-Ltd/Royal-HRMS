@@ -1963,6 +1963,16 @@ class EmployeeProfile(models.Model):
     gender             = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
     marital_status     = models.CharField(max_length=20, choices=MARITAL_CHOICES, blank=True)
     father_name        = models.CharField(max_length=150, blank=True)
+    # Collected on the Hire wizard's Personal identity step (HireWizardClient
+    # .identityExtras.mother_name) since that UI was first built, but never
+    # actually had a real column to persist to — HireActionCompleteView
+    # silently dropped it at hire completion. Added now alongside
+    # languages_known so both close that gap for real.
+    mother_name        = models.CharField(max_length=150, blank=True)
+    # Free-text, comma-separated (matches LanguagesSelect.tsx's own stored
+    # format) rather than a related table — this is display-only metadata,
+    # not a field anything else joins against.
+    languages_known    = models.CharField(max_length=255, blank=True)
     blood_group        = models.CharField(max_length=5, choices=BLOOD_CHOICES, blank=True)
     # Distinct from User.email (the work email, used for login) — a
     # personal address the employee can be reached on outside the org,

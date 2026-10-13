@@ -3,6 +3,7 @@
 import type { OnboardingFieldConfig } from "@/types/onboardingFieldConfig";
 import CountrySelect from "@/components/CountrySelect";
 import { StateSelect, DistrictSelect } from "@/components/StateDistrictSelect";
+import LanguagesSelect from "@/components/LanguagesSelect";
 
 const INP = "field-input";
 
@@ -71,7 +72,7 @@ const NATIONALITY_FIELDS = new Set(['nationality']);
 // step (see page.tsx's family-sync effect) instead of being typed twice —
 // same "read-only, FROM FAMILY" treatment the Hire wizard's own Personal
 // identity step already gives this exact field.
-const FROM_FAMILY_FIELDS = new Set(['father_name']);
+const FROM_FAMILY_FIELDS = new Set(['father_name', 'mother_name']);
 
 // current_state/permanent_state and current_district/permanent_district get
 // the same real India state/district dropdowns the Hire wizard's own
@@ -81,6 +82,11 @@ const FROM_FAMILY_FIELDS = new Set(['father_name']);
 // exact same fields.
 const STATE_FIELDS = new Set(['current_state', 'permanent_state']);
 const DISTRICT_FIELDS = new Set(['current_district', 'permanent_district']);
+
+// languages_known gets the same multi-select the Hire wizard's own Personal
+// identity step already uses (LanguagesSelect.tsx), instead of a plain
+// free-text box — same reasoning as NATIONALITY_FIELDS above.
+const LANGUAGES_FIELDS = new Set(['languages_known']);
 
 interface Props {
   config: OnboardingFieldConfig;
@@ -164,6 +170,15 @@ export default function DynamicField({ config, value, onChange, placeholder, pai
       <div className="field-group">
         {label}
         <DistrictSelect value={value} onChange={onChange} state={pairedState ?? ""} />
+      </div>
+    );
+  }
+
+  if (LANGUAGES_FIELDS.has(config.field_key)) {
+    return (
+      <div className="field-group">
+        {label}
+        <LanguagesSelect value={value} onChange={onChange} />
       </div>
     );
   }

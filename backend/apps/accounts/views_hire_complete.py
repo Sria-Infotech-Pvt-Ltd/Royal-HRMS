@@ -158,7 +158,8 @@ def _assign_salary_and_tax(user, draft, actor):
 
 _PROFILE_FIELDS = (
     'salutation', 'middle_name', 'display_name', 'nationality', 'place_of_birth',
-    'date_of_birth', 'gender', 'marital_status', 'father_name', 'blood_group',
+    'date_of_birth', 'gender', 'marital_status', 'father_name', 'mother_name',
+    'languages_known', 'blood_group',
     'current_address', 'current_address_line2', 'current_village', 'current_district',
     'current_state', 'current_pin_code', 'permanent_address', 'permanent_address_line2',
     'permanent_village', 'permanent_district', 'permanent_state', 'permanent_pin_code',

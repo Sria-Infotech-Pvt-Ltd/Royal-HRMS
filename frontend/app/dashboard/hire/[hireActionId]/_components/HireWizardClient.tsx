@@ -454,13 +454,16 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   // out of sync with each other.
   function buildFullDraftPayload() {
     return {
-      ...identityExtras,
-      ...addressExtras,
       ...form,
       // Explicitly after the ...form spread: ProfileForm now also declares
-      // salutation/display_name/nationality/place_of_birth (added for the
-      // self-service wizard's own Identity header) — this wizard tracks
-      // its own separate state for these instead, which must win here.
+      // salutation/display_name/nationality/place_of_birth/mother_name/
+      // languages_known (added for the self-service wizard's own Identity
+      // header, which tracks them through `form` instead) — this wizard
+      // tracks its own separate state/extras for all of these instead,
+      // which must win here, same reasoning for identityExtras/addressExtras
+      // below as for the explicit scalars.
+      ...identityExtras,
+      ...addressExtras,
       salutation, first_name: firstName, middle_name: middleName, last_name: lastName,
       display_name: displayName, nationality, place_of_birth: placeOfBirth, email, phone,
       role: employment.role, branch: employment.branch, work_email: employment.work_email,
