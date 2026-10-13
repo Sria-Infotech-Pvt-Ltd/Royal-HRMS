@@ -16,6 +16,8 @@ from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
+from apps.accounts.models import User
+from apps.accounts.serializers_profile_photo import ProfilePhotoUploadSerializer
 
 
 def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
@@ -46,6 +48,29 @@ def _make_image_upload(size_bytes: int, image_format: str = 'PNG', filename: str
     return SimpleUploadedFile(filename, base, content_type=content_type)
 
 
+def _make_noisy_image_upload(pixel_size: int = 900, filename: str = 'photo.png'):
+    """
+    A real photo-like image with actual pixel entropy (random noise), unlike
+    _make_image_upload's flat-color swatch — needed specifically for testing
+    ProfilePhotoUploadSerializer's auto-fit re-encode (_fit_to_size_band),
+    which re-compresses the DECODED pixel content, not the raw uploaded byte
+    count. A flat color block has almost no entropy, so no JPEG quality
+    setting can push its re-encoded size up to PROFILE_PHOTO_MIN_SIZE — that
+    isn't a bug in auto-fit, it's just not a realistic "too small photo"
+    case; random noise at a real resolution is.
+    """
+    import random
+    rng = random.Random(42)
+    img = Image.new('RGB', (pixel_size, pixel_size))
+    img.putdata([
+        (rng.randrange(256), rng.randrange(256), rng.randrange(256))
+        for _ in range(pixel_size * pixel_size)
+    ])
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return SimpleUploadedFile(filename, buf.getvalue(), content_type='image/png')
+
+
 class ProfilePhotoUploadTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -65,17 +90,43 @@ class ProfilePhotoUploadTests(TestCase):
         self.user.refresh_from_db()
         self.assertTrue(bool(self.user.profile_photo))
 
-    def test_upload_below_minimum_size_is_rejected(self):
-        photo = _make_image_upload(50 * 1024)
-        resp  = self.client.post(reverse('my-profile-photo'), {'photo': photo}, format='multipart')
-        self.assertEqual(resp.status_code, 422, resp.data)
-        self.assertIn('too small', resp.data['message'].lower())
+    def test_upload_below_minimum_size_is_auto_fitted_up(self):
+        # commit 7865cc8 deliberately replaced size-based rejection with
+        # auto-fit (re-encode/resize into the allowed band) — "pick any
+        # reasonable photo, it just works" rather than bouncing the user
+        # back to find a differently-sized file. This asserts the real,
+        # current behavior instead of the old reject-on-size-bounds
+        # contract these two tests were still written against.
+        #
+        # 315px of random noise lands just under PROFILE_PHOTO_MIN_SIZE at
+        # the initial quality-90 encode, and just over it once auto-fit
+        # bumps to quality 95 — a genuine "near miss, auto-fit rescues it"
+        # case. (_make_image_upload's flat-color swatch has almost no
+        # pixel entropy, so no JPEG quality setting can push its re-encoded
+        # size up to the 100KB floor — not a bug in auto-fit, just not a
+        # realistic "too small photo" scenario to test this behavior with.)
+        #
+        # Checked at the serializer level, not by re-reading
+        # user.profile_photo back from storage afterward — the real upload
+        # storage (core.storage.ImageKitStorage) is deliberately write-only
+        # (no size()/read() — every other upload in this app only ever
+        # needs a signed .url(), see ProfileSummaryTab's own docstring).
+        photo = _make_noisy_image_upload(pixel_size=315)
+        serializer = ProfilePhotoUploadSerializer(data={'photo': photo})
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertGreaterEqual(serializer.validated_data['photo'].size, User.PROFILE_PHOTO_MIN_SIZE)
 
-    def test_upload_above_maximum_size_is_rejected(self):
-        photo = _make_image_upload(250 * 1024)
-        resp  = self.client.post(reverse('my-profile-photo'), {'photo': photo}, format='multipart')
-        self.assertEqual(resp.status_code, 422, resp.data)
-        self.assertIn('too large', resp.data['message'].lower())
+        resp = self.client.post(reverse('my-profile-photo'), {'photo': _make_noisy_image_upload(pixel_size=315)}, format='multipart')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    def test_upload_above_maximum_size_is_auto_fitted_down(self):
+        photo = _make_noisy_image_upload(pixel_size=900)
+        serializer = ProfilePhotoUploadSerializer(data={'photo': photo})
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertLessEqual(serializer.validated_data['photo'].size, User.PROFILE_PHOTO_MAX_SIZE)
+
+        resp = self.client.post(reverse('my-profile-photo'), {'photo': _make_noisy_image_upload(pixel_size=900)}, format='multipart')
+        self.assertEqual(resp.status_code, 200, resp.data)
 
     def test_disallowed_format_is_rejected(self):
         photo = _make_image_upload(150 * 1024, image_format='GIF', filename='photo.gif')
