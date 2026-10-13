@@ -371,6 +371,21 @@ def get_attendance_detail(
     def _coord(value) -> float | None:
         return float(value) if value is not None else None
 
+    from apps.attendance.location_accuracy import (
+        accuracy_level, display_location, format_accuracy, is_office_label, parse_accuracy,
+    )
+
+    def _accuracy_fields(prefix: str, punch) -> dict:
+        label = (punch.location_label or None) if punch else None
+        accuracy = punch.accuracy if punch else None
+        return {
+            f'{prefix}_accuracy_m':         parse_accuracy(accuracy),
+            f'{prefix}_accuracy_text':      format_accuracy(accuracy),
+            f'{prefix}_accuracy_level':     accuracy_level(accuracy),
+            f'{prefix}_location_display':   display_location(label, accuracy) or None,
+            f'{prefix}_location_is_office': is_office_label(label),
+        }
+
     user = record.employee
     return {
         'record_id':           str(record.id),
@@ -389,6 +404,8 @@ def get_attendance_detail(
         'clock_out_latitude':  _coord(clock_out_punch.latitude) if clock_out_punch else None,
         'clock_out_longitude': _coord(clock_out_punch.longitude) if clock_out_punch else None,
         'clock_out_location_label': (clock_out_punch.location_label or None) if clock_out_punch else None,
+        **_accuracy_fields('clock_in', clock_in_punch),
+        **_accuracy_fields('clock_out', clock_out_punch),
         'total_hours':         record.total_hours_display,
         'overtime':            _fmt_minutes(record.overtime_minutes),
         'is_late':             record.is_late,

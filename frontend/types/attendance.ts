@@ -165,6 +165,17 @@ export interface AttendanceDetail {
   clock_out_latitude:  number | null;
   clock_out_longitude: number | null;
   clock_out_location_label: string | null;
+  // GPS accuracy, display-only (null = unknown — never treated as precise)
+  clock_in_accuracy_m:          number | null;
+  clock_in_accuracy_text:       string | null;
+  clock_in_accuracy_level:      GpsAccuracyLevel | null;
+  clock_in_location_display:    string | null;
+  clock_in_location_is_office:  boolean;
+  clock_out_accuracy_m:         number | null;
+  clock_out_accuracy_text:      string | null;
+  clock_out_accuracy_level:     GpsAccuracyLevel | null;
+  clock_out_location_display:   string | null;
+  clock_out_location_is_office: boolean;
   total_hours:   string;
   overtime:      string;
   is_late:       boolean;
@@ -285,6 +296,8 @@ export interface ImportRowError {
   reason:          string;
   resolution:      string;
 }
+
+export type GpsAccuracyLevel = "precise" | "approximate" | "very_approximate";
 
 export type ImportRowAction = "create" | "create_on_leave" | "update" | "skip_on_leave" | "skip_duplicate";
 

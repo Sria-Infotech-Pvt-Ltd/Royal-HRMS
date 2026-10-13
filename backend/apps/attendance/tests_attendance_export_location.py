@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import io
+from decimal import Decimal
 from datetime import date, datetime, time
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -64,10 +65,10 @@ class AttendanceExportLocationTests(TestCase):
             full_name=f'Export Emp {self._seq}', branch=BRANCH, department=department,
         )
 
-    def _punch(self, employee, punch_type, when, label='', lat=None, lon=None):
+    def _punch(self, employee, punch_type, when, label='', lat=None, lon=None, accuracy=None):
         return AttendancePunch.objects.create(
             employee=employee, punch_type=punch_type, punched_at=when,
-            location_label=label, latitude=lat, longitude=lon,
+            location_label=label, latitude=lat, longitude=lon, accuracy=accuracy,
         )
 
     def _export(self, **extra):
@@ -111,6 +112,39 @@ class AttendanceExportLocationTests(TestCase):
         _, rows = self._export()
         self.assertEqual(rows[emp.employee_id]['clock_in_location'], in_label)
         self.assertEqual(rows[emp.employee_id]['clock_out_location'], out_label)
+
+    def test_gps_accuracy_marks_each_punch_independently(self):
+        emp = self._employee()
+        self._punch(emp, AttendancePunch.PUNCH_IN, _at(9), 'Palanpur Road, Surat, Gujarat, India, 395009', 21.19, 72.79, Decimal('16.84'))
+        self._punch(emp, AttendancePunch.PUNCH_OUT, _at(18), 'Surat, Gujarat, India, 395009', 21.20, 72.80, Decimal('20000.00'))
+        self._process(emp)
+
+        _, rows = self._export()
+        row = rows[emp.employee_id]
+        self.assertEqual(row['clock_in_location'], 'Palanpur Road, Surat, Gujarat, India, 395009')
+        self.assertEqual(row['clock_out_location'], 'Approximate location (±20 km): Surat, Gujarat, India, 395009')
+        self.assertEqual((row['clock_in_gps_accuracy_m'], row['clock_out_gps_accuracy_m']), ('17', '20000'))
+
+    def test_moderate_accuracy_and_unknown_accuracy(self):
+        emp = self._employee()
+        self._punch(emp, AttendancePunch.PUNCH_IN, _at(9), 'Surat, Gujarat, India, 395009', 21.19, 72.79, Decimal('350'))
+        self._punch(emp, AttendancePunch.PUNCH_OUT, _at(18), 'Surat, Gujarat, India, 395009', 21.20, 72.80)
+        self._process(emp)
+
+        _, rows = self._export()
+        row = rows[emp.employee_id]
+        self.assertEqual(row['clock_in_location'], 'Location approximate (±350 m): Surat, Gujarat, India, 395009')
+        self.assertEqual(row['clock_out_location'], 'Surat, Gujarat, India, 395009')
+        self.assertEqual((row['clock_in_gps_accuracy_m'], row['clock_out_gps_accuracy_m']), ('350', ''))
+
+    def test_office_label_never_marked_approximate(self):
+        emp = self._employee()
+        self._punch(emp, AttendancePunch.PUNCH_IN, _at(9), OFFICE_LABEL, 51.5074, -0.1278, Decimal('5000'))
+        self._process(emp)
+
+        _, rows = self._export()
+        self.assertEqual(rows[emp.employee_id]['clock_in_location'], OFFICE_LABEL)
+        self.assertEqual(rows[emp.employee_id]['clock_in_gps_accuracy_m'], '5000')
 
     def test_missing_label_falls_back_to_stored_coordinates(self):
         emp = self._employee()
@@ -185,7 +219,9 @@ class AttendanceExportLocationTests(TestCase):
         self._process(emp)
 
         header, rows = self._export()
-        self.assertEqual(header, EXISTING_COLUMNS + ['clock_in_location', 'clock_out_location'])
+        self.assertEqual(header, EXISTING_COLUMNS + [
+            'clock_in_location', 'clock_out_location', 'clock_in_gps_accuracy_m', 'clock_out_gps_accuracy_m',
+        ])
 
         list_row = next(r for r in get_attendance_list({'date': DAY, 'branch': BRANCH}) if r['employee_id'] == emp.employee_id)
         row = rows[emp.employee_id]
@@ -282,7 +318,9 @@ class AttendanceExportEndpointLocationTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp['Content-Type'].startswith('text/csv'))
         header, rows = _parse(resp.content.decode('utf-8'))
-        self.assertEqual(header[-2:], ['clock_in_location', 'clock_out_location'])
+        self.assertEqual(header[-4:], [
+            'clock_in_location', 'clock_out_location', 'clock_in_gps_accuracy_m', 'clock_out_gps_accuracy_m',
+        ])
         self.assertEqual(rows[self.emp.employee_id]['clock_in_location'], 'London, England, United Kingdom')
         self.assertEqual(rows[self.emp.employee_id]['clock_out_location'], '')
 

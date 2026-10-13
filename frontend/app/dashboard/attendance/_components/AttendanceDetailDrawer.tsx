@@ -6,7 +6,7 @@ import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
-import type { AttendanceAuditEntry, AttendanceDetail, CorrectionReviewAction, CorrectionStatus, PaginatedCorrections, PunchType } from "@/types/attendance";
+import type { AttendanceAuditEntry, AttendanceDetail, CorrectionReviewAction, CorrectionStatus, GpsAccuracyLevel, PaginatedCorrections, PunchType } from "@/types/attendance";
 import { AttendanceEditForm } from "./AttendanceEditForm";
 
 interface Props {
@@ -58,6 +58,19 @@ function formatEventLabel(event: string): string {
     .split("_")
     .map(word => word.charAt(0) + word.slice(1).toLowerCase())
     .join(" ");
+}
+
+// Display guidance only — a small accuracy value doesn't prove the address is exact.
+function GpsAccuracyLine({ text, level }: { text: string | null; level: GpsAccuracyLevel | null }) {
+  const color = level === "very_approximate" ? "var(--error)" : level === "approximate" ? "var(--warn)" : "var(--on-variant)";
+  return (
+    <div style={{ fontSize: 11, color, marginBottom: 2, display: "flex", alignItems: "center", gap: 4 }}>
+      {level && level !== "precise" && <i className="ti ti-alert-triangle" style={{ fontSize: 11 }} />}
+      GPS accuracy: {text ?? "unknown"}
+      {level === "approximate" && " — location approximate"}
+      {level === "very_approximate" && " — location very approximate"}
+    </div>
+  );
 }
 
 function SectionTitle({ icon, title }: { icon: string; title: string }) {
@@ -225,12 +238,15 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
                     {data.clock_in_latitude !== null && data.clock_in_longitude !== null ? (
                       <>
                         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
-                          {data.clock_in_location_label ?? (
+                          {data.clock_in_location_display ?? data.clock_in_location_label ?? (
                             <span style={{ fontWeight: 400, fontStyle: "italic", color: "var(--on-variant)" }}>
                               Location name unavailable
                             </span>
                           )}
                         </div>
+                        {!data.clock_in_location_is_office && (
+                          <GpsAccuracyLine text={data.clock_in_accuracy_text} level={data.clock_in_accuracy_level} />
+                        )}
                         <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>
                           Latitude: {data.clock_in_latitude.toFixed(8)}
                         </div>
@@ -254,12 +270,15 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
                     {data.clock_out_latitude !== null && data.clock_out_longitude !== null ? (
                       <>
                         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
-                          {data.clock_out_location_label ?? (
+                          {data.clock_out_location_display ?? data.clock_out_location_label ?? (
                             <span style={{ fontWeight: 400, fontStyle: "italic", color: "var(--on-variant)" }}>
                               Location name unavailable
                             </span>
                           )}
                         </div>
+                        {!data.clock_out_location_is_office && (
+                          <GpsAccuracyLine text={data.clock_out_accuracy_text} level={data.clock_out_accuracy_level} />
+                        )}
                         <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>
                           Latitude: {data.clock_out_latitude.toFixed(8)}
                         </div>
