@@ -35,6 +35,26 @@ LEAVE_TYPE_CHOICES = [
     (LEAVE_COMP_OFF,    'Compensatory Off'),
 ]
 
+_LEAVE_TYPE_LABELS = dict(LEAVE_TYPE_CHOICES)
+
+
+def leave_type_display_label(leave_type_code: str, leave_type_ref) -> str:
+    """Shared resolver for LeaveRequest/LeaveBalance's `get_leave_type_display()`
+    — `leave_type` stopped being a `choices=` field in Phase 6A (widened to a
+    plain CharField so an admin-created LeavePolicy isn't limited to the 8
+    built-in codes), which silently broke Django's auto-generated
+    `get_FOO_display()` for every one of its several call sites across this
+    codebase (serializers, leave_stats_calendar, voice_commands, this dashboard
+    module) — none of them were updated at the time, a real regression this
+    fixes at the source rather than patching each call site separately.
+    Prefers the real `LeaveType.name` (Phase 6A's own label source) when a row
+    has been linked to one; falls back to the legacy static label map for
+    older rows that predate `leave_type_ref` being populated."""
+    if leave_type_ref is not None:
+        return leave_type_ref.name
+    return _LEAVE_TYPE_LABELS.get(leave_type_code, leave_type_code)
+
+
 DURATION_FULL      = 'full_day'
 DURATION_MORNING   = 'half_morning'
 DURATION_AFTERNOON = 'half_afternoon'
@@ -310,6 +330,9 @@ class LeaveBalance(models.Model):
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — {self.leave_type} {self.year}'
+
+    def get_leave_type_display(self) -> str:
+        return leave_type_display_label(self.leave_type, self.leave_type_ref)
 
     @property
     def available_days(self):
@@ -766,6 +789,9 @@ class LeaveRequest(models.Model):
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — {self.leave_type} ({self.start_date})'
+
+    def get_leave_type_display(self) -> str:
+        return leave_type_display_label(self.leave_type, self.leave_type_ref)
 
 
 # ─── Work From Home Request ────────────────────────────────────────────────────
