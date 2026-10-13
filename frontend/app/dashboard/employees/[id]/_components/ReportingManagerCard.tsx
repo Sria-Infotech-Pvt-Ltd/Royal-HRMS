@@ -9,6 +9,7 @@ interface EmployeeResult {
   employee_id: string;
   department:  string;
   branch:      string;
+  role?:       string;   // only returned by the Manager reporting list
 }
 
 interface Props {
@@ -129,7 +130,7 @@ export function EmployeePickerInline({
                         {emp.full_name}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                        {emp.employee_id} · {emp.department}
+                        {emp.employee_id} · {emp.role || emp.department}
                       </div>
                     </div>
                     {isActive && (

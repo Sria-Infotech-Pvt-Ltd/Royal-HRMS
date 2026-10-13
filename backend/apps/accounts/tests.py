@@ -1407,7 +1407,7 @@ class ManagerReportingManagerEditTests(TestCase):
             'reporting_manager_id': str(self.other_manager.pk),
         }, format='json')
         self.assertEqual(resp.status_code, 400)
-        self.assertIn('Managers do not have a reporting manager', resp.data['message'])
+        self.assertIn("Reporting Manager must be the COO", resp.data['message'])
         self.manager.refresh_from_db()
         self.assertIsNone(self.manager.reporting_manager)
 
@@ -1537,7 +1537,7 @@ class ManagerCooReportingTests(TestCase):
             'reporting_manager_id': str(self.other_manager.pk),
         }, format='json')
         self.assertEqual(resp.status_code, 400)
-        self.assertIn('Managers do not have a reporting manager', resp.data['message'])
+        self.assertIn("Reporting Manager must be the COO", resp.data['message'])
         self.manager.refresh_from_db()
         self.assertIsNone(self.manager.reporting_manager)
 
@@ -1912,7 +1912,7 @@ class ManagerStoredReportingManagerSaveTests(TestCase):
     def test_assigning_a_different_non_coo_rm_to_manager_still_rejected(self):
         resp = self._put(self.manager, {'reporting_manager_id': str(self.peer.pk), 'phone': '9000000003'})
         self.assertEqual(resp.status_code, 400)
-        self.assertIn('Managers do not have a reporting manager', resp.data['message'])
+        self.assertIn("Reporting Manager must be the COO", resp.data['message'])
         self.manager.refresh_from_db()
         self.assertEqual(self.manager.reporting_manager_id, self.legacy_rm.pk)
         self.assertEqual(self.manager.phone, '9000000001')
@@ -1950,7 +1950,7 @@ class ManagerStoredReportingManagerSaveTests(TestCase):
         self.employee.save(update_fields=['reporting_manager'])
         resp = self._put(self.employee, {'role': self.manager_role.name, 'reporting_manager_id': str(self.peer.pk)})
         self.assertEqual(resp.status_code, 400)
-        self.assertIn('Managers do not have a reporting manager', resp.data['message'])
+        self.assertIn("Reporting Manager must be the COO", resp.data['message'])
         self.employee.refresh_from_db()
         self.assertEqual(self.employee.role_id, self.employee_role.pk)
 
@@ -2002,98 +2002,139 @@ class ManagerListCooOnlyTests(TestCase):
         self.assertEqual(self.client.get(self.url, {'coo_only': '1'}).status_code, 403)
 
 
-class ManagerReportingApproverTests(TestCase):
-    """A Manager's Reporting Approver must be the COO, their branch HR or their
-    Branch Admin (who already approve a Manager's leave/separation). Other roles
-    are unchanged; an existing manager's unchanged value is preserved."""
+class ManagerReportingHierarchyTests(TestCase):
+    """Manager-role employees: Reporting Manager and Reporting Approver may each be
+    the COO or Admin Head (company-level), or HR / HR Admin / Branch Admin of the
+    Manager's own branch — never System Admin, never themselves. Other roles are
+    unchanged; existing assignments are kept unless explicitly changed."""
 
     BRANCH = 'Mumbai HQ'
 
     def setUp(self):
         cache.clear()
         self.client = APIClient()
-        editor_role = make_role('approver_editor', permission_codenames=['employees.view', 'employees.edit'])
-        make_user('editor.appr@test.com', role=editor_role, employee_id='EMPAPED1', full_name='Editor', branch=self.BRANCH)
+        editor_role = make_role('hierarchy_editor', permission_codenames=['employees.view', 'employees.edit'])
+        make_user('editor.hier@test.com', role=editor_role, employee_id='EMPHIED1', full_name='Editor', branch=self.BRANCH)
 
-        self.coo = make_user('coo.appr@test.com', role=make_role(COO_ROLE_NAME, can_manage_team=False),
-                             employee_id='EMPAPCO1', full_name='COO', branch='Delhi HQ')
-        hr_role = make_role('approver_hr', permission_codenames=['onboarding.approve'])
-        self.hr = make_user('hr.appr@test.com', role=hr_role, employee_id='EMPAPHR1', full_name='Branch HR', branch=self.BRANCH)
-        self.other_hr = make_user('hr2.appr@test.com', role=hr_role, employee_id='EMPAPHR2', full_name='Other HR', branch='Delhi HQ')
-        self.inactive_hr = make_user('hr3.appr@test.com', role=hr_role, employee_id='EMPAPHR3', full_name='Gone HR',
-                                     branch=self.BRANCH, is_active=False)
-        self.org_admin = make_user(
-            'admin.appr@test.com', role=make_role('approver_org_admin', permission_codenames=['onboarding.approve', 'settings.edit']),
-            employee_id='EMPAPOA1', full_name='Org Admin', branch=self.BRANCH,
-        )
-        ba_role = make_role('approver_branch_admin')
+        self.coo = make_user('coo.hier@test.com', role=make_role(COO_ROLE_NAME, can_manage_team=False),
+                             employee_id='EMPHICO1', full_name='COO', branch='Delhi HQ')
+        self.admin_head = make_user('ah.hier@test.com', role=make_role('admin_head'),
+                                    employee_id='EMPHIAH1', full_name='Admin Head', branch='Delhi HQ')
+        self.hr_admin = make_user('hra.hier@test.com', role=make_role('hr_admin'),
+                                  employee_id='EMPHIHA1', full_name='HR Admin', branch=self.BRANCH)
+        self.hr = make_user('hr.hier@test.com', role=make_role('hr'),
+                            employee_id='EMPHIHR1', full_name='HR', branch=self.BRANCH)
+        ba_role = make_role('branch_admin')
         ba_role.can_manage_branch = True
         ba_role.save()
-        self.branch_admin = make_user('ba.appr@test.com', role=ba_role, employee_id='EMPAPBA1', full_name='Branch Admin', branch=self.BRANCH)
+        self.branch_admin = make_user('ba.hier@test.com', role=ba_role, employee_id='EMPHIBA1', full_name='Branch Admin', branch=self.BRANCH)
 
-        self.manager_role = make_role('approver_manager', can_manage_team=True)
-        self.peer = make_user('peer.appr@test.com', role=self.manager_role, employee_id='EMPAPPM1', full_name='Peer Manager', branch=self.BRANCH)
-        self.manager = make_user('mgr.appr@test.com', role=self.manager_role, employee_id='EMPAPMG1', full_name='Manager', branch=self.BRANCH)
-        self.employee_role = make_role('approver_staff')
-        self.employee = make_user('emp.appr@test.com', role=self.employee_role, employee_id='EMPAPEM1', full_name='Employee', branch=self.BRANCH)
-        _login(self.client, 'editor.appr@test.com')
+        # Not eligible for a Manager
+        self.other_branch_hr = make_user('hr2.hier@test.com', role=make_role('hr'),
+                                         employee_id='EMPHIHR2', full_name='Delhi HR', branch='Delhi HQ')
+        self.other_branch_admin = make_user('ba2.hier@test.com', role=ba_role,
+                                            employee_id='EMPHIBA2', full_name='Delhi Branch Admin', branch='Delhi HQ')
+        self.system_admin = make_user('sa.hier@test.com', role=make_role('system_admin'),
+                                      employee_id='EMPHISA1', full_name='System Admin', branch=self.BRANCH)
+        self.inactive_hr = make_user('hr3.hier@test.com', role=make_role('hr'), employee_id='EMPHIHR3',
+                                     full_name='Gone HR', branch=self.BRANCH, is_active=False)
+
+        self.manager_role = make_role('manager', can_manage_team=True)
+        self.manager_role.can_manage_team = True
+        self.manager_role.save()
+        self.peer = make_user('peer.hier@test.com', role=self.manager_role, employee_id='EMPHIPM1', full_name='Peer Manager', branch=self.BRANCH)
+        self.manager = make_user('mgr.hier@test.com', role=self.manager_role, employee_id='EMPHIMG1', full_name='Manager', branch=self.BRANCH)
+        self.employee_role = make_role('employee')
+        self.employee = make_user('emp.hier@test.com', role=self.employee_role, employee_id='EMPHIEM1', full_name='Employee', branch=self.BRANCH)
+        _login(self.client, 'editor.hier@test.com')
+
+        self.eligible = (self.coo, self.admin_head, self.hr_admin, self.hr, self.branch_admin)
+        self.ineligible = (self.other_branch_hr, self.other_branch_admin, self.system_admin, self.peer)
 
     def _put(self, employee, payload):
         return self.client.put(reverse('employee-detail', kwargs={'employee_id': employee.employee_id}), payload, format='json')
 
-    def test_approver_list_for_managers(self):
+    def test_list_contains_only_eligible_people_with_roles(self):
         resp = self.client.get(reverse('employee-manager-list'), {'manager_approvers': '1', 'branch': self.BRANCH})
         self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertEqual({r['employee_id'] for r in resp.data['data']}, {'EMPAPCO1', 'EMPAPHR1', 'EMPAPBA1'})
+        rows = {r['employee_id']: r for r in resp.data['data']}
+        self.assertEqual(set(rows), {'EMPHICO1', 'EMPHIAH1', 'EMPHIHA1', 'EMPHIHR1', 'EMPHIBA1'})
+        self.assertTrue(all(r['role'] for r in rows.values()))
+        self.assertNotIn('EMPHISA1', rows)
 
-    def test_manager_may_have_coo_branch_hr_or_branch_admin(self):
-        for approver in (self.coo, self.hr, self.branch_admin):
-            with self.subTest(approver=approver.employee_id):
-                resp = self._put(self.manager, {'reporting_approver_id': str(approver.pk)})
-                self.assertEqual(resp.status_code, 200, resp.data)
-                self.manager.refresh_from_db()
-                self.assertEqual(self.manager.reporting_approver_id, approver.pk)
+    def test_list_without_branch_offers_only_company_level(self):
+        resp = self.client.get(reverse('employee-manager-list'), {'manager_approvers': '1'})
+        self.assertEqual({r['employee_id'] for r in resp.data['data']}, {'EMPHICO1', 'EMPHIAH1'})
 
-    def test_manager_rejects_other_approvers(self):
-        for approver in (self.peer, self.other_hr, self.org_admin):
-            with self.subTest(approver=approver.employee_id):
-                resp = self._put(self.manager, {'reporting_approver_id': str(approver.pk)})
-                self.assertEqual(resp.status_code, 400)
-                self.assertIn("Reporting Approver must be the COO", resp.data['message'])
+    def test_both_fields_accept_every_eligible_role(self):
+        for field in ('reporting_manager_id', 'reporting_approver_id'):
+            for person in self.eligible:
+                with self.subTest(field=field, person=person.employee_id):
+                    resp = self._put(self.manager, {field: str(person.pk)})
+                    self.assertEqual(resp.status_code, 200, resp.data)
+
+    def test_both_fields_reject_ineligible_people(self):
+        for field, message in (('reporting_manager_id', 'Reporting Manager must be'),
+                               ('reporting_approver_id', 'Reporting Approver must be')):
+            for person in self.ineligible:
+                with self.subTest(field=field, person=person.employee_id):
+                    resp = self._put(self.manager, {field: str(person.pk)})
+                    self.assertEqual(resp.status_code, 400)
+                    self.assertIn(message, resp.data['message'])
         self.manager.refresh_from_db()
+        self.assertIsNone(self.manager.reporting_manager_id)
         self.assertIsNone(self.manager.reporting_approver_id)
 
-    def test_manager_cannot_be_own_approver(self):
+    def test_inactive_and_self_rejected(self):
+        self.assertEqual(self._put(self.manager, {'reporting_manager_id': str(self.inactive_hr.pk)}).status_code, 400)
         resp = self._put(self.manager, {'reporting_approver_id': str(self.manager.pk)})
         self.assertEqual(resp.status_code, 400)
         self.assertIn('own reporting approver', resp.data['message'])
+        resp = self._put(self.manager, {'reporting_manager_id': str(self.manager.pk)})
+        self.assertEqual(resp.status_code, 400)
 
-    def test_existing_value_preserved_on_unrelated_save(self):
-        self.manager.reporting_approver = self.peer
-        self.manager.save(update_fields=['reporting_approver'])
-        resp = self._put(self.manager, {'reporting_approver_id': str(self.peer.pk), 'phone': '9000000077'})
+    def test_none_clears_both(self):
+        self.manager.reporting_manager = self.hr
+        self.manager.reporting_approver = self.branch_admin
+        self.manager.save(update_fields=['reporting_manager', 'reporting_approver'])
+        resp = self._put(self.manager, {'reporting_manager_id': None, 'reporting_approver_id': None})
         self.assertEqual(resp.status_code, 200, resp.data)
         self.manager.refresh_from_db()
-        self.assertEqual((self.manager.reporting_approver_id, self.manager.phone), (self.peer.pk, '9000000077'))
-
-    def test_manager_can_clear_approver(self):
-        self.manager.reporting_approver = self.hr
-        self.manager.save(update_fields=['reporting_approver'])
-        self.assertEqual(self._put(self.manager, {'reporting_approver_id': None}).status_code, 200)
-        self.manager.refresh_from_db()
+        self.assertIsNone(self.manager.reporting_manager_id)
         self.assertIsNone(self.manager.reporting_approver_id)
 
-    def test_other_roles_unchanged(self):
-        resp = self._put(self.employee, {'reporting_approver_id': str(self.peer.pk)})
+    def test_existing_values_preserved_on_unrelated_save(self):
+        self.manager.reporting_manager = self.peer
+        self.manager.reporting_approver = self.system_admin
+        self.manager.save(update_fields=['reporting_manager', 'reporting_approver'])
+        resp = self._put(self.manager, {
+            'reporting_manager_id': str(self.peer.pk), 'reporting_approver_id': str(self.system_admin.pk),
+            'phone': '9000000088',
+        })
         self.assertEqual(resp.status_code, 200, resp.data)
-        self.employee.refresh_from_db()
-        self.assertEqual(self.employee.reporting_approver_id, self.peer.pk)
+        self.manager.refresh_from_db()
+        self.assertEqual(
+            (self.manager.reporting_manager_id, self.manager.reporting_approver_id, self.manager.phone),
+            (self.peer.pk, self.system_admin.pk, '9000000088'),
+        )
+
+    def test_other_roles_unchanged(self):
+        resp = self._put(self.employee, {
+            'reporting_manager_id': str(self.peer.pk), 'reporting_approver_id': str(self.peer.pk),
+        })
+        self.assertEqual(resp.status_code, 200, resp.data)
+        resp = self.client.get(reverse('employee-manager-list'), {'branch': self.BRANCH})
+        self.assertIn('EMPHIPM1', {r['employee_id'] for r in resp.data['data']})
+
+    def test_approval_matrix_reporting_manager_edit_uses_same_rule(self):
+        url = reverse('employee-reporting-manager', kwargs={'employee_id': self.manager.employee_id})
+        self.assertEqual(self.client.patch(url, {'reporting_manager_id': str(self.branch_admin.pk)}, format='json').status_code, 200)
+        self.assertEqual(self.client.patch(url, {'reporting_manager_id': str(self.peer.pk)}, format='json').status_code, 400)
 
     def test_promotion_to_manager_in_same_save_is_checked(self):
-        self.employee.reporting_approver = self.peer
-        self.employee.save(update_fields=['reporting_approver'])
-        resp = self._put(self.employee, {'role': self.manager_role.name, 'reporting_approver_id': str(self.peer.pk)})
+        self.employee.reporting_manager = self.peer
+        self.employee.save(update_fields=['reporting_manager'])
+        resp = self._put(self.employee, {'role': self.manager_role.name, 'reporting_manager_id': str(self.peer.pk)})
         self.assertEqual(resp.status_code, 400)
         self.employee.refresh_from_db()
         self.assertEqual(self.employee.role_id, self.employee_role.pk)
-

@@ -47,27 +47,34 @@ def _is_coo(user) -> bool:
     return bool(user and user.role and user.role.name == COO_ROLE_NAME)
 
 
-def _manager_approver_candidates(branch: str):
-    """
-    Who may be a Manager's Reporting Approver: the people the existing workflows
-    already route a Manager's own requests to — the COO (leave L1 via the Manager's
-    reporting manager), the branch HR (leave L2 / separation stage 1, same "HR"
-    definition as HRListView) and the branch's Branch Admin (separation stage 2).
-    """
+# Who a Manager-role employee may have as Reporting Manager / Reporting Approver.
+# Company-level roles regardless of branch; branch-level roles only from the
+# Manager's own branch. System Admin is never eligible.
+_MANAGER_REPORTING_COMPANY_ROLES = ('admin_head', COO_ROLE_NAME)
+_MANAGER_REPORTING_BRANCH_ROLES = ('hr_admin', 'hr', 'branch_admin')
+_MANAGER_REPORTING_EXCLUDED_ROLES = ('system_admin',)
+_MANAGER_RM_ERROR = (
+    "A Manager's Reporting Manager must be the COO, Admin Head, or HR / HR Admin / Branch Admin of their branch."
+)
+_MANAGER_APPROVER_ERROR = (
+    "A Manager's Reporting Approver must be the COO, Admin Head, or HR / HR Admin / Branch Admin of their branch."
+)
+
+
+def _manager_reporting_candidates(branch: str):
     from django.db.models import Q as _Q
 
-    q = _Q(role__name=COO_ROLE_NAME)
+    q = _Q(role__name__in=_MANAGER_REPORTING_COMPANY_ROLES)
     branch = (branch or '').strip()
     if branch:
-        hr_ids = (
-            User.objects
-            .filter(role__role_permissions__permission__codename='onboarding.approve')
-            .exclude(role__role_permissions__permission__codename='settings.edit')
-            .filter(_Q(branch__iexact=branch) | _Q(managed_branches__branch_name__iexact=branch))
-            .values('id')
-        )
-        q |= _Q(role__can_manage_branch=True, branch__iexact=branch) | _Q(id__in=hr_ids)
-    return User.objects.filter(q, is_active=True).distinct()
+        in_branch = _Q(branch__iexact=branch) | _Q(managed_branches__branch_name__iexact=branch)
+        q |= _Q(role__name__in=_MANAGER_REPORTING_BRANCH_ROLES) & in_branch
+    return (
+        User.objects.filter(q, is_active=True)
+        .exclude(role__name__in=_MANAGER_REPORTING_EXCLUDED_ROLES)
+        .select_related('role')
+        .distinct()
+    )
 
 from django.conf import settings
 from django.core import signing
@@ -3138,10 +3145,10 @@ class EmployeeListCreateView(APIView):
                     'Reporting manager not found or is inactive.',
                     data={'reporting_manager_id': 'Invalid manager selected.'},
                 )
-            if role.can_manage_team and not _is_coo(selected_manager):
+            if role.can_manage_team and not _manager_reporting_candidates(branch).filter(pk=selected_manager.pk).exists():
                 return error(
-                    'Managers do not have a reporting manager.',
-                    data={'reporting_manager_id': 'Not applicable for this role.'},
+                    _MANAGER_RM_ERROR,
+                    data={'reporting_manager_id': 'Not eligible for a Manager.'},
                 )
 
         temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
@@ -3654,10 +3661,11 @@ class EmployeeDetailView(APIView):
                 # this same request still gets the full check.
                 unchanged_for_existing_manager = was_manager and rm_user.pk == stored_reporting_manager_id
                 if (
-                    employee.role and employee.role.can_manage_team and not _is_coo(rm_user)
+                    employee.role and employee.role.can_manage_team
                     and not unchanged_for_existing_manager
+                    and not _manager_reporting_candidates(employee.branch).filter(pk=rm_user.pk).exists()
                 ):
-                    return error('Managers do not have a reporting manager.')
+                    return error(_MANAGER_RM_ERROR)
                 if rm_user.pk == employee.pk:
                     return error('An employee cannot be their own reporting manager.')
                 employee.reporting_manager = rm_user
@@ -3683,9 +3691,9 @@ class EmployeeDetailView(APIView):
                 if (
                     employee.role and employee.role.can_manage_team
                     and not (was_manager and ra_user.pk == stored_reporting_approver_id)
-                    and not _manager_approver_candidates(employee.branch).filter(pk=ra_user.pk).exists()
+                    and not _manager_reporting_candidates(employee.branch).filter(pk=ra_user.pk).exists()
                 ):
-                    return error("A Manager's Reporting Approver must be the COO, their branch HR or their Branch Admin.")
+                    return error(_MANAGER_APPROVER_ERROR)
                 employee.reporting_approver = ra_user
             else:
                 employee.reporting_approver = None
@@ -6064,10 +6072,11 @@ class ManagerListView(APIView):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         if (request.query_params.get('manager_approvers') or '').strip().lower() in ('1', 'true', 'yes'):
-            approvers = _manager_approver_candidates(request.query_params.get('branch') or '').order_by('full_name')
+            approvers = _manager_reporting_candidates(request.query_params.get('branch') or '').order_by('full_name')
             return success('Managers retrieved.', data=[
                 {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
-                 'department': u.department, 'branch': u.branch}
+                 'department': u.department, 'branch': u.branch,
+                 'role': u.role.display_name if u.role else ''}
                 for u in approvers[:_HR_MANAGER_LIST_CAP]
             ])
         if (request.query_params.get('coo_only') or '').strip().lower() in ('1', 'true', 'yes'):
@@ -6136,8 +6145,11 @@ class EmployeeReportingManagerView(APIView):
             except (User.DoesNotExist, Exception):
                 return error('Reporting manager not found or is inactive.')
 
-            if employee.role and employee.role.can_manage_team and not _is_coo(manager):
-                return error('Managers do not have a reporting manager.')
+            if (
+                employee.role and employee.role.can_manage_team
+                and not _manager_reporting_candidates(employee.branch).filter(pk=manager.pk).exists()
+            ):
+                return error(_MANAGER_RM_ERROR)
 
             if manager.id == employee.id:
                 return error('An employee cannot be their own reporting manager.')

@@ -16,8 +16,8 @@ describe("isManagerRole", () => {
 });
 
 describe("reportingManagerListEndpoint", () => {
-  it("offers only the COO for a manager role", () => {
-    expect(reportingManagerListEndpoint(BASE, "Hyderabad", true)).toBe(`${BASE}?coo_only=1`);
+  it("offers the Manager-eligible list (COO, Admin Head, branch HR / HR Admin / Branch Admin)", () => {
+    expect(reportingManagerListEndpoint(BASE, "Hyderabad", true)).toBe(`${BASE}?manager_approvers=1&branch=Hyderabad`);
   });
 
   it("keeps the existing branch-filtered list for other roles", () => {
@@ -39,7 +39,7 @@ describe("reportingApproverListEndpoint", () => {
 });
 
 describe("shouldClearReportingManager", () => {
-  const base = { managerRoleNames: MANAGER_ROLES, cooIds: ["coo-1"] };
+  const base = { managerRoleNames: MANAGER_ROLES, eligibleIds: ["coo-1"] };
 
   it("clears a non-COO manager when the role changes to a manager role", () => {
     expect(shouldClearReportingManager({ ...base, previousRole: "employee", nextRole: "manager", reportingManagerId: "mgr-9" })).toBe(true);
@@ -61,7 +61,7 @@ describe("shouldClearReportingManager", () => {
     expect(shouldClearReportingManager({ ...base, previousRole: "employee", nextRole: "manager", reportingManagerId: "" })).toBe(false);
   });
 
-  it("clears when the COO list hasn't loaded yet rather than risk an invalid save", () => {
-    expect(shouldClearReportingManager({ ...base, cooIds: null, previousRole: "employee", nextRole: "manager", reportingManagerId: "mgr-9" })).toBe(true);
+  it("clears when the eligible list hasn't loaded yet rather than risk an invalid save", () => {
+    expect(shouldClearReportingManager({ ...base, eligibleIds: null, previousRole: "employee", nextRole: "manager", reportingManagerId: "mgr-9" })).toBe(true);
   });
 });

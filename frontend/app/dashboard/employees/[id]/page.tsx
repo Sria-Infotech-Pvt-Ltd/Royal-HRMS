@@ -32,7 +32,7 @@ import ProfileSidebar from "./_components/ProfileSidebar";
 import ProfileForm from "./_components/ProfileForm";
 import { EmployeePickerInline } from "./_components/ReportingManagerCard";
 import {
-  MANAGER_APPROVER_NOTE, MANAGER_RM_NOTE, isManagerRole, reportingApproverListEndpoint,
+  MANAGER_REPORTING_NOTE, isManagerRole, reportingApproverListEndpoint,
   reportingManagerListEndpoint, shouldClearReportingManager,
 } from "@/lib/reportingManager";
 import { ApprovalMatrixTab } from "./_components/ApprovalMatrixTab";
@@ -350,7 +350,10 @@ export default function EmployeeProfilePage({
   const fieldConfig = fieldConfigData ?? {};
 
   // The COO(s) — the only valid reporting manager for a manager-role employee.
-  const { data: cooList } = useFetch<{ id: string }[]>(isEditing ? `${API.employees.managerList}?coo_only=1` : null);
+  // People a Manager may report to — used to clear an ineligible pick on promotion in the form.
+  const { data: managerEligibleList } = useFetch<{ id: string }[]>(
+    isEditing ? reportingManagerListEndpoint(API.employees.managerList, values.branch, true) : null,
+  );
   const managerRole = isManagerRole(values.ssRole, managerRoleNames);
 
   const rawSection = PROFILE_SECTIONS.find(s => s.id === sectionId)!;
@@ -393,7 +396,7 @@ export default function EmployeeProfilePage({
       const next = { ...v, [key]: val };
       if (key === "ssRole" && shouldClearReportingManager({
         previousRole: v.ssRole, nextRole: val, managerRoleNames,
-        reportingManagerId: v.reportingManagerId, cooIds: cooList?.map(c => c.id),
+        reportingManagerId: v.reportingManagerId, eligibleIds: managerEligibleList?.map(c => c.id),
       })) {
         next.reportingManager = "";
         next.reportingManagerId = "";
@@ -707,7 +710,7 @@ export default function EmployeeProfilePage({
                         }
                       />
                       {managerRole && (
-                        <p style={{ fontSize: 11.5, color: "var(--on-variant)", margin: "4px 0 0 152px" }}>{MANAGER_RM_NOTE}</p>
+                        <p style={{ fontSize: 11.5, color: "var(--on-variant)", margin: "4px 0 0 152px" }}>{MANAGER_REPORTING_NOTE}</p>
                       )}
                     </div>
                   );
@@ -730,7 +733,7 @@ export default function EmployeeProfilePage({
                         }
                       />
                       {managerRole && (
-                        <p style={{ fontSize: 11.5, color: "var(--on-variant)", margin: "4px 0 0 152px" }}>{MANAGER_APPROVER_NOTE}</p>
+                        <p style={{ fontSize: 11.5, color: "var(--on-variant)", margin: "4px 0 0 152px" }}>{MANAGER_REPORTING_NOTE}</p>
                       )}
                     </div>
                   );
