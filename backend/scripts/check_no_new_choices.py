@@ -39,6 +39,7 @@ ALLOWED_CHOICES_FIELDS = {
     'accounts.EmployeeProfile.account_type', 'accounts.EmployeeProfile.bank_change_status',
     'accounts.EmployeeProfile.pending_account_type', 'accounts.EmployeeProfile.disability_type',
     'accounts.EducationExperienceFieldConfig.list_type', 'accounts.EducationRecord.level',
+    'accounts.EducationRecord.score_type',
     'accounts.WorkExperienceRecord.employment_type', 'accounts.FamilyMember.relationship', 'accounts.FamilyMember.gender',
     'accounts.EPFNominee.scheme', 'accounts.CompanyAsset.asset_type', 'accounts.CompanyAsset.condition',
     'accounts.OnboardingFieldConfig.field_type', 'accounts.OnboardingFieldConfig.step',
@@ -87,18 +88,58 @@ ALLOWED_CHOICES_FIELDS = {
     'performance.ReviewCycle.status', 'performance.Goal.status', 'performance.Goal.self_rating',
     'performance.PerformanceReview.self_rating', 'performance.PerformanceReview.manager_rating',
     'performance.PerformanceReview.status',
+    # Allowlisted by explicit user decision (not converted to LookupValue) -
+    # these are genuine business-domain fields the Phase 1 policy was
+    # written to catch, bypassed deliberately rather than verified as
+    # internal-only. See 'voice_commands' and 'platform_core' sections
+    # below for the same note on the rest of this batch.
+    'performance.FeedbackRequest.status', 'performance.PerformanceReview.final_rating',
     # assessments, notifications, announcements, branch
     'assessments.AssessmentItem.item_type', 'assessments.CandidateAssignment.status',
     'notifications.Notification.notification_type', 'notifications.Notification.module',
     'announcements.Announcement.category', 'announcements.Announcement.visibility',
     'branch.Branch.status',
-    # platform_core itself — both are internal state-machine vocabularies
-    # with code behavior attached to every value (ChangeHistory.action is
-    # read by the capture mechanism itself; NumberSeries.reset_period is
-    # read by services_numbering.py's _reset_key()), not a business list an
-    # admin would ever add a new value to without a matching code change
-    # anyway — exactly the exception this script's own policy allows for.
+    # Allowlisted by explicit user decision (see note above performance.*) -
+    # a genuine business-domain field, bypassed deliberately.
+    'voice_commands.GenericEntityVoiceCapability.action',
+    # platform_core itself — ChangeHistory.action and NumberSeries.reset_period
+    # are internal state-machine vocabularies with code behavior attached to
+    # every value, not a business list an admin would ever add a new value to
+    # without a matching code change anyway — exactly the exception this
+    # script's own policy allows for.
     'platform_core.ChangeHistory.action', 'platform_core.NumberSeries.reset_period',
+    # The rest of platform_core below (added together with the app itself)
+    # plausibly fits that same "internal plumbing" exception - these are the
+    # engine implementing the LookupType/LookupValue system itself (workflow
+    # engine, job scheduler, report builder, form layout, policy engine,
+    # etc.), not business-editable vocabularies. Allowlisted by explicit user
+    # decision rather than verified field-by-field; revisit individually if
+    # any of these turns out to need business-admin editability after all.
+    'platform_core.ClickToAcceptSignature.signer_role', 'platform_core.ConfigPackage.status',
+    'platform_core.DataSubjectRequest.request_type', 'platform_core.DataSubjectRequest.status',
+    'platform_core.DocumentTemplate.status', 'platform_core.EntityDefinition.kind',
+    'platform_core.EntityDefinition.status', 'platform_core.EnvironmentSetting.environment',
+    'platform_core.EventOutbox.status', 'platform_core.ExportJob.status',
+    'platform_core.ExternalSignatureRequest.status', 'platform_core.FieldDefinition.data_type',
+    'platform_core.FieldDefinition.status', 'platform_core.FieldDefinition.unique_scope',
+    'platform_core.FieldPermission.access', 'platform_core.FormLayout.context',
+    'platform_core.FormLayout.status', 'platform_core.GeneratedDocument.status',
+    'platform_core.ImportJob.mode', 'platform_core.ImportJob.status',
+    'platform_core.JobRun.status', 'platform_core.JobRun.triggered_by',
+    'platform_core.ListViewDefinition.visibility', 'platform_core.MessageTemplate.channel',
+    'platform_core.MessageTemplate.status', 'platform_core.NotificationDelivery.status',
+    'platform_core.NotificationRule.digest', 'platform_core.NotificationRule.recipient_type',
+    'platform_core.Policy.status', 'platform_core.PolicyAssignment.target_type',
+    'platform_core.PolicyType.resolution_strategy', 'platform_core.ReportDefinition.chart_type',
+    'platform_core.ReportDefinition.visibility', 'platform_core.ReportRun.export_format',
+    'platform_core.RoleAssignment.scope_type', 'platform_core.RuleDefinition.purpose',
+    'platform_core.RuleDefinition.return_type', 'platform_core.RuleDefinition.status',
+    'platform_core.ScheduledJob.schedule_type', 'platform_core.SoDRule.severity',
+    'platform_core.Widget.widget_type', 'platform_core.WorkflowDefinition.status',
+    'platform_core.WorkflowDefinition.trigger', 'platform_core.WorkflowHistory.action',
+    'platform_core.WorkflowInstance.status', 'platform_core.WorkflowStep.no_approver_action',
+    'platform_core.WorkflowStep.quorum', 'platform_core.WorkflowStep.sla_timeout_action',
+    'platform_core.WorkflowStep.step_type', 'platform_core.WorkflowTask.status',
 }
 
 _CLASS_RE = re.compile(r'^class (\w+)\(')
