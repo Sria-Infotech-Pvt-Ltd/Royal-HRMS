@@ -31,6 +31,7 @@ from apps.accounts.models import (
     EducationRecord,
     EDUCATION_LEVEL_BACHELORS,
     EmployeeCodeSettings,
+    EmployeeProfile,
     EPFNominee,
     FamilyMember,
     Position,
@@ -178,7 +179,7 @@ class Command(BaseCommand):
     # ── Personal identity, statutory & bank ──────────────────────────────────
 
     def _seed_personal_statutory(self, employee: User) -> None:
-        profile = employee.profile
+        profile, _ = EmployeeProfile.objects.get_or_create(user=employee)
         changed = []
 
         def _set(field, value):
