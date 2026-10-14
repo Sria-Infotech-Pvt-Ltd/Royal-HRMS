@@ -295,9 +295,11 @@ class LeaveBalance(models.Model):
 
 CREDIT_TXN_ADJUSTMENT = 'adjustment'
 CREDIT_TXN_REVERSAL   = 'reversal'
+CREDIT_TXN_MONTHLY    = 'monthly_credit'   # Settings → Leave Management → Monthly Leave Management
 CREDIT_TXN_TYPE_CHOICES = [
     (CREDIT_TXN_ADJUSTMENT, 'Adjustment'),
     (CREDIT_TXN_REVERSAL,   'Reversal'),
+    (CREDIT_TXN_MONTHLY,    'Monthly credit'),
 ]
 
 
@@ -307,6 +309,9 @@ class LeaveCreditTransaction(models.Model):
     employee        = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='leave_credit_transactions')
     leave_type      = models.CharField(max_length=50)
     year            = models.PositiveIntegerField()
+    # Set only on monthly_credit rows: the month (1-12) of `year` the credit is
+    # for. A month's credit is the sum of its rows — edits append the difference.
+    month           = models.PositiveSmallIntegerField(null=True, blank=True)
     txn_type        = models.CharField(max_length=20, choices=CREDIT_TXN_TYPE_CHOICES)
     amount          = models.DecimalField(max_digits=6, decimal_places=1)  # signed
     total_before    = models.DecimalField(max_digits=6, decimal_places=1)
@@ -328,6 +333,7 @@ class LeaveCreditTransaction(models.Model):
         ordering = ['-created_at']
         indexes  = [
             models.Index(fields=['employee', 'year', 'leave_type'], name='leave_credit_emp_year_idx'),
+            models.Index(fields=['employee', 'leave_type', 'year', 'month'], name='leave_credit_monthly_idx'),
         ]
 
     def __str__(self) -> str:

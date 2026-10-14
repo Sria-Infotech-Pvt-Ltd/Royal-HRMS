@@ -8,9 +8,10 @@ import PolicyTab from "./_components/PolicyTab";
 import CreditTab from "./_components/CreditTab";
 import LeavePoliciesTab from "./_components/LeavePoliciesTab";
 import CarryForwardTab from "./_components/CarryForwardTab";
+import MonthlyLeaveTab from "./_components/MonthlyLeaveTab";
 import OpeningBalanceImportModal from "./_components/OpeningBalanceImportModal";
 
-type Tab = "types" | "policies" | "credit" | "carryForward";
+type Tab = "types" | "policies" | "credit" | "carryForward" | "monthly";
 
 
 const BASE_TABS: { id: Tab; icon: string; label: string }[] = [
@@ -26,9 +27,14 @@ export default function LeavePolicyPage() {
   const [showImportModal, setShowImportModal] = useState(false);
 
   const isLeaveAdmin = usePermission("leave.edit");
-  const TABS = isLeaveAdmin
-    ? [...BASE_TABS, { id: "carryForward" as Tab, icon: "ti-repeat", label: "Carry Forward" }]
-    : BASE_TABS;
+  // Monthly credits change individual balances, so they follow the Leave
+  // Credits permission (leave.approve); the backend also enforces per-employee scope.
+  const canManageCredits = usePermission("leave.approve");
+  const TABS = [
+    ...BASE_TABS,
+    ...(isLeaveAdmin ? [{ id: "carryForward" as Tab, icon: "ti-repeat", label: "Carry Forward" }] : []),
+    ...(canManageCredits ? [{ id: "monthly" as Tab, icon: "ti-calendar-plus", label: "Monthly Leave Management" }] : []),
+  ];
 
   return (
     <>
@@ -73,6 +79,7 @@ export default function LeavePolicyPage() {
       {tab === "types"        && <PolicyTab />}
       {tab === "policies"     && <LeavePoliciesTab />}
       {tab === "credit"       && <CreditTab />}
+      {tab === "monthly"      && canManageCredits && <MonthlyLeaveTab />}
       {tab === "carryForward" && isLeaveAdmin && <CarryForwardTab />}
 
       {showImportModal && (

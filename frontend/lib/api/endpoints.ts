@@ -246,6 +246,9 @@ export const API = {
     balanceImport:         "/leave/balance/import/",
     balanceImportValidate: "/leave/balance/import/validate/",
     creditsOverview: (employeeCode: string) => `/leave/credits/${employeeCode}/`,
+    monthlyCredits:       "/leave/monthly-credits/",
+    monthlyCreditsImport: "/leave/monthly-credits/import/",
+    monthlyCreditsSample: "/leave/monthly-credits/import/sample/", // + ?format=csv|xlsx
     creditsAdjust:   (employeeCode: string) => `/leave/credits/${employeeCode}/adjust/`,
     creditsReverse:  (employeeCode: string, txnId: string) => `/leave/credits/${employeeCode}/transactions/${txnId}/reverse/`,
     requests: "/leave/requests/",

@@ -28,6 +28,9 @@ from .views import (
     LeaveRequestDetailView,
     LeaveRequestListCreateView,
     LeaveStatsView,
+    MonthlyLeaveCreditView,
+    MonthlyLeaveImportSampleView,
+    MonthlyLeaveImportView,
     SeparationActivityListView,
     SeparationApprovalStageActionView,
     SeparationClearanceActionView,
@@ -78,6 +81,10 @@ urlpatterns = [
         'leave/credits/<str:employee_id>/transactions/<uuid:txn_id>/reverse/',
         LeaveCreditReverseView.as_view(), name='leave-credit-reverse',
     ),
+    # Leave — Monthly Leave Management (Settings → Leave Management)
+    path('leave/monthly-credits/',               MonthlyLeaveCreditView.as_view(),       name='leave-monthly-credits'),
+    path('leave/monthly-credits/import/',        MonthlyLeaveImportView.as_view(),       name='leave-monthly-import'),
+    path('leave/monthly-credits/import/sample/', MonthlyLeaveImportSampleView.as_view(), name='leave-monthly-import-sample'),
 
     # Leave — requests
     path('leave/requests/',                          LeaveRequestListCreateView.as_view(), name='leave-request-list'),

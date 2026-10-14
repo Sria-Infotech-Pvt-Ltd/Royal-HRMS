@@ -1,0 +1,95 @@
+// Monthly Leave Management (Settings → Leave Management) — shared types and
+// pure helpers. The backend (apps/hrms/services_leave_credit.set_monthly_credit)
+// is the source of truth for every rule; these only give early feedback.
+
+export const MAX_MONTHLY_CREDIT = 31;
+
+export const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+export type ImportRowStatus = "new" | "update" | "unchanged" | "duplicate" | "error";
+
+export interface MonthlyImportRow {
+  row:              number;
+  employee_code:    string;
+  employee_name:    string | null;
+  leave_type:       string;
+  leave_type_label: string | null;
+  credit:           number | string;
+  previous:         number | null;
+  delta:            number | null;
+  status:           ImportRowStatus;
+  message:          string;
+}
+
+export interface MonthlyImportPreview {
+  year:  number;
+  month: number;
+  rows:  MonthlyImportRow[];
+  counts: Record<ImportRowStatus, number>;
+  annual_entitlements: Record<string, number>;
+}
+
+export interface MonthlyImportResult {
+  year:  number;
+  month: number;
+  rows:  MonthlyImportRow[];
+  summary: { created: number; updated: number; skipped: number; failed: number; total: number };
+  annual_entitlements: Record<string, number>;
+}
+
+export interface MonthlyLeaveTypeRow {
+  leave_type:       string;
+  leave_type_label: string;
+  annual_days:      number;
+  monthly_credit:   number;
+  balance: { total: number; used: number; pending: number; available: number } | null;
+}
+
+/** Years HR can credit: the current calendar year and the two before it. */
+export function creditYears(today: Date = new Date()): number[] {
+  const y = today.getFullYear();
+  return [y, y - 1, y - 2];
+}
+
+/** Returns an error message, or null when the value is an acceptable monthly credit. */
+export function validateMonthlyCredit(raw: string): string | null {
+  const text = raw.trim();
+  if (!text) return "Enter a monthly leave credit (0 removes the month's credit).";
+  if (!/^\d+(\.\d)?$/.test(text)) {
+    return /^-/.test(text)
+      ? "Monthly leave credit cannot be negative."
+      : "Use a number with at most one decimal place, e.g. 1 or 1.5.";
+  }
+  if (Number(text) > MAX_MONTHLY_CREDIT) return `Monthly leave credit cannot exceed ${MAX_MONTHLY_CREDIT} days.`;
+  return null;
+}
+
+/** Balance after saving `next` in place of the month's current credit. */
+export function projectedBalance(row: MonthlyLeaveTypeRow, next: number) {
+  const delta = next - row.monthly_credit;
+  const total = (row.balance?.total ?? 0) + delta;
+  const used = row.balance?.used ?? 0;
+  return { delta, total, available: total - used };
+}
+
+/** Leave types in the rows that also carry an annual entitlement (double-counting warning). */
+export function annualWarningTypes(rows: MonthlyImportRow[], annual: Record<string, number>): string[] {
+  const labels = new Set<string>();
+  for (const r of rows) {
+    if ((r.status === "new" || r.status === "update") && annual[r.leave_type]) {
+      labels.add(`${r.leave_type_label ?? r.leave_type} (${annual[r.leave_type]} days/year)`);
+    }
+  }
+  return [...labels];
+}
+
+export const STATUS_LABEL: Record<ImportRowStatus, string> = {
+  new:       "New",
+  update:    "Update",
+  unchanged: "Unchanged",
+  duplicate: "Duplicate",
+  error:     "Error",
+};
