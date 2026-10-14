@@ -16,6 +16,9 @@ from __future__ import annotations
 import logging
 
 from django.db import transaction
+from django.http import HttpResponse
+from django.urls import reverse
+from django.utils.http import content_disposition_header
 from PIL import Image, UnidentifiedImageError
 from rest_framework import serializers, status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -99,7 +102,9 @@ class IdCardSettingsSerializer(serializers.ModelSerializer):
         read_only_fields = ['reference_pdf_name', 'reference_pdf_size', 'updated_at']
 
     def get_reference_pdf_url(self, obj) -> str | None:
-        return _file_url(obj.reference_pdf)
+        # The app endpoint that streams the PDF (IdCardReferencePdfView), not
+        # a Cloudinary link — CDN delivery of the stored PDF is refused.
+        return reverse('id-card-reference-pdf') if obj.reference_pdf else None
 
     def get_signature_url(self, obj) -> str | None:
         return _file_url(obj.signature_image)
@@ -185,6 +190,47 @@ class IdCardSettingsView(APIView):
 
     def patch(self, request):
         return self.put(request)
+
+
+class IdCardReferencePdfView(APIView):
+    """
+    GET /api/settings/id-card/reference-pdf/  — settings.view
+
+    Streams the stored reference PDF to an authorised user. Proxied rather
+    than linked because Cloudinary refuses CDN delivery of the authenticated
+    PDF (401, "deny or ACL failure"); the server fetches it through the
+    signed download API instead. Nothing is made public.
+    """
+    permission_classes = [IsAuthenticated, HasSettingsPermission]
+
+    def get(self, request):
+        cfg = IdCardSettings.get()
+        if not cfg.reference_pdf:
+            return error('No reference PDF has been uploaded.', http_status=status.HTTP_404_NOT_FOUND)
+        storage = cfg.reference_pdf.storage
+        # Cloudinary storage reads through its download API; any other
+        # storage (local development, tests) reads the file directly.
+        reader = getattr(storage, 'read_via_download_api', None)
+        try:
+            if reader:
+                content = reader(cfg.reference_pdf.name)
+            else:
+                with cfg.reference_pdf.open('rb') as fh:
+                    content = fh.read()
+        except Exception:
+            logger.warning('Could not fetch ID card reference PDF %s', cfg.reference_pdf.name, exc_info=True)
+            return error('Could not load the reference PDF. Please try again.', http_status=status.HTTP_502_BAD_GATEWAY)
+        if not content.startswith(b'%PDF-'):
+            logger.warning('ID card reference PDF %s did not return PDF content', cfg.reference_pdf.name)
+            return error('Could not load the reference PDF. Please try again.', http_status=status.HTTP_502_BAD_GATEWAY)
+
+        response = HttpResponse(content, content_type='application/pdf')
+        response['Content-Disposition'] = content_disposition_header(
+            as_attachment=False, filename=cfg.reference_pdf_name or 'id-card-reference.pdf',
+        )
+        response['Cache-Control'] = 'private, no-store'
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
 
 
 # ─── Per-employee card data ───────────────────────────────────────────────────

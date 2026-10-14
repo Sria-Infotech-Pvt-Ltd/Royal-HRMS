@@ -30,6 +30,7 @@ import uuid
 import cloudinary
 import cloudinary.uploader
 import cloudinary.utils
+import requests
 from cloudinary_storage.storage import RawMediaCloudinaryStorage
 from django.db import connection
 
@@ -77,6 +78,26 @@ class AuthenticatedRawMediaCloudinaryStorage(RawMediaCloudinaryStorage):
             expires_at=int(time.time()) + SIGNED_URL_TTL_SECONDS,
         )
         return url
+
+    def read_via_download_api(self, name, timeout: int = 20) -> bytes:
+        """
+        Fetch a file's bytes server-side through Cloudinary's authenticated
+        download API (signed with the API secret, valid for 60 seconds).
+        Needed for PDFs: this account refuses CDN delivery of the signed
+        res.cloudinary.com URL from _get_url() for them (401, x-cld-error
+        "deny or ACL failure"). Note that cloudinary_url() ignores
+        expires_at, so _get_url()'s links don't actually expire either.
+        """
+        name = self._prepend_prefix(name)
+        url = cloudinary.utils.private_download_url(
+            name, None,
+            resource_type=self._get_resource_type(name),
+            type='authenticated',
+            expires_at=int(time.time()) + 60,
+        )
+        response = requests.get(url, timeout=timeout)
+        response.raise_for_status()
+        return response.content
 
 
 def _tenant_schema() -> str:

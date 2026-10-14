@@ -58,7 +58,7 @@ from apps.accounts.views import (
     ResolveTemplateVariablesView,
 )
 from apps.accounts.views_profile_photo import ProfilePhotoView
-from apps.accounts.views_id_card import EmployeeIdCardView, IdCardSettingsView
+from apps.accounts.views_id_card import EmployeeIdCardView, IdCardReferencePdfView, IdCardSettingsView
 
 urlpatterns = [
     # Auth
@@ -126,6 +126,7 @@ urlpatterns = [
     path('settings/company/',                     CompanyRetrieveUpdateView.as_view(),     name='company'),
     path('settings/company/financial-year/',      CompanyFinancialYearView.as_view(),      name='company-financial-year'),
     path('settings/id-card/',          IdCardSettingsView.as_view(),         name='id-card-settings'),
+    path('settings/id-card/reference-pdf/', IdCardReferencePdfView.as_view(), name='id-card-reference-pdf'),
     path('settings/employee-code/',    EmployeeCodeSettingsView.as_view(),   name='employee-code-settings'),
     path('settings/approval-rules/',   ApprovalWorkflowRuleView.as_view(),   name='approval-workflow-rules'),
 

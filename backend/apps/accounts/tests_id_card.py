@@ -14,7 +14,7 @@ from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import InMemoryStorage
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from PIL import Image
 from rest_framework.test import APIClient
@@ -125,6 +125,44 @@ class IdCardSettingsApiTests(_InMemoryFilesMixin, TestCase):
         resp = self.client.put(self.url, {'terms': '\n'.join(f'Rule {i}' for i in range(7))}, format='multipart')
         self.assertEqual(resp.status_code, 400)
 
+    def _store_pdf(self, content: bytes = PDF_BYTES):
+        cfg = IdCardSettings.get()
+        cfg.reference_pdf.save('Approved Card.pdf', ContentFile(content), save=False)
+        cfg.reference_pdf_name = 'Approved Card.pdf'
+        cfg.save()
+
+    def test_reference_pdf_view_streams_pdf_to_settings_viewers(self):
+        self._store_pdf()
+        pdf_url = reverse('id-card-reference-pdf')
+        _login(self.client, 'idc.plain@test.com')
+        self.assertEqual(self.client.get(pdf_url).status_code, 403)
+
+        _login(self.client, 'idc.viewer@test.com')
+        self.assertEqual(self.client.get(self.url).data['data']['reference_pdf_url'], pdf_url)
+        resp = self.client.get(pdf_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Type'], 'application/pdf')
+        self.assertTrue(resp['Content-Disposition'].startswith('inline'))
+        self.assertIn('no-store', resp['Cache-Control'])
+        self.assertEqual(resp.content, PDF_BYTES)
+
+    def test_reference_pdf_view_without_upload(self):
+        _login(self.client, 'idc.viewer@test.com')
+        self.assertIsNone(self.client.get(self.url).data['data']['reference_pdf_url'])
+        self.assertEqual(self.client.get(reverse('id-card-reference-pdf')).status_code, 404)
+
+    def test_reference_pdf_view_uses_download_api_and_handles_failures(self):
+        self._store_pdf()
+        _login(self.client, 'idc.viewer@test.com')
+        storage = IdCardSettings._meta.get_field('reference_pdf').storage
+        with mock.patch.object(storage, 'read_via_download_api', create=True, return_value=PDF_BYTES) as reader:
+            self.assertEqual(self.client.get(reverse('id-card-reference-pdf')).status_code, 200)
+            reader.assert_called_once_with(IdCardSettings.get().reference_pdf.name)
+        with mock.patch.object(storage, 'read_via_download_api', create=True, side_effect=RuntimeError('401')):
+            self.assertEqual(self.client.get(reverse('id-card-reference-pdf')).status_code, 502)
+        with mock.patch.object(storage, 'read_via_download_api', create=True, return_value=b'<!doctype html>'):
+            self.assertEqual(self.client.get(reverse('id-card-reference-pdf')).status_code, 502)
+
     def test_no_separate_logo_storage(self):
         field_names = {f.name for f in IdCardSettings._meta.get_fields()}
         self.assertFalse({'logo', 'company_logo'} & field_names)
@@ -229,3 +267,21 @@ class EmployeeIdCardApiTests(_InMemoryFilesMixin, TestCase):
         self.assertEqual(data['company']['office_address'], '1 Main Street, Testville, Teststate 500001')
         self.assertIsNone(data['employee']['location'])
         self.assertIn('Location', data['missing'])
+
+
+class DownloadApiReadTests(SimpleTestCase):
+    """AuthenticatedRawMediaCloudinaryStorage.read_via_download_api builds a
+    short-lived signed download-API URL for the authenticated raw file."""
+
+    def test_signed_download_url_for_authenticated_raw_file(self):
+        from core.storage import AuthenticatedRawMediaCloudinaryStorage
+        storage = AuthenticatedRawMediaCloudinaryStorage()
+        response = mock.Mock(content=PDF_BYTES)
+        with mock.patch('core.storage.cloudinary.utils.private_download_url', return_value='https://api.example/dl') as url_fn,              mock.patch('core.storage.requests.get', return_value=response) as get:
+            self.assertEqual(storage.read_via_download_api('media/tenant_x/id_card/a.pdf'), PDF_BYTES)
+        args, kwargs = url_fn.call_args
+        self.assertEqual(args, ('media/tenant_x/id_card/a.pdf', None))
+        self.assertEqual((kwargs['type'], kwargs['resource_type']), ('authenticated', 'raw'))
+        self.assertIn('expires_at', kwargs)
+        get.assert_called_once_with('https://api.example/dl', timeout=20)
+        response.raise_for_status.assert_called_once()

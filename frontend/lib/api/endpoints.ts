@@ -122,6 +122,7 @@ export const API = {
     financialYear: "/settings/company/financial-year/",
     employeeCode: "/settings/employee-code/",
     idCard: "/settings/id-card/",
+    idCardReferencePdf: "/settings/id-card/reference-pdf/",
     emailTemplates: "/settings/email-templates/",
     resolveTemplateContext: "/settings/email-templates/resolve-context/",
     approvalRules: "/settings/approval-rules/",

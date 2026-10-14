@@ -1867,3 +1867,219 @@ sudo supervisorctl status royalhrms_backend royalhrms_frontend royalhrms_celery_
 No `migrate_schemas` needed for this batch (section 27's migrations
 `0044`/`0045`/`0047` still need confirming if not already done). Do not
 restart if `npm run build` fails.
+
+---
+
+# 29. Application change log (production support, 2026-10-10 → 2026-10-13)
+
+Continuation of section 28. Same rules: implemented and tested locally
+against the isolated Docker Postgres test DB on `localhost:15432` (never
+production). Section 28's Notice Period work was committed afterwards as
+`8d43666`.
+
+| Item | Commit(s) | Migration | Pushed | Deployed on server |
+|---|---|---|---|---|
+| Leave Credits (employee-wise credit management) | `a178600`, `834a0a2` | hrms `0028` | Yes | Yes — `0028` applied during the incident below |
+| Attendance CSV import: single employee, date range, preview | `834a0a2` | None | Yes | Not confirmed |
+| Fuller punch addresses (building-level geocoding) | `17250bb`, `20b2256` | None | Yes | Not confirmed |
+| GPS accuracy warnings (drawer + CSV export) | `af42806` | None | Yes | Not confirmed |
+| Manager Reporting Manager / Approver hierarchy | `25c07d0`, `270d34e`, `2d646c7`, `e5eefe5` | None | Yes | Not confirmed |
+| ID Card Settings + employee ID card preview/print | `8da4041` | accounts `0100` | Yes | Not confirmed — confirm `0100` applied |
+| Company logo 500 fix (+ profile photo filenames) | `a63e0d1` ("id card put") | None | Not confirmed | No |
+
+## Production incident — Leave Credits 500
+
+Employee Profile → Leave Credits returned 500 in production. Root cause:
+the code was pulled but migration hrms `0028_leave_credit_transaction` had
+not been applied (table missing). Fixed by taking a `pg_dump` backup, then
+running `migrate_schemas`. Lesson (same as section 26): **always run
+`showmigrations` after a pull.** Before that deploy, `LeaveCreditTransaction`
+FKs were changed from `PROTECT` to `CASCADE` so deleting an employee or
+balance can't be blocked by credit history.
+
+## Leave Credits (employee-wise credit management, Phase 1)
+
+-   Employee Profile → Leave tab gains a collapsible **Leave Credits**
+    section: per leave type, total / used / remaining, plus an append-only
+    history of manual adjustments.
+-   HR can add or deduct days with a mandatory reason, and reverse a past
+    adjustment. Every change locks the `LeaveBalance` row, applies a signed
+    delta to `total_days` (never overwrites, never touches `used_days`) and
+    writes a `LeaveCreditTransaction` in the same DB transaction. An
+    idempotency key prevents double-submits.
+-   `LeaveBalance` stays the source of truth for every existing leave
+    workflow — nothing else changed.
+-   Endpoints: `GET /api/leave/credits/<employee_id>/`,
+    `POST .../adjust/`, `POST .../transactions/<txn_id>/reverse/`.
+    Requires `leave.approve`, scoped like other approvals (managers → direct
+    reports, branch-restricted users → own branch).
+-   Files: `backend/apps/hrms/{models.py, services_leave_credit.py,
+    views/leave_credits.py, urls.py}`, migration `0028`; frontend
+    `employees/[id]/_components/LeaveCreditsSection.tsx`, `LeaveTab.tsx`.
+    Tests: `backend/apps/hrms/tests_leave_credits.py`.
+
+## Attendance CSV import — single employee, date range, preview
+
+-   The import modal can now target one employee (picker limited to
+    employees the importer may manage), restrict to a date range, and run a
+    **preview (dry run)** showing what would be created / updated / skipped
+    before anything is written.
+-   Rows for other employees or outside the range are skipped and reported,
+    never written. The existing all-employees import is unchanged.
+-   API: same import endpoint, optional `employee_id`, `date_from`,
+    `date_to` (YYYY-MM-DD), `dry_run`.
+-   Files: `backend/apps/attendance/{services_hr_ops.py, tasks.py,
+    views/hr_attendance.py}`; frontend `attendance/_components/ImportModal.tsx`.
+    Tests: `tests_attendance_import.py`.
+
+## Fuller punch addresses + GPS accuracy warnings
+
+-   Reverse geocoding (Celery task `reverse_geocode_punch_task`, Nominatim)
+    now requests building-level detail (`zoom=18`) and stores the fullest
+    address available: building/place, house number, road, locality
+    (incl. hamlet / complex names), city, state, country, postcode —
+    trimmed on whole components to the 255-char `location_label`.
+    Components Nominatim doesn't return are omitted, never guessed.
+-   **Investigated "address too short":** the cause is missing street
+    names in OpenStreetMap for those areas (unnamed roads), not the code or
+    GPS precision. Google-level detail would need a commercial geocoder —
+    **decision pending** (cost + API key).
+-   The attendance detail drawer shows each punch's GPS accuracy with a
+    level: ≤100 m precise, ≤1,000 m approximate, otherwise very approximate
+    (warning). Office punches still show "Office – <Branch>".
+-   Attendance CSV export gains `clock_in_gps_accuracy_m` and
+    `clock_out_gps_accuracy_m` (appended at the end; file still re-imports).
+-   Files: `backend/apps/attendance/{services_geocoding.py,
+    location_accuracy.py (new), services_hr.py, services_hr_ops.py}`;
+    frontend `AttendanceDetailDrawer.tsx`, `types/attendance.ts`.
+-   Only new punches get the fuller address; old labels are not rewritten.
+    **The Celery worker must be restarted** for the geocoding change.
+
+## Manager Reporting Manager / Reporting Approver hierarchy
+
+Built up over four commits; the final rule (`e5eefe5`) supersedes the
+"COO only" step (`270d34e`):
+
+-   `25c07d0` — saving a Manager no longer fails when their existing
+    Reporting Manager is unchanged (pre-existing assignments are kept).
+-   Final rule, for employees whose role has `can_manage_team` (Managers):
+    Reporting Manager **and** Reporting Approver may each be the **COO**,
+    the **Admin Head** (company-level), or **HR / HR Admin / Branch Admin
+    of the Manager's own branch**, or None. **System Admin is never
+    allowed**, nor the Manager themself, inactive users, other-branch staff
+    or peer managers. Other roles are unchanged.
+-   Enforced on create, employee edit (PUT), the Approval Matrix
+    Reporting Manager edit (PATCH) and the picker lists
+    (`GET /api/employees/managers/?manager_approvers=1&branch=`, which also
+    returns each person's role). Stored values are kept on unrelated saves;
+    a role change to Manager in the same save is checked.
+-   Files: `backend/apps/accounts/views.py` (`_manager_reporting_candidates`);
+    frontend `lib/reportingManager.ts`, `employees/[id]/page.tsx`,
+    `ReportingManagerCard.tsx`. Tests: `ManagerReportingHierarchyTests`
+    in `backend/apps/accounts/tests.py`, `frontend/lib/reportingManager.test.ts`.
+-   Open: the Approval Matrix stage-1 display is blank when the Reporting
+    Manager isn't a Manager-role user; the Approval Matrix RM pop-up does
+    not yet use the new list.
+
+## ID Card Settings + employee ID card (accounts migration `0100`)
+
+-   **Settings → ID Card** (`settings.view` to see, `settings.edit` to
+    change): upload the approved reference PDF, an authorised
+    signature/stamp image, signature caption, terms & conditions (≤6 lines,
+    `{company}` placeholder), and toggles for DOB / residential address /
+    phone + email. Stored in the new singleton table
+    `hrms_id_card_settings`; files go to private Cloudinary storage
+    (`<schema>/id_card/`, signed URLs only).
+-   The reference PDF is a flattened design export (one person's details
+    baked in), so it is **kept for reference only**. Cards are rendered by
+    a built-in HTML/CSS front/back template reproducing it (50 × 85 mm, the
+    PDF's page size). Logo and website come from Company Info — no
+    duplicate logo upload.
+-   **Employee Profile → ID Card** (`employees.view` + the same branch
+    scope as the profile): front/back preview from real data (User,
+    EmployeeProfile, Branch city/address, Company). Missing values are
+    listed and left off the card, never invented. Print layouts: card size
+    (one face per page) or A4 (both faces with cut guides). Print CSS hides
+    the rest of the app; users must set 100% scale and enable background
+    graphics. No automatic duplex.
+-   API: `GET/PUT /api/settings/id-card/`,
+    `GET /api/employees/<employee_id>/id-card/`.
+-   Files: `backend/apps/accounts/{views_id_card.py (new), models.py,
+    urls.py}`, `core/storage.py`, migration `0100`; frontend
+    `settings/id-card/page.tsx`, `employees/[id]/id-card/page.tsx`,
+    `components/idcard/IdCardFaces.tsx`, `lib/idCard.ts`. Tests:
+    `tests_id_card.py` (11), `lib/idCard.test.ts` (8).
+-   **Production browser click-through not yet done.**
+
+## Production incident — Company Info save 500 (`a63e0d1`)
+
+-   Symptom: `PUT /api/settings/company/` → 500 when saving with a new
+    logo (Demo Corp tenant). Server log:
+    `StringDataRightTruncation: value too long for type character varying(100)`
+    in `CompanyRetrieveUpdateView.put` → `serializer.save()`.
+-   Root cause: `Company.logo` is `varchar(100)`. The Cloudinary storage
+    stores the returned `public_id` = `media/` + `<schema>/company/` +
+    original filename + `_xxxxxx` suffix, which exceeded 100 characters.
+-   Side effect of the old code: it deleted the old logo from Cloudinary
+    **before** saving, so the failed save left the row pointing at a
+    deleted file. **Re-upload the Demo Corp logo after deploying.**
+-   Fix: `core/storage.py` `_short_upload_name()` — logo and profile photo
+    names are now a short random hex name + the original extension, sized
+    to fit 100 characters for the longest schema (`tenant_` + 50-char
+    company code). The old logo file is deleted only after the DB update
+    commits, best-effort (logged, never fails the request). The
+    original-filename length limit on the logo upload was removed (the name
+    is no longer stored). No migration.
+-   Tests: `backend/apps/accounts/tests_upload_names.py` (9; 7 of them fail
+    on the old code).
+-   Not changed (optional follow-up): the profile photo upload still
+    deletes the old photo before saving the new one.
+
+## Unrelated work observed on `production` during this window
+
+-   `0da1c0d` — "Face clock-in: dotted guide frame, staged model loading,
+    head-turn-only liveness at clock-in" (from another developer).
+    **Note:** clock-in liveness now passes on a head turn alone
+    (registration still needs blink + turn) — a security trade-off for
+    speed that deserves an explicit sign-off.
+
+## Test results for this window
+
+-   accounts: 176 run — all new tests pass; 6 failures (5 profile-photo
+    upload tests needing real Cloudinary, 1 forgot-password) are
+    pre-existing.
+-   attendance: the 17 pre-existing failures are unchanged (punch service
+    ×3, WFH geofence ×1, face verification ×13); all new import /
+    geocoding / accuracy tests pass.
+-   Frontend: TypeScript, ESLint and Vitest (137/137) pass.
+-   `makemigrations --check` clean after `0100`.
+
+## Deploy steps for this batch
+
+```
+su - royalhrms
+cd /var/www/royalhrms/app
+git pull origin production
+git log --oneline -3                     # expect a63e0d1 at or near HEAD
+cd backend
+.venv/bin/python manage.py showmigrations hrms accounts | grep "\[ \]"   # any unapplied?
+# Only if something is unapplied (e.g. 0100) — back up first, then migrate:
+pg_dump -U royalhrms_user -h localhost -d royalhrms_db -F c -f /home/royalhrms/backup_$(date +%Y%m%d_%H%M%S).dump
+.venv/bin/python manage.py migrate_schemas
+cd ../frontend && npm ci && npm run build   # stop here if the build fails
+exit
+# as root:
+supervisorctl restart royalhrms_backend royalhrms_frontend royalhrms_celery_worker royalhrms_celery_beat
+supervisorctl status | grep royalhrms
+```
+
+After deploying: re-upload the Demo Corp logo; click through Settings →
+ID Card and Employee Profile → ID Card → Print.
+
+## Open items carried forward
+
+-   Approval Matrix stage-1 display / RM pop-up (see Manager hierarchy).
+-   Commercial geocoder decision (fuller addresses).
+-   Profile photo: same safe delete order as the logo fix (optional).
+-   Sign-off on head-turn-only liveness at face clock-in.
+-   Server reboot pending (noted during the server health check).

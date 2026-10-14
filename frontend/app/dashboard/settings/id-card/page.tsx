@@ -74,6 +74,7 @@ export default function IdCardSettingsPage() {
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [openingPdf, setOpeningPdf] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -139,6 +140,32 @@ export default function IdCardSettingsPage() {
     if (settings) setForm(toForm(settings));
     setPdfFile(null); setRemovePdf(false); setSigFile(null); setSigPreview(null); setRemoveSig(false);
     setApiError(null); setSaved(false);
+  }
+
+  // The PDF is streamed by the API (session cookie), not linked from
+  // Cloudinary — Cloudinary refuses direct delivery of the private file.
+  // The tab is opened inside the click so popup blockers allow it.
+  async function viewReferencePdf() {
+    const tab = window.open("", "_blank");
+    setOpeningPdf(true);
+    setApiError(null);
+    try {
+      const { data } = await clientApi.get<Blob>(API.settings.idCardReferencePdf, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+      if (tab) tab.location.href = url;
+      else window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
+    } catch (err: unknown) {
+      tab?.close();
+      const blob = (err as { response?: { data?: Blob } })?.response?.data;
+      let msg: string | undefined;
+      if (blob instanceof Blob) {
+        try { msg = JSON.parse(await blob.text())?.message; } catch { /* non-JSON error body */ }
+      }
+      setApiError(msg || "Could not open the reference PDF. Please try again.");
+    } finally {
+      setOpeningPdf(false);
+    }
   }
 
   async function onSave() {
@@ -236,9 +263,11 @@ export default function IdCardSettingsPage() {
                     <span style={{ fontSize: 13, fontWeight: 600 }}><i className="ti ti-file-type-pdf" style={{ color: "var(--error)" }} /> {settings?.reference_pdf_name}</span>
                     <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{formatBytes(settings?.reference_pdf_size)}</span>
                     {settings?.reference_pdf_url && (
-                      <a className="btn btn-ghost btn-sm" href={settings.reference_pdf_url} target="_blank" rel="noopener noreferrer">
-                        <i className="ti ti-external-link" /> View
-                      </a>
+                      <button className="btn btn-ghost btn-sm" onClick={viewReferencePdf} disabled={openingPdf}>
+                        {openingPdf
+                          ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Opening…</>
+                          : <><i className="ti ti-external-link" /> View</>}
+                      </button>
                     )}
                   </>
                 ) : (
