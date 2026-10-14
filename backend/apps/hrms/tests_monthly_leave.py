@@ -290,6 +290,67 @@ class MonthlyLeaveApiTests(_Fixtures, TestCase):
         self.assertEqual(LeaveBalance.objects.get(employee=self.emp_mum, leave_type='casual', year=YEAR).total_days, Decimal('1'))
 
 
+class MonthlyLeavePickerScopeTests(_Fixtures, TestCase):
+    """The Manual Entry picker uses GET /employees/?search=; its scope must match
+    the monthly-credit endpoints (Branch Admin → own branch, System Admin → all)."""
+
+    def setUp(self):
+        from apps.accounts.factories import make_role, make_user
+        self.make_fixtures()
+        ba_role = make_role('mlm_branch_admin', permission_codenames=['employees.view', 'leave.approve'])
+        ba_role.can_manage_branch = True
+        ba_role.save(update_fields=['can_manage_branch'])
+        self.branch_admin = make_user('mlm.ba@test.com', role=ba_role, employee_id='CRBA01',
+                                      full_name='Branch Admin Hyd', branch='Hyderabad Credits')
+        self.sys_admin = make_user(
+            'mlm.sa@test.com', role=make_role('mlm_system_admin', permission_codenames=['settings.edit', 'settings.view']),
+            employee_id='CRSA01', full_name='System Admin', branch='Hyderabad Credits',
+        )
+        self.client = APIClient()
+
+    def _login(self, user):
+        resp = self.client.post(reverse('login'), {'company_code': TEST_COMPANY_CODE, 'email': user.email,
+                                                   'password': PASSWORD}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    def _search(self, q):
+        resp = self.client.get(reverse('employee-list-create'), {'search': q, 'page_size': 50})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        return {r['employee_id'] for r in resp.data['data']['results']}
+
+    def _save(self, code):
+        return self.client.post(reverse('leave-monthly-credits'), {
+            'employee_id': code, 'year': YEAR, 'month': MONTH, 'leave_type': 'casual', 'credit': '1',
+        }, format='json')
+
+    def test_branch_admin_sees_and_saves_only_own_branch(self):
+        self._login(self.branch_admin)
+        found = self._search('CREMP')
+        self.assertIn('CREMP01', found)
+        self.assertIn('CREMP02', found)
+        self.assertNotIn('CREMP03', found)                     # Mumbai employee
+        self.assertEqual(self._search('Mum Emp'), set())        # by name, other branch
+        self.assertEqual(self._search('Other'), {'CREMP02'})    # by name, own branch
+        self.assertEqual(self._save('CREMP01').status_code, 200)
+        self.assertEqual(self._save('CREMP03').status_code, 404)
+        lookup = self.client.get(reverse('leave-monthly-credits'),
+                                 {'employee_id': 'CREMP03', 'year': YEAR, 'month': MONTH})
+        self.assertEqual(lookup.status_code, 404)
+        self.assertFalse(LeaveBalance.objects.filter(employee=self.emp_mum).exists())
+
+    def test_system_admin_sees_and_saves_across_branches(self):
+        self._login(self.sys_admin)
+        self.assertTrue({'CREMP01', 'CREMP02', 'CREMP03'} <= self._search('CREMP'))
+        self.assertEqual(self._search('Mum Emp'), {'CREMP03'})
+        self.assertEqual(self._save('CREMP03').status_code, 200)
+        self.assertEqual(monthly_credit_value(self.emp_mum, 'casual', YEAR, MONTH), Decimal('1'))
+
+    def test_branch_hr_and_manager_scope_unchanged(self):
+        self._login(self.hr_hyd)
+        self.assertNotIn('CREMP03', self._search('CREMP'))
+        self._login(self.manager)
+        self.assertEqual(self._search('CREMP'), {'CREMP01'})   # direct reports only
+
 class MonthlyCreditConcurrencyTests(_Fixtures, TransactionTestCase):
     """Real commits and separate connections: concurrent saves of the same month apply once."""
 

@@ -35,6 +35,7 @@ export default function EmployeePickerField({
   const [open,    setOpen]    = useState(false);
   const [results, setResults] = useState<ApiEmployeeRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [failed,  setFailed]  = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -51,13 +52,19 @@ export default function EmployeePickerField({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
+      setFailed(null);
       try {
         const { data } = await clientApi.get<{ data: { results: ApiEmployeeRow[] } }>(
           API.employees.list, { params: { search: q, page_size: 8 } },
         );
         setResults(data.data?.results ?? []);
-      } catch {
+      } catch (err) {
+        // Show why the search failed (e.g. no permission) instead of an empty list.
         setResults([]);
+        setFailed(
+          (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+          ?? "Could not search employees. Please try again.",
+        );
       } finally {
         setLoading(false);
       }
@@ -109,6 +116,8 @@ export default function EmployeePickerField({
             <div style={{ padding: 12, fontSize: 13, color: "var(--on-variant)" }}>
               <i className="ti ti-loader-2 spin" /> Searching…
             </div>
+          ) : failed ? (
+            <div style={{ padding: 12, fontSize: 13, color: "var(--error)" }}>{failed}</div>
           ) : results.length === 0 ? (
             <div style={{ padding: 12, fontSize: 13, color: "var(--on-variant)" }}>No employees found.</div>
           ) : (

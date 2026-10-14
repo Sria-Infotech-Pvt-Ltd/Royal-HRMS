@@ -291,7 +291,8 @@ function ManualEntrySection() {
   }
 
   return (
-    <div className="card mb-24">
+    // overflow: visible so the employee search dropdown isn't clipped by .card's overflow: hidden
+    <div className="card mb-24" style={{ overflow: "visible" }}>
       <div className="card-header">
         <div className="card-title"><i className="ti ti-edit" /> Manual Monthly Leave Entry</div>
       </div>
