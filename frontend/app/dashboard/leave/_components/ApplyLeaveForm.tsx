@@ -8,16 +8,30 @@ import { useToast } from "@/components/ToastProvider";
 import { getLeaveYear } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
-  LEAVE_TYPE_CONFIG, calcWorkingDays,
+  LEAVE_TYPE_CONFIG, LEAVE_TYPES_LIST, calcWorkingDays,
   type DurationKey,
 } from "../_data";
-import { type LeaveForm, BLANK, Lbl, Err } from "./applyLeaveFormHelpers";
+import DateInput from "@/components/shared/DateInput";
+import { type LeaveForm, BLANK, Err } from "./applyLeaveFormHelpers";
 import LeaveSubmittedScreen from "./LeaveSubmittedScreen";
-import LeaveTypePicker from "./LeaveTypePicker";
-import LeaveDurationDates from "./LeaveDurationDates";
-import LeaveRequestSummary from "./LeaveRequestSummary";
 import LeaveSupportingDocument from "./LeaveSupportingDocument";
 import LeaveHandoverFields from "./LeaveHandoverFields";
+
+const DURATION_OPTIONS: { value: DurationKey; label: string }[] = [
+  { value: "full_day",       label: "Full day" },
+  { value: "half_morning",   label: "Morning half" },
+  { value: "half_afternoon", label: "Afternoon half" },
+];
+
+/** Small uppercase field label — this compact layout's own style, distinct
+ *  from the bold-sentence-case Lbl() the optional sections below still use. */
+function SmallLbl({ text }: { text: string }) {
+  return (
+    <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--on-variant)]">
+      {text}
+    </div>
+  );
+}
 
 export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const { showToast } = useToast();
@@ -133,69 +147,90 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
     if (value !== "full_day") setField("to_date", "");
   }
 
+  const requestedLabel = preview ? preview.actual_leave_days : workDays;
+  const balancePreviewText = ltConfig.isLwp
+    ? "Unpaid — no balance deducted"
+    : `${available} day${available === 1 ? "" : "s"} available · ${requestedLabel} day${requestedLabel === 1 ? "" : "s"} requested`;
+
   return (
     <div className="p-6">
-      <div className="leave-request-layout">
-        <div className="flex min-w-0 flex-col gap-6">
-          <div>
-            <Lbl text="Leave type" required />
-            <LeaveTypePicker selected={form.leave_type} balanceMap={balanceMap} onSelect={key => setField("leave_type", key)} />
-            {policy?.policy_note && (
-              <p className="mt-2.5 flex items-start gap-1.5 text-xs text-[var(--on-variant)]">
-                <i className="ti ti-info-circle mt-px flex-shrink-0" /> {policy.policy_note}
-              </p>
-            )}
-          </div>
-
-          <LeaveDurationDates
-            form={form}
-            errors={errors}
-            isHalfDay={isHalfDay}
-            onDurationChange={handleDurationChange}
-            onDateChange={(field, isoDate) => setField(field, isoDate)}
-          />
-
-          <div>
-            <Lbl text="Reason" required />
-            <textarea
-              className={`field-input${errors.reason ? " field-error" : ""}`}
-              value={form.reason}
-              onChange={event => setField("reason", event.target.value)}
-              placeholder="Briefly describe the reason for your leave"
-              rows={3}
-              maxLength={500}
-              style={{ resize: "none" }}
-            />
-            <div className="mt-1 flex justify-between">
-              <Err msg={errors.reason} />
-              <span className={`ml-auto text-xs ${form.reason.length > 450 ? "text-[var(--warn)]" : "text-[var(--on-variant)]"}`}>{form.reason.length}/500</span>
-            </div>
-          </div>
-
-          <LeaveSupportingDocument file={docFile} isRequired={ltConfig.requiresDoc} error={errors.doc} onChange={setDocFile} />
-
-          <LeaveHandoverFields form={form} onChange={setField} />
+      <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
+        <div>
+          <SmallLbl text="Leave type" />
+          <select
+            className="field-input field-select"
+            value={form.leave_type}
+            onChange={event => setField("leave_type", event.target.value as LeaveForm["leave_type"])}
+          >
+            {LEAVE_TYPES_LIST.map(type => <option key={type.key} value={type.key}>{type.label}</option>)}
+          </select>
+          {policy?.policy_note && (
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-[var(--on-variant)]">
+              <i className="ti ti-info-circle mt-px flex-shrink-0" /> {policy.policy_note}
+            </p>
+          )}
         </div>
 
-        <LeaveRequestSummary
-          leaveType={ltConfig}
-          balance={balance}
-          available={available}
-          form={form}
-          isHalfDay={isHalfDay}
-          workDays={workDays}
-          isOverLimit={overLimit}
-          preview={preview}
-          isPreviewLoading={previewLoading && canPreview}
-          isInsufficientBalance={insufficientBalance}
-        />
+        <div>
+          <SmallLbl text="Duration" />
+          <select
+            className="field-input field-select"
+            value={form.duration}
+            onChange={event => handleDurationChange(event.target.value as DurationKey)}
+          >
+            {DURATION_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <SmallLbl text={isHalfDay ? "Date" : "From"} />
+          <DateInput value={form.from_date} onChange={isoDate => setField("from_date", isoDate)} className={`field-input${errors.from_date ? " field-error" : ""}`} />
+          <Err msg={errors.from_date} />
+        </div>
+
+        {!isHalfDay && (
+          <div>
+            <SmallLbl text="To" />
+            <DateInput value={form.to_date} min={form.from_date} onChange={isoDate => setField("to_date", isoDate)} className={`field-input${errors.to_date ? " field-error" : ""}`} />
+            <Err msg={errors.to_date} />
+          </div>
+        )}
+
+        <div>
+          <SmallLbl text="Reason" />
+          <textarea
+            className={`field-input${errors.reason ? " field-error" : ""}`}
+            value={form.reason}
+            onChange={event => setField("reason", event.target.value)}
+            placeholder="Reason for leave"
+            rows={3}
+            maxLength={500}
+            style={{ resize: "none" }}
+          />
+          <Err msg={errors.reason} />
+        </div>
+
+        <div>
+          <SmallLbl text="Balance preview" />
+          <div className="field-input flex items-center" style={{ background: "var(--bg-low)", color: "var(--on-variant)", minHeight: 76 }}>
+            {previewLoading && canPreview ? "Checking balance…" : balancePreviewText}
+          </div>
+          {insufficientBalance && <Err msg="Insufficient leave balance for the selected dates." />}
+        </div>
       </div>
 
-      <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-[var(--outline-v)] pt-4">
+      <LeaveSupportingDocument file={docFile} isRequired={ltConfig.requiresDoc} error={errors.doc} onChange={setDocFile} />
+
+      <LeaveHandoverFields form={form} onChange={setField} />
+
+      <div className="mt-6 flex items-center justify-between gap-2.5 border-t border-[var(--outline-v)] pt-4">
+        <p className="text-xs text-[var(--on-variant)]">Submissions are routed for approval and retained in My Requests.</p>
+        <div className="flex items-center gap-2.5">
         <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={submitting}>Cancel</button>
         <button type="button" className="btn btn-filled" onClick={handleSubmit} disabled={submitting || insufficientBalance}>
           {submitting ? <><i className="ti ti-loader-2 spin" /> Submitting…</> : "Submit request"}
         </button>
+        </div>
       </div>
     </div>
   );

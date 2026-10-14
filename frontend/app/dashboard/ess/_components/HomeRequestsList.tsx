@@ -15,8 +15,11 @@ interface Props {
 export default function HomeRequestsList({ items, onViewAll }: Props) {
   return (
     <div className="card">
-      <div className="card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div className="card-title"><i className="ti ti-list-check" /> My requests</div>
+      <div className="card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <div>
+          <div className="card-title" style={{ fontSize: 20 }}><i className="ti ti-list-check" /> My requests</div>
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--on-variant)" }}>Recent submissions and approval progress.</p>
+        </div>
         <button onClick={onViewAll} className="btn btn-ghost btn-sm">
           View all <i className="ti ti-arrow-right" />
         </button>
@@ -36,7 +39,7 @@ export default function HomeRequestsList({ items, onViewAll }: Props) {
               <div
                 key={item.key}
                 onClick={onViewAll}
-                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", borderBottom: "1px solid var(--outline-v)", cursor: "pointer" }}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid var(--outline-v)", cursor: "pointer" }}
               >
                 <i className={`ti ${meta.icon}`} style={{ fontSize: 16, color: meta.color, flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>

@@ -9,6 +9,7 @@
 // left out rather than shown with a fabricated number.
 
 import { useFetch } from "@/hooks/useFetch";
+import { useWeeklyTimesheet } from "@/hooks/useWeeklyTimesheet";
 import { API } from "@/lib/api/endpoints";
 import type { AttendanceStatus } from "@/types/employeeDashboard";
 import type { HolidayListData } from "@/types/holidays";
@@ -46,6 +47,11 @@ const BADGE_CLASS: Record<"ok" | "warn" | "neutral", string> = {
 export default function HomeTodayPanel({ status }: Props) {
   const { data: shift } = useFetch<Shift | null>(API.attendance.myShift);
   const { data: holidayData } = useFetch<HolidayListData>(API.leave.holidays);
+  // Same hook WeeklyTimesheetCard itself calls (cheap GET, already cached by
+  // the browser's normal fetch path) — needed here only to know whether that
+  // row has real content, so the "Nothing scheduled" fallback below doesn't
+  // show redundantly next to it.
+  const { data: timesheet } = useWeeklyTimesheet();
 
   const todayIso = new Date().toISOString().slice(0, 10);
   const nextHoliday = (holidayData?.holidays ?? [])
@@ -66,7 +72,7 @@ export default function HomeTodayPanel({ status }: Props) {
             object), not null — so `shift` alone being truthy doesn't mean
             it has real fields. Check for an actual field instead. */}
         {!!shift?.start_time && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--outline-v)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: "1px solid var(--outline-v)" }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--on-bg)" }}>{shift.name}</div>
               <div style={{ fontSize: 11.5, color: "var(--on-variant)" }}>{shift.start_time}–{shift.end_time}</div>
@@ -76,7 +82,7 @@ export default function HomeTodayPanel({ status }: Props) {
         )}
         <WeeklyTimesheetCard compact />
         {nextHoliday && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0" }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--on-bg)" }}>{nextHoliday.name}</div>
               <div style={{ fontSize: 11.5, color: "var(--on-variant)" }}>
@@ -86,8 +92,8 @@ export default function HomeTodayPanel({ status }: Props) {
             <span className="badge badge-neutral">UPCOMING</span>
           </div>
         )}
-        {!shift?.start_time && !nextHoliday && (
-          <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "10px 0" }}>Nothing scheduled to show yet.</div>
+        {!shift?.start_time && !nextHoliday && !timesheet && (
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "14px 0" }}>Nothing scheduled to show yet.</div>
         )}
       </div>
     </div>

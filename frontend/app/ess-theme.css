@@ -168,6 +168,16 @@
    shell only, bring their headings and cards to the reference's scale. */
 .ess-shell .page-title{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:normal}
 .ess-shell .page-sub{font-size:11px;margin-top:4px}
-.ess-shell .card,.ess-shell .stat-card{border-radius:14px}
+.ess-shell .card,.ess-shell .stat-card{border-radius:10px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
 .ess-shell .card-title{font-size:16px;font-weight:700}
 .ess-shell .stat-card{padding:15px}
+
+/* Home tab tab-bar sizing — reference spec: 40px bar, 6px/12px tab padding,
+   12px/600 tab text, 8px tab radius. */
+.ess-tabs{border-radius:8px;padding:4px}
+.ess-tab{padding:6px 12px;font-size:12px;font-weight:600;border-radius:6px}
+
+/* Quick-action tile hover — "violet border + light violet bg" per the
+   Home reference spec. */
+.ess-quick-tile{transition:border-color .12s,background .12s}
+.ess-quick-tile:hover{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 7%,var(--surface))}

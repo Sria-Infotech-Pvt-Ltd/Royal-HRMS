@@ -26,8 +26,11 @@ interface Props {
 export default function HomePayslipsPanel({ payslips, onViewAll }: Props) {
   return (
     <div className="card">
-      <div className="card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div className="card-title"><i className="ti ti-receipt" /> Payslips &amp; documents</div>
+      <div className="card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <div>
+          <div className="card-title"><i className="ti ti-receipt" /> Payslips &amp; documents</div>
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--on-variant)" }}>Your latest secure employee documents.</p>
+        </div>
         <button onClick={onViewAll} className="btn btn-ghost btn-sm">
           View all <i className="ti ti-arrow-right" />
         </button>
@@ -41,7 +44,7 @@ export default function HomePayslipsPanel({ payslips, onViewAll }: Props) {
       ) : (
         <div>
           {payslips.slice(0, 4).map(p => (
-            <div key={p.cycle} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", borderBottom: "1px solid var(--outline-v)" }}>
+            <div key={p.cycle} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--outline-v)" }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{p.cycle}</div>
                 <div style={{ fontSize: 11, color: "var(--on-variant)" }}>₹{Number(p.net_pay).toLocaleString("en-IN")}</div>

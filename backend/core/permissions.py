@@ -33,6 +33,32 @@ def has_perm(user, codename: str) -> bool:
     ).exists()
 
 
+def effective_permission_codenames(user) -> list[str]:
+    """
+    The permission codename list to hand to the frontend (login response
+    body, JWT claims) for a given user — single shared source so every
+    permission-gated nav item / route guard / usePermission() check agrees
+    with what has_perm() above would actually allow server-side.
+
+    A superuser gets every real codename that exists, not just whatever its
+    linked Role happens to carry — mirrors has_perm()'s own superuser
+    bypass. Previously this list came from `user.role.role_permissions.all()`
+    independently in three different places (JWT token claims, the login
+    response, and nowhere accounting for is_superuser at all), so a
+    superuser account without every permission explicitly assigned to its
+    Role lost whole nav sections (e.g. Organization) despite has_perm()
+    itself already letting them through server-side.
+    """
+    if not user:
+        return []
+    if getattr(user, 'is_superuser', False):
+        from apps.accounts.models import Permission
+        return list(Permission.objects.values_list('codename', flat=True))
+    if not user.role:
+        return []
+    return [rp.permission.codename for rp in user.role.role_permissions.all()]
+
+
 class RequiresSecureTransport(BasePermission):
     """
     Rejects any request not carrying request.is_secure() == True — for

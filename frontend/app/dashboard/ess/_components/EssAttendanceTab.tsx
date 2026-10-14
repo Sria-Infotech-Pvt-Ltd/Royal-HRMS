@@ -1,9 +1,12 @@
 "use client";
 
-// Self-service "Attendance" tab, laid out as the Employee Directory reference: four metric tiles, this month's
-// day-by-day calendar beside the latest punches, then the weekly timesheet beside attendance requests. All of it
-// is real data (attendance stats/calendar/history, the weekly timesheet and the employee's correction requests);
-// clocking in/out lives on the "Punch in" button in the page header, so there is no second clock widget here.
+// Self-service "Attendance" tab, laid out exactly as the ESS reference: this
+// month's day-by-day calendar beside the latest punches, then the weekly
+// timesheet beside attendance requests — no metric-tile row (that belongs to
+// Payslips' own reference screen, not this one). All of it is real data
+// (attendance stats/calendar/history, the weekly timesheet and the
+// employee's correction requests); clocking in/out lives on the "Punch in"
+// button in the shared hero banner, so there is no second clock widget here.
 
 import { useMemo, useState } from "react";
 import { useAttendanceDashboard } from "@/hooks/useAttendanceDashboard";
@@ -15,21 +18,15 @@ import MyCorrectionDetailModal from "../../my-requests/_components/MyCorrectionD
 import {
   MyCorrectionRequest, PaginatedResponse, STATUS_LABEL, toDisplayStatus,
 } from "../../my-requests/_data";
-import type { HistoryRow } from "@/types/attendance";
+import type { RecentPunchRow } from "@/types/attendance";
 
 const WEEKDAY_LETTER = ["S", "M", "T", "W", "T", "F", "S"];
-const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const RECENT_PUNCHES = 3;
 const RECENT_REQUESTS = 5;
 
-function dayLabel(iso: string): string {
-  const [, month, day] = iso.split("-").map(Number);
-  return `${day} ${MONTH_SHORT[month - 1] ?? ""}`;
-}
-
-function punchDetail(row: HistoryRow): string {
-  return row.clockOut ? `In ${row.clockIn} · Out ${row.clockOut}` : `In ${row.clockIn}`;
+function punchDetail(row: RecentPunchRow): string {
+  return row.clockOut ? `In ${row.clockIn} · Out ${row.clockOut}` : `In ${row.clockIn} · ${row.source}`;
 }
 
 function correctionTitle(dateIso: string): string {
@@ -87,25 +84,35 @@ export default function EssAttendanceTab() {
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
-  const { stats, calendar, history, isLoading, refetch } = useAttendanceDashboard({ month, year });
+  const { calendar, refetch } = useAttendanceDashboard({ month, year });
+  // Dedicated recent-punches endpoint (date + location + source), not the
+  // calendar dashboard's generic `history` list — that one has no location/
+  // source fields at all, which is why this card was always missing them.
+  const recentPunches = useFetch<RecentPunchRow[]>(`${API.attendance.recentPunches}?limit=${RECENT_PUNCHES}`);
   const corrections = useFetch<PaginatedResponse<MyCorrectionRequest>>(`${API.attendance.myCorrections}?page_size=100`);
   const [showRegularize, setShowRegularize] = useState(false);
   const [detail, setDetail] = useState<MyCorrectionRequest | null>(null);
 
-  const days = useMemo(() => Array.from({ length: now.getDate() }, (_, index) => {
-    const dayNumber = index + 1;
-    const iso = `${year}-${String(month).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
-    return { dayNumber, letter: WEEKDAY_LETTER[new Date(year, month - 1, dayNumber).getDay()], cls: dayClass(calendar[iso]?.status) };
-  }), [calendar, month, year, now]);
+  const days = useMemo(() => {
+    // The whole month, not just "1..today" — a monthly calendar that stops
+    // at today hides the rest of the month's weekly-offs/holidays entirely.
+    // Days with no calendar entry yet (future, unprocessed) just render
+    // blank, same as any other day dayClass() doesn't recognize a status for.
+    const daysInMonth = new Date(year, month, 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, index) => {
+      const dayNumber = index + 1;
+      // calendar.days is keyed by plain day-of-month ("1", "2", …), not an ISO
+      // date string — same convention AttendanceCalendar.tsx's own `data[String(day)]`
+      // lookup already relies on; building an ISO key here instead meant this
+      // calendar never matched anything and every day rendered blank.
+      return { dayNumber, letter: WEEKDAY_LETTER[new Date(year, month - 1, dayNumber).getDay()], cls: dayClass(calendar[String(dayNumber)]?.status) };
+    });
+  }, [calendar, month, year]);
 
-  const punches = history.filter(row => row.clockIn).slice(0, RECENT_PUNCHES);
+  const punches = recentPunches.data ?? [];
   const requests = [...(corrections.data?.results ?? [])]
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, RECENT_REQUESTS);
-
-  const present = stats?.days_present ?? 0;
-  const workingDays = stats?.working_days ?? 0;
-  const hours = stats ? Math.round(stats.total_work_minutes / 60) : 0;
 
   return (
     <section className="ess-page">
@@ -115,13 +122,6 @@ export default function EssAttendanceTab() {
           <p>Punch status, monthly calendar and regularization requests.</p>
         </div>
         <button className="rvbtn pri" type="button" onClick={() => setShowRegularize(true)}>Regularize attendance</button>
-      </div>
-
-      <div className="ess-metrics">
-        <article className="ess-metric"><i>PRESENT</i><b>{isLoading ? "—" : present}</b><span>of {workingDays} working days</span></article>
-        <article className="ess-metric"><i>WORK HOURS</i><b>{isLoading ? "—" : `${hours}h`}</b><span>{stats?.work_hours_percentage ?? 0}% of expected</span></article>
-        <article className="ess-metric"><i>LATE ARRIVALS</i><b>{isLoading ? "—" : stats?.late_arrivals ?? 0}</b><span>{stats?.late_arrivals_regularized ?? 0} regularized</span></article>
-        <article className="ess-metric"><i>MISSING PUNCH</i><b>{isLoading ? "—" : stats?.missing_punch ?? 0}</b><span>no action required</span></article>
       </div>
 
       <div className="ess-grid">
@@ -142,9 +142,11 @@ export default function EssAttendanceTab() {
           <div className="ess-list">
             {punches.length === 0 && <div className="ess-row"><div><b>No punches yet</b><small>Your clock-ins will appear here.</small></div></div>}
             {punches.map(row => (
+              // row.date is already a display string ("14 Oct") from the
+              // backend, not an ISO date — rendered as-is, not re-parsed.
               <div className="ess-row" key={row.date}>
-                <div><b>{dayLabel(row.date)}</b><small>{punchDetail(row)}</small></div>
-                <span className="state ok">{row.clockOut ? "COMPLETE" : "PRESENT"}</span>
+                <div><b>{row.date} · {row.location}</b><small>{punchDetail(row)}</small></div>
+                <span className="state ok">{row.status}</span>
               </div>
             ))}
           </div>

@@ -16,22 +16,28 @@ interface Tile {
 interface Props { tiles: Tile[] }
 
 export default function HomeStatTiles({ tiles }: Props) {
+  // 4 separate cards (same .card box — border, radius, shadow — every other
+  // card on this page uses), not one joined bar with 1px divider lines: the
+  // reference spec calls these "4 equal columns" of cards, same size/style
+  // as Quick actions/Today/My requests, with the page's own 12px card gap.
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 1, background: "var(--outline-v)", borderRadius: "var(--radius-lg)", overflow: "hidden", marginBottom: 20 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
       {tiles.map((t, i) => (
-        <div key={i} style={{ background: "var(--surface)", padding: "18px 22px", display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--on-variant)", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>
+        <div key={i} className="card" style={{ padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--on-variant)", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
             <i className={`ti ${t.icon}`} /> {t.label}
           </div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: "var(--on-bg)" }}>{t.value}</div>
-          <div style={{ fontSize: 12, color: "var(--on-variant)" }}>{t.sub}</div>
-          <button
-            onClick={t.onClick}
-            className="btn-link"
-            style={{ marginTop: 4, alignSelf: "flex-start", border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--primary)" }}
-          >
-            {t.linkText} <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
-          </button>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "var(--on-bg)", lineHeight: 1, marginTop: 8 }}>{t.value}</div>
+          <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 6 }}>
+            {t.sub} ·{" "}
+            <button
+              onClick={t.onClick}
+              className="btn-link"
+              style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 11, fontWeight: 500, color: "var(--primary)" }}
+            >
+              {t.linkText}
+            </button>
+          </div>
         </div>
       ))}
     </div>

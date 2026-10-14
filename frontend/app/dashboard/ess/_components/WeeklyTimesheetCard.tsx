@@ -27,7 +27,7 @@ export default function WeeklyTimesheetCard({ compact = false }: { compact?: boo
 
   if (compact) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--outline-v)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: "1px solid var(--outline-v)" }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--on-bg)" }}>Weekly timesheet</div>
           <div style={{ fontSize: 11.5, color: "var(--on-variant)" }}>{data.hours_logged} of {data.target_hours} hours logged</div>

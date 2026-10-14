@@ -44,10 +44,8 @@ class RoleBasedRefreshToken(RefreshToken):
         token['employee_id']          = user.employee_id or ''
         token['department']           = user.department or ''
         token['branch']               = user.branch or ''
-        token['permissions'] = (
-            [rp.permission.codename for rp in user.role.role_permissions.all()]
-            if user.role else []
-        )
+        from core.permissions import effective_permission_codenames
+        token['permissions'] = effective_permission_codenames(user)
         for key, value in _volatile_claims(user).items():
             token[key] = value
 

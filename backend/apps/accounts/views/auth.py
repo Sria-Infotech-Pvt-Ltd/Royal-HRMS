@@ -43,7 +43,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from core.file_validation import validate_file_content as _validate_file_content
 from core.pagination import paginate, paginated_data
-from core.permissions import HasSettingsPermission, has_perm as _has_perm
+from core.permissions import HasSettingsPermission, effective_permission_codenames, has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 from core.template_context import (
     candidate_context as _candidate_template_context,
@@ -198,10 +198,7 @@ class LoginView(APIView):
         )
         logger.info('User %s logged in from %s', email, ip)
 
-        permissions = (
-            [rp.permission.codename for rp in user.role.role_permissions.all()]
-            if user.role else []
-        )
+        permissions = effective_permission_codenames(user)
 
         resp = success('Login successful.', data={
             'user': {

@@ -68,7 +68,20 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
       </div>
 
       {showApply && (
-        <Modal title="Request leave" onClose={() => setShowApply(false)} size="lg" maxWidth={940} bodyStyle={{ padding: 0 }}>
+        <Modal
+          title={
+            <div>
+              <div className="text-[18px] font-bold">Leave request</div>
+              <div className="mt-0.5 text-[12px] font-normal text-[var(--on-variant)]">
+                Complete the required information. Your submission will appear in My Requests.
+              </div>
+            </div>
+          }
+          onClose={() => setShowApply(false)}
+          size="lg"
+          maxWidth={820}
+          bodyStyle={{ padding: 0 }}
+        >
           <ApplyLeaveForm onCancel={() => setShowApply(false)} />
         </Modal>
       )}

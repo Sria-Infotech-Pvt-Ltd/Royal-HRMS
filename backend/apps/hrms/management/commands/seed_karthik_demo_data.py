@@ -85,13 +85,35 @@ REPORTING_MANAGER_ID = 'EMP00065'  # Head — Product Engineering, same branch
 
 
 class Command(BaseCommand):
-    help = f'Seeds realistic full-record demo data for employee {EMPLOYEE_ID} (Karthik Pillai).'
+    help = (
+        f'Seeds realistic full-record demo data for an already-hired employee across every '
+        f'module. Defaults to {EMPLOYEE_ID} (Karthik Pillai) when no --employee-id/--email is given.'
+    )
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--employee-id', default=None,
+            help=f'Employee ID to seed (e.g. EMP00076). Defaults to {EMPLOYEE_ID}.',
+        )
+        parser.add_argument(
+            '--email', default=None,
+            help='Alternative to --employee-id: look the employee up by email instead.',
+        )
 
     def handle(self, *args, **options):
-        try:
-            employee = User.objects.get(employee_id=EMPLOYEE_ID)
-        except User.DoesNotExist as exc:
-            raise CommandError(f'No employee with employee_id={EMPLOYEE_ID!r} found.') from exc
+        employee_id = options.get('employee_id')
+        email = options.get('email')
+        if email:
+            try:
+                employee = User.objects.get(email__iexact=email)
+            except User.DoesNotExist as exc:
+                raise CommandError(f'No employee with email={email!r} found.') from exc
+        else:
+            target_id = employee_id or EMPLOYEE_ID
+            try:
+                employee = User.objects.get(employee_id=target_id)
+            except User.DoesNotExist as exc:
+                raise CommandError(f'No employee with employee_id={target_id!r} found.') from exc
 
         with transaction.atomic():
             self._seed_reporting_manager(employee)
@@ -186,30 +208,49 @@ class Command(BaseCommand):
     # ── Family & nomination ───────────────────────────────────────────────────
 
     def _seed_family_and_nominees(self, employee: User) -> None:
-        if FamilyMember.objects.filter(employee=employee).exists():
+        # Checked per-relationship (not "any family member exists") so an
+        # employee who already has e.g. just a father on file still gets a
+        # spouse/child/nominees added, rather than the whole step no-opping.
+        existing = set(FamilyMember.objects.filter(employee=employee).values_list('relationship', flat=True))
+        created_any = False
+
+        spouse = FamilyMember.objects.filter(employee=employee, relationship='spouse').first()
+        if spouse is None:
+            spouse = FamilyMember.objects.create(
+                employee=employee, name='Divya Pillai', relationship='spouse',
+                date_of_birth=date(1995, 7, 22), gender='female', blood_group='O+',
+                is_dependent=True, order=0,
+            )
+            created_any = True
+
+        child = FamilyMember.objects.filter(employee=employee, relationship='child').first()
+        if child is None:
+            child = FamilyMember.objects.create(
+                employee=employee, name='Advaith Pillai', relationship='child',
+                date_of_birth=date(2021, 11, 4), gender='male', blood_group='O+',
+                is_dependent=True, order=1,
+            )
+            created_any = True
+
+        if 'father' not in existing:
+            FamilyMember.objects.create(
+                employee=employee, name='Suresh Pillai', relationship='father',
+                date_of_birth=date(1962, 2, 10), gender='male', blood_group='B+',
+                is_dependent=False, order=2,
+            )
+            created_any = True
+
+        if created_any:
+            self.stdout.write('Family members created/completed: spouse, child, father.')
+        else:
             self.stdout.write('Family members already present — skipped.')
-            return
 
-        spouse = FamilyMember.objects.create(
-            employee=employee, name='Divya Pillai', relationship='spouse',
-            date_of_birth=date(1995, 7, 22), gender='female', blood_group='O+',
-            is_dependent=True, order=0,
-        )
-        child = FamilyMember.objects.create(
-            employee=employee, name='Advaith Pillai', relationship='child',
-            date_of_birth=date(2021, 11, 4), gender='male', blood_group='O+',
-            is_dependent=True, order=1,
-        )
-        FamilyMember.objects.create(
-            employee=employee, name='Suresh Pillai', relationship='father',
-            date_of_birth=date(1962, 2, 10), gender='male', blood_group='B+',
-            is_dependent=False, order=2,
-        )
-        self.stdout.write('Family members created: spouse, child, father.')
-
-        EPFNominee.objects.create(employee=employee, family_member=spouse, scheme='both', share_percentage=70, order=0)
-        EPFNominee.objects.create(employee=employee, family_member=child, scheme='both', share_percentage=30, order=1)
-        self.stdout.write('EPF nominees created: spouse 70%, child 30%.')
+        if not EPFNominee.objects.filter(employee=employee).exists():
+            EPFNominee.objects.create(employee=employee, family_member=spouse, scheme='both', share_percentage=70, order=0)
+            EPFNominee.objects.create(employee=employee, family_member=child, scheme='both', share_percentage=30, order=1)
+            self.stdout.write('EPF nominees created: spouse 70%, child 30%.')
+        else:
+            self.stdout.write('EPF nominees already present — skipped.')
 
     # ── Education & experience ────────────────────────────────────────────────
 

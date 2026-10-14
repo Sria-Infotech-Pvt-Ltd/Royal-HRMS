@@ -69,6 +69,7 @@ import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "../
 import EmploymentStep, { EMPTY_EMPLOYMENT, type EmploymentDraft } from "../../hire/[hireActionId]/_components/EmploymentStep";
 import DocumentsChecklistStep, { EMPTY_VERIFICATION, type VerificationDraft } from "../../hire/[hireActionId]/_components/DocumentsChecklistStep";
 import EmergencyContactsList, { type EmergencyContactEntry } from "../../hire/[hireActionId]/_components/EmergencyContactsList";
+import AddressFields, { EMPTY_ADDRESS_EXTRAS, type AddressExtras, type AddressFormFields } from "../../hire/[hireActionId]/_components/AddressFields";
 import { type FamilyEntry, type NomineeEntry } from "@/app/onboarding/_components/FamilyNominationStep";
 import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/AssetsList";
 import EducationChecklist, { type EducationEntry } from "@/app/onboarding/_components/EducationChecklist";
@@ -77,6 +78,19 @@ import type { EducationExperienceFieldConfigResponse } from "@/types/onboardingF
 import type { EmployeeSalaryConfig } from "@/types/payroll";
 
 const STEPS = HIRE_STEPS.slice(0, -1); // drop "Review" — not applicable to editing an existing record
+
+// AddressFields speaks snake_case (ProfileForm's own key names); `values`
+// (DetailValues) is keyed camelCase. Inverse of _data.ts's own internal
+// CAMEL_TO_SNAKE map, scoped to just the address fields AddressFields uses.
+const ADDRESS_FIELD_TO_CAMEL: Record<keyof AddressFormFields, string> = {
+  current_address: "currentAddress", current_address_line2: "currentAddressLine2",
+  current_village: "currentVillage", current_district: "currentDistrict",
+  current_state: "currentState", current_pin_code: "currentPinCode",
+  permanent_address: "permanentAddress", permanent_address_line2: "permanentAddressLine2",
+  permanent_village: "permanentVillage", permanent_district: "permanentDistrict",
+  permanent_state: "permanentState", permanent_pin_code: "permanentPinCode",
+  permanent_same_as_current: "permanentSameAsCurrent",
+};
 
 // Same backend-accepted values as the real FamilyNominationStep
 // (app/onboarding/_components/FamilyNominationStep.tsx) — only this
@@ -148,8 +162,13 @@ function EditRecordSidebar({ currentStep, onStepClick, hasMissing }: { currentSt
 // HireWizardClient's own step-0 JSX (it has no separate component file to
 // import; this reconstructs it field-for-field). Fields with no backend
 // column at all (middle name, specially abled, international worker,
-// category) are LOCAL ONLY in this pass — rendered for visual/field parity
-// with Hire, but not sent on save. Flagged plainly, not hidden.
+// category, address landmark/country) are LOCAL ONLY in this pass —
+// rendered for visual/field parity with Hire, but not sent on save (except
+// current/permanent address itself, which IS a real field and does save —
+// only the landmark/country extras are local-only). Flagged plainly, not
+// hidden. (Statutory declarations/Voluntary self-declaration/Address were
+// previously tracked in state here but never actually rendered — a real
+// gap found and fixed; see the JSX below for all three.)
 interface PersonalIdentityDraft {
   salutation: string; firstName: string; middleName: string; lastName: string; displayName: string;
   dateOfBirth: string; gender: string; bloodGroup: string; maritalStatus: string; nationality: string; placeOfBirth: string;
@@ -177,6 +196,11 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   const [uuid, setUuid] = useState("");
   const [loading, setLoading] = useState(true);
   const [values, setValues] = useState<DetailValues>({});
+  // Landmark/country — same as Hire's own addressExtras: no backend column
+  // exists for either today (current_address_line2 absorbs landmark; country
+  // isn't stored at all), so local-only, same documented gap as Personal
+  // identity's speciallyAbled/internationalWorker/category below.
+  const [addressExtras, setAddressExtras] = useState<AddressExtras>(EMPTY_ADDRESS_EXTRAS);
 
   const [personal, setPersonal] = useState<PersonalIdentityDraft>(EMPTY_PERSONAL);
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContactEntry[]>([]);
@@ -772,6 +796,48 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                     </div>
                   </div>
 
+                  <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Statutory declarations</div>
+                  <div className="grid grid-cols-2 gap-3 mb-5">
+                    <div>
+                      <label className="block text-[12.5px] font-semibold mb-1.5" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        Specially abled
+                        <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.03em", textTransform: "uppercase", color: "var(--warn)", background: "var(--warn-c)", borderRadius: 99, padding: "1px 6px" }}>RPwD</span>
+                      </label>
+                      <select value={personal.speciallyAbled} onChange={e => setPersonal(p => ({ ...p, speciallyAbled: e.target.value }))} className="field-input field-select">
+                        <option value="no">No</option><option value="yes">Yes</option>
+                      </select>
+                      <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Record-keeping obligation under the RPwD Act 2016.</p>
+                    </div>
+                    <div>
+                      <label className="block text-[12.5px] font-semibold mb-1.5" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        International worker
+                        <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.03em", textTransform: "uppercase", color: "var(--warn)", background: "var(--warn-c)", borderRadius: 99, padding: "1px 6px" }}>GOI</span>
+                      </label>
+                      <select value={personal.internationalWorker} onChange={e => setPersonal(p => ({ ...p, internationalWorker: e.target.value }))} className="field-input field-select">
+                        <option value="no">No</option><option value="yes">Yes</option>
+                      </select>
+                      <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Mandatory declaration on EPF Form 11.</p>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-bold uppercase tracking-wide mb-1" style={{ color: "var(--on-variant)" }}>Voluntary self-declaration</div>
+                  <p className="text-[11.5px] mb-2" style={{ color: "var(--on-variant)" }}>
+                    Not required of a private employer. Collect only where a government, PSU or aided establishment must report it, or a state incentive scheme requires it. Self-declared, and hidden from reporting managers.
+                  </p>
+                  <div className="grid grid-cols-3 gap-3 mb-5">
+                    <div>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">Category / community <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                      <select value={personal.category} onChange={e => setPersonal(p => ({ ...p, category: e.target.value }))} className="field-input field-select">
+                        <option value="prefer_not_to_say">Prefer not to say</option>
+                        <option value="general">General</option>
+                        <option value="obc">OBC</option>
+                        <option value="sc">SC</option>
+                        <option value="st">ST</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
                   <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Contact</div>
                   <div className="grid grid-cols-3 gap-3 mb-5">
                     <div>
@@ -787,6 +853,30 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       <PhoneInput value={personal.alternateMobile} onChange={v => setPersonal(p => ({ ...p, alternateMobile: v }))} placeholder="Optional" />
                     </div>
                   </div>
+
+                  <AddressFields
+                    form={{
+                      current_address: values.currentAddress || "",
+                      current_address_line2: values.currentAddressLine2 || "",
+                      current_village: values.currentVillage || "",
+                      current_district: values.currentDistrict || "",
+                      current_state: values.currentState || "",
+                      current_pin_code: values.currentPinCode || "",
+                      permanent_address: values.permanentAddress || "",
+                      permanent_address_line2: values.permanentAddressLine2 || "",
+                      permanent_village: values.permanentVillage || "",
+                      permanent_district: values.permanentDistrict || "",
+                      permanent_state: values.permanentState || "",
+                      permanent_pin_code: values.permanentPinCode || "",
+                      permanent_same_as_current: values.permanentSameAsCurrent || "false",
+                    }}
+                    extras={addressExtras}
+                    onFieldChange={(key, value) => {
+                      const camelKey = ADDRESS_FIELD_TO_CAMEL[key] ?? key;
+                      setValues(v => ({ ...v, [camelKey]: value }));
+                    }}
+                    onExtrasChange={(key, value) => setAddressExtras(x => ({ ...x, [key]: value }))}
+                  />
 
                   <EmergencyContactsList
                     entries={emergencyContacts}

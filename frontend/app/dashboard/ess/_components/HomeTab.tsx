@@ -142,19 +142,23 @@ export default function HomeTab({ onNavigate, status }: Props) {
     <div>
       <HomeStatTiles tiles={tiles} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, alignItems: "start" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-          <HomeQuickActions primary={primaryActions} secondary={secondaryActions} />
-          <HomeRequestsList items={requestItems.slice(0, 5)} onViewAll={() => onNavigate("requests")} />
-        </div>
+      {/* Two separate grid rows (not one pair of independently-stacked flex
+          columns) so each row's two cards stretch to the SAME height as
+          each other — a grid row's default align-items:stretch only works
+          when both cards are actually in that row, not just vertically
+          near it. Middle row: Quick actions | Today. Bottom row: My
+          requests | Payslips & documents. */}
+      <div style={{ display: "grid", gridTemplateColumns: "5fr 3fr", gap: 14, marginBottom: 20 }}>
+        <HomeQuickActions primary={primaryActions} secondary={secondaryActions} />
+        <HomeTodayPanel status={status} />
+      </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-          <HomeTodayPanel status={status} />
-          <HomePayslipsPanel
-            payslips={payslips?.results ?? []}
-            onViewAll={() => onNavigate("payslips")}
-          />
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: "5fr 3fr", gap: 14 }}>
+        <HomeRequestsList items={requestItems.slice(0, 5)} onViewAll={() => onNavigate("requests")} />
+        <HomePayslipsPanel
+          payslips={payslips?.results ?? []}
+          onViewAll={() => onNavigate("payslips")}
+        />
       </div>
     </div>
   );
