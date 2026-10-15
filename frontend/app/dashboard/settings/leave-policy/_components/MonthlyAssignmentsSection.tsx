@@ -5,7 +5,7 @@
 // same endpoint (and set_monthly_credit rule) as manual entry: only the
 // difference from the current value is applied to the employee's balance.
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
@@ -113,15 +113,19 @@ export default function MonthlyAssignmentsSection({ refreshKey, onChanged }: {
   refreshKey: number; onChanged: () => void;
 }) {
   const now = new Date();
+  const contentId = useId();
+  // Collapsed on first load; month/year live here, so they survive collapsing.
+  const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [data, setData] = useState<MonthlyAssignmentsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [editing, setEditing] = useState<MonthlyAssignment | null>(null);
 
   useEffect(() => {
+    if (!open) return;   // loaded (and refreshed) only while expanded
     let cancelled = false;
     setLoading(true);
     setErrorMsg(null);
@@ -131,15 +135,33 @@ export default function MonthlyAssignmentsSection({ refreshKey, onChanged }: {
       .catch(err => { if (!cancelled) { setData(null); setErrorMsg(apiMessage(err, "Could not load monthly leave assignments.")); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [year, month, refreshKey]);
+  }, [open, year, month, refreshKey]);
 
   const summary = data?.summary;
 
   return (
     <div className="card mb-24">
-      <div className="card-header" style={{ flexWrap: "wrap", gap: 12 }}>
-        <div className="card-title"><i className="ti ti-list-details" /> Monthly Leave Assignments</div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <button
+        type="button"
+        className="card-header"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-controls={contentId}
+        style={{
+          width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", font: "inherit",
+          borderBottom: open ? "1px solid var(--outline-v)" : "none",
+        }}
+      >
+        <span className="card-title"><i className="ti ti-list-details" /> Monthly Leave Assignments</span>
+        <i
+          className="ti ti-chevron-down"
+          aria-hidden="true"
+          style={{ fontSize: 18, color: "var(--on-variant)", transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none" }}
+        />
+      </button>
+      {open && (
+      <div id={contentId} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <select className="field-input" style={{ width: "auto", padding: "6px 10px" }} value={month}
             onChange={e => { setMonth(Number(e.target.value)); setOkMsg(null); }} aria-label="Month">
             {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
@@ -149,8 +171,6 @@ export default function MonthlyAssignmentsSection({ refreshKey, onChanged }: {
             {creditYears().map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-      </div>
-      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
         {summary && (
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             {[
@@ -176,7 +196,7 @@ export default function MonthlyAssignmentsSection({ refreshKey, onChanged }: {
           </div>
         ) : data && data.assignments.length === 0 ? (
           <div style={{ fontSize: 13, color: "var(--on-variant)" }}>
-            No monthly leave credits assigned for {MONTHS[month - 1]} {year}. Use the import or manual entry above to add them.
+            No monthly leave assignments found for {MONTHS[month - 1]} {year}. Use the import or manual entry above to add them.
           </div>
         ) : data ? (
           <div style={{ overflowX: "auto", border: "1px solid var(--outline-v)", borderRadius: 8 }}>
@@ -213,6 +233,7 @@ export default function MonthlyAssignmentsSection({ refreshKey, onChanged }: {
           </div>
         ) : null}
       </div>
+      )}
 
       {editing && (
         <EditAssignmentModal
