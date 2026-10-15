@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
 import type { OnboardingFieldConfigByStep, CustomFieldFileValue, OnboardingSection, EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import type { ProfileForm } from "@/app/onboarding/_types";
@@ -41,6 +42,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
   const router = useRouter();
   const canEdit    = usePermission("onboarding.edit");
   const canApprove = usePermission("onboarding.approve");
+  const { isMandatory: faceIdMandatory } = useFaceVerificationStatus();
   // Basic Details reuses PUT /employees/<id>/ (Edit Employee's own endpoint)
   // directly, so it's gated on the same permission that endpoint itself
   // checks (employees.edit), not onboarding.edit.
@@ -867,15 +869,27 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
         </div>
       </div>
 
-      <div className="alert alert-info" style={{ marginTop: 20 }}>
-        <i className="ti ti-info-circle" />
+      <div className={`alert ${faceIdMandatory ? "alert-warn" : "alert-info"}`} style={{ marginTop: 20 }}>
+        <i className={`ti ${faceIdMandatory ? "ti-alert-triangle" : "ti-info-circle"}`} />
         <div>
-          Face ID registration (if required by your organisation) isn&apos;t part of this wizard — register it
-          in person from{" "}
-          <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>
-            Face ID Registrations
-          </a>{" "}
-          before submitting, if your Attendance Settings require it.
+          {faceIdMandatory ? (
+            <>
+              <b>Face ID registration required.</b> Your organisation requires every employee to register a
+              Face ID before they can clock in or out on the web — this record will stay unable to punch in
+              until it&apos;s completed. It isn&apos;t part of this wizard; register it in person from{" "}
+              <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>
+                Face ID Registrations
+              </a>.
+            </>
+          ) : (
+            <>
+              Face ID registration isn&apos;t part of this wizard — register it in person from{" "}
+              <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>
+                Face ID Registrations
+              </a>{" "}
+              if your organisation ever turns on Attendance Settings → Face ID Verification.
+            </>
+          )}
         </div>
       </div>
     </>

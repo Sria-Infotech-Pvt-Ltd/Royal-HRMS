@@ -21,9 +21,9 @@ from rest_framework import status
 
 from core.permissions import has_perm as _has_perm
 from core.responses import error, success, get_client_ip
-from apps.accounts.models import AuditLog, EmployeeDocument, HireAction, HireActionDocument, Role, User
+from apps.accounts.models import AuditLog, Company, EmployeeDocument, HireAction, HireActionDocument, Role, User
 from apps.accounts.services_placement import assign_position
-from apps.accounts.utils import send_activation_invite
+from apps.accounts.utils import send_template_email
 from apps.accounts.views_hire import _hire_action_dict, _DENIED
 
 logger = logging.getLogger(__name__)
@@ -289,12 +289,9 @@ class HireActionCompleteView(APIView):
         if role.role_permissions.filter(permission__codename='settings.edit').exists():
             return error('System Admin accounts cannot be created through the Hire flow.')
 
-        # Never emailed/shown anywhere — the account's real password is set
-        # by the new hire themselves via the activation-invite link below.
-        # This random value only exists because create_user() requires one;
-        # must_change_password stays True so even a leaked/guessed value
-        # here can't be used to log in without immediately being forced to
-        # replace it.
+        # Emailed to the new hire below (hire_welcome_credentials template) so
+        # they can log in immediately — must_change_password stays True so
+        # this value is forced to be replaced on first login regardless.
         temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
         full_name = f'{first_name} {last_name}'
 
@@ -394,9 +391,22 @@ class HireActionCompleteView(APIView):
             )
 
         try:
-            send_activation_invite(user, created_by=request.user)
+            company = Company.objects.first()
+            send_template_email(
+                recipient_email=user.email,
+                template_name='hire_welcome_credentials',
+                context={
+                    'employee_name': user.full_name or user.email,
+                    'employee_email': user.email,
+                    'employee_id_line': f' (Employee ID: {user.employee_id})' if user.employee_id else '',
+                    'temp_password': temp_password,
+                    'company_name': company.company_name if company else '',
+                },
+                module='accounts',
+                triggered_by=request.user,
+            )
         except Exception as exc:
-            logger.error('Activation invite email failed for %s: %s', email, exc)
+            logger.error('Welcome-credentials email failed for %s: %s', email, exc)
 
         logger.info('Employee %s (%s) hired via HireAction %s by %s', action.reserved_employee_id, email, action.id, request.user.email)
         return success('Employee hired.', _hire_action_dict(action), http_status=201)

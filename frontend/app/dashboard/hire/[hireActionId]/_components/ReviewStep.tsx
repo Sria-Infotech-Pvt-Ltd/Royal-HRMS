@@ -1,5 +1,6 @@
 "use client";
 
+import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
 import type { ProfileForm } from "@/app/onboarding/_types";
 import type { EducationEntry } from "@/app/onboarding/_components/EducationChecklist";
 import type { ExperienceEntry } from "@/app/onboarding/_components/ExperienceList";
@@ -53,6 +54,13 @@ export default function ReviewStep(props: Props) {
     educationEntries, experienceEntries, assetEntries, uploadedDocTypes, requiredDocTypes,
     onHire, hiring, hireError,
   } = props;
+
+  // Org-wide toggle, Attendance Settings -> Face ID Verification. Advisory
+  // only, same reasoning as the HR-run onboarding page's own note: face
+  // capture is an in-person webcam interaction (HRFaceCaptureModal, via
+  // Face ID Registrations), not something this wizard can collect itself —
+  // so it can never be a blockingReasons entry, only a reminder here.
+  const { isMandatory: faceIdMandatory } = useFaceVerificationStatus();
 
   const missingRequiredDocs = requiredDocTypes.filter(t => !uploadedDocTypes.has(t));
   const nomineeTotals: Record<string, number> = {};
@@ -124,6 +132,18 @@ export default function ReviewStep(props: Props) {
         <div className="note warn" style={{ marginBottom: 16 }}>
           <b>Not payroll ready</b>
           {notPayrollReasons.join("; ")} — the record can still be created in Onboarding status.
+        </div>
+      )}
+
+      {faceIdMandatory && (
+        <div className="note warn" style={{ marginBottom: 16 }}>
+          <b>Face ID registration still required</b>
+          Your organisation requires every employee to register a Face ID before they can clock in or out
+          on the web. This isn&apos;t collected by this wizard — it&apos;s an in-person capture done separately.
+          Hiring this employee now will leave them unable to punch in until it&apos;s completed on{" "}
+          <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>
+            Face ID Registrations
+          </a>.
         </div>
       )}
 
