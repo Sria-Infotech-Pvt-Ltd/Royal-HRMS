@@ -39,6 +39,10 @@ export default function OnboardingPage() {
   const [panSaving,    setPanSaving]    = useState(false);
   const [submitted,          setSubmitted]          = useState(false);
   const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
+  // HR's exact "what needs fixing" text (see onboarding_rejection_remarks on
+  // the User model) — shown as a banner once the employee is actually back
+  // on the editable wizard, not just a status they have to guess at.
+  const [rejectionRemarks, setRejectionRemarks] = useState<string | null>(null);
   const [checkingApproval,   setCheckingApproval]   = useState(false);
   const [checkApprovalMsg,   setCheckApprovalMsg]   = useState<string | null>(null);
   const [highestSaved, setHighestSaved] = useState(-1);
@@ -480,6 +484,17 @@ export default function OnboardingPage() {
   useEffect(() => {
     const user = getStoredUser();
     if (user?.onboarding_status === "submitted") setIsAlreadySubmitted(true);
+    // A fresh page load/login after HR already sent this back for
+    // corrections — fetch the real remarks (not stored in the cached user
+    // object/JWT) so the banner below shows up immediately, not only after
+    // the submitted-screen's own polling effect happens to run.
+    if (user?.onboarding_status === "rejected") {
+      clientApi.get<{ data: { onboarding_rejection_remarks?: string } }>(API.employees.me)
+        .then(({ data }) => setRejectionRemarks(
+          data?.data?.onboarding_rejection_remarks || "Please review and resubmit — contact HR for details.",
+        ))
+        .catch(() => {});
+    }
   }, []);
 
   const refetchFaceRegistration = useCallback(() => {
@@ -506,7 +521,9 @@ export default function OnboardingPage() {
   // refresh is required, see refreshAccessToken below).
   async function checkAndHandleApproval(): Promise<boolean> {
     try {
-      const { data } = await clientApi.get<{ data: { onboarding_status: string; assessment_status: string } }>(API.employees.me);
+      const { data } = await clientApi.get<{ data: {
+        onboarding_status: string; assessment_status: string; onboarding_rejection_remarks?: string;
+      } }>(API.employees.me);
       const info = data?.data;
       if (!info) return false;
       if (info.onboarding_status === "complete") {
@@ -519,7 +536,17 @@ export default function OnboardingPage() {
         return true;
       }
       if (info.onboarding_status === "rejected") {
-        router.replace("/onboarding");
+        // router.replace("/onboarding") here used to be a no-op — this
+        // component IS /onboarding, so a same-route replace doesn't remount
+        // it or reset isAlreadySubmitted/submitted, which is local React
+        // state. The employee stayed stuck on "Profile Submitted!" forever
+        // (QA: "when they sent it for correction it show the status here
+        // then it has to open for the correction screen"). Reset the actual
+        // state that gates which screen renders, and surface HR's remarks
+        // so landing back on the wizard isn't a guessing game.
+        setRejectionRemarks(info.onboarding_rejection_remarks || "Please review and resubmit — contact HR for details.");
+        setIsAlreadySubmitted(false);
+        setSubmitted(false);
         return true;
       }
     } catch { /* stay on this screen */ }
@@ -846,6 +873,7 @@ export default function OnboardingPage() {
       setHighestSaved(steps.length - 1);
       setOnboardingStatus("submitted");
       setSubmitted(true);
+      setRejectionRemarks(null);
     } catch (err: unknown) {
       setSaveErr((err as { message?: string })?.message ?? "Submission failed. Please try again.");
     } finally {
@@ -944,6 +972,7 @@ export default function OnboardingPage() {
 
   return (
     <div style={WIZARD_ROOT_STYLE}>
+    <div style={WIZARD_CARD_STYLE}>
       <div className="modal-head" style={{ flex: "none" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -953,11 +982,28 @@ export default function OnboardingPage() {
             <p>Fill in your details to get started. Your information is kept secure.</p>
           </div>
         </div>
-        <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--primary)" }}>{progressPct}% complete</div>
-          <div style={{ height: 5, width: 120, borderRadius: 3, background: "var(--outline-v)", overflow: "hidden", marginTop: 4 }}>
-            <div style={{ height: "100%", width: `${progressPct}%`, background: "var(--primary)", borderRadius: 3, transition: "width 0.3s ease" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--primary)" }}>{progressPct}% complete</div>
+            <div style={{ height: 5, width: 120, borderRadius: 3, background: "var(--outline-v)", overflow: "hidden", marginTop: 4 }}>
+              <div style={{ height: "100%", width: `${progressPct}%`, background: "var(--primary)", borderRadius: 3, transition: "width 0.3s ease" }} />
+            </div>
           </div>
+          {/* In the page header, not floating fixed at bottom-right — that
+              spot collides with the footer's own Save/Submit button (QA:
+              "logout button was colliding with save button"). */}
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            type="button"
+            className="btn btn-ghost"
+            style={{ flexShrink: 0 }}
+          >
+            {loggingOut
+              ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Logging out…</>
+              : <><i className="ti ti-logout" style={{ fontSize: 14 }} /> Logout</>
+            }
+          </button>
         </div>
       </div>
 
@@ -981,6 +1027,14 @@ export default function OnboardingPage() {
           </div>
 
         <div className="wiz-body">
+          {rejectionRemarks && (
+            <div className="alert alert-warn" style={{ marginBottom: "1.25rem" }}>
+              <i className="ti ti-alert-triangle" />
+              <div>
+                <b>HR sent this back for corrections:</b> {rejectionRemarks}
+              </div>
+            </div>
+          )}
           {saveErr && <div className="alert alert-error"  style={{ marginBottom: "1.25rem" }}>{saveErr}</div>}
           {saveMsg && <div className="alert alert-success" style={{ marginBottom: "1.25rem" }}>{saveMsg}</div>}
 
@@ -1140,29 +1194,7 @@ export default function OnboardingPage() {
         </div>
         </div>
       </div>
-
-      {/* ── Fixed logout button ── */}
-      <button
-        onClick={handleLogout}
-        disabled={loggingOut}
-        type="button"
-        style={{
-          position: "fixed", bottom: 24, right: 24, zIndex: 100,
-          display: "flex", alignItems: "center", gap: 7,
-          padding: "10px 18px", borderRadius: 10,
-          border: "1.5px solid var(--outline-v)",
-          background: "var(--surface)",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.10)",
-          cursor: loggingOut ? "not-allowed" : "pointer",
-          fontSize: ".84rem", fontWeight: 500,
-          color: "var(--on-variant)",
-        }}
-      >
-        {loggingOut
-          ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 15 }} /> Logging out…</>
-          : <><i className="ti ti-logout" style={{ fontSize: 15 }} /> Logout</>
-        }
-      </button>
+    </div>
 
       {showFaceCapture && (
         <FaceRegistrationModal
@@ -1185,7 +1217,11 @@ export default function OnboardingPage() {
 const ROOT_STYLE: React.CSSProperties = {
   height: "100vh",
   overflowY: "auto",
-  background: "linear-gradient(140deg, #f0f4ff 0%, #e9effe 45%, #f3f0ff 100%)",
+  // var(--bg) — this app's one real page background everywhere else
+  // (including behind the Hire wizard's own modal), not a one-off gradient
+  // invented just for this page. QA: "make the UI same 2 same as the hire
+  // employee UI with the same colours".
+  background: "var(--bg)",
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
@@ -1209,7 +1245,28 @@ const CARD_STYLE: React.CSSProperties = {
 // padding.
 const WIZARD_ROOT_STYLE: React.CSSProperties = {
   height: "100vh",
-  background: "linear-gradient(140deg, #f0f4ff 0%, #e9effe 45%, #f3f0ff 100%)",
+  // var(--bg) — same real page background as everywhere else in the app
+  // (including behind the Hire wizard's own modal), not a one-off gradient.
+  background: "var(--bg)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+};
+
+// Mirrors Modal.tsx's own .modal.modal-lg box exactly (background var(--surface),
+// var(--radius-lg) corners, var(--shadow-md)) — this page has no dashboard
+// behind it to dim/overlay like the Hire wizard's real <Modal> does, but the
+// floating white card itself should look identical, not stretch edge-to-edge.
+const WIZARD_CARD_STYLE: React.CSSProperties = {
+  background: "var(--surface)",
+  borderRadius: "var(--radius-lg)",
+  boxShadow: "var(--shadow-md)",
+  width: 1100,
+  maxWidth: "95vw",
+  height: "100%",
+  maxHeight: "90vh",
   display: "flex",
   flexDirection: "column",
+  overflow: "hidden",
 };

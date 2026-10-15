@@ -2235,7 +2235,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'department', 'designation', 'branch', 'employee_type',
             'org_unit_name', 'position_title',
             'role_name', 'role_display', 'date_of_joining', 'date_joined',
-            'work_location', 'onboarding_status', 'assessment_status',
+            'work_location', 'onboarding_status', 'onboarding_rejection_remarks', 'assessment_status',
             'employment_status', 'employment_status_display', 'notice_period_days',
             'reporting_manager', 'reporting_approver', 'hr',
             'profile', 'profile_photo_url',

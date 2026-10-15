@@ -81,6 +81,13 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   const derivedDepartmentName = resolveDepartmentName(orgUnitId);
   const [assignErr,      setAssignErr]      = useState("");
   const [previewDoc,     setPreviewDoc]     = useState<OnboardingDocument | null>(null);
+  // Remarks is the ONLY thing the candidate actually sees when sent back for
+  // corrections (onboarding_rejected email, {remarks} — falls back to a
+  // useless generic "Please contact HR for details." when blank). Labeled
+  // "optional" before because it's also reused for an approve-time note, but
+  // leaving it blank on reject meant the candidate never found out what to
+  // fix. Required specifically at the moment of rejecting, not on every use.
+  const [rejectErr, setRejectErr] = useState<string | null>(null);
 
   // Per-document Verified/Needs Correction — overlays `user.documents`
   // locally rather than requiring the parent to refetch the whole approval
@@ -262,6 +269,11 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
             className="btn btn-ghost"
             style={{ color: "var(--error)", borderColor: "var(--error)" }}
             onClick={() => {
+              if (!remarks.trim()) {
+                setRejectErr("Describe what needs to be corrected — the candidate only sees this exact text, so it can't be sent blank.");
+                return;
+              }
+              setRejectErr(null);
               if (!window.confirm(
                 `Send ${user.full_name}'s onboarding back for corrections? They'll see your remarks and need to ` +
                 `resubmit before this can be reviewed again.`,
@@ -493,14 +505,20 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
           </SectionCard>
 
           <div className="field-group" style={{ marginTop: "1rem" }}>
-            <label className="field-label">Remarks (optional)</label>
+            <label className="field-label">
+              Remarks <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>— optional to approve, required to send back for corrections</span>
+            </label>
             <textarea
               className="field-input"
               rows={3}
               value={remarks}
-              onChange={e => onRemarksChange(e.target.value)}
-              placeholder="Notes for the employee or for record…"
+              onChange={e => { onRemarksChange(e.target.value); if (rejectErr) setRejectErr(null); }}
+              placeholder="What needs to be corrected? (e.g. PAN document is blurred, Aadhaar number doesn't match the name on file) — this is exactly what the candidate will see."
+              style={rejectErr ? { borderColor: "var(--error)" } : undefined}
             />
+            {rejectErr && (
+              <div style={{ fontSize: ".78rem", color: "var(--error)", marginTop: 4 }}>{rejectErr}</div>
+            )}
           </div>
 
           {/* Assign dept/designation — revealed on approve click. Not shown

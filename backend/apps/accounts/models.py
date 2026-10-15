@@ -410,6 +410,17 @@ class User(AbstractBaseUser, PermissionsMixin):
                                   choices=ONBOARDING_CHOICES,
                                   default=ONBOARDING_PENDING,
                               )
+    # Set alongside onboarding_status going to ONBOARDING_REJECTED (see
+    # OnboardingApprovalView) — the exact text HR typed in the "Send Back for
+    # Corrections" dialog, so the employee sees what to fix when they land
+    # back on the wizard, not just a generic "corrections needed". Cleared on
+    # resubmit/approval so a stale reason never lingers once it's been acted
+    # on. Previously this text only ever existed in a one-time email and an
+    # AuditLog row — a candidate who missed/deleted that email, or whose
+    # client-side app just stayed stuck on the old "Profile Submitted!"
+    # screen (see onboarding/page.tsx's own fix for that), had no way to see
+    # it again.
+    onboarding_rejection_remarks = models.TextField(blank=True, default='')
     assessment_status       = models.CharField(
                                   max_length=20,
                                   choices=ASSESSMENT_CHOICES,
