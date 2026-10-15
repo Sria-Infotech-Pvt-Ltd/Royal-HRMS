@@ -301,9 +301,10 @@ class OnboardingApprovalView(APIView):
 
             target.onboarding_status    = User.ONBOARDING_COMPLETE
             target.must_change_password = False
+            target.onboarding_rejection_remarks = ''
             auto_fields = _auto_assign_managers(target)
             target.save(update_fields=list(dict.fromkeys([
-                'onboarding_status', 'must_change_password',
+                'onboarding_status', 'must_change_password', 'onboarding_rejection_remarks',
                 'role', 'employee_id', 'date_of_joining',
                 'designation', 'department', 'branch',
                 'reporting_manager', 'reporting_manager_from_org_chart', 'hr',
@@ -374,26 +375,21 @@ class OnboardingApprovalView(APIView):
                             linked_candidate.referral_by_id, linked_candidate.pk,
                         )
 
-            # Auto-assign default assessments — employee must complete these to unlock full portal.
-            # Works for both recruited candidates (candidate FK) and direct hires (employee FK).
+            # HR may explicitly pick one or more assessments in the approval
+            # confirmation dialog ("Assign assessment... or leave blank to
+            # skip") — only those are assigned now. This used to ALSO
+            # auto-assign every is_default=True Assessment regardless of
+            # HR's choice, forcing every approved employee through whatever
+            # assessments happened to be marked default org-wide; removed —
+            # assessments are opt-in per hire now, not automatic.
             from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
             from django.db.models import Q as _Q
             assigned_assessments = []
-            assessments_to_assign = list(
-                Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
-            )
-            # HR may pick one or more specific (possibly non-default) assessments
-            # in the approval confirmation dialog — honor that choice, not just
-            # the global defaults. A branch/role can have several relevant
-            # tests, so this is a list, not a single value.
+            assessments_to_assign = []
             if req_assessment_ids:
-                already_ids = {str(a.id) for a in assessments_to_assign}
-                new_ids = [aid for aid in req_assessment_ids if aid not in already_ids]
-                if new_ids:
-                    selected_assessments = Assessment.objects.filter(
-                        pk__in=new_ids, is_active=True,
-                    ).prefetch_related('items')
-                    assessments_to_assign.extend(selected_assessments)
+                assessments_to_assign = list(
+                    Assessment.objects.filter(pk__in=req_assessment_ids, is_active=True).prefetch_related('items')
+                )
             for assessment in assessments_to_assign:
                 max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
                 if linked_candidate:
@@ -458,7 +454,8 @@ class OnboardingApprovalView(APIView):
 
         else:
             target.onboarding_status = User.ONBOARDING_REJECTED
-            target.save(update_fields=['onboarding_status'])
+            target.onboarding_rejection_remarks = remarks
+            target.save(update_fields=['onboarding_status', 'onboarding_rejection_remarks'])
             AuditLog.objects.create(
                 user=request.user, action='onboarding_rejected', module='accounts',
                 object_id=str(target.pk),

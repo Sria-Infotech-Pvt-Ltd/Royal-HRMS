@@ -470,28 +470,10 @@ class EmployeeListCreateView(APIView):
             from apps.hrms.views.leave_shared import _allocate_leaves_for_employee
             _allocate_leaves_for_employee(user, user.date_of_joining)
 
-            # Auto-assign all default assessments to the new employee
-            from apps.assessments.models import (
-                Assessment as _Assessment,
-                AssessmentItem as _AssessmentItem,
-                CandidateAssignment as _CandidateAssignment,
-            )
-            _default_assessments = list(
-                _Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
-            )
-            _has_pending_assessment = False
-            for _assessment in _default_assessments:
-                _max_score = _assessment.items.filter(item_type=_AssessmentItem.TYPE_QUIZ).count()
-                _, _created = _CandidateAssignment.objects.get_or_create(
-                    employee=user,
-                    assessment=_assessment,
-                    defaults={'assigned_by': request.user, 'max_score': _max_score},
-                )
-                if _created:
-                    _has_pending_assessment = True
-            if _has_pending_assessment:
-                user.assessment_status = User.ASSESSMENT_PENDING
-                user.save(update_fields=['assessment_status', 'updated_at'])
+            # Assessments are opt-in per employee (assigned manually from the
+            # Assessments admin page), not auto-assigned here — this used to
+            # assign every is_default=True Assessment to every new employee
+            # regardless of role/need.
 
             # Auto-assign the company's default weekly-off pattern — without
             # this, a new employee has no pattern at all and every actual day

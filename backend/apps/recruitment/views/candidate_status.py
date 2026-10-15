@@ -18,8 +18,7 @@ from core.date_utils import format_date_display
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
-from apps.accounts.models import AuditLog, Company, User
-from apps.accounts.utils import send_template_email
+from apps.accounts.models import AuditLog
 from core.pagination import paginate, paginated_data
 from core.template_context import candidate_context, candidate_interview_location, company_name, universal_context
 from ..models import Candidate, CandidateEmail, CandidateLog, ReferralBonus, ReferralRule
@@ -300,52 +299,10 @@ class CandidateHRDecisionView(APIView):
                     description=f'Using template: {template_name}',
                 )
 
-                # Auto-assign default assessments so candidate must complete them
-                # before accessing the employment portal
-                if candidate.portal_user_id:
-                    from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
-                    from apps.accounts.models import User as _User
-                    default_assessments = list(
-                        Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
-                    )
-                    assigned_assessments = []
-                    for assessment in default_assessments:
-                        max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
-                        _, created = CandidateAssignment.objects.get_or_create(
-                            candidate=candidate,
-                            assessment=assessment,
-                            defaults={'assigned_by': request.user, 'max_score': max_score},
-                        )
-                        if created:
-                            assigned_assessments.append(assessment)
-
-                    if assigned_assessments:
-                        portal_user = candidate.portal_user
-                        portal_user.assessment_status = _User.ASSESSMENT_PENDING
-                        portal_user.save(update_fields=['assessment_status', 'updated_at'])
-
-                        company      = Company.objects.first()
-                        company_name = company.company_name if company else ''
-                        portal_url   = (company.portal_url if company else '') or ''
-                        for assessment in assigned_assessments:
-                            try:
-                                send_template_email(
-                                    recipient_email=candidate.email,
-                                    template_name='assessment_assigned',
-                                    context={
-                                        'candidate_name':   candidate.name,
-                                        'assessment_title': assessment.title,
-                                        'company_name':     company_name,
-                                        'portal_url':       portal_url,
-                                    },
-                                    module='recruitment',
-                                    triggered_by=request.user,
-                                )
-                            except Exception:
-                                logger.exception(
-                                    'Failed to send assessment_assigned email for "%s" to %s',
-                                    assessment.title, candidate.email,
-                                )
+                # Assessments are opt-in per candidate (assigned manually from
+                # the Assessments admin page), not auto-assigned here — this
+                # used to assign every is_default=True Assessment to every
+                # candidate moved to onboarding regardless of role/need.
 
             msg = f'{candidate.name} approved and onboarded!'
         else:

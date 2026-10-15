@@ -356,19 +356,12 @@ class HireActionCompleteView(APIView):
             _apply_wizard_records(user, draft)
             _copy_hire_action_documents(user, action)
 
-            # Auto-assign default assessments — same real requirement
-            # onboarding_approval.py's OnboardingApprovalView already enforces
-            # for candidates approved through the recruitment pipeline. A
-            # direct hire completed through this two-stage Hire wizard must
-            # unlock full portal access the same way, not skip it just
-            # because there's no linked recruitment candidate here.
-            from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
-            for assessment in Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items'):
-                max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
-                CandidateAssignment.objects.get_or_create(
-                    employee=user, assessment=assessment,
-                    defaults={'assigned_by': request.user, 'max_score': max_score},
-                )
+            # Assessments are opt-in per hire (assigned manually, e.g. from
+            # the Assessments admin page), not auto-assigned here — this used
+            # to assign every is_default=True Assessment to every hire
+            # regardless of role/need. Still reflects a real PENDING status
+            # if one was already assigned some other way, below.
+            from apps.assessments.models import CandidateAssignment
             if CandidateAssignment.objects.filter(
                 employee=user,
                 status__in=[CandidateAssignment.STATUS_PENDING, CandidateAssignment.STATUS_IN_PROGRESS],
