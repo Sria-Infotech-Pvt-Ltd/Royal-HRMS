@@ -93,3 +93,35 @@ export const STATUS_LABEL: Record<ImportRowStatus, string> = {
   duplicate: "Duplicate",
   error:     "Error",
 };
+
+export interface MonthlyAssignment {
+  employee_id:      string;
+  employee_name:    string;
+  branch:           string;
+  is_active:        boolean;
+  leave_type:       string;
+  leave_type_label: string;
+  year:             number;
+  month:            number;
+  credit:           number;
+  last_updated:     string;
+}
+
+export interface MonthlyAssignmentsResponse {
+  year:        number;
+  month:       number;
+  assignments: MonthlyAssignment[];
+  summary:     { employees: number; entries: number; total_days: number };
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Confirmation text for changing a month's credit from `previous` to `next` days. */
+export function describeChange(previous: number, next: number): string {
+  const delta = round1(next - previous);
+  if (delta === 0) return "No change.";
+  if (next === 0) return `Removes this month's credit: ${previous} day(s) will be taken off the employee's balance.`;
+  return delta > 0
+    ? `Changes ${previous} → ${next} day(s): ${delta} day(s) will be added to the employee's balance.`
+    : `Changes ${previous} → ${next} day(s): ${-delta} day(s) will be taken off the employee's balance.`;
+}

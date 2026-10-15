@@ -188,3 +188,57 @@ def strip_internal(plan: dict) -> dict:
     for row in plan['rows']:
         row.pop('_employee', None)
     return plan
+
+
+def list_assignments(*, actor, year, month) -> dict:
+    """
+    Current monthly credits for (year, month): one row per employee and leave
+    type, read from the ledger (sum of the month's monthly_credit rows, so an
+    edit shows its new value and a month set to 0 drops out). Each row is
+    filtered through _can_manage_leave_credits — the exact check the save
+    endpoint uses — so the list never shows anyone the user can't edit.
+    """
+    from django.db.models import Max, Sum
+
+    from apps.accounts.models import User
+    from .models import CREDIT_TXN_MONTHLY, LeaveCreditTransaction
+    from .views.leave import _can_manage_leave_credits
+
+    year, month = _clean_year(year), clean_month(month)
+    grouped = (
+        LeaveCreditTransaction.objects
+        .filter(txn_type=CREDIT_TXN_MONTHLY, year=year, month=month)
+        .values('employee_id', 'leave_type')
+        .annotate(credit=Sum('amount'), last_updated=Max('created_at'))
+        .filter(credit__gt=0)
+    )
+    grouped = list(grouped)
+    employees = User.objects.select_related('role').in_bulk({g['employee_id'] for g in grouped})
+    policies = {p.leave_type: p for p in LeavePolicy.objects.filter(leave_type__in={g['leave_type'] for g in grouped})}
+
+    rows = []
+    for g in grouped:
+        employee = employees.get(g['employee_id'])
+        if employee is None or not _can_manage_leave_credits(actor, employee):
+            continue
+        rows.append({
+            'employee_id':      employee.employee_id,
+            'employee_name':    employee.full_name,
+            'branch':           employee.branch or '',
+            'is_active':        employee.is_active,
+            'leave_type':       g['leave_type'],
+            'leave_type_label': leave_type_label(g['leave_type'], policies.get(g['leave_type'])),
+            'year':             year,
+            'month':            month,
+            'credit':           _f(g['credit']),
+            'last_updated':     g['last_updated'].isoformat(),
+        })
+    rows.sort(key=lambda r: (r['employee_id'], r['leave_type_label']))
+    return {
+        'year': year, 'month': month, 'assignments': rows,
+        'summary': {
+            'employees':   len({r['employee_id'] for r in rows}),
+            'entries':     len(rows),
+            'total_days':  _f(sum(Decimal(str(r['credit'])) for r in rows)),
+        },
+    }

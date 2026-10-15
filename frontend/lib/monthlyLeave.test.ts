@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  annualWarningTypes, creditYears, projectedBalance, validateMonthlyCredit,
+  annualWarningTypes, creditYears, describeChange, projectedBalance, validateMonthlyCredit,
   type MonthlyImportRow, type MonthlyLeaveTypeRow,
 } from "./monthlyLeave";
 
@@ -53,5 +53,15 @@ describe("annualWarningTypes", () => {
 describe("creditYears", () => {
   it("offers the current and two previous calendar years", () => {
     expect(creditYears(new Date(2026, 9, 14))).toEqual([2026, 2025, 2024]);
+  });
+});
+
+describe("describeChange", () => {
+  it("describes increases, decreases, removal and no change by the difference only", () => {
+    expect(describeChange(2, 3)).toMatch(/2 → 3.*1 day\(s\) will be added/);
+    expect(describeChange(3, 1)).toMatch(/3 → 1.*2 day\(s\) will be taken off/);
+    expect(describeChange(2, 0)).toMatch(/Removes this month's credit: 2 day/);
+    expect(describeChange(1.5, 1.5)).toBe("No change.");
+    expect(describeChange(0.1, 0.3)).toMatch(/0.2 day/);
   });
 });

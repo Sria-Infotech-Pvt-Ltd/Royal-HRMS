@@ -123,6 +123,7 @@ class LeaveCreditReverseView(APIView):
 #   POST /api/leave/monthly-credits/                              add / update one monthly credit
 #   POST /api/leave/monthly-credits/import/                       preview (dry_run=true) or import
 #   GET  /api/leave/monthly-credits/import/sample/?format=csv|xlsx
+#   GET  /api/leave/monthly-credits/assignments/?year=&month=     the month's current credits
 #
 # Same access as Leave Credits: leave.approve, plus per-employee scope.
 
@@ -282,3 +283,19 @@ class MonthlyLeaveImportSampleView(APIView):
         response = HttpResponse(content, content_type=mime)
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+
+
+class MonthlyLeaveAssignmentsView(APIView):
+    """GET /api/leave/monthly-credits/assignments/?year=&month= — the month's current monthly credits."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from ..services_monthly_leave import list_assignments
+        if not _has_perm(request.user, 'leave.approve'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            data = list_assignments(actor=request.user, year=request.query_params.get('year'),
+                                    month=request.query_params.get('month'))
+        except LeaveCreditError as exc:
+            return _credit_error(exc)
+        return success('Monthly leave assignments retrieved.', data)

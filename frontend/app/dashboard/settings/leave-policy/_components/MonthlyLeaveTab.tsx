@@ -10,6 +10,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { downloadBlobFile } from "@/lib/downloadFile";
 import EmployeePickerField, { type PickedEmployee } from "@/app/dashboard/separation/_components/EmployeePickerField";
+import MonthlyAssignmentsSection from "./MonthlyAssignmentsSection";
 import {
   MONTHS, STATUS_LABEL, annualWarningTypes, creditYears, projectedBalance, validateMonthlyCredit,
   type ImportRowStatus, type MonthlyImportPreview, type MonthlyImportResult, type MonthlyImportRow,
@@ -98,7 +99,7 @@ function AnnualWarning({ types }: { types: string[] }) {
 
 // ─── A. Import ────────────────────────────────────────────────────────────────
 
-function MonthlyImportSection() {
+function MonthlyImportSection({ onChanged }: { onChanged: () => void }) {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -143,7 +144,7 @@ function MonthlyImportSection() {
     try {
       const { data } = await clientApi.post(API.leave.monthlyCreditsImport, fd, { headers: { "Content-Type": undefined } });
       if (dryRun) { setPreview(data.data); setResult(null); }
-      else { setResult(data.data); setPreview(null); }
+      else { setResult(data.data); setPreview(null); onChanged(); }
     } catch (err) {
       setErrorMsg(apiMessage(err, dryRun ? "Could not preview the file." : "Import failed. Nothing was changed for rows that failed."));
     } finally {
@@ -239,7 +240,7 @@ function MonthlyImportSection() {
 
 // ─── B. Manual entry ──────────────────────────────────────────────────────────
 
-function ManualEntrySection() {
+function ManualEntrySection({ onChanged }: { onChanged: () => void }) {
   const now = new Date();
   const [employee, setEmployee] = useState<PickedEmployee | null>(null);
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -283,6 +284,7 @@ function ManualEntrySection() {
       });
       setRows(data.data.leave_types);
       setOkMsg(data.message);
+      onChanged();
     } catch (err) {
       setErrorMsg(apiMessage(err, "Could not save the monthly credit."));
     } finally {
@@ -361,10 +363,15 @@ function ManualEntrySection() {
 }
 
 export default function MonthlyLeaveTab() {
+  // Bumped after every successful import, manual save or edit so the
+  // assignments list and its summary reload from the server.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const changed = () => setRefreshKey(k => k + 1);
   return (
     <>
-      <MonthlyImportSection />
-      <ManualEntrySection />
+      <MonthlyImportSection onChanged={changed} />
+      <ManualEntrySection onChanged={changed} />
+      <MonthlyAssignmentsSection refreshKey={refreshKey} onChanged={changed} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>
   );
