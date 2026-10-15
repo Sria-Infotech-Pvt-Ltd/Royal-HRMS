@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePermission } from "@/hooks/usePermission";
+import { useToast } from "@/components/ToastProvider";
 import { useEmployees } from "@/hooks/useEmployees";
 import Pagination from "@/components/shared/Pagination";
 import type { Employee, EmployeeStatusFilter } from "./_data";
@@ -43,6 +44,7 @@ function EmployeesPageInner() {
   const canEdit = usePermission("employees.edit");
   const canEditOnboarding = usePermission("onboarding.edit");
   const canExport = usePermission("employees.export");
+  const { showToast } = useToast();
 
   const emp = useEmployees();
 
@@ -126,7 +128,15 @@ function EmployeesPageInner() {
         <HireEmployeeModal
           initialHireActionId={resumeDraftId ?? undefined}
           onClose={() => { setShowModal(false); setResumeDraftId(null); }}
-          onHired={() => { emp.fetchEmployees(emp.search, 1); emp.fetchStats(emp.branch, emp.dept, emp.status); }}
+          onHired={() => {
+            emp.fetchEmployees(emp.search, 1);
+            emp.fetchStats(emp.branch, emp.dept, emp.status);
+            // The wizard modal closes itself right after this fires (see
+            // HireEmployeeModal's own onHired wrapper) — nothing told the
+            // user the hire actually succeeded. QA: "after successful
+            // hiring it was not showing successfully message".
+            showToast("Employee hired successfully.", "success");
+          }}
         />
       )}
 

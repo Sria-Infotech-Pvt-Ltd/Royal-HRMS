@@ -12,12 +12,17 @@ import SessionExpiredOverlay from "@/components/SessionExpiredOverlay";
 import VoiceCommandButton from "@/components/VoiceCommandButton";
 import { ToastProvider } from "@/components/ToastProvider";
 
+// style: ["normal", "italic"] combined with 5 weights used to be here for a
+// real italic cut on the highlighted title word (em.hl) — combining multiple
+// weights with multiple styles in one next/font/google call hits a Turbopack
+// resolver bug ("next/font/google queries have exactly one entry") that
+// breaks every page with a 500. Dropped back to normal-only to restore the
+// app; em.hl falls back to a synthesized oblique until italic is reintroduced
+// properly (e.g. a second Inter() call with style: "italic" alone, merged via
+// CSS variables) rather than combined into this one.
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
-  // Real italic cut — the highlighted title word (em.hl) otherwise renders a
-  // synthesized oblique that is narrower than the AIRA reference design.
-  style: ["normal", "italic"],
   display: "swap",
 });
 
