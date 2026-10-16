@@ -72,14 +72,15 @@ class ReferralBonusDecimalTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
 
-class HRDecisionAssessmentAssignmentTests(TestCase):
-    """Regression test: CandidateHRDecisionView.patch() referenced
-    AssessmentItem.pass_score, a field removed by migration
-    0006_assessment_pass_percentage_remove_item_pass_score — every approval
-    of a selected candidate with a linked portal account and an active
-    default assessment crashed with a FieldError partway through (after
-    hr_approved was already saved and the welcome email already sent).
-    """
+class HRDecisionTests(TestCase):
+    """CandidateHRDecisionView.patch() — approving a selected candidate with
+    a linked portal account. Previously named HRDecisionAssessmentAssignmentTests
+    and included default-assessment auto-assignment coverage; that behavior
+    was removed (assessments are opt-in per hire now, not automatic — see
+    the assessment-removal work across onboarding_approval.py,
+    views_hire_complete.py, employees_list.py and this view), so the tests
+    that exercised it are gone too. The reapprove-is-a-no-op regression
+    below is unrelated to assessments and still applies."""
 
     def setUp(self):
         cache.clear()
@@ -93,24 +94,9 @@ class HRDecisionAssessmentAssignmentTests(TestCase):
             position_applied='Engineer', status=Candidate.STATUS_SELECTED,
             portal_user=portal_user,
         )
-
-        from apps.assessments.models import Assessment, AssessmentItem
-        assessment = Assessment.objects.create(
-            title='Default Screening', is_active=True, is_default=True,
-        )
-        AssessmentItem.objects.create(
-            assessment=assessment, item_type=AssessmentItem.TYPE_QUIZ,
-            title='Q1', question='2+2?', option_a='3', option_b='4',
-            correct_option='b',
-        )
-        AssessmentItem.objects.create(
-            assessment=assessment, item_type=AssessmentItem.TYPE_QUIZ,
-            title='Q2', question='3+3?', option_a='6', option_b='7',
-            correct_option='a',
-        )
         _login(self.client, 'hrdecision@test.com')
 
-    def test_approve_selected_candidate_assigns_assessment_without_crashing(self):
+    def test_approve_selected_candidate_succeeds(self):
         resp = self.client.patch(
             reverse('candidate-hr-decision', kwargs={'pk': self.candidate.pk}),
             {'decision': 'approve'},
@@ -118,18 +104,13 @@ class HRDecisionAssessmentAssignmentTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200, resp.data)
 
-        from apps.assessments.models import CandidateAssignment
-        assignment = CandidateAssignment.objects.get(candidate=self.candidate)
-        self.assertEqual(assignment.max_score, 2)
-
     def test_reapproving_an_already_approved_candidate_is_rejected_not_repeated(self):
         """Regression test: candidate.status never changes on this endpoint
         (stays STATUS_SELECTED — only hr_approved flips), so retrying an
         approve after it already succeeded used to silently re-match the
         same query and repeat every candidate-facing side effect (a second
-        "you're approved" email, a duplicate CandidateLog entry, a second
-        attempt at assessment assignment). Confirms a retry is now a no-op
-        409 instead."""
+        "you're approved" email, a duplicate CandidateLog entry). Confirms a
+        retry is now a no-op 409 instead."""
         first = self.client.patch(
             reverse('candidate-hr-decision', kwargs={'pk': self.candidate.pk}),
             {'decision': 'approve'}, format='json',
@@ -149,45 +130,6 @@ class HRDecisionAssessmentAssignmentTests(TestCase):
             log_count_after_first,
             'a rejected retry must not create any new log entries (or, by the same logic, resend any email)',
         )
-
-    def test_approval_is_atomic_a_failure_during_assessment_assignment_rolls_back_hr_approved(self):
-        """Regression test: previously, candidate.hr_approved=True and the
-        "HR Approved" CandidateLog entry committed independently of the
-        assessment-assignment step further down, which had no try/except at
-        all — a DB hiccup or a bad Assessment/AssessmentItem row there would
-        500 the request *after* the approval had already been saved, with
-        nothing to roll it back. Forces exactly that failure (a DB-level
-        error inside CandidateAssignment.get_or_create) and confirms the
-        whole approve action — including hr_approved and every CandidateLog
-        entry — is rolled back together, not left half-applied."""
-        from unittest.mock import patch as mock_patch
-
-        with mock_patch(
-            'apps.assessments.models.CandidateAssignment.objects.get_or_create',
-            side_effect=Exception('simulated DB failure'),
-        ):
-            resp = self.client.patch(
-                reverse('candidate-hr-decision', kwargs={'pk': self.candidate.pk}),
-                {'decision': 'approve'}, format='json',
-            )
-        self.assertEqual(resp.status_code, 500)
-
-        self.candidate.refresh_from_db()
-        self.assertFalse(self.candidate.hr_approved, 'hr_approved must roll back when a later step in the same action fails')
-
-        from apps.recruitment.models import CandidateLog
-        self.assertEqual(
-            CandidateLog.objects.filter(candidate=self.candidate).count(), 0,
-            'no CandidateLog entry (HR Approved / onboarding email) should survive the rollback either',
-        )
-
-        # And a genuine retry (the transient failure is gone) succeeds cleanly —
-        # confirms the rollback didn't leave the candidate stuck in a bad state.
-        retry = self.client.patch(
-            reverse('candidate-hr-decision', kwargs={'pk': self.candidate.pk}),
-            {'decision': 'approve'}, format='json',
-        )
-        self.assertEqual(retry.status_code, 200, retry.data)
 
 
 class CandidateCreateValidationTests(TestCase):

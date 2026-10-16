@@ -121,6 +121,8 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'name':             {'required': True},
             'position_applied': {'required': True},
+            'interview_date':   {'required': False, 'allow_null': True},
+            'interview_time':   {'required': False, 'allow_null': True},
         }
 
     def validate_name(self, value: str) -> str:
@@ -144,6 +146,19 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f'A candidate with this email already exists: {existing.name} '
                 f'({existing.get_status_display()} for {existing.position_applied}).'
+            )
+        # Block scheduling an interview for someone who is already a current
+        # employee — only active employees, so a former (inactive) employee
+        # can still legitimately be re-added as a rehire candidate. Mirrors
+        # the same check candidate_portal.py already does before issuing
+        # portal login credentials, just moved earlier (at creation, not
+        # only at portal-conversion time).
+        from apps.accounts.models import User
+        existing_employee = User.objects.filter(email__iexact=value, is_active=True).first()
+        if existing_employee:
+            raise serializers.ValidationError(
+                f'{existing_employee.full_name} ({existing_employee.employee_id}) is already an active '
+                f'employee with this email — cannot add them as a candidate.'
             )
         return value
 

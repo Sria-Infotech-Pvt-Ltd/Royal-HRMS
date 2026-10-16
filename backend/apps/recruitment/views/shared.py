@@ -239,31 +239,40 @@ def _send_interview_scheduled_email_general(candidate):
     )
 
 
+_ICS_ESCAPE = str.maketrans({',': '\\,', ';': '\\;', '\n': '\\n'})
+
+
 def _build_interview_ics(candidate):
     """
     Build a minimal .ics calendar invite for the candidate's interview, so it
     lands directly on their calendar instead of relying on them to remember
     the email. Returns None when there's no interview_date to build from.
 
-    interview_date/interview_time are naive values in the company's operating
-    timezone (IST — matching apps/attendance's own convention elsewhere in
-    this codebase); converted to UTC for DTSTART/DTEND so every calendar
-    client reads them correctly without an embedded VTIMEZONE block.
+    interview_date/interview_time are entered as plain wall-clock values by
+    whoever scheduled the interview — HR could be in any branch/country, and
+    "3pm" means 3pm wherever the interview is actually happening, not a
+    fixed company timezone. There's no per-branch timezone field to convert
+    from, and hardcoding one (this used to assume IST for everyone) silently
+    shifted the time for anyone outside that zone. So DTSTART/DTEND are
+    emitted as RFC 5545 "floating" local time (no Z suffix, no VTIMEZONE) —
+    every calendar client displays them exactly as typed, with no
+    conversion. Only DTSTAMP (the real creation instant, not the interview
+    time) uses a true UTC timestamp, which is what RFC 5545 expects there.
     """
     if not candidate.interview_date:
         return None
 
-    from datetime import datetime, time as dt_time, timedelta
-    from zoneinfo import ZoneInfo
+    from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
 
-    IST = ZoneInfo('Asia/Kolkata')
-    UTC = ZoneInfo('UTC')
     start_time = candidate.interview_time or dt_time(hour=10)
-    start_dt = datetime.combine(candidate.interview_date, start_time, tzinfo=IST)
+    start_dt = datetime.combine(candidate.interview_date, start_time)
     end_dt   = start_dt + timedelta(minutes=30)
 
     def _fmt(dt):
-        return dt.astimezone(UTC).strftime('%Y%m%dT%H%M%SZ')
+        return dt.strftime('%Y%m%dT%H%M%S')
+
+    def _fmt_utc(dt):
+        return dt.strftime('%Y%m%dT%H%M%SZ')
 
     location    = candidate_interview_location(candidate).translate(_ICS_ESCAPE)
     summary     = f'Interview — {candidate.position_applied}'.translate(_ICS_ESCAPE)
@@ -277,7 +286,7 @@ def _build_interview_ics(candidate):
         'METHOD:PUBLISH',
         'BEGIN:VEVENT',
         f'UID:interview-{candidate.id}@airahrms',
-        f'DTSTAMP:{_fmt(datetime.now(UTC))}',
+        f'DTSTAMP:{_fmt_utc(datetime.now(dt_timezone.utc))}',
         f'DTSTART:{_fmt(start_dt)}',
         f'DTEND:{_fmt(end_dt)}',
         f'SUMMARY:{summary}',

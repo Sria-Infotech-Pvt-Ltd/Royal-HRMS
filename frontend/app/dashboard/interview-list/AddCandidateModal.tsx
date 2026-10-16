@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import {
-  NAME_RE, POSITION_RE, PHONE_RE, EMAIL_RE,
-  sanitizeName, sanitizePosition, sanitizePhone, todayDateString,
+  NAME_RE, PHONE_RE, EMAIL_RE,
+  sanitizeName, sanitizePhone, todayDateString,
 } from "@/lib/candidateValidation";
 import { Branch, Candidate, InterviewMode, RECRUITMENT_API } from "./_data";
 import Modal from "@/components/Modal";
@@ -41,6 +42,19 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
   const [employees, setEmployees] = useState<PickerEmployee[]>([]);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState("");
+  const { positions } = useOrgUnitsAndPositions();
+
+  // Dropdown options for Position Applied: every active position's title,
+  // deduped (several seats can share a title) and narrowed to the selected
+  // Company Code once one is picked — positions with branch=null sit in the
+  // shared, company-wide tree and match every branch (same convention as
+  // useOrgUnitsAndPositions.positionsForUnit's own branch filter).
+  const selectedBranchId = form.branch ? Number(form.branch) : null;
+  const positionTitles = Array.from(new Set(
+    positions
+      .filter(p => p.is_active && (selectedBranchId == null || p.branch === null || p.branch === selectedBranchId))
+      .map(p => p.title),
+  )).sort((a, b) => a.localeCompare(b));
 
   // Fetch active branches for the dropdown using branch app URL
   useEffect(() => {
@@ -90,10 +104,6 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
       setError("Enter a valid email address.");
       return;
     }
-    if (!POSITION_RE.test(positionApplied)) {
-      setError("Position applied can only contain letters, spaces, and & / . - — no numbers or other special characters.");
-      return;
-    }
     if (form.phone.trim() && !PHONE_RE.test(form.phone.trim())) {
       setError("Enter a valid phone number (10 to 15 digits, optionally starting with +).");
       return;
@@ -118,6 +128,8 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
         ...form,
         branch: Number(form.branch),
         interviewer: form.interviewer || null,
+        interview_date: form.interview_date || null,
+        interview_time: form.interview_time || null,
       });
       onSaved(res.data.data);
     } catch (e: unknown) {
@@ -158,7 +170,13 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Position Applied *</label>
-              <input className="field-input" placeholder="e.g. Backend Engineer" value={form.position_applied} onChange={e => set("position_applied", sanitizePosition(e.target.value))} />
+              <SearchableSelect
+                value={form.position_applied}
+                onChange={v => set("position_applied", v)}
+                placeholder="— Select Position —"
+                options={positionTitles.map(title => ({ value: title, label: title }))}
+                inputClassName="field-input"
+              />
             </div>
             <div className="field-group">
               <label className="field-label">Phone</label>

@@ -61,16 +61,6 @@ _DENIED = 'You do not have permission to perform this action.'
 
 
 
-
-_ICS_ESCAPE = str.maketrans({',': '\\,', ';': '\\;', '\n': '\\n'})
-
-
-
-
-
-
-
-
 # ─── Candidate List + Create ──────────────────────────────────────────────────
 
 class CandidateListCreateView(APIView):

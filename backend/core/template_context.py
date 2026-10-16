@@ -50,6 +50,22 @@ def universal_context() -> dict:
     return {**lower, **upper}
 
 
+def _branch_map_link(branch, address: str) -> str:
+    """A clickable Google Maps URL for an in-person interview location.
+    Prefers real GPS coordinates (already captured for geofencing — see
+    Branch.latitude/longitude) since those pin the exact spot; falls back to
+    a text-search URL built from the address when a branch has no
+    coordinates on file yet. Returns '' only if there's nothing to link to
+    at all (should not happen here since callers already checked address)."""
+    from urllib.parse import quote
+
+    if branch.latitude is not None and branch.longitude is not None:
+        return f'https://www.google.com/maps?q={branch.latitude},{branch.longitude}'
+    if address.strip():
+        return f'https://www.google.com/maps/search/?api=1&query={quote(address)}'
+    return ''
+
+
 def candidate_interview_location(candidate) -> str:
     """
     Human-readable "how to actually attend" line, resolved from the one
@@ -71,6 +87,23 @@ def candidate_interview_location(candidate) -> str:
     if mode == Candidate.MODE_PHONE:
         return 'We will call you on your registered phone number at the scheduled time.'
     return ''
+
+
+def candidate_interview_map_link(candidate) -> str:
+    """A clickable Google Maps URL for an in-person interview's branch —
+    kept separate from candidate_interview_location() (plain text, also used
+    verbatim in the .ics calendar invite's LOCATION field, which must not
+    contain HTML) so email templates can render it as an actual link while
+    the calendar invite stays plain text. Empty for any non-in-person mode,
+    or when the branch has no address at all to link to."""
+    from apps.recruitment.models import Candidate
+
+    if candidate.interview_mode != Candidate.MODE_IN_PERSON:
+        return ''
+    branch = candidate.branch
+    if not branch or not (branch.address or '').strip():
+        return ''
+    return _branch_map_link(branch, candidate_interview_location(candidate))
 
 
 def candidate_context(candidate, actor=None) -> dict:
@@ -122,6 +155,15 @@ def candidate_context(candidate, actor=None) -> dict:
         'interviewer_name':  interviewer_name,
         'meeting_link':      candidate.meeting_link or '',
         'location_details':  candidate_interview_location(candidate),
+        # Pre-built HTML snippet (empty for non-in-person interviews, or an
+        # in-person one with no branch address) so templates just drop it
+        # straight after {location_details} with no conditional logic of
+        # their own — this templating system has no if/else, only {var}
+        # substitution. The bare URL is kept separate in
+        # candidate_interview_map_link() for any non-HTML consumer.
+        'location_map_link': (
+            f' — <a href="{_map_link}">View on Google Maps</a>' if (_map_link := candidate_interview_map_link(candidate)) else ''
+        ),
         'company_name':      company_name(),
         'employee_name':     employee.full_name if employee else candidate.name,
         'employee_id':       employee.employee_id if employee else '',
