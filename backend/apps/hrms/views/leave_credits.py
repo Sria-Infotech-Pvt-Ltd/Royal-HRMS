@@ -57,7 +57,7 @@ class LeaveCreditOverviewView(APIView):
             leave_type = summaries[0]['leave_type']
 
         assignable = [
-            {'value': p.leave_type, 'label': leave_type_label(p.leave_type, p)}
+            {'value': p.leave_type, 'label': leave_type_label(p.leave_type, p), 'credit_schedule': p.credit_schedule}
             for p in LeavePolicy.objects.filter(is_active=True).exclude(leave_type=LEAVE_LWP).order_by('leave_type')
         ]
         return success('Leave credits retrieved.', {

@@ -7,12 +7,13 @@ import { useEmployeeLeave } from "@/hooks/useEmployeeLeave";
 import {
   STATUS_BADGE, STATUS_LABEL, fmtShortDate,
   buildLeaveTypesList, CUSTOM_LEAVE_TYPE_DEFAULTS,
-  type LeaveRequest, type LeavePolicy,
+  type LeaveRequest, type LeavePolicy, type BalanceSummary,
 } from "@/app/dashboard/leave/_data";
 import LeaveRequestDetailModal from "@/app/dashboard/leave/_components/LeaveRequestDetailModal";
 import LopBadge from "@/app/dashboard/leave/_components/LopBadge";
 import LeaveCreditsSection from "./LeaveCreditsSection";
-import MonthlyLeaveStatement from "@/components/leave/MonthlyLeaveStatement";
+import MonthlyLeaveStatement, { MonthlyCreditsTable } from "@/components/leave/MonthlyLeaveStatement";
+import { defaultMonth, monthOf, splitBySchedule, type ScheduleView } from "@/lib/leaveStatement";
 
 interface Props {
   employeeId: string;
@@ -37,6 +38,9 @@ const LWP_KEY = "lwp";
 
 export function LeaveTab({ employeeId }: Props) {
   const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
+  // View and month live here, so switching views (or years) keeps both.
+  const [view, setView] = useState<ScheduleView>("annual");
+  const [month, setMonth] = useState<number | null>(null);
   const { year, prevYear, nextYear, page, setPage, totalPages, requests, stats, loading, error, refetch } =
     useEmployeeLeave(employeeId);
 
@@ -50,9 +54,15 @@ export function LeaveTab({ employeeId }: Props) {
   );
 
   const balances = (stats?.balances ?? []).filter(b => b.leave_type !== LWP_KEY);
-  // Monthly-schedule types come with the backend's month-by-month statement;
-  // annual types keep exactly the existing card.
-  const monthly = balances.filter(b => b.credit_schedule === "monthly" && b.statement);
+  // Each leave type goes to the view matching its policy's credit_schedule (from the
+  // backend). A type whose schedule is unknown (no policy) is listed separately, never guessed.
+  const groups = splitBySchedule(balances);
+  const visible = view === "monthly" ? groups.monthly : groups.annual;
+  const selectedMonth = month ?? defaultMonth(year);
+  const monthOptions = Array.from({ length: 12 }, (_, i) => ({
+    value: i + 1, label: new Date(year, i, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
+  }));
+  const labelOf = (b: BalanceSummary) => leaveTypeMap[b.leave_type]?.label ?? b.leave_type_display;
 
   if (error) {
     return (
@@ -64,11 +74,51 @@ export function LeaveTab({ employeeId }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Annual / Monthly view selector */}
+      <div role="tablist" aria-label="Leave credit schedule" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {(["annual", "monthly"] as const).map(v => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={view === v}
+            className={`btn btn-sm ${view === v ? "btn-filled" : "btn-ghost"}`}
+            onClick={() => setView(v)}
+          >
+            <i className={`ti ${v === "annual" ? "ti-calendar" : "ti-calendar-stats"}`} />
+            {v === "annual" ? `Annual leave (${groups.annual.length})` : `Monthly leave (${groups.monthly.length})`}
+          </button>
+        ))}
+        <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
+          Grouped by each leave type&apos;s credit schedule in Leave Policy.
+        </span>
+      </div>
+
+      {groups.unclassified.length > 0 && (
+        <div className="alert alert-warn">
+          <i className="ti ti-alert-triangle" />
+          <div>
+            No leave policy found for: {groups.unclassified.map(b => `${labelOf(b)} (${b.available} available)`).join(", ")}.
+            These aren&apos;t shown as annual or monthly — check Settings → Leave Management → Leave Types.
+          </div>
+        </div>
+      )}
+
       <div className="stats-grid" style={{ marginBottom: 0 }}>
-        {balances.map(b => {
+        {!loading && visible.length === 0 && (
+          <div className="stat-card" style={{ gridColumn: "1 / -1" }}>
+            <div className="stat-label">{view === "monthly" ? "No monthly leave types" : "No annual leave types"}</div>
+            <div className="stat-sub">
+              {view === "monthly"
+                ? "No leave type for this employee is set to the Monthly credit schedule. Set one in Settings → Leave Management → Leave Policy → Monthly Credit Settings."
+                : "Every leave type for this employee is on the Monthly credit schedule — see the Monthly leave view."}
+            </div>
+          </div>
+        )}
+        {visible.map(b => {
           const curated  = CURATED_STYLE[b.leave_type];
           const lt       = leaveTypeMap[b.leave_type];
-          const label    = lt?.label ?? b.leave_type_display;
+          const label    = labelOf(b);
           const icon     = curated?.icon ?? lt?.icon ?? CUSTOM_LEAVE_TYPE_DEFAULTS.icon;
           const barColor = curated?.barColor ?? lt?.color ?? CUSTOM_LEAVE_TYPE_DEFAULTS.color;
           const iconBg   = lt?.bg ?? CUSTOM_LEAVE_TYPE_DEFAULTS.bg;
@@ -76,7 +126,8 @@ export function LeaveTab({ employeeId }: Props) {
           const left     = Number(b.available);
           const used     = Number(b.used_days);
           const pct      = total > 0 ? Math.round((used / total) * 100) : 0;
-          const isMonthly = b.credit_schedule === "monthly";
+          const isMonthly = view === "monthly";
+          const thisMonth = isMonthly ? monthOf(b.statement, selectedMonth) : null;
           return (
             <div key={b.leave_type} className="stat-card">
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
@@ -85,10 +136,11 @@ export function LeaveTab({ employeeId }: Props) {
                   <div className="stat-value">{loading ? "—" : left}</div>
                   {isMonthly ? (
                     // Not "of N days": a monthly type's yearly total is the credits recorded so far,
-                    // not an allocation. The month-by-month view below shows each month.
+                    // not an allocation.
                     <div className="stat-sub">
-                      available now · credited monthly
-                      {b.statement?.total_credited != null ? ` · ${b.statement.total_credited} credited in ${year}` : ""}
+                      available now
+                      {thisMonth ? ` · ${thisMonth.credit} credited in ${thisMonth.label}` : ""}
+                      {b.statement?.total_credited != null ? ` · ${b.statement.total_credited} in ${year}` : ""}
                     </div>
                   ) : (
                     <div className="stat-sub">of {total} days left</div>
@@ -113,6 +165,7 @@ export function LeaveTab({ employeeId }: Props) {
           );
         })}
 
+        {/* Operational summaries — not leave policies, shown in both views */}
         <div className="stat-card">
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
             <div>
@@ -144,20 +197,34 @@ export function LeaveTab({ employeeId }: Props) {
         </div>
       </div>
 
-      {monthly.map((b, i) => (
-        <MonthlyLeaveStatement
-          key={`${b.leave_type}-${year}`}
-          label={leaveTypeMap[b.leave_type]?.label ?? b.leave_type_display}
-          year={year}
-          stmt={b.statement!}
-          total={Number(b.total_days)}
-          used={Number(b.used_days)}
-          available={Number(b.available)}
-          defaultOpen={i === 0}
-        />
-      ))}
-
-      <LeaveCreditsSection employeeId={employeeId} onChanged={refetch} />
+      {view === "annual" ? (
+        <LeaveCreditsSection employeeId={employeeId} onChanged={refetch} schedule="annual" />
+      ) : groups.monthly.length > 0 && (
+        <>
+          <MonthlyCreditsTable
+            rows={groups.monthly.map(b => ({
+              leave_type: b.leave_type, label: labelOf(b),
+              month: monthOf(b.statement, selectedMonth), hasStatement: !!b.statement,
+            }))}
+            year={year}
+            month={selectedMonth}
+            monthOptions={monthOptions}
+            onMonth={setMonth}
+          />
+          {groups.monthly.filter(b => b.statement).map((b, i) => (
+            <MonthlyLeaveStatement
+              key={`${b.leave_type}-${year}`}
+              label={labelOf(b)}
+              year={year}
+              stmt={b.statement!}
+              total={Number(b.total_days)}
+              used={Number(b.used_days)}
+              available={Number(b.available)}
+              defaultOpen={i === 0}
+            />
+          ))}
+        </>
+      )}
 
       <div className="card">
         <div className="card-header">

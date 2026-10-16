@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
@@ -16,6 +16,7 @@ interface YearlyRow {
   pending: number;
   remaining: number;
   available_after_pending: number;
+  credit_schedule?: "annual" | "monthly" | null;   // the policy's schedule; null = no policy
 }
 
 interface CreditTxn {
@@ -53,7 +54,7 @@ interface CreditOverview {
   leave_type: string | null;
   monthly: MonthlyData | null;
   transactions: CreditTxn[];
-  assignable_leave_types: { value: string; label: string }[];
+  assignable_leave_types: { value: string; label: string; credit_schedule?: "annual" | "monthly" }[];
 }
 
 type Pending =
@@ -105,7 +106,11 @@ function errorMessage(err: unknown): string {
 
 // Manual leave credit management: signed adjustments and compensating reversals,
 // recorded in an append-only history. Renders nothing for users who may not manage this employee.
-export default function LeaveCreditsSection({ employeeId, onChanged }: { employeeId: string; onChanged?: () => void }) {
+// `schedule` limits the table and the type pickers to leave types whose policy has that
+// credit schedule (Employee Profile → Leave → Annual view); omit it to show every type.
+export default function LeaveCreditsSection({ employeeId, onChanged, schedule }: {
+  employeeId: string; onChanged?: () => void; schedule?: "annual" | "monthly";
+}) {
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [leaveType, setLeaveType] = useState("");
   const query = `?year=${year}${leaveType ? `&leave_type=${encodeURIComponent(leaveType)}` : ""}`;
@@ -123,14 +128,24 @@ export default function LeaveCreditsSection({ employeeId, onChanged }: { employe
   const [monthlyOpen, setMonthlyOpen] = useState(false);
   const reverseKeyRef = useRef<string>("");
 
+  const rows = data ? data.summaries.filter(r => !schedule || r.credit_schedule === schedule) : [];
+  const shownTypes = rows.map(r => r.leave_type).join(",");
+  // The backend preselects the first balance; if that type isn't in this view, select the first one that is.
+  useEffect(() => {
+    if (!data || !schedule || !data.leave_type) return;
+    const first = shownTypes.split(",").filter(Boolean)[0];
+    if (first && !shownTypes.split(",").includes(data.leave_type)) setLeaveType(first);
+  }, [data, schedule, shownTypes]);
+
   if (status === 403 || status === 404) return null;
 
-  const selected = data?.leave_type ?? "";
+  const selected = data && rows.some(r => r.leave_type === data.leave_type) ? data.leave_type ?? "" : "";
   const canEditYear = !!data && data.year <= data.current_year;
   const typeOptions = data
     ? [
-        ...data.summaries.map(s => ({ value: s.leave_type, label: s.leave_type_label })),
-        ...data.assignable_leave_types.filter(t => !data.summaries.some(s => s.leave_type === t.value)),
+        ...rows.map(s => ({ value: s.leave_type, label: s.leave_type_label })),
+        ...data.assignable_leave_types.filter(t =>
+          (!schedule || t.credit_schedule === schedule) && !rows.some(s => s.leave_type === t.value)),
       ]
     : [];
   const effectiveFormType = formType || selected || typeOptions[0]?.value || "";
@@ -231,10 +246,14 @@ export default function LeaveCreditsSection({ employeeId, onChanged }: { employe
             <tbody>
               {loading && !data ? (
                 <tr><td colSpan={8} style={{ textAlign: "center", padding: 24 }}><i className="ti ti-loader-2" /></td></tr>
-              ) : !data || data.summaries.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>No leave balances for {year}.</td></tr>
+              ) : !data || rows.length === 0 ? (
+                <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>
+                  {schedule && data && data.summaries.length > 0
+                    ? `No ${schedule} leave types for ${year}.`
+                    : `No leave balances for ${year}.`}
+                </td></tr>
               ) : (
-                data.summaries.map(s => (
+                rows.map(s => (
                   <tr
                     key={s.leave_type}
                     onClick={() => { setLeaveType(s.leave_type); setReverseFor(null); setPending(null); }}
@@ -301,7 +320,7 @@ export default function LeaveCreditsSection({ employeeId, onChanged }: { employe
         )}
 
         {/* History */}
-        {data?.leave_type && (
+        {selected && data && (
           <CollapsibleSection
             title={<>Adjustment history — {data.monthly?.leave_type_label ?? data.leave_type}, {year}</>}
             open={historyOpen}
@@ -367,7 +386,7 @@ export default function LeaveCreditsSection({ employeeId, onChanged }: { employe
         )}
 
         {/* Monthly */}
-        {data?.monthly && (
+        {selected && data?.monthly && (
           <CollapsibleSection
             title={<>Monthly view — {data.monthly.leave_type_label}, {year}</>}
             open={monthlyOpen}

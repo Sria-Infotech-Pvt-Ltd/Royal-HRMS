@@ -379,6 +379,8 @@ def yearly_summary(employee, year: int) -> list[dict]:
         rows.append({
             'leave_type':           b.leave_type,
             'leave_type_label':     leave_type_label(b.leave_type, policies.get(b.leave_type)),
+            # The policy's credit schedule ('annual'/'monthly'); None when the balance has no policy.
+            'credit_schedule':      getattr(policies.get(b.leave_type), 'credit_schedule', None),
             'opening_or_allocated': _f(b.total_days - b.carried_forward - manual),
             'carried_forward':      _f(b.carried_forward),
             'manual_adjustments':   _f(manual),

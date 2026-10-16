@@ -52,3 +52,28 @@ export function statementNotes(stmt: LeaveStatement, year: number): string[] {
   if (!stmt.reconciled) notes.push("Month-end processing for a past month is still due; the yearly balance is current.");
   return notes;
 }
+
+// ─── Annual / Monthly separation (Employee Profile → Leave) ─────────────────
+
+export type ScheduleView = "annual" | "monthly";
+
+/** Split rows by their policy's credit_schedule (from the backend). Rows whose
+ *  schedule is unknown (no policy) are kept apart, never guessed into a view. */
+export function splitBySchedule<T extends { credit_schedule?: string | null }>(rows: T[]) {
+  return {
+    annual:       rows.filter(r => r.credit_schedule === "annual"),
+    monthly:      rows.filter(r => r.credit_schedule === "monthly"),
+    unclassified: rows.filter(r => r.credit_schedule !== "annual" && r.credit_schedule !== "monthly"),
+  };
+}
+
+/** Month to select by default: the current month for this year, December for a past year, January for a future one. */
+export function defaultMonth(year: number, today: Date = new Date()): number {
+  if (year < today.getFullYear()) return 12;
+  if (year > today.getFullYear()) return 1;
+  return today.getMonth() + 1;
+}
+
+export function monthOf(stmt: LeaveStatement | null | undefined, month: number): LeaveStatementMonth | null {
+  return stmt?.months.find(m => m.month === month) ?? null;
+}

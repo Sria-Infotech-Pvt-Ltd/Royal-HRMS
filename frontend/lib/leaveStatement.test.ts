@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monthLines, scheduleChip, statementNotes } from "./leaveStatement";
+import { defaultMonth, monthLines, monthOf, scheduleChip, splitBySchedule, statementNotes } from "./leaveStatement";
 import type { LeaveStatement, LeaveStatementMonth } from "@/types/employeeDashboard";
 
 const month = (over: Partial<LeaveStatementMonth> = {}): LeaveStatementMonth => ({
@@ -49,5 +49,33 @@ describe("scheduleChip", () => {
   it("describes the configured carry-forward", () => {
     expect(scheduleChip(stmt())).toMatch(/carries forward/);
     expect(scheduleChip(stmt({ monthly_carry_forward: false }))).toMatch(/expires at month end/);
+  });
+});
+
+describe("splitBySchedule", () => {
+  it("separates by the policy's schedule and keeps unknown schedules apart", () => {
+    const rows = [
+      { leave_type: "earned", credit_schedule: "annual" },
+      { leave_type: "pink", credit_schedule: "monthly" },
+      { leave_type: "orphan", credit_schedule: null },
+      { leave_type: "old_cache" },
+    ];
+    const s = splitBySchedule(rows);
+    expect(s.annual.map(r => r.leave_type)).toEqual(["earned"]);
+    expect(s.monthly.map(r => r.leave_type)).toEqual(["pink"]);
+    expect(s.unclassified.map(r => r.leave_type)).toEqual(["orphan", "old_cache"]);
+  });
+});
+
+describe("defaultMonth / monthOf", () => {
+  const today = new Date(2026, 9, 16);
+  it("picks the current, last or first month by year", () => {
+    expect([defaultMonth(2026, today), defaultMonth(2025, today), defaultMonth(2027, today)]).toEqual([10, 12, 1]);
+  });
+  it("returns the backend month row, or null when the month isn't in the statement", () => {
+    const s = stmt({ months: [month({ month: 3 })] });
+    expect(monthOf(s, 3)?.label).toBe("Mar 2026");
+    expect(monthOf(s, 4)).toBeNull();
+    expect(monthOf(null, 3)).toBeNull();
   });
 });

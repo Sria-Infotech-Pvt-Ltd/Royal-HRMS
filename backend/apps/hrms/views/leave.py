@@ -1449,7 +1449,8 @@ class LeaveStatsView(APIView):
                     'available':          float(b.total_days - b.used_days),
                     # Additive: how the type is credited, and for Monthly types the
                     # month-by-month statement (same calculation as the dashboard).
-                    'credit_schedule':    getattr(policy, 'credit_schedule', 'annual'),
+                    # None when the balance's leave type has no policy — never guessed.
+                    'credit_schedule':    getattr(policy, 'credit_schedule', None),
                     'statement':          None,
                 }
                 if is_monthly(policy) and can_see_statement:

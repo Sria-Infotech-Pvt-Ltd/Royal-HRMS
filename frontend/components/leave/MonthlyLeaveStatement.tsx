@@ -7,7 +7,7 @@
 
 import { useState } from "react";
 import { monthLines, scheduleChip, statementNotes } from "@/lib/leaveStatement";
-import type { LeaveStatement } from "@/types/employeeDashboard";
+import type { LeaveStatement, LeaveStatementMonth } from "@/types/employeeDashboard";
 
 export default function MonthlyLeaveStatement({ label, year, stmt, total, used, available, defaultOpen = true }: {
   label: string; year: number; stmt: LeaveStatement;
@@ -77,6 +77,65 @@ export default function MonthlyLeaveStatement({ label, year, stmt, total, used, 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Monthly view → Manage Leave Credits: one row per Monthly leave type for the selected month,
+ *  read from each type's backend statement (no frontend calculation). */
+export function MonthlyCreditsTable({ rows, year, month, monthOptions, onMonth }: {
+  rows: { leave_type: string; label: string; month: LeaveStatementMonth | null; hasStatement: boolean }[];
+  year: number; month: number; monthOptions: { value: number; label: string }[];
+  onMonth: (m: number) => void;
+}) {
+  const num = (v: number | undefined) => (v ? v : "—");
+  return (
+    <div className="card">
+      <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
+        <div className="card-title"><i className="ti ti-adjustments-horizontal" /> Monthly Leave Credits</div>
+        <select className="field-input" style={{ width: "auto", padding: "6px 10px" }} aria-label="Month"
+          value={month} onChange={e => onMonth(Number(e.target.value))}>
+          {monthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Leave Type</th>
+              <th style={{ textAlign: "right" }}>Carried in</th>
+              <th style={{ textAlign: "right" }}>Credited</th>
+              <th style={{ textAlign: "right" }}>Used</th>
+              <th style={{ textAlign: "right" }}>Pending</th>
+              <th style={{ textAlign: "right" }}>Expired</th>
+              <th style={{ textAlign: "right" }}>Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.leave_type}>
+                <td style={{ fontWeight: 600 }}>{r.label}</td>
+                {!r.hasStatement ? (
+                  <td colSpan={6} style={{ color: "var(--on-variant)" }}>Monthly breakdown isn&apos;t available to you for this employee.</td>
+                ) : !r.month ? (
+                  <td colSpan={6} style={{ color: "var(--on-variant)" }}>Nothing recorded for this month in {year}.</td>
+                ) : (
+                  <>
+                    <td style={{ textAlign: "right" }}>{num(r.month.carried_in)}</td>
+                    <td style={{ textAlign: "right" }}>{num(r.month.credit)}</td>
+                    <td style={{ textAlign: "right" }}>{num(r.month.used)}</td>
+                    <td style={{ textAlign: "right" }}>{num(r.month.pending)}</td>
+                    <td style={{ textAlign: "right", color: r.month.expired ? "var(--error)" : undefined }}>
+                      {r.month.carry_off ? num(r.month.expired) : "n/a"}
+                    </td>
+                    <td style={{ textAlign: "right", fontWeight: 700 }}>{r.month.closing}</td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

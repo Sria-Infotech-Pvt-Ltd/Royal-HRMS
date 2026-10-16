@@ -647,3 +647,24 @@ class ProfileLeaveStatsTests(_MonthlyBase, TestCase):
         rows = self._stats(employee_id=None)
         self.assertIsNotNone(rows['pink']['statement'])
         self.assertIsNone(rows['casual']['statement'])
+
+    def test_schedule_comes_from_the_policy_and_is_null_without_one(self):
+        LeaveBalance.objects.create(employee=self.employee, leave_type='ghost', year=YEAR,
+                                    total_days=D('2'), used_days=D('0'), carried_forward=D('0'))
+        self._login(self.hr_hyd)
+        rows = self._stats()
+        self.assertEqual({k: rows[k]['credit_schedule'] for k in ('pink', 'cl_monthly', 'casual', 'ghost') if k in rows},
+                         {'pink': 'monthly', 'casual': 'annual', 'ghost': None})
+        self.assertIsNone(rows['ghost']['statement'])
+
+    def test_manage_leave_credits_rows_carry_the_policy_schedule(self):
+        LeaveBalance.objects.create(employee=self.employee, leave_type='ghost', year=YEAR,
+                                    total_days=D('2'), used_days=D('0'), carried_forward=D('0'))
+        self._login(self.hr_hyd)
+        resp = self.client.get(reverse('leave-credit-overview', kwargs={'employee_id': 'CREMP01'}), {'year': YEAR})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        sched = {r['leave_type']: r['credit_schedule'] for r in resp.data['data']['summaries']}
+        self.assertEqual((sched['pink'], sched['casual'], sched['ghost']), ('monthly', 'annual', None))
+        assignable = {t['value']: t['credit_schedule'] for t in resp.data['data']['assignable_leave_types']}
+        self.assertEqual((assignable['pink'], assignable['cl_monthly'], assignable['earned']), ('monthly', 'monthly', 'annual'))
+        self.assertNotIn('ghost', assignable)                          # no policy -> never assignable
