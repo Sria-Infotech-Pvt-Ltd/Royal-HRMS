@@ -1,6 +1,22 @@
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/
+
 function toValidDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null
-  const date = value instanceof Date ? value : new Date(value)
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
+  // A bare "YYYY-MM-DD" (no time component) is a calendar date, not an
+  // instant — `new Date("YYYY-MM-DD")` parses it as UTC midnight, which
+  // then reads back one day early via the local getDate()/getMonth() below
+  // for any viewer west of UTC (all of the US). Build the Date from its
+  // local year/month/day instead so the calendar date never shifts
+  // depending on where the viewer is. Full timestamps (with a time
+  // component) are real instants and should still convert UTC -> local,
+  // so only this bare-date shape is special-cased.
+  const dateOnly = DATE_ONLY_RE.exec(value)
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly
+    return new Date(Number(year), Number(month) - 1, Number(day))
+  }
+  const date = new Date(value)
   return Number.isNaN(date.getTime()) ? null : date
 }
 
