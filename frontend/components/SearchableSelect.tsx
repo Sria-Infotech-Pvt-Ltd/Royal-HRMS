@@ -84,7 +84,10 @@ export default function SearchableSelect({
         disabled={disabled}
         style={{ width: "100%", textAlign: "left", cursor: disabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, opacity: disabled ? 0.6 : 1 }}
       >
-        <span style={{ color: selected ? "inherit" : "var(--on-variant, #7c8aa3)" }}>
+        <span style={{
+          color: selected ? "inherit" : "var(--on-variant, #7c8aa3)",
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0,
+        }}>
           {selected?.label || placeholder || "Select"}
         </span>
         <i className="ti ti-chevron-down" style={{ fontSize: 14, color: "var(--on-variant)", flexShrink: 0 }} />
