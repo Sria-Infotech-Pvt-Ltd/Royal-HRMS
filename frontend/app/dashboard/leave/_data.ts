@@ -1,3 +1,4 @@
+import type { LeaveStatement } from "@/types/employeeDashboard";
 // ─── Leave type UI metadata ───────────────────────────────────────────────────
 
 // Widened to `string` rather than the original 6-value union — the backend
@@ -178,6 +179,9 @@ export interface BalanceSummary {
   total_days:         number;
   used_days:          number;
   available:          number;
+  /** "monthly" types also carry the backend's month-by-month statement (when the viewer may see it). */
+  credit_schedule?:   "annual" | "monthly";
+  statement?:         LeaveStatement | null;
 }
 
 export interface LeavePreviewHoliday {

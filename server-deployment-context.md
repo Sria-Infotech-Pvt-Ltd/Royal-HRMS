@@ -2189,8 +2189,13 @@ Rollback while no policy is Monthly: `migrate_schemas hrms 0029`.
 su - royalhrms
 cd /var/www/royalhrms/app && git pull origin production
 cd backend && .venv/bin/python manage.py showmigrations hrms | tail -4   # expect 0030, 0031 unapplied
-pg_dump -U royalhrms_user -h localhost -d royalhrms_db -F c -f /home/royalhrms/backup_$(date +%Y%m%d_%H%M%S).dump
-ls -lh /home/royalhrms/backup_*.dump | tail -1                            # non-zero size
+# Backup — uses the app's own DATABASE_URL (the old `pg_dump -U royalhrms_user ...`
+# form had no password and silently produced 0-byte files every time; see below).
+DBURL=$(grep '^DATABASE_URL=' /var/www/royalhrms/app/backend/.env | cut -d= -f2-)
+OUT=/home/royalhrms/backup_$(date +%Y%m%d_%H%M%S).dump
+pg_dump "$DBURL" -F c -f "$OUT"; echo "pg_dump exit code: $?"; unset DBURL
+ls -lh "$OUT"                                                             # several MB, never 0
+pg_restore --list "$OUT" | grep "TABLE DATA" | grep -c "tenant_"          # large count = complete
 .venv/bin/python manage.py check
 .venv/bin/python manage.py migrate_schemas
 .venv/bin/python manage.py showmigrations hrms | tail -4                 # all [X]
@@ -2211,3 +2216,13 @@ a type to Monthly. Smoke test with one test leave type/employee before HR use.
 -   Approval Matrix stage-1 display / RM pop-up; commercial geocoder decision;
     face clock-in liveness sign-off; profile photo safe delete order;
     server reboot pending.
+
+## Backups — finding on 2026-10-16 (important)
+Every earlier `pg_dump -U royalhrms_user -h localhost -d royalhrms_db ...` run
+(2026-09-21, 10-13, 10-14, 10-16) produced a **0-byte file** — no password was
+supplied, so no usable database backup existed until **2026-10-16 07:53 UTC**
+(`/home/royalhrms/backup_20261016_075322.dump`, 3.5 MB, verified with
+`pg_restore --list`: 245 table-data entries, 232 tenant). Always back up with
+the `DATABASE_URL` form above and check the size + `pg_restore --list` before
+migrating. No automatic database backup is scheduled on the server; Hostinger
+VPS snapshots are the only other recovery point — verify their date.

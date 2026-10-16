@@ -600,38 +600,13 @@ def _monthly_breakdown(employee, leave_type: str, year: int, last_month: int) ->
     return {'months': months, 'used_not_itemised': summary['used_not_itemised']}
 
 
-def _monthly_statement(employee, policy, year: int, last_month: int) -> dict | None:
-    """
-    Monthly-schedule leave types: the Phase B statement — carried in, credit,
-    used, pending, expired and closing per month — from the same
-    calculation leave validation and expiry use. `reconciled` is True when the
-    statement matches the yearly balance (closing + pending == total - used).
-    """
-    from apps.hrms.services_monthly_statement import build_statement
-
-    stmt = build_statement(employee, policy, year)
-    if stmt is None:
-        return None
-    months = [
-        m.as_dict() for m in stmt.months
-        if m.month <= last_month or m.credit or m.used or m.pending or m.expired
-    ]
-    return {
-        'opening':           float(stmt.opening),          # opening/carried-in/lump/adjustments (never expire)
-        'adjustments':       float(stmt.adjustments),
-        'used_not_itemised': float(max(stmt.used_not_itemised, 0)),
-        'months':            months,
-        'total_pending':     float(stmt.total_pending),
-        'reconciled':        stmt.reconciled,
-    }
-
-
 class EmployeeLeaveBalanceView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
         from apps.hrms.models import CREDIT_SCHEDULE_ANNUAL, LEAVE_LWP, LeaveBalance, LeavePolicy, LeaveRequest, REQ_APPROVED
         from apps.hrms.services_leave_credit import leave_type_label
+        from apps.hrms.services_monthly_statement import statement_payload
 
         employee = request.user
         try:
@@ -675,7 +650,7 @@ class EmployeeLeaveBalanceView(APIView):
                         else _monthly_breakdown(employee, b.leave_type, year, last_month)
                     ),
                     'statement': (
-                        _monthly_statement(employee, policies[b.leave_type], year, last_month)
+                        statement_payload(employee, policies[b.leave_type], year)
                         if getattr(policies.get(b.leave_type), 'credit_schedule', None) == 'monthly' else None
                     ),
                 }

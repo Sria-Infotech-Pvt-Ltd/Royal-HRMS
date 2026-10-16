@@ -31,7 +31,7 @@ from ..models import (
 )
 from ..services_monthly_statement import (
     annual_allocation, is_monthly, monthly_rules_apply_to_request, next_month_start,
-    request_shortfall, sync_after_request_change, sync_expiries, unused_for_carry_forward,
+    request_shortfall, statement_payload, sync_after_request_change, sync_expiries, unused_for_carry_forward,
 )
 from ..serializers import (
     CarryForwardInputSerializer,
@@ -1299,6 +1299,12 @@ def _deduct_balance_safe(leave_request: LeaveRequest) -> None:
         ).update(used_days=F('used_days') + earned_days)
 
 
+def _profile_out_of_scope(viewer, employee) -> bool:
+    """Same branch/team scope as the Employee Profile itself (accounts EmployeeDetailView)."""
+    from apps.accounts.views import _employee_out_of_branch_scope
+    return _employee_out_of_branch_scope(viewer, employee)
+
+
 def _invalidate_leave_balance_cache(leave_request: LeaveRequest) -> None:
     """The employee dashboard caches its leave balance card per employee and year."""
     from ..services_leave_credit import _invalidate_balance_cache
@@ -1424,17 +1430,31 @@ class LeaveStatsView(APIView):
         # Balance breakdown only for own-scope views (employee or ?scope=own or ?employee_id=)
         balance_data = []
         if own_scope:
-            balances = LeaveBalance.objects.filter(employee=target, year=year)
-            balance_data = [
-                {
+            balances = list(LeaveBalance.objects.filter(employee=target, year=year))
+            policies = {p.leave_type: p for p in LeavePolicy.objects.filter(leave_type__in=[b.leave_type for b in balances])}
+            # Monthly statement only for someone allowed to see the employee's
+            # profile (same branch scope as the employee detail endpoint) or
+            # their own data — never through this endpoint's wider access.
+            can_see_statement = stats_user is None or stats_user.pk == request.user.pk or (
+                _has_perm(request.user, 'employees.view') and not _profile_out_of_scope(request.user, stats_user)
+            )
+            balance_data = []
+            for b in balances:
+                policy = policies.get(b.leave_type)
+                row = {
                     'leave_type':         b.leave_type,
                     'leave_type_display': b.get_leave_type_display(),
                     'total_days':         float(b.total_days),
                     'used_days':          float(b.used_days),
                     'available':          float(b.total_days - b.used_days),
+                    # Additive: how the type is credited, and for Monthly types the
+                    # month-by-month statement (same calculation as the dashboard).
+                    'credit_schedule':    getattr(policy, 'credit_schedule', 'annual'),
+                    'statement':          None,
                 }
-                for b in balances
-            ]
+                if is_monthly(policy) and can_see_statement:
+                    row['statement'] = statement_payload(target, policy, year)
+                balance_data.append(row)
 
         return success('Stats retrieved.', {
             'total':     agg['total']     or 0,

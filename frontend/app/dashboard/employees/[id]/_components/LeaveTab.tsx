@@ -12,6 +12,7 @@ import {
 import LeaveRequestDetailModal from "@/app/dashboard/leave/_components/LeaveRequestDetailModal";
 import LopBadge from "@/app/dashboard/leave/_components/LopBadge";
 import LeaveCreditsSection from "./LeaveCreditsSection";
+import MonthlyLeaveStatement from "@/components/leave/MonthlyLeaveStatement";
 
 interface Props {
   employeeId: string;
@@ -49,6 +50,9 @@ export function LeaveTab({ employeeId }: Props) {
   );
 
   const balances = (stats?.balances ?? []).filter(b => b.leave_type !== LWP_KEY);
+  // Monthly-schedule types come with the backend's month-by-month statement;
+  // annual types keep exactly the existing card.
+  const monthly = balances.filter(b => b.credit_schedule === "monthly" && b.statement);
 
   if (error) {
     return (
@@ -72,13 +76,23 @@ export function LeaveTab({ employeeId }: Props) {
           const left     = Number(b.available);
           const used     = Number(b.used_days);
           const pct      = total > 0 ? Math.round((used / total) * 100) : 0;
+          const isMonthly = b.credit_schedule === "monthly";
           return (
             <div key={b.leave_type} className="stat-card">
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
                 <div>
                   <div className="stat-label">{label}</div>
                   <div className="stat-value">{loading ? "—" : left}</div>
-                  <div className="stat-sub">of {total} days left</div>
+                  {isMonthly ? (
+                    // Not "of N days": a monthly type's yearly total is the credits recorded so far,
+                    // not an allocation. The month-by-month view below shows each month.
+                    <div className="stat-sub">
+                      available now · credited monthly
+                      {b.statement?.total_credited != null ? ` · ${b.statement.total_credited} credited in ${year}` : ""}
+                    </div>
+                  ) : (
+                    <div className="stat-sub">of {total} days left</div>
+                  )}
                 </div>
                 {curated ? (
                   <div className={`stat-icon ${curated.iconClass}`} style={{ float: "none", margin: 0 }}>
@@ -90,9 +104,11 @@ export function LeaveTab({ employeeId }: Props) {
                   </div>
                 )}
               </div>
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${pct}%`, background: barColor }} />
-              </div>
+              {!isMonthly && (
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: `${pct}%`, background: barColor }} />
+                </div>
+              )}
             </div>
           );
         })}
@@ -127,6 +143,19 @@ export function LeaveTab({ employeeId }: Props) {
           <div className="progress-bar"><div className="progress-fill" style={{ width: 0 }} /></div>
         </div>
       </div>
+
+      {monthly.map((b, i) => (
+        <MonthlyLeaveStatement
+          key={`${b.leave_type}-${year}`}
+          label={leaveTypeMap[b.leave_type]?.label ?? b.leave_type_display}
+          year={year}
+          stmt={b.statement!}
+          total={Number(b.total_days)}
+          used={Number(b.used_days)}
+          available={Number(b.available)}
+          defaultOpen={i === 0}
+        />
+      ))}
 
       <LeaveCreditsSection employeeId={employeeId} onChanged={refetch} />
 

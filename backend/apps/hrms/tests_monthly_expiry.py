@@ -565,3 +565,85 @@ class ConcurrentExpiryTests(_MonthlyBase, TransactionTestCase):
         self.assertEqual(sorted(results), [D('-1'), D('0'), D('0'), D('0')])
         self.assertEqual(LeaveCreditTransaction.objects.filter(txn_type=CREDIT_TXN_EXPIRY).count(), 1)
         self.assertEqual(self.bal().total_days, D('0'))
+
+
+class ProfileLeaveStatsTests(_MonthlyBase, TestCase):
+    """Employee Profile → Leave: /leave/stats/?employee_id= carries the monthly statement."""
+
+    def setUp(self):
+        super().setUp()
+        self.credit(1, 3)                                                  # March: unused -> expires
+        self.credit(1, 4)
+        self.req(_weekday(YEAR, 4, 8), booked=datetime.date(YEAR, 4, 1))  # April credit used in time
+        sync_expiries(self.employee, self.pink, YEAR)                       # what the daily task does
+        self.client = APIClient()
+
+    def _login(self, user):
+        resp = self.client.post(reverse('login'), {'company_code': TEST_COMPANY_CODE, 'email': user.email,
+                                                   'password': PASSWORD}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    def _stats(self, year=YEAR, employee_id='CREMP01'):
+        params = {'year': year}
+        if employee_id:
+            params['employee_id'] = employee_id
+        resp = self.client.get(reverse('leave-stats'), params)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        return {b['leave_type']: b for b in resp.data['data']['balances']}
+
+    def test_monthly_and_annual_types_side_by_side(self):
+        self._login(self.hr_hyd)
+        rows = self._stats()
+        pink, casual = rows['pink'], rows['casual']
+        self.assertEqual((casual['credit_schedule'], casual['statement']), ('annual', None))
+        self.assertEqual((casual['total_days'], casual['used_days']), (12.0, 2.0))         # annual card unchanged
+        self.assertEqual(pink['credit_schedule'], 'monthly')
+        stmt = pink['statement']
+        months = {m['month']: m for m in stmt['months']}
+        self.assertEqual((months[3]['credit'], months[3]['expired'], months[3]['closing']), (1.0, 1.0, 0.0))
+        self.assertEqual((months[4]['credit'], months[4]['used'], months[4]['expired']), (1.0, 1.0, 0.0))
+        self.assertEqual((months[1]['credit'], months[1]['closing']), (0.0, 0.0))          # month with no record
+        self.assertEqual(sorted(months)[:6], [1, 2, 3, 4, 5, 6])                           # Jan..June (TODAY)
+        self.assertEqual((stmt['total_credited'], stmt['total_expired']), (2.0, 1.0))
+        self.assertFalse(stmt['monthly_carry_forward'])
+        self.assertTrue(stmt['reconciled'])
+        self.assertEqual(pink['available'], pink['total_days'] - pink['used_days'])        # yearly figure kept
+
+    def test_year_navigation_loads_that_years_records(self):
+        prev = YEAR - 1
+        self.pink.monthly_rules_from = datetime.date(prev, 1, 1)
+        self.pink.save(update_fields=['monthly_rules_from'])
+        LeaveBalance.objects.create(employee=self.employee, leave_type='pink', year=prev,
+                                    total_days=D('0'), used_days=D('0'), carried_forward=D('0'))
+        set_monthly_credit(employee=self.employee, leave_type='pink', year=prev, month=11, value='2', actor=self.admin)
+        self._login(self.hr_hyd)
+        stmt = self._stats(year=prev)['pink']['statement']
+        self.assertEqual(len(stmt['months']), 12)                                          # past year: all months
+        self.assertEqual({m['month']: m['credit'] for m in stmt['months'] if m['credit']}, {11: 2.0})
+        self.assertEqual(self._stats()['pink']['statement']['total_credited'], 2.0)       # this year's own 2
+
+    def test_carry_forward_type_shows_carried_in(self):
+        self.credit(1, 2, policy=self.cl)
+        self.credit(1, 3, policy=self.cl)
+        self._login(self.hr_hyd)
+        stmt = self._stats()['cl_monthly']['statement']
+        months = {m['month']: m for m in stmt['months']}
+        self.assertTrue(stmt['monthly_carry_forward'])
+        self.assertEqual((months[3]['carried_in'], months[4]['carried_in']), (1.0, 2.0))
+        self.assertTrue(all(not m['carry_off'] and m['expired'] == 0 for m in stmt['months']))
+
+    def test_statement_respects_profile_scope(self):
+        self._login(self.hr_mum)                         # other branch: no statement through this endpoint
+        self.assertIsNone(self._stats()['pink']['statement'])
+        self._login(self.manager)                        # manager without employees.view: no statement
+        self.assertIsNone(self._stats()['pink']['statement'])
+        self._login(self.admin)                          # settings.edit: all branches
+        self.assertIsNotNone(self._stats()['pink']['statement'])
+        self._login(self.other_hyd)                      # no permission at all
+        self.assertEqual(self.client.get(reverse('leave-stats'), {'employee_id': 'CREMP01', 'year': YEAR}).status_code, 403)
+
+    def test_employee_sees_own_statement(self):
+        self._login(self.employee)
+        rows = self._stats(employee_id=None)
+        self.assertIsNotNone(rows['pink']['statement'])
+        self.assertIsNone(rows['casual']['statement'])

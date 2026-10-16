@@ -61,6 +61,11 @@ export interface LeaveStatement {
   months:            LeaveStatementMonth[];
   total_pending:     number;
   reconciled:        boolean;
+  // Added with the Employee Profile view (older cached dashboard payloads may lack them).
+  total_credited?:        number;
+  total_expired?:         number;
+  monthly_carry_forward?: boolean;
+  monthly_rules_from?:    string | null;
 }
 
 export interface LeaveBalanceSummary {

@@ -423,3 +423,36 @@ def unused_for_carry_forward(employee, policy, balance) -> Decimal:
         return unused
     due = sum((t - stmt.expiry_recorded.get(m, ZERO) for m, t in stmt.expiry_target.items()), ZERO)
     return unused - (due if due > 0 else ZERO)
+
+
+# ─── API payload ──────────────────────────────────────────────────────────────
+
+def statement_payload(employee, policy, year: int, *, today: datetime.date | None = None) -> dict | None:
+    """
+    The statement as returned to the UI (employee dashboard, Employee Profile →
+    Leave). Months: every month of a past year; Jan to the current month of the
+    current year; months after that only when something is already recorded
+    (e.g. a credit entered in advance). All figures come from build_statement().
+    """
+    today = today or _today()
+    stmt = build_statement(employee, policy, year, today=today)
+    if stmt is None:
+        return None
+    last_month = 12 if year < today.year else (today.month if year == today.year else 0)
+    months = [
+        m.as_dict() for m in stmt.months
+        if m.month <= last_month or m.credit or m.used or m.pending or m.expired
+    ]
+    rules_from = getattr(policy, 'monthly_rules_from', None)
+    return {
+        'opening':            float(stmt.opening),          # opening/carried-in/lump/adjustments (never expire)
+        'adjustments':        float(stmt.adjustments),
+        'used_not_itemised':  float(max(stmt.used_not_itemised, 0)),
+        'months':             months,
+        'total_credited':     float(sum((m.credit for m in stmt.months), ZERO)),
+        'total_expired':      float(sum((m.expired for m in stmt.months), ZERO)),
+        'total_pending':      float(stmt.total_pending),
+        'monthly_carry_forward': bool(policy.monthly_carry_forward),
+        'monthly_rules_from': rules_from.isoformat() if rules_from else None,
+        'reconciled':         stmt.reconciled,
+    }
