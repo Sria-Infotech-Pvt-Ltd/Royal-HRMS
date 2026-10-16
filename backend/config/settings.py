@@ -404,6 +404,12 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.hrms.tasks.reset_annual_leave_balances',
         'schedule': crontab(hour=0, minute=1, day_of_month=1, month_of_year=1),
     },
+    # Runs daily at 00:20 IST — records month-end expiry of unused monthly credit
+    # for Monthly leave types with monthly carry-forward off (idempotent catch-up).
+    'sync-monthly-leave-expiry': {
+        'task':     'apps.hrms.tasks.sync_monthly_leave_expiry',
+        'schedule': crontab(hour=0, minute=20),
+    },
     # Runs daily at 10:00 IST — nudges managers who haven't approved payroll
     # attendance within 24 hours of the cycle being created.
     'send-payroll-approval-reminders': {

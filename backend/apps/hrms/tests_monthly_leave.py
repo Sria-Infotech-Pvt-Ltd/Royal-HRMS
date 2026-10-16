@@ -445,6 +445,102 @@ class MonthlyAssignmentsTests(_Fixtures, TestCase):
         self.assertEqual(self.client.get(url, {'year': YEAR, 'month': 13}).status_code, 400)
         self.assertEqual(self.client.get(url, {'year': YEAR + 1, 'month': 1}).status_code, 400)
 
+class MonthlyBulkEntryTests(_Fixtures, TestCase):
+    """POST /leave/monthly-credits/bulk/: one credit for several employees, each revalidated and saved separately."""
+
+    def setUp(self):
+        from apps.accounts.factories import make_role, make_user
+        self.make_fixtures()
+        ba_role = make_role('mlb_branch_admin', permission_codenames=['employees.view', 'leave.approve'])
+        ba_role.can_manage_branch = True
+        ba_role.save(update_fields=['can_manage_branch'])
+        self.branch_admin = make_user('mlb.ba@test.com', role=ba_role, employee_id='CRBA03',
+                                      full_name='Branch Admin', branch='Hyderabad Credits')
+        self.client = APIClient()
+
+    def _login(self, user):
+        resp = self.client.post(reverse('login'), {'company_code': TEST_COMPANY_CODE, 'email': user.email,
+                                                   'password': PASSWORD}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+    def _bulk(self, codes, credit='2', dry_run=False, leave_type='casual'):
+        payload = {'employee_ids': codes, 'leave_type': leave_type, 'year': YEAR, 'month': MONTH, 'credit': credit}
+        if dry_run:
+            payload['dry_run'] = True
+        return self.client.post(reverse('leave-monthly-bulk'), payload, format='json')
+
+    def test_review_revalidates_every_employee_and_writes_nothing(self):
+        self._login(self.branch_admin)
+        resp = self._bulk(['CREMP01', 'CREMP02', 'CREMP03', 'CREMP01', 'CRBA03', 'NOPE'], dry_run=True)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        data = resp.data['data']
+        self.assertEqual(data['counts'], {'new': 2, 'update': 0, 'unchanged': 0, 'duplicate': 1, 'error': 3})
+        by_code = {}
+        for r in data['rows']:
+            by_code.setdefault(r['employee_code'], r)
+        self.assertIn('not found', by_code['CREMP03']['message'])           # other branch, hidden
+        self.assertIn('your own leave credits', by_code['CRBA03']['message'])
+        self.assertFalse(LeaveCreditTransaction.objects.exists())
+
+    def test_confirm_saves_each_employee_with_history_and_retry_is_noop(self):
+        self._login(self.branch_admin)
+        resp = self._bulk(['CREMP01', 'CREMP02'])
+        self.assertEqual(resp.data['data']['summary'], {'created': 2, 'updated': 0, 'skipped': 0, 'failed': 0, 'total': 2})
+        self.balance.refresh_from_db()
+        self.assertEqual(self.balance.total_days, Decimal('14'))
+        self.assertEqual(LeaveBalance.objects.get(employee=self.other_hyd, leave_type='casual', year=YEAR).total_days, Decimal('2'))
+        txns = LeaveCreditTransaction.objects.filter(txn_type=CREDIT_TXN_MONTHLY)
+        self.assertEqual(txns.count(), 2)
+        self.assertTrue(all('imported' not in t.reason for t in txns))
+        self.assertTrue(all(t.created_by_id == self.branch_admin.id for t in txns))
+        self.assertEqual(AuditLog.objects.filter(action='leave_monthly_credit_set').count(), 2)
+
+        resp = self._bulk(['CREMP01', 'CREMP02'])          # retried: nothing applied twice
+        self.assertEqual(resp.data['data']['summary']['skipped'], 2)
+        self.balance.refresh_from_db()
+        self.assertEqual(self.balance.total_days, Decimal('14'))
+        self.assertEqual(LeaveCreditTransaction.objects.count(), 2)
+
+    def test_partial_failure_keeps_other_employees_updates(self):
+        self._login(self.admin)
+        self._bulk(['CREMP01', 'CREMP02'], credit='3')
+        other = LeaveBalance.objects.get(employee=self.other_hyd, leave_type='casual', year=YEAR)
+        other.used_days = Decimal('3')
+        other.save(update_fields=['used_days'])
+
+        resp = self._bulk(['CREMP01', 'CREMP02'], credit='0')   # CREMP02 would drop below used
+        summary = resp.data['data']['summary']
+        self.assertEqual((summary['updated'], summary['failed']), (1, 1))
+        failed = next(r for r in resp.data['data']['rows'] if r['employee_code'] == 'CREMP02')
+        self.assertIn('below', failed['message'])
+        self.assertEqual(monthly_credit_value(self.employee, 'casual', YEAR, MONTH), Decimal('0'))
+        self.assertEqual(monthly_credit_value(self.other_hyd, 'casual', YEAR, MONTH), Decimal('3'))
+
+    def test_system_admin_across_branches(self):
+        self._login(self.admin)
+        resp = self._bulk(['CREMP01', 'CREMP03'], credit='1')
+        self.assertEqual(resp.data['data']['summary']['created'], 2)
+        self.assertEqual(monthly_credit_value(self.emp_mum, 'casual', YEAR, MONTH), Decimal('1'))
+
+    def test_validation_and_permissions(self):
+        self._login(self.admin)
+        self.assertEqual(self._bulk([]).status_code, 400)
+        self.assertEqual(self._bulk(['CREMP01'] * 501).status_code, 400)
+        self.assertEqual(self._bulk(['CREMP01'], credit='-1', dry_run=True).data['data']['counts']['error'], 1)
+        self.assertEqual(self._bulk(['CREMP01'], leave_type='lwp', dry_run=True).data['data']['counts']['error'], 1)
+        self._login(self.other_hyd)   # no leave.approve
+        self.assertEqual(self._bulk(['CREMP01']).status_code, 403)
+        self.assertFalse(LeaveCreditTransaction.objects.exists())
+
+    def test_dashboard_cache_dropped_for_each_saved_employee(self):
+        keys = [f'dashboard:employee:leave_balance:{e.id}:{YEAR}' for e in (self.employee, self.other_hyd)]
+        for k in keys:
+            cache.set(k, {'stale': True}, 300)
+        self._login(self.admin)
+        with self.captureOnCommitCallbacks(execute=True):
+            self._bulk(['CREMP01', 'CREMP02'])
+        self.assertEqual([cache.get(k) for k in keys], [None, None])
+
 class MonthlyCreditConcurrencyTests(_Fixtures, TransactionTestCase):
     """Real commits and separate connections: concurrent saves of the same month apply once."""
 

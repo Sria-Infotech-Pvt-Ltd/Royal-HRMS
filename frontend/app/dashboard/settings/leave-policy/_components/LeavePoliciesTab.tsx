@@ -6,9 +6,10 @@ import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import ToggleSwitch from "@/components/ToggleSwitch";
-import type { CarryForwardType, CarryForwardMode, LeavePolicyCarryForwardSettings } from "@/types/leave";
+import type { CarryForwardType, CarryForwardMode, CreditSchedule, LeavePolicyCarryForwardSettings, MonthlyCreditSettings } from "@/types/leave";
 import EligibilitySection from "./EligibilitySection";
 import CarryForwardSettingsSection from "./CarryForwardSettingsSection";
+import MonthlyCreditSettingsSection from "./MonthlyCreditSettingsSection";
 
 // Full shape of GET /leave/policy/ list items — includes both the existing
 // Leave Types fields (annual_days, can_carry_forward, ...) and the policy
@@ -27,6 +28,9 @@ export interface LeavePolicy {
   carry_forward_type:        CarryForwardType;
   carry_forward_mode:        CarryForwardMode;
   carry_forward_expiry_days: number;
+  credit_schedule?:          CreditSchedule;   // absent from responses cached before the field existed
+  monthly_carry_forward?:    boolean;
+  monthly_rules_from?:       string | null;
   policy_note:         string;
   is_active:           boolean;
 
@@ -161,6 +165,13 @@ function defaultCf(): LeavePolicyCarryForwardSettings {
   return { can_carry_forward: false, carry_forward_type: "limited", max_carry_forward_days: 0, carry_forward_mode: "automatic", carry_forward_expiry_days: 0 };
 }
 
+function extractMonthly(p: LeavePolicy | undefined): MonthlyCreditSettings {
+  return {
+    credit_schedule:       p?.credit_schedule === "monthly" ? "monthly" : "annual",
+    monthly_carry_forward: p?.monthly_carry_forward ?? true,
+  };
+}
+
 function extractCf(p: LeavePolicy): LeavePolicyCarryForwardSettings {
   return {
     can_carry_forward:         p.can_carry_forward,
@@ -244,6 +255,7 @@ export default function LeavePoliciesTab() {
   const [cfExpiryMode, setCfExpiryMode] = useState<"never" | "after">("never");
   const [cfErrors,    setCfErrors]    = useState<{ max_carry_forward_days?: string; carry_forward_expiry_days?: string }>({});
   const [cfSaveError, setCfSaveError] = useState<string | null>(null);
+  const [monthly, setMonthly] = useState<MonthlyCreditSettings | null>(null);
 
   const list = policies ?? [];
 
@@ -256,6 +268,7 @@ export default function LeavePoliciesTab() {
   useEffect(() => {
     if (!selectedType) { setRules(null); setCf(null); return; }
     const policy = (policies ?? []).find(p => p.leave_type === selectedType);
+    setMonthly(extractMonthly(policy));
     setRules(policy ? extractRules(policy) : defaultRules());
     const nextCf = policy ? extractCf(policy) : defaultCf();
     setCf(nextCf);
@@ -275,6 +288,7 @@ export default function LeavePoliciesTab() {
 
   function discard() {
     const policy = list.find(p => p.leave_type === selectedType);
+    setMonthly(extractMonthly(policy));
     setRules(policy ? extractRules(policy) : defaultRules());
     const nextCf = policy ? extractCf(policy) : defaultCf();
     setCf(nextCf);
@@ -312,6 +326,7 @@ export default function LeavePoliciesTab() {
           max_carry_forward_days:    cf.max_carry_forward_days,
           carry_forward_mode:        cf.carry_forward_mode,
           carry_forward_expiry_days: cfExpiryMode === "never" ? 0 : cf.carry_forward_expiry_days,
+          ...(monthly ?? {}),
         };
         await clientApi.patch<{ message: string }>(API.leave.policyDetail(selectedType), cfPayload);
         showToast(res.data.message || "Policy updated.", "success");
@@ -420,6 +435,14 @@ export default function LeavePoliciesTab() {
               setField={setCfField}
               errors={cfErrors}
               saveError={cfSaveError}
+            />
+          )}
+
+          {monthly && (
+            <MonthlyCreditSettingsSection
+              value={monthly}
+              onChange={setMonthly}
+              rulesFrom={list.find(p => p.leave_type === selectedType)?.monthly_rules_from ?? null}
             />
           )}
 

@@ -9,12 +9,14 @@ import { useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { downloadBlobFile } from "@/lib/downloadFile";
-import EmployeePickerField, { type PickedEmployee } from "@/app/dashboard/separation/_components/EmployeePickerField";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import CollapsibleCard from "./CollapsibleCard";
 import MonthlyAssignmentsSection from "./MonthlyAssignmentsSection";
 import {
-  MONTHS, STATUS_LABEL, annualWarningTypes, creditYears, projectedBalance, validateMonthlyCredit,
+  MONTHS, STATUS_LABEL, annualWarningTypes, creditYears, selectAllState, toggleAllShown, unselectableReason,
+  validateMonthlyCredit,
   type ImportRowStatus, type MonthlyImportPreview, type MonthlyImportResult, type MonthlyImportRow,
-  type MonthlyLeaveTypeRow,
+  type PickableEmployee,
 } from "@/lib/monthlyLeave";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -156,10 +158,6 @@ function MonthlyImportSection({ onChanged }: { onChanged: () => void }) {
   const warn = preview ? annualWarningTypes(preview.rows, preview.annual_entitlements) : [];
 
   return (
-    <div className="card mb-24">
-      <div className="card-header">
-        <div className="card-title"><i className="ti ti-file-upload" /> Monthly Leave Import</div>
-      </div>
       <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 12.5, color: "var(--on-variant)", lineHeight: 1.5 }}>
           Set each employee&apos;s leave credit for one month. Columns: <strong>Employee Code</strong>,{" "}
@@ -234,130 +232,264 @@ function MonthlyImportSection({ onChanged }: { onChanged: () => void }) {
           </>
         )}
       </div>
-    </div>
   );
 }
 
-// ─── B. Manual entry ──────────────────────────────────────────────────────────
+// ─── B. Manual entry (one or many employees) ─────────────────────────────────
 
-function ManualEntrySection({ onChanged }: { onChanged: () => void }) {
+interface LeaveTypeOption { leave_type: string; label: string; annual_days: number }
+
+const PAGE_SIZE = 50;
+
+function ManualEntrySection({ active, onChanged }: { active: boolean; onChanged: () => void }) {
   const now = new Date();
-  const [employee, setEmployee] = useState<PickedEmployee | null>(null);
+  const user = useCurrentUser();
+  const me = user?.userId ?? null;
+
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
-  const [rows, setRows] = useState<MonthlyLeaveTypeRow[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
+  const [rows, setRows] = useState<PickableEmployee[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Map<string, PickableEmployee>>(new Map());
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[] | null>(null);
   const [leaveType, setLeaveType] = useState("");
   const [credit, setCredit] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [review, setReview] = useState<MonthlyImportPreview | null>(null);
+  const [result, setResult] = useState<MonthlyImportResult | null>(null);
+  const [busy, setBusy] = useState<"review" | "save" | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
+  // Debounce typing into the search used for the request.
+  useEffect(() => {
+    // A new search always starts from page 1 (both updates batch into one render).
+    const t = setTimeout(() => { setSearch(query.trim()); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Employees from the existing, server-scoped directory (Branch Admin → own
+  // branch, System Admin → all branches, managers → their team). Loaded only
+  // once the section has been opened.
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    setListLoading(true);
+    setListError(null);
+    clientApi
+      .get(API.employees.list, { params: { search, page, page_size: PAGE_SIZE } })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const found: PickableEmployee[] = (data.data?.results ?? []).map((r: PickableEmployee) => ({
+          uuid: r.uuid, employee_id: r.employee_id, full_name: r.full_name,
+          branch: r.branch ?? "", department: r.department ?? "", is_active: r.is_active !== false,
+        }));
+        setRows(prev => (page === 1 ? found : [...prev, ...found]));
+        setTotalPages(data.data?.total_pages ?? 1);
+      })
+      .catch(err => { if (!cancelled) { setRows([]); setListError(apiMessage(err, "Could not load employees.")); } })
+      .finally(() => { if (!cancelled) setListLoading(false); });
+    return () => { cancelled = true; };
+  }, [active, search, page]);
 
   useEffect(() => {
-    setRows(null); setOkMsg(null); setErrorMsg(null);
-    if (!employee) return;
-    let cancelled = false;
-    setLoading(true);
+    if (!active || leaveTypes) return;
     clientApi
-      .get(API.leave.monthlyCredits, { params: { employee_id: employee.code, year, month } })
-      .then(({ data }) => { if (!cancelled) setRows(data.data.leave_types); })
-      .catch(err => { if (!cancelled) setErrorMsg(apiMessage(err, "Could not load this employee's leave credits.")); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [employee, year, month]);
+      .get(API.leave.policy)
+      .then(({ data }) => setLeaveTypes(
+        (data.data ?? [])
+          .filter((p: { is_active: boolean; leave_type: string }) => p.is_active && p.leave_type !== "lwp")
+          .map((p: { leave_type: string; leave_type_display?: string; annual_days: number | string }) => ({
+            leave_type: p.leave_type, label: p.leave_type_display || p.leave_type, annual_days: Number(p.annual_days) || 0,
+          })),
+      ))
+      .catch(err => setErrorMsg(apiMessage(err, "Could not load leave types.")));
+  }, [active, leaveTypes]);
 
-  const selected = rows?.find(r => r.leave_type === leaveType) ?? null;
-  useEffect(() => { setCredit(selected ? String(selected.monthly_credit) : ""); }, [selected?.leave_type, selected?.monthly_credit]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Any change to what would be saved makes an earlier review stale.
+  useEffect(() => { setReview(null); }, [selected, leaveType, credit, month, year]);
 
-  const creditError = selected ? validateMonthlyCredit(credit) : null;
-  const next = creditError ? null : Number(credit);
-  const projection = selected && next !== null ? projectedBalance(selected, next) : null;
-  const exists = !!selected && selected.monthly_credit > 0;
-  const unchanged = !!selected && next === selected.monthly_credit;
+  const all = selectAllState(rows, new Set(selected.keys()), me);
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = all.indeterminate;
+  }, [all.indeterminate]);
 
-  async function save() {
-    if (!employee || !selected || creditError) return;
-    setSaving(true); setErrorMsg(null); setOkMsg(null);
+  const creditError = credit ? validateMonthlyCredit(credit) : null;
+  const typeInfo = leaveTypes?.find(t => t.leave_type === leaveType) ?? null;
+  const canReview = selected.size > 0 && !!leaveType && credit.trim() !== "" && !creditError && !busy;
+
+  function toggle(emp: PickableEmployee, check: boolean) {
+    setResult(null);
+    setSelected(prev => {
+      const next = new Map(prev);
+      if (check) next.set(emp.employee_id, emp); else next.delete(emp.employee_id);
+      return next;
+    });
+  }
+
+  async function send(dryRun: boolean) {
+    setBusy(dryRun ? "review" : "save");
+    setErrorMsg(null);
     try {
-      const { data } = await clientApi.post(API.leave.monthlyCredits, {
-        employee_id: employee.code, year, month, leave_type: selected.leave_type, credit: credit.trim(),
+      const { data } = await clientApi.post(API.leave.monthlyCreditsBulk, {
+        employee_ids: [...selected.keys()], leave_type: leaveType, year, month, credit: credit.trim(),
+        ...(dryRun ? { dry_run: true } : {}),
       });
-      setRows(data.data.leave_types);
-      setOkMsg(data.message);
-      onChanged();
+      if (dryRun) { setReview(data.data); setResult(null); }
+      else { setResult(data.data); setReview(null); onChanged(); }
     } catch (err) {
-      setErrorMsg(apiMessage(err, "Could not save the monthly credit."));
+      setErrorMsg(apiMessage(err, dryRun ? "Could not prepare the review." : "Could not save. Employees that failed were not changed."));
     } finally {
-      setSaving(false);
+      setBusy(null);
     }
   }
 
+  const applicable = review ? review.counts.new + review.counts.update : 0;
+
   return (
-    // overflow: visible so the employee search dropdown isn't clipped by .card's overflow: hidden
-    <div className="card mb-24" style={{ overflow: "visible" }}>
-      <div className="card-header">
-        <div className="card-title"><i className="ti ti-edit" /> Manual Monthly Leave Entry</div>
+    <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ fontSize: 12.5, color: "var(--on-variant)", lineHeight: 1.5 }}>
+        Tick one or more employees, choose the month, leave type and credit, then review and confirm. Each
+        employee&apos;s credit is set to this value; only the difference is applied to their balance, and 0 removes it.
       </div>
-      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
-        <div className="field-group">
-          <label className="field-label">Employee</label>
-          <EmployeePickerField value={employee} onChange={e => { setEmployee(e); setLeaveType(""); }}
-            placeholder="Search an employee by name or code…" />
+
+      <MonthYearFields month={month} year={year} onMonth={setMonth} onYear={setYear} disabled={!!busy} />
+
+      {/* Employee checklist */}
+      <div className="field-group">
+        <label className="field-label">Employees</label>
+        <input className="field-input" placeholder="Search by name or employee code…" value={query}
+          onChange={e => setQuery(e.target.value)} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "10px 0 6px", fontSize: 13 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: all.selectable ? "pointer" : "default" }}>
+            <input ref={selectAllRef} type="checkbox" checked={all.checked} disabled={!all.selectable || !!busy}
+              onChange={e => { setResult(null); setSelected(prev => toggleAllShown(rows, prev, e.target.checked, me)); }} />
+            Select all shown ({all.selectable})
+          </label>
+          <span style={{ color: "var(--on-variant)" }}><strong>{selected.size}</strong> selected</span>
+          {selected.size > 0 && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSelected(new Map()); setResult(null); }} disabled={!!busy}>
+              <i className="ti ti-x" /> Clear selection
+            </button>
+          )}
         </div>
-
-        <MonthYearFields month={month} year={year} onMonth={setMonth} onYear={setYear} disabled={saving} />
-
-        {loading && <div style={{ fontSize: 13, color: "var(--on-variant)" }}><Spin /> Loading…</div>}
-        {errorMsg && <div className="alert alert-error"><i className="ti ti-alert-circle" /><div>{errorMsg}</div></div>}
-        {okMsg && <div className="alert alert-success"><i className="ti ti-circle-check" /><div>{okMsg}</div></div>}
-
-        {rows && (
-          <div className="field-group" style={{ maxWidth: 320 }}>
-            <label className="field-label">Leave type</label>
-            <select className="field-input" value={leaveType} onChange={e => { setLeaveType(e.target.value); setOkMsg(null); }}>
-              <option value="">Select a leave type…</option>
-              {rows.map(r => <option key={r.leave_type} value={r.leave_type}>{r.leave_type_label}</option>)}
-            </select>
+        <div style={{ border: "1px solid var(--outline-v)", borderRadius: 8, maxHeight: 300, overflowY: "auto" }}>
+          {listError ? (
+            <div style={{ padding: 12, fontSize: 13, color: "var(--error)" }}>{listError}</div>
+          ) : rows.length === 0 && listLoading ? (
+            <div style={{ padding: 12, fontSize: 13, color: "var(--on-variant)" }}><Spin /> Loading employees…</div>
+          ) : rows.length === 0 ? (
+            <div style={{ padding: 12, fontSize: 13, color: "var(--on-variant)" }}>No employees found.</div>
+          ) : (
+            <>
+              {rows.map(emp => {
+                const reason = unselectableReason(emp, me);
+                return (
+                  <label key={emp.employee_id} style={{
+                    display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", fontSize: 13,
+                    borderBottom: "1px solid var(--outline-v)", cursor: reason ? "default" : "pointer",
+                    opacity: reason ? 0.6 : 1,
+                  }}>
+                    <input type="checkbox" disabled={!!reason || !!busy} checked={selected.has(emp.employee_id)}
+                      onChange={e => toggle(emp, e.target.checked)} />
+                    <span style={{ minWidth: 0 }}>
+                      <strong>{emp.full_name}</strong>
+                      <span style={{ color: "var(--on-variant)" }}>
+                        {" "}· {emp.employee_id}{emp.branch ? ` · ${emp.branch}` : ""}{emp.department ? ` · ${emp.department}` : ""}
+                        {reason === "you" && " · you (cannot change your own credits)"}
+                        {reason === "inactive" && " · inactive"}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+              {page < totalPages && (
+                <div style={{ padding: 8, textAlign: "center" }}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPage(p => p + 1)} disabled={listLoading}>
+                    {listLoading ? <><Spin /> Loading…</> : "Load more"}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        {page < totalPages && (
+          <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
+            Select all applies to the employees shown. Load more or search to include others.
           </div>
         )}
-
-        {selected && (
-          <>
-            {selected.annual_days > 0 && (
-              <AnnualWarning types={[`${selected.leave_type_label} (${selected.annual_days} days/year)`]} />
-            )}
-            <div style={{ fontSize: 13 }}>
-              Current credit for {MONTHS[month - 1]} {year}:{" "}
-              <strong>{exists ? `${selected.monthly_credit} day(s)` : "none"}</strong>
-            </div>
-            <div className="field-group" style={{ maxWidth: 220 }}>
-              <label className="field-label">Monthly leave credit (days)</label>
-              <input className={`field-input${creditError ? " field-error" : ""}`} inputMode="decimal"
-                value={credit} onChange={e => { setCredit(e.target.value); setOkMsg(null); }} />
-              {creditError
-                ? <div className="field-error-msg">{creditError}</div>
-                : <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>0–31, one decimal place. 0 removes this month&apos;s credit.</div>}
-            </div>
-
-            <div style={{ fontSize: 12.5, color: "var(--on-variant)", lineHeight: 1.7 }}>
-              {selected.balance
-                ? <>Balance now: total <strong>{selected.balance.total}</strong>, used <strong>{selected.balance.used}</strong>,
-                    pending <strong>{selected.balance.pending}</strong>, available <strong>{selected.balance.available}</strong>.</>
-                : <>No {year} balance exists yet for this leave type{year === now.getFullYear() ? "; saving creates one" : ""}.</>}
-              {projection && !unchanged && (
-                <> After saving: total <strong>{projection.total}</strong>, available <strong>{projection.available}</strong>{" "}
-                  ({projection.delta > 0 ? "+" : ""}{projection.delta}).</>
-              )}
-            </div>
-
-            <div>
-              <button className="btn btn-filled" onClick={save} disabled={saving || !!creditError || unchanged}>
-                {saving ? <><Spin /> Saving…</> : <><i className="ti ti-device-floppy" /> {exists ? "Update" : "Save"}</>}
-              </button>
-            </div>
-          </>
-        )}
       </div>
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div className="field-group" style={{ minWidth: 220 }}>
+          <label className="field-label">Leave type</label>
+          <select className="field-input" value={leaveType} disabled={!!busy || !leaveTypes}
+            onChange={e => { setLeaveType(e.target.value); setResult(null); }}>
+            <option value="">{leaveTypes ? "Select a leave type…" : "Loading…"}</option>
+            {leaveTypes?.map(t => <option key={t.leave_type} value={t.leave_type}>{t.label}</option>)}
+          </select>
+        </div>
+        <div className="field-group" style={{ maxWidth: 220 }}>
+          <label className="field-label">Monthly leave credit (days)</label>
+          <input className={`field-input${creditError ? " field-error" : ""}`} inputMode="decimal" value={credit}
+            disabled={!!busy} onChange={e => { setCredit(e.target.value); setResult(null); }} />
+          {creditError
+            ? <div className="field-error-msg">{creditError}</div>
+            : <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>0–31, one decimal place. 0 removes the month&apos;s credit.</div>}
+        </div>
+      </div>
+
+      {typeInfo && typeInfo.annual_days > 0 && (
+        <AnnualWarning types={[`${typeInfo.label} (${typeInfo.annual_days} days/year)`]} />
+      )}
+      {errorMsg && <div className="alert alert-error"><i className="ti ti-alert-circle" /><div>{errorMsg}</div></div>}
+
+      {!review && (
+        <div>
+          <button className="btn btn-filled" onClick={() => send(true)} disabled={!canReview}>
+            {busy === "review" ? <><Spin /> Checking…</> : <><i className="ti ti-eye" /> Review ({selected.size})</>}
+          </button>
+        </div>
+      )}
+
+      {review && (
+        <>
+          <div className={`alert ${review.counts.error ? "alert-warn" : "alert-info"}`}>
+            <i className="ti ti-list-check" />
+            <div>
+              Review (nothing saved yet): set <strong>{typeInfo?.label ?? leaveType}</strong> to{" "}
+              <strong>{credit.trim()} day(s)</strong> for <strong>{MONTHS[review.month - 1]} {review.year}</strong> —{" "}
+              <strong>{review.counts.new}</strong> new, <strong>{review.counts.update}</strong> update,{" "}
+              <strong>{review.counts.unchanged}</strong> unchanged, <strong>{review.counts.error}</strong> cannot be changed.
+            </div>
+          </div>
+          <RowsTable rows={review.rows} />
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button className="btn btn-ghost" onClick={() => setReview(null)} disabled={!!busy}>Back</button>
+            <button className="btn btn-filled" onClick={() => send(false)} disabled={!!busy || applicable === 0}>
+              {busy === "save" ? <><Spin /> Saving…</> : <><i className="ti ti-check" /> Confirm for {applicable} employee(s)</>}
+            </button>
+          </div>
+        </>
+      )}
+
+      {result && (
+        <>
+          <div className={`alert ${result.summary.failed ? "alert-warn" : "alert-success"}`}>
+            <i className={`ti ${result.summary.failed ? "ti-alert-triangle" : "ti-circle-check"}`} />
+            <div>
+              {MONTHS[result.month - 1]} {result.year}: <strong>{result.summary.created}</strong> added,{" "}
+              <strong>{result.summary.updated}</strong> updated, <strong>{result.summary.skipped}</strong> unchanged or skipped,{" "}
+              <strong>{result.summary.failed}</strong> failed. Employees that failed were not changed.
+            </div>
+          </div>
+          <RowsTable rows={result.rows} />
+        </>
+      )}
     </div>
   );
 }
@@ -367,10 +499,19 @@ export default function MonthlyLeaveTab() {
   // assignments list and its summary reload from the server.
   const [refreshKey, setRefreshKey] = useState(0);
   const changed = () => setRefreshKey(k => k + 1);
+  // All sections start collapsed; each keeps its own state while collapsed.
+  const [importOpen, setImportOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualOpened, setManualOpened] = useState(false);
   return (
     <>
-      <MonthlyImportSection onChanged={changed} />
-      <ManualEntrySection onChanged={changed} />
+      <CollapsibleCard icon="ti-file-upload" title="Monthly Leave Import" open={importOpen} onToggle={() => setImportOpen(o => !o)}>
+        <MonthlyImportSection onChanged={changed} />
+      </CollapsibleCard>
+      <CollapsibleCard icon="ti-edit" title="Manual Monthly Leave Entry" open={manualOpen}
+        onToggle={() => { setManualOpen(o => !o); setManualOpened(true); }}>
+        <ManualEntrySection active={manualOpened} onChanged={changed} />
+      </CollapsibleCard>
       <MonthlyAssignmentsSection refreshKey={refreshKey} onChanged={changed} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>

@@ -29,6 +29,7 @@ from .views import (
     LeaveRequestListCreateView,
     LeaveStatsView,
     MonthlyLeaveAssignmentsView,
+    MonthlyLeaveBulkView,
     MonthlyLeaveCreditView,
     MonthlyLeaveImportSampleView,
     MonthlyLeaveImportView,
@@ -87,6 +88,7 @@ urlpatterns = [
     path('leave/monthly-credits/import/',        MonthlyLeaveImportView.as_view(),       name='leave-monthly-import'),
     path('leave/monthly-credits/import/sample/', MonthlyLeaveImportSampleView.as_view(), name='leave-monthly-import-sample'),
     path('leave/monthly-credits/assignments/',   MonthlyLeaveAssignmentsView.as_view(),  name='leave-monthly-assignments'),
+    path('leave/monthly-credits/bulk/',          MonthlyLeaveBulkView.as_view(),         name='leave-monthly-bulk'),
 
     # Leave — requests
     path('leave/requests/',                          LeaveRequestListCreateView.as_view(), name='leave-request-list'),

@@ -36,7 +36,7 @@ from .leave import (
 )
 from .leave_credits import (
     LeaveCreditAdjustView, LeaveCreditOverviewView, LeaveCreditReverseView,
-    MonthlyLeaveAssignmentsView, MonthlyLeaveCreditView, MonthlyLeaveImportSampleView, MonthlyLeaveImportView,
+    MonthlyLeaveAssignmentsView, MonthlyLeaveBulkView, MonthlyLeaveCreditView, MonthlyLeaveImportSampleView, MonthlyLeaveImportView,
 )
 from .workfromhome import (
     WorkFromHomeRequestListCreateView,

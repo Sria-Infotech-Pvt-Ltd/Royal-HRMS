@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  annualWarningTypes, creditYears, describeChange, projectedBalance, validateMonthlyCredit,
-  type MonthlyImportRow, type MonthlyLeaveTypeRow,
+  annualWarningTypes, creditYears, describeChange, projectedBalance, selectAllState, toggleAllShown,
+  unselectableReason, validateMonthlyCredit,
+  type MonthlyImportRow, type MonthlyLeaveTypeRow, type PickableEmployee,
 } from "./monthlyLeave";
 
 describe("validateMonthlyCredit", () => {
@@ -63,5 +64,32 @@ describe("describeChange", () => {
     expect(describeChange(2, 0)).toMatch(/Removes this month's credit: 2 day/);
     expect(describeChange(1.5, 1.5)).toBe("No change.");
     expect(describeChange(0.1, 0.3)).toMatch(/0.2 day/);
+  });
+});
+
+describe("employee selection", () => {
+  const emp = (id: string, extra: Partial<PickableEmployee> = {}): PickableEmployee => ({
+    uuid: `u-${id}`, employee_id: id, full_name: id, branch: "Hyd", department: "IT", is_active: true, ...extra,
+  });
+  const rows = [emp("E1"), emp("E2"), emp("E3", { is_active: false }), emp("ME", { uuid: "me" })];
+
+  it("never lets inactive employees or yourself be ticked", () => {
+    expect(unselectableReason(rows[2], "me")).toBe("inactive");
+    expect(unselectableReason(rows[3], "me")).toBe("you");
+    expect(unselectableReason(rows[0], "me")).toBeNull();
+  });
+
+  it("select all ticks only selectable shown rows and keeps earlier selections", () => {
+    const earlier = new Map([["X9", emp("X9")]]);
+    const next = toggleAllShown(rows, earlier, true, "me");
+    expect([...next.keys()].sort()).toEqual(["E1", "E2", "X9"]);
+    expect(selectAllState(rows, new Set(next.keys()), "me")).toEqual({ selectable: 2, checked: true, indeterminate: false });
+    const cleared = toggleAllShown(rows, next, false, "me");
+    expect([...cleared.keys()]).toEqual(["X9"]);
+  });
+
+  it("reports a partial selection as indeterminate", () => {
+    expect(selectAllState(rows, new Set(["E1"]), "me")).toEqual({ selectable: 2, checked: false, indeterminate: true });
+    expect(selectAllState([], new Set(), "me")).toEqual({ selectable: 0, checked: false, indeterminate: false });
   });
 });

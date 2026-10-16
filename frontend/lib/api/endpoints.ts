@@ -250,6 +250,7 @@ export const API = {
     monthlyCreditsImport: "/leave/monthly-credits/import/",
     monthlyCreditsSample: "/leave/monthly-credits/import/sample/", // + ?format=csv|xlsx
     monthlyAssignments:   "/leave/monthly-credits/assignments/",
+    monthlyCreditsBulk:   "/leave/monthly-credits/bulk/",
     creditsAdjust:   (employeeCode: string) => `/leave/credits/${employeeCode}/adjust/`,
     creditsReverse:  (employeeCode: string, txnId: string) => `/leave/credits/${employeeCode}/transactions/${txnId}/reverse/`,
     requests: "/leave/requests/",

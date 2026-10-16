@@ -125,3 +125,41 @@ export function describeChange(previous: number, next: number): string {
     ? `Changes ${previous} → ${next} day(s): ${delta} day(s) will be added to the employee's balance.`
     : `Changes ${previous} → ${next} day(s): ${-delta} day(s) will be taken off the employee's balance.`;
 }
+
+/** An employee row in the Manual Entry checklist (from the scoped /employees/ list). */
+export interface PickableEmployee {
+  uuid:        string;
+  employee_id: string;
+  full_name:   string;
+  branch:      string;
+  department:  string;
+  is_active:   boolean;
+}
+
+/** Why a row can't be ticked, or null when it can. */
+export function unselectableReason(emp: PickableEmployee, currentUserId: string | null | undefined): string | null {
+  if (!emp.is_active) return "inactive";
+  if (currentUserId && emp.uuid === currentUserId) return "you";
+  return null;
+}
+
+/** State of the Select All box for the rows currently shown. */
+export function selectAllState(rows: PickableEmployee[], selected: Set<string>, currentUserId?: string | null) {
+  const selectable = rows.filter(r => !unselectableReason(r, currentUserId));
+  const ticked = selectable.filter(r => selected.has(r.employee_id)).length;
+  return { selectable: selectable.length, checked: selectable.length > 0 && ticked === selectable.length,
+           indeterminate: ticked > 0 && ticked < selectable.length };
+}
+
+/** Tick or untick every selectable row currently shown; other selections are kept. */
+export function toggleAllShown(
+  rows: PickableEmployee[], selected: Map<string, PickableEmployee>, check: boolean, currentUserId?: string | null,
+): Map<string, PickableEmployee> {
+  const next = new Map(selected);
+  for (const r of rows) {
+    if (unselectableReason(r, currentUserId)) continue;
+    if (check) next.set(r.employee_id, r);
+    else next.delete(r.employee_id);
+  }
+  return next;
+}

@@ -29,6 +29,10 @@ from ..models import (
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
     BUILTIN_LEAVE_TYPE_KEYS, leave_type_usage,
 )
+from ..services_monthly_statement import (
+    annual_allocation, is_monthly, monthly_rules_apply_to_request, next_month_start,
+    request_shortfall, sync_after_request_change, sync_expiries, unused_for_carry_forward,
+)
 from ..serializers import (
     CarryForwardInputSerializer,
     CarryForwardLogSerializer,
@@ -267,7 +271,7 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
             continue
 
         # Round to nearest 0.5 — standard HRMS display precision
-        raw     = float(policy.annual_days) * remaining_months / 12
+        raw     = float(annual_allocation(policy)) * remaining_months / 12
         prorata = Decimal(str(round(raw * 2) / 2))
 
         _, created = LeaveBalance.objects.get_or_create(
@@ -359,7 +363,7 @@ def _allocate_new_policy_for_existing_employees(policy, today=None) -> int:
             if not _eligible_for_policy(employee, policy, today):
                 continue
 
-            raw     = float(policy.annual_days) * remaining_months / 12
+            raw     = float(annual_allocation(policy)) * remaining_months / 12
             prorata = Decimal(str(round(raw * 2) / 2))
 
             _, created = LeaveBalance.objects.get_or_create(
@@ -609,6 +613,8 @@ class LeavePolicyView(APIView):
         data  = serializer.validated_data
         label = data.pop('leave_type_label')
         leave_type_key = label.lower().replace(' ', '_').replace('-', '_')
+        if data.get('credit_schedule') == 'monthly':
+            data['monthly_rules_from'] = next_month_start()
         policy = LeavePolicy.objects.create(
             leave_type=leave_type_key, leave_type_label=label, **data
         )
@@ -696,7 +702,7 @@ class LeaveBalanceView(APIView):
                     continue
                 balance, created = LeaveBalance.objects.get_or_create(
                     employee=emp, leave_type=lt, year=year,
-                    defaults={'total_days': policy.annual_days, 'used_days': 0, 'carried_forward': 0},
+                    defaults={'total_days': annual_allocation(policy), 'used_days': 0, 'carried_forward': 0},
                 )
                 if created:
                     created_count += 1
@@ -998,15 +1004,32 @@ class LeaveRequestListCreateView(APIView):
                 )
                 if not balance:
                     return error(f'No leave balance found for {leave_type} in {year}. Contact HR.')
-                available = float(balance.total_days - balance.used_days)
-                if total_days > available:
-                    if policy and policy.convert_to_lop:
-                        # Use available balance; excess days become LOP — leave_type stays unchanged
-                        lop_days = round(total_days - available, 1)
-                    elif policy and policy.allow_negative_balance:
-                        pass  # allow overdraft
-                    else:
-                        return error(f'Insufficient balance. You have {available} day(s) available.')
+                if monthly_rules_apply_to_request(policy, start, end):
+                    # Monthly policy: each month's own entitlement (credits recorded for
+                    # that month + the non-expiring pool, net of used and pending leave).
+                    shortfall = float(request_shortfall(
+                        request.user, policy, year, start=start, end=end, duration=duration, total_days=total_days,
+                    ))
+                    if shortfall > 0:
+                        if policy.convert_to_lop:
+                            lop_days = round(shortfall, 1)
+                        elif policy.allow_negative_balance:
+                            pass  # allow overdraft
+                        else:
+                            return error(
+                                f'Insufficient monthly leave entitlement: {shortfall} day(s) of this request are not '
+                                'covered by the credits recorded for the month(s) selected.'
+                            )
+                else:
+                    available = float(balance.total_days - balance.used_days)
+                    if total_days > available:
+                        if policy and policy.convert_to_lop:
+                            # Use available balance; excess days become LOP — leave_type stays unchanged
+                            lop_days = round(total_days - available, 1)
+                        elif policy and policy.allow_negative_balance:
+                            pass  # allow overdraft
+                        else:
+                            return error(f'Insufficient balance. You have {available} day(s) available.')
 
             l1, l2 = _resolve_approval_chain(request.user)
 
@@ -1105,6 +1128,7 @@ class LeaveRequestDetailView(APIView):
 
         leave_request.status = REQ_CANCELLED
         leave_request.save(update_fields=['status', 'updated_at'])
+        _after_request_closed(leave_request)
         logger.info('Leave request %s cancelled by %s', leave_request.id, request.user.email)
         return success('Leave request cancelled.', LeaveRequestSerializer(leave_request, context={'request': request}).data)
 
@@ -1126,6 +1150,7 @@ class LeaveRequestDetailView(APIView):
                 http_status=status.HTTP_409_CONFLICT,
             )
         leave_request.delete()
+        _after_request_closed(leave_request)
         logger.info('Leave request %s deleted by %s', request_id, request.user.email)
         return success('Leave request deleted.')
 
@@ -1207,7 +1232,9 @@ class LeaveApprovalView(APIView):
             else:
                 # No L2 configured — L1 approval is final.
                 leave_request.status = REQ_APPROVED
-                _deduct_balance_safe(leave_request)
+                blocked = _deduct_for_approval(leave_request)
+                if blocked:
+                    return error(blocked, http_status=status.HTTP_409_CONFLICT)
                 _sync_leave_attendance(leave_request)
 
         elif leave_request.status == REQ_L2_PENDING:
@@ -1223,13 +1250,19 @@ class LeaveApprovalView(APIView):
             leave_request.l2_actioned_at = now
             leave_request.status = REQ_APPROVED if action == 'approve' else REQ_REJECTED
             if action == 'approve':
-                _deduct_balance_safe(leave_request)
+                blocked = _deduct_for_approval(leave_request)
+                if blocked:
+                    return error(blocked, http_status=status.HTTP_409_CONFLICT)
                 _sync_leave_attendance(leave_request)
 
         else:
             return error(f'Cannot act on a request with status "{leave_request.status}".')
 
         leave_request.save()
+        if leave_request.status == REQ_REJECTED:
+            _after_request_closed(leave_request)
+        else:
+            _invalidate_leave_balance_cache(leave_request)
         logger.info('Leave request %s %sd by %s', leave_request.id, action, request.user.email)
 
         from apps.accounts.models import AuditLog
@@ -1264,6 +1297,55 @@ def _deduct_balance_safe(leave_request: LeaveRequest) -> None:
             leave_type=leave_request.leave_type,
             year=year,
         ).update(used_days=F('used_days') + earned_days)
+
+
+def _invalidate_leave_balance_cache(leave_request: LeaveRequest) -> None:
+    """The employee dashboard caches its leave balance card per employee and year."""
+    from ..services_leave_credit import _invalidate_balance_cache
+    _invalidate_balance_cache(leave_request.employee, leave_request.start_date.year)
+
+
+def _after_request_closed(leave_request: LeaveRequest) -> None:
+    """A pending request was rejected, cancelled or deleted: its days are no longer
+    protected from a closed month's expiry, so recalculate it; refresh the dashboard."""
+    _invalidate_leave_balance_cache(leave_request)
+    try:
+        sync_after_request_change(leave_request)
+    except Exception:   # never fail the rejection/cancellation itself; the daily sync retries
+        logger.exception('Monthly expiry recalculation failed for leave request %s', leave_request.id)
+
+
+def _deduct_for_approval(leave_request: LeaveRequest) -> str | None:
+    """
+    Final approval. Annual policies: deduct exactly as before. Monthly policies:
+    re-check the month(s) first, with the balance row locked, so a request that
+    no longer fits (credits edited/expired since it was applied for) is not
+    approved. Returns an error message when the approval must be refused.
+    """
+    policy = LeavePolicy.objects.filter(leave_type=leave_request.leave_type).first()
+    if leave_request.is_lwp or not monthly_rules_apply_to_request(policy, leave_request.start_date, leave_request.end_date):
+        _deduct_balance_safe(leave_request)
+        return None
+    with transaction.atomic():
+        balance = (
+            LeaveBalance.objects.select_for_update()
+            .filter(employee=leave_request.employee, leave_type=leave_request.leave_type,
+                    year=leave_request.start_date.year).first()
+        )
+        if balance is not None and not policy.allow_negative_balance:
+            shortfall = request_shortfall(
+                leave_request.employee, policy, leave_request.start_date.year,
+                start=leave_request.start_date, end=leave_request.end_date, duration=leave_request.duration,
+                total_days=leave_request.total_days, lop_days=leave_request.lop_days,
+                created_at=leave_request.created_at, exclude_request_id=leave_request.id,
+            )
+            if shortfall > 0:
+                return (
+                    f'Cannot approve: {shortfall} day(s) of this leave are no longer covered by the monthly '
+                    'entitlement for those month(s). Ask the employee to re-apply, or adjust their monthly credits.'
+                )
+        _deduct_balance_safe(leave_request)
+    return None
 
 
 def _sync_leave_attendance(leave_request: LeaveRequest) -> None:
@@ -1481,7 +1563,7 @@ def _build_carry_forward_rows(employees, policies, from_year, to_year, today):
             if not prev:
                 continue
 
-            unused = prev.total_days - prev.used_days
+            unused = unused_for_carry_forward(employee, policy, prev)
             if unused <= 0:
                 continue
 
@@ -1625,7 +1707,10 @@ class CarryForwardRunView(APIView):
                     skipped += 1
                     continue
 
-                unused = prev.total_days - prev.used_days
+                if is_monthly(policy) and not policy.monthly_carry_forward:
+                    sync_expiries(employee, policy, from_year)
+                    prev.refresh_from_db()
+                unused = unused_for_carry_forward(employee, policy, prev)
                 if unused <= 0:
                     skipped += 1
                     continue
@@ -1651,7 +1736,7 @@ class CarryForwardRunView(APIView):
                         employee=employee,
                         leave_type=policy.leave_type,
                         year=to_year,
-                        total_days=policy.annual_days + cf_amount,
+                        total_days=annual_allocation(policy) + cf_amount,
                         carried_forward=cf_amount,
                         carry_forward_expiry_date=expiry_date,
                     )

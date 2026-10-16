@@ -124,6 +124,7 @@ class LeaveCreditReverseView(APIView):
 #   POST /api/leave/monthly-credits/import/                       preview (dry_run=true) or import
 #   GET  /api/leave/monthly-credits/import/sample/?format=csv|xlsx
 #   GET  /api/leave/monthly-credits/assignments/?year=&month=     the month's current credits
+#   POST /api/leave/monthly-credits/bulk/                          one credit for several employees
 #
 # Same access as Leave Credits: leave.approve, plus per-employee scope.
 
@@ -299,3 +300,51 @@ class MonthlyLeaveAssignmentsView(APIView):
         except LeaveCreditError as exc:
             return _credit_error(exc)
         return success('Monthly leave assignments retrieved.', data)
+
+
+class MonthlyLeaveBulkView(APIView):
+    """
+    POST /api/leave/monthly-credits/bulk/
+      {employee_ids: [codes], leave_type, year, month, credit, dry_run}
+
+    Manual entry for several employees at once. The selection is turned into
+    the same rows an import would have and runs through the same plan/apply
+    path: every employee is revalidated server-side (scope, active, leave type,
+    value, balance), saved in its own transaction via set_monthly_credit(), and
+    duplicates or retries apply nothing twice.
+    """
+    permission_classes = [IsAuthenticated]
+    MAX_EMPLOYEES = 500
+
+    def post(self, request):
+        from ..services_monthly_leave import apply_import, plan_import, strip_internal
+
+        if not _has_perm(request.user, 'leave.approve'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        codes = request.data.get('employee_ids')
+        if not isinstance(codes, list) or not codes:
+            return error('Select at least one employee.')
+        if len(codes) > self.MAX_EMPLOYEES:
+            return error(f'Select at most {self.MAX_EMPLOYEES} employees at a time.')
+        leave_type, credit = request.data.get('leave_type'), request.data.get('credit')
+        rows = [
+            {'row': i, 'employee_code': str(code or '').strip(), 'leave_type': str(leave_type or '').strip(),
+             'credit': str(credit if credit is not None else '').strip()}
+            for i, code in enumerate(codes, start=1)
+        ]
+        try:
+            year, month = _year_month(request.data)
+            plan = plan_import(rows, actor=request.user, year=year, month=month)
+        except LeaveCreditError as exc:
+            return _credit_error(exc)
+
+        if str(request.data.get('dry_run', '')).lower() in ('1', 'true', 'yes'):
+            return success('Review ready. Nothing has been saved yet.', strip_internal(plan))
+
+        result = apply_import(plan, actor=request.user, ip_address=get_client_ip(request), source='manual')
+        summary = result['summary']
+        return success(
+            f"Saved: {summary['created']} added, {summary['updated']} updated, "
+            f"{summary['skipped']} unchanged or skipped, {summary['failed']} failed.",
+            result,
+        )

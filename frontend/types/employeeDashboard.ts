@@ -16,12 +16,51 @@ export interface EmployeeKPIs {
   today_attendance:       TodayAttendance | null;
 }
 
+/** One month's recorded movements — not a month-end balance. */
+export interface LeaveMonthRow {
+  month:             number;
+  label:             string;
+  monthly_credit:    number;
+  other_adjustments: number;
+  used:              number;
+}
+
 export interface LeaveBalance {
   leave_type:      string;
   total_days:      number;
   used_days:       number;
   remaining:       number;
   carried_forward: number;
+  // Optional: responses cached before these fields existed won't have them.
+  leave_type_label?:      string;
+  credit_schedule?:       "annual" | "monthly";
+  monthly_carry_forward?: boolean;
+  monthly?: { months: LeaveMonthRow[]; used_not_itemised: number };
+  /** Monthly-schedule leave types only (null otherwise): the full month-by-month statement. */
+  statement?: LeaveStatement | null;
+}
+
+export interface LeaveStatementMonth {
+  month:       number;
+  label:       string;
+  carry_off:   boolean;   // this month's credit expires if unused
+  closed:      boolean;
+  carried_in:  number;
+  credit:      number;
+  used:        number;
+  pending:     number;
+  expired:     number;
+  credit_left: number;    // this month's credit still usable (open no-carry months)
+  closing:     number;
+}
+
+export interface LeaveStatement {
+  opening:           number;   // opening / carried-in / lump / adjustments — never expire
+  adjustments:       number;
+  used_not_itemised: number;
+  months:            LeaveStatementMonth[];
+  total_pending:     number;
+  reconciled:        boolean;
 }
 
 export interface LeaveBalanceSummary {

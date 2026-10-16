@@ -173,7 +173,8 @@ class LeavePolicySerializer(serializers.ModelSerializer):
         fields = (
             ['id', 'leave_type', 'leave_type_display', 'annual_days', 'can_carry_forward',
              'max_carry_forward_days', 'carry_forward_type', 'carry_forward_mode',
-             'carry_forward_expiry_days', 'policy_note', 'is_active']
+             'carry_forward_expiry_days', 'credit_schedule', 'monthly_carry_forward', 'monthly_rules_from',
+             'policy_note', 'is_active']
             + _POLICY_RULE_FIELDS
             + ['updated_at', 'usage_info']
         )
@@ -202,6 +203,8 @@ class LeavePolicyCreateSerializer(serializers.Serializer):
     carry_forward_type        = serializers.ChoiceField(choices=['limited', 'unlimited'], default='limited', required=False)
     carry_forward_mode        = serializers.ChoiceField(choices=['automatic', 'manual'], default='automatic', required=False)
     carry_forward_expiry_days = serializers.IntegerField(default=0, min_value=0, required=False)
+    credit_schedule           = serializers.ChoiceField(choices=['annual', 'monthly'], default='annual', required=False)
+    monthly_carry_forward     = serializers.BooleanField(default=True, required=False)
     policy_note               = serializers.CharField(required=False, default='', allow_blank=True)
     is_active              = serializers.BooleanField(default=True)
     # Application Rules
@@ -281,12 +284,26 @@ class LeavePolicyUpdateSerializer(serializers.ModelSerializer):
         fields = (
             ['leave_type_label', 'annual_days', 'can_carry_forward', 'max_carry_forward_days',
              'carry_forward_type', 'carry_forward_mode', 'carry_forward_expiry_days',
-             'policy_note', 'is_active']
+             'credit_schedule', 'monthly_carry_forward', 'policy_note', 'is_active']
             + _POLICY_RULE_FIELDS
         )
 
     def validate_leave_type_label(self, value):
         return _validate_leave_type_label(value, exclude_pk=self.instance.pk if self.instance else None)
+
+    def update(self, instance, validated_data):
+        # A change to the monthly rules takes effect from the 1st of next month;
+        # earlier months are never recalculated (see services_monthly_statement).
+        changed = any(
+            key in validated_data and validated_data[key] != getattr(instance, key)
+            for key in ('credit_schedule', 'monthly_carry_forward')
+        )
+        instance = super().update(instance, validated_data)
+        if changed:
+            from .services_monthly_statement import next_month_start
+            instance.monthly_rules_from = next_month_start()
+            instance.save(update_fields=['monthly_rules_from'])
+        return instance
 
     def validate_annual_days(self, value):
         if value < 0:
@@ -559,6 +576,11 @@ class WFHSavedLocationSerializer(serializers.ModelSerializer):
 
 
 class LeaveRequestCreateSerializer(serializers.ModelSerializer):
+    # Declared explicitly: the auto-generated field took the model's fixed
+    # LEAVE_TYPE_CHOICES and rejected every custom leave type (e.g. Pink Leave)
+    # before validate_leave_type() below — which allows active policies — ran.
+    leave_type = serializers.CharField(max_length=50)
+
     class Meta:
         model  = LeaveRequest
         fields = [
@@ -571,6 +593,9 @@ class LeaveRequestCreateSerializer(serializers.ModelSerializer):
         if value not in valid:
             if not LeavePolicy.objects.filter(leave_type=value, is_active=True).exists():
                 raise serializers.ValidationError('Invalid leave type.')
+        # LeaveRequest/LeaveBalance.leave_type hold at most 20 characters.
+        if len(value) > LeaveRequest._meta.get_field('leave_type').max_length:
+            raise serializers.ValidationError('This leave type cannot be applied for: its key is too long. Contact HR.')
         return value
 
     def validate_duration(self, value):

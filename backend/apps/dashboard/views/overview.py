@@ -577,11 +577,61 @@ class EmployeeKPIView(APIView):
 
 # ─── Employee Leave Balances ──────────────────────────────────────────────────
 
+def _monthly_breakdown(employee, leave_type: str, year: int, last_month: int) -> dict:
+    """
+    What was recorded each month — monthly credits, other credit adjustments
+    and leave used — straight from the leave-credit ledger and approved
+    requests (apps.hrms.services_leave_credit.monthly_summary). These are
+    recorded movements, not month-end balances: the available balance stays
+    the yearly LeaveBalance figure, since monthly carry-forward/expiry are not
+    calculated. Months after `last_month` are included only if they already
+    have recorded activity (e.g. a credit entered in advance).
+    """
+    from apps.hrms.services_leave_credit import monthly_summary
+
+    summary = monthly_summary(employee, leave_type, year)
+    if summary is None:
+        return {'months': [], 'used_not_itemised': 0.0}
+    months = [
+        {k: m[k] for k in ('month', 'label', 'monthly_credit', 'other_adjustments', 'used')}
+        for m in summary['months']
+        if m['month'] <= last_month or m['monthly_credit'] or m['other_adjustments'] or m['used']
+    ]
+    return {'months': months, 'used_not_itemised': summary['used_not_itemised']}
+
+
+def _monthly_statement(employee, policy, year: int, last_month: int) -> dict | None:
+    """
+    Monthly-schedule leave types: the Phase B statement — carried in, credit,
+    used, pending, expired and closing per month — from the same
+    calculation leave validation and expiry use. `reconciled` is True when the
+    statement matches the yearly balance (closing + pending == total - used).
+    """
+    from apps.hrms.services_monthly_statement import build_statement
+
+    stmt = build_statement(employee, policy, year)
+    if stmt is None:
+        return None
+    months = [
+        m.as_dict() for m in stmt.months
+        if m.month <= last_month or m.credit or m.used or m.pending or m.expired
+    ]
+    return {
+        'opening':           float(stmt.opening),          # opening/carried-in/lump/adjustments (never expire)
+        'adjustments':       float(stmt.adjustments),
+        'used_not_itemised': float(max(stmt.used_not_itemised, 0)),
+        'months':            months,
+        'total_pending':     float(stmt.total_pending),
+        'reconciled':        stmt.reconciled,
+    }
+
+
 class EmployeeLeaveBalanceView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
-        from apps.hrms.models import LeaveBalance, LeaveRequest, REQ_APPROVED
+        from apps.hrms.models import CREDIT_SCHEDULE_ANNUAL, LEAVE_LWP, LeaveBalance, LeavePolicy, LeaveRequest, REQ_APPROVED
+        from apps.hrms.services_leave_credit import leave_type_label
 
         employee = request.user
         try:
@@ -601,6 +651,11 @@ class EmployeeLeaveBalanceView(APIView):
             .aggregate(total=Sum('lop_days'))['total'] or 0
         )
 
+        balances = list(balances)
+        policies = {p.leave_type: p for p in LeavePolicy.objects.filter(leave_type__in=[b.leave_type for b in balances])}
+        today = timezone.localdate()
+        last_month = 12 if year < today.year else (today.month if year == today.year else 0)
+
         result = {
             'year': year,
             'balances': [
@@ -610,6 +665,19 @@ class EmployeeLeaveBalanceView(APIView):
                     'used_days':       float(b.used_days),
                     'remaining':       float(b.available_days),
                     'carried_forward': float(b.carried_forward),
+                    # Additive (Phase A): label for custom leave types, the policy's
+                    # credit settings, and the recorded month-by-month movements.
+                    'leave_type_label':      leave_type_label(b.leave_type, policies.get(b.leave_type)),
+                    'credit_schedule':       getattr(policies.get(b.leave_type), 'credit_schedule', CREDIT_SCHEDULE_ANNUAL),
+                    'monthly_carry_forward': getattr(policies.get(b.leave_type), 'monthly_carry_forward', True),
+                    'monthly': (
+                        {'months': [], 'used_not_itemised': 0.0} if b.leave_type == LEAVE_LWP
+                        else _monthly_breakdown(employee, b.leave_type, year, last_month)
+                    ),
+                    'statement': (
+                        _monthly_statement(employee, policies[b.leave_type], year, last_month)
+                        if getattr(policies.get(b.leave_type), 'credit_schedule', None) == 'monthly' else None
+                    ),
                 }
                 for b in balances
             ],

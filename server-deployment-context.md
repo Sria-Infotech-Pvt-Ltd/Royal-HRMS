@@ -2083,3 +2083,131 @@ ID Card and Employee Profile → ID Card → Print.
 -   Profile photo: same safe delete order as the logo fix (optional).
 -   Sign-off on head-turn-only liveness at face clock-in.
 -   Server reboot pending (noted during the server health check).
+
+---
+
+# 30. Application change log (production support, 2026-10-14 → 2026-10-16)
+
+Same rules as before: implemented and tested locally against the isolated
+Docker Postgres test DB on `localhost:15432` (never production).
+
+| Item | Commit(s) | Migration | Pushed | Deployed on server |
+|---|---|---|---|---|
+| ID card reference PDF served through the API | `beff2f1` | None | Yes | Not confirmed — run the Cloudinary read-only check |
+| Monthly Leave Management (import + manual entry) | `d2f7a5c`, `574f0a6` | hrms `0029` | Yes | Not confirmed — confirm `0029` applied |
+| Monthly Leave Assignments list + edit, collapsible | `f6fc23e`, `3f77c87` | None | Yes | Not confirmed |
+| Monthly Leave multi-select + all sections collapsible | uncommitted | None | No | No |
+| Phase A — monthly policy settings + dashboard breakdown | uncommitted | hrms `0030` | No | No |
+| Phase B — monthly expiry, validation, approval, statement | uncommitted | hrms `0031` | No | No |
+| Custom leave types can be applied for (bug fix) | uncommitted | None | No | No |
+
+## ID card reference PDF (`beff2f1`)
+Cloudinary refused CDN delivery of the authenticated PDF (`401`,
+`x-cld-error: deny or ACL failure`). View now calls
+`GET /api/settings/id-card/reference-pdf/` (settings.view), which fetches
+the file server-side through Cloudinary's signed download API. If that is
+also blocked, the only fix is Cloudinary Security → "Allow delivery of PDF
+and ZIP files" (account-wide — owner's decision). Possible same issue for
+PDF email-template attachments (`apps/accounts/utils.py:623`), unchanged.
+Note: `cloudinary_url()` ignores `expires_at`, so signed CDN links never
+expire.
+
+## Monthly Leave Management (Settings → Leave Management)
+-   Credits are ledger rows (`LeaveCreditTransaction`, `txn_type='monthly_credit'`,
+    `month`) applied by difference through `set_monthly_credit()` →
+    `apply_adjustment()`: edits apply only the change, 0 removes a month's
+    credit, re-imports change nothing, history is append-only, audit logged,
+    dashboard cache cleared. Access: `leave.approve` + `_can_manage_leave_credits`
+    (no self; managers → direct reports; branch roles → own branch).
+-   Import (CSV/XLSX preview + confirm), manual entry, assignments list with
+    summary + edit, multi-select bulk entry (`POST /api/leave/monthly-credits/bulk/`,
+    each employee revalidated and saved separately), all three sections
+    collapsible (collapsed by default).
+
+## Phase A — monthly policy settings + employee dashboard (`hrms 0030`)
+-   `LeavePolicy.credit_schedule` (`annual` default | `monthly`) and
+    `monthly_carry_forward` (default on), set in Leave Policy → Monthly Credit
+    Settings. Yearly carry-forward fields unchanged.
+-   Employee dashboard leave-balance response (same endpoint/cache) gains a
+    per-type label, the settings, and a recorded month-by-month breakdown.
+
+## Phase B — monthly expiry, validation, approval (`hrms 0031`)
+Business rules (approved 2026-10-16):
+1.  Only the unused part of a month's **monthly credit** expires, and only for
+    Monthly-schedule types with monthly carry-forward off. Opening balances,
+    carried-forward days, annual lump and manual adjustments never expire.
+2.  Future-month leave uses only credits already recorded for that month plus
+    the non-expiring pool.
+3.  Leave pending when a month closed is protected; if later rejected,
+    cancelled or deleted, that month's expiry is recalculated. Leave booked
+    after a month closed never uses that month's (expired) credit.
+4.  Policy changes apply from `LeavePolicy.monthly_rules_from` (1st of next
+    month, set automatically). Earlier months are never recalculated.
+5.  Monthly types are rechecked at approval (balance row locked; refused with
+    409 if no longer covered). Annual pending-request validation unchanged
+    (see open items).
+6.  Dashboard balance cache cleared on approve / reject / cancel / delete for
+    all leave types (previously up to 10 min stale after approval).
+
+Implementation: `backend/apps/hrms/services_monthly_statement.py` (one
+statement used by dashboard, validation, approval, expiry); expiry written as
+append-only `monthly_expiry` ledger rows by difference (idempotent; cannot be
+reversed by hand); monthly types get **no annual lump** from joining pro-rata,
+policy back-fill, Credit All, the yearly reset or the manual carry-forward run
+(yearly carry-forward and caps still apply). New Celery beat task
+`sync-monthly-leave-expiry` (daily 00:20 IST, per tenant, catches up missed
+days); the 1 Jan reset records December expiry before carrying.
+Dashboard shows the statement (carried in, credit, used, pending, expired,
+available at month end) and a reconciliation flag.
+
+Cross-tenant cache check: **not** shared — every key is prefixed with the
+tenant schema (`core/cache_keys.tenant_aware_key_func`, both cache backends).
+
+## Bug fix — custom leave types could not be applied for
+`LeaveRequestCreateSerializer` inherited the model's fixed `LEAVE_TYPE_CHOICES`,
+rejecting every custom type (Pink Leave, Menstrual Leave…) before its own
+`validate_leave_type()` (which allows active policies) ran. Now an explicit
+`CharField`; keys longer than 20 characters (the `LeaveRequest`/`LeaveBalance`
+column) get a clear error.
+
+## Migrations for this batch (both additive, tenant schemas)
+`hrms 0030`: `ALTER TABLE hrms_leave_policies ADD COLUMN credit_schedule
+varchar(10) NOT NULL DEFAULT 'annual'` and `monthly_carry_forward boolean NOT
+NULL DEFAULT true` (default then dropped — Django's normal pattern).
+`hrms 0031`: `ADD COLUMN monthly_rules_from date NULL`; `monthly_expiry` choice
+(no SQL). One small table, constant defaults: no rewrite, no data change.
+Rollback while no policy is Monthly: `migrate_schemas hrms 0029`.
+
+## Test results for this batch (local, isolated DB)
+-   Monthly Leave + Phase A + Phase B backend tests: all pass (see final report).
+-   hrms + dashboard + accounts: 372 run, only the 6 known accounts failures.
+-   Full backend suite and frontend (tsc, eslint, vitest): see final report.
+
+## Deploy steps for this batch
+```
+# as royalhrms
+su - royalhrms
+cd /var/www/royalhrms/app && git pull origin production
+cd backend && .venv/bin/python manage.py showmigrations hrms | tail -4   # expect 0030, 0031 unapplied
+pg_dump -U royalhrms_user -h localhost -d royalhrms_db -F c -f /home/royalhrms/backup_$(date +%Y%m%d_%H%M%S).dump
+ls -lh /home/royalhrms/backup_*.dump | tail -1                            # non-zero size
+.venv/bin/python manage.py check
+.venv/bin/python manage.py migrate_schemas
+.venv/bin/python manage.py showmigrations hrms | tail -4                 # all [X]
+cd ../frontend && npm ci && npm run build                                # stop if this fails
+exit
+# as root — Celery beat MUST restart to load the new daily task
+supervisorctl restart royalhrms_backend royalhrms_frontend royalhrms_celery_worker royalhrms_celery_beat
+supervisorctl status | grep royalhrms
+```
+After deploy: existing leave types stay Annual — nothing changes until HR sets
+a type to Monthly. Smoke test with one test leave type/employee before HR use.
+
+## Open items carried forward
+-   Annual leave validation ignores pending requests (two pending can each pass
+    against the same yearly balance) — leave unchanged or handle separately.
+-   ID card PDF View (Cloudinary check), Demo Corp logo re-upload, ID card
+    print click-through.
+-   Approval Matrix stage-1 display / RM pop-up; commercial geocoder decision;
+    face clock-in liveness sign-off; profile photo safe delete order;
+    server reboot pending.

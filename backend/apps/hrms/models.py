@@ -187,6 +187,16 @@ CARRY_FORWARD_TYPE_CHOICES = [
     (CARRY_FORWARD_UNLIMITED, 'Unlimited'),
 ]
 
+# How a leave type's entitlement is credited. 'annual' is today's behaviour
+# (annual_days up front). 'monthly' marks types managed through Monthly Leave
+# Management; Phase A only records it — it does not change any calculation yet.
+CREDIT_SCHEDULE_ANNUAL  = 'annual'
+CREDIT_SCHEDULE_MONTHLY = 'monthly'
+CREDIT_SCHEDULE_CHOICES = [
+    (CREDIT_SCHEDULE_ANNUAL,  'Annual'),
+    (CREDIT_SCHEDULE_MONTHLY, 'Monthly'),
+]
+
 CARRY_FORWARD_AUTO   = 'automatic'
 CARRY_FORWARD_MANUAL = 'manual'
 CARRY_FORWARD_MODE_CHOICES = [
@@ -207,6 +217,18 @@ class LeavePolicy(models.Model):
     carry_forward_type        = models.CharField(max_length=20, choices=CARRY_FORWARD_TYPE_CHOICES, default=CARRY_FORWARD_LIMITED)
     carry_forward_mode        = models.CharField(max_length=20, choices=CARRY_FORWARD_MODE_CHOICES, default=CARRY_FORWARD_AUTO)
     carry_forward_expiry_days = models.PositiveIntegerField(default=0, help_text='Days before carry-forwarded balance expires. 0 = never.')
+    # Monthly crediting configuration (separate from the yearly carry-forward above).
+    credit_schedule           = models.CharField(max_length=10, choices=CREDIT_SCHEDULE_CHOICES, default=CREDIT_SCHEDULE_ANNUAL)
+    monthly_carry_forward     = models.BooleanField(
+        default=True,
+        help_text='Monthly schedule only: unused monthly credit rolls into the next month; '
+                  'when off, unused monthly credit expires at month end.',
+    )
+    # First day of the month from which the current credit_schedule /
+    # monthly_carry_forward apply (set to the 1st of the next month whenever
+    # either changes). Earlier months are never recalculated. Null = no
+    # monthly rule change recorded yet (no expiry is ever applied).
+    monthly_rules_from        = models.DateField(null=True, blank=True)
     policy_note               = models.TextField(blank=True, default='')
     is_active              = models.BooleanField(default=True)
 
@@ -296,10 +318,12 @@ class LeaveBalance(models.Model):
 CREDIT_TXN_ADJUSTMENT = 'adjustment'
 CREDIT_TXN_REVERSAL   = 'reversal'
 CREDIT_TXN_MONTHLY    = 'monthly_credit'   # Settings → Leave Management → Monthly Leave Management
+CREDIT_TXN_EXPIRY     = 'monthly_expiry'   # unused no-carry monthly credit expired at month end
 CREDIT_TXN_TYPE_CHOICES = [
     (CREDIT_TXN_ADJUSTMENT, 'Adjustment'),
     (CREDIT_TXN_REVERSAL,   'Reversal'),
     (CREDIT_TXN_MONTHLY,    'Monthly credit'),
+    (CREDIT_TXN_EXPIRY,     'Monthly expiry'),
 ]
 
 

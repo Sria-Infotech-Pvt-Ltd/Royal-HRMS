@@ -6,6 +6,14 @@
 export type CarryForwardType = "limited" | "unlimited";
 export type CarryForwardMode = "automatic" | "manual";
 
+export type CreditSchedule = "annual" | "monthly";
+
+/** Leave Policy → Monthly Credit Settings (recorded only; no balance effect yet). */
+export interface MonthlyCreditSettings {
+  credit_schedule:       CreditSchedule;
+  monthly_carry_forward: boolean;
+}
+
 export interface LeavePolicyCarryForwardSettings {
   can_carry_forward: boolean;
   carry_forward_type: CarryForwardType;

@@ -102,6 +102,10 @@ def plan_import(rows: list[dict], *, actor, year, month) -> dict:
         planned.append(out)
 
         employee = employees.get(code)
+        if employee is not None and employee.pk == actor.pk:
+            out['employee_name'] = employee.full_name
+            out['message'] = 'You cannot change your own leave credits.'
+            continue
         if not code or employee is None or not _can_manage_leave_credits(actor, employee):
             out['message'] = f'Employee code "{code}" was not found.' if code else 'Employee Code is required.'
             continue
@@ -148,8 +152,9 @@ def plan_import(rows: list[dict], *, actor, year, month) -> dict:
             'annual_entitlements': annual_entitlements()}
 
 
-def apply_import(plan: dict, *, actor, ip_address=None) -> dict:
-    """Apply the plan's new/update rows, each in its own transaction (a failed row changes nothing)."""
+def apply_import(plan: dict, *, actor, ip_address=None, source: str = 'import') -> dict:
+    """Apply the plan's new/update rows, each in its own transaction (a failed row changes nothing).
+    source='manual' when the rows came from a multi-employee manual entry rather than a file."""
     created = updated = 0
     for row in plan['rows']:
         employee = row.pop('_employee', None)
@@ -158,7 +163,7 @@ def apply_import(plan: dict, *, actor, ip_address=None) -> dict:
         try:
             result = set_monthly_credit(
                 employee=employee, leave_type=row['leave_type'], year=plan['year'], month=plan['month'],
-                value=Decimal(str(row['credit'])), actor=actor, source='import', ip_address=ip_address,
+                value=Decimal(str(row['credit'])), actor=actor, source=source, ip_address=ip_address,
             )
         except LeaveCreditError as exc:
             row['status'], row['message'] = 'error', str(exc)

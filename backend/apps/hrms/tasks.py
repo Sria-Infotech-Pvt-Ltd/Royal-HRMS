@@ -39,6 +39,9 @@ def reset_annual_leave_balances(self):
         from decimal import Decimal
         from apps.accounts.models import User
         from apps.hrms.models import CARRY_FORWARD_MANUAL, CARRY_FORWARD_UNLIMITED, LeaveBalance, LeavePolicy
+        from apps.hrms.services_monthly_statement import (
+            annual_allocation, is_monthly, sync_expiries, unused_for_carry_forward,
+        )
         from apps.hrms.views.leave import _eligible_for_policy
 
         today    = timezone.localdate()
@@ -67,7 +70,12 @@ def reset_annual_leave_balances(self):
                         employee=employee, leave_type=policy.leave_type, year=prev_year,
                     ).first()
                     if prev:
-                        unused = prev.total_days - prev.used_days
+                        # Monthly no-carry types: record December's (and any other due)
+                        # expiry before carrying, so expiring credit is never carried.
+                        if is_monthly(policy) and not policy.monthly_carry_forward:
+                            sync_expiries(employee, policy, prev_year)
+                            prev.refresh_from_db()
+                        unused = unused_for_carry_forward(employee, policy, prev)
                         if unused > 0:
                             if policy.carry_forward_type == CARRY_FORWARD_UNLIMITED:
                                 carry_forward = unused
@@ -82,7 +90,7 @@ def reset_annual_leave_balances(self):
                     leave_type=policy.leave_type,
                     year=new_year,
                     defaults={
-                        'total_days':               policy.annual_days + carry_forward,
+                        'total_days':               annual_allocation(policy) + carry_forward,
                         'carried_forward':          carry_forward,
                         'carry_forward_expiry_date': expiry_date,
                     },
@@ -239,3 +247,45 @@ def _record_birthday_delivery(employee, action: str, changes: dict) -> None:
         )
     except Exception:
         logger.exception('Failed to record birthday delivery audit log for %s', employee.id)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def sync_monthly_leave_expiry(self):
+    """
+    Daily (00:20 IST), once per active company: for leave types on the Monthly
+    credit schedule with monthly carry-forward OFF, record the expiry of unused
+    monthly credit for every closed month of this year (and last year, so a
+    late December is caught after New Year), by difference — reruns and missed
+    days are idempotent catch-ups, and no ledger history is ever deleted.
+    Months before a policy's monthly_rules_from are never touched.
+    """
+    from apps.tenants.models import MODULE_LEAVE
+    from apps.tenants.utils import run_for_all_tenants
+
+    def _run_for_one_tenant():
+        from apps.hrms.models import CREDIT_SCHEDULE_MONTHLY, LeaveBalance, LeavePolicy
+        from apps.hrms.services_monthly_statement import sync_expiries
+
+        today = timezone.localdate()
+        policies = list(LeavePolicy.objects.filter(credit_schedule=CREDIT_SCHEDULE_MONTHLY, monthly_carry_forward=False))
+        changed = 0
+        for policy in policies:
+            balances = LeaveBalance.objects.filter(
+                leave_type=policy.leave_type, year__in=(today.year - 1, today.year),
+            ).select_related('employee')
+            for balance in balances:
+                try:
+                    if sync_expiries(balance.employee, policy, balance.year, today=today):
+                        changed += 1
+                except Exception:
+                    logger.exception('Monthly expiry sync failed for employee=%s leave_type=%s year=%s',
+                                     balance.employee_id, policy.leave_type, balance.year)
+        return {'balances_changed': changed}
+
+    try:
+        return run_for_all_tenants(
+            _run_for_one_tenant, task_name='sync_monthly_leave_expiry', required_module=MODULE_LEAVE,
+        )
+    except Exception as exc:
+        logger.exception('sync_monthly_leave_expiry failed: %s', exc)
+        raise self.retry(exc=exc)

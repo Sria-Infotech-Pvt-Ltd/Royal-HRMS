@@ -21,7 +21,7 @@ from django.db.models import F, Sum
 from django.utils import timezone
 
 from .models import (
-    CREDIT_TXN_ADJUSTMENT, CREDIT_TXN_MONTHLY, CREDIT_TXN_REVERSAL, LEAVE_LWP, LEAVE_TYPE_CHOICES,
+    CREDIT_TXN_ADJUSTMENT, CREDIT_TXN_EXPIRY, CREDIT_TXN_MONTHLY, CREDIT_TXN_REVERSAL, LEAVE_LWP, LEAVE_TYPE_CHOICES,
     REQ_APPROVED, REQ_L2_PENDING, REQ_PENDING,
     LeaveBalance, LeaveCreditTransaction, LeavePolicy, LeaveRequest,
 )
@@ -143,11 +143,12 @@ def _invalidate_balance_cache(employee, year: int) -> None:
 
 def apply_adjustment(*, employee, leave_type, year, amount, reason, actor, idempotency_key,
                      reverses: LeaveCreditTransaction | None = None, ip_address=None,
-                     month: int | None = None):
+                     month: int | None = None, txn_type: str | None = None):
     """
     Returns (transaction, created). created=False means an identical earlier
     request with the same idempotency_key was found and nothing was re-applied.
-    `month` is passed only by set_monthly_credit() and tags a monthly_credit row.
+    `month` is passed only by set_monthly_credit() and tags a monthly_credit row;
+    sync_expiries() also passes txn_type='monthly_expiry'.
     """
     leave_type = (leave_type or '').strip()
     if not leave_type or leave_type == LEAVE_LWP:
@@ -185,7 +186,9 @@ def apply_adjustment(*, employee, leave_type, year, amount, reason, actor, idemp
             LeaveBalance.objects.filter(pk=balance.pk).update(
                 total_days=F('total_days') + amount, updated_at=timezone.now(),
             )
-            if month:
+            if txn_type == CREDIT_TXN_EXPIRY:
+                action = 'leave_monthly_credit_expired'
+            elif month:
                 txn_type, action = CREDIT_TXN_MONTHLY, 'leave_monthly_credit_set'
             elif reverses:
                 txn_type, action = CREDIT_TXN_REVERSAL, 'leave_credit_reversed'
@@ -232,6 +235,8 @@ def reverse_transaction(*, employee, txn_id, reason, actor, idempotency_key, ip_
         raise LeaveCreditError('A reversal cannot itself be reversed.')
     if original.txn_type == CREDIT_TXN_MONTHLY:
         raise LeaveCreditError('Change a monthly credit from Monthly Leave Management (set it to 0 to remove it).')
+    if original.txn_type == CREDIT_TXN_EXPIRY:
+        raise LeaveCreditError('Monthly expiry is recalculated automatically and cannot be reversed by hand.')
 
     key = _clean_key(idempotency_key)
     existing = LeaveCreditTransaction.objects.filter(idempotency_key=key).first()
@@ -329,10 +334,18 @@ def set_monthly_credit(*, employee, leave_type, year, month, value, actor, sourc
             + (f' (was {previous})' if previous else '')
             + (' - imported' if source == 'import' else '')
         )
+        # Editing a closed month's credit changes what expired that month: reopen
+        # its expiry first (so a reduction never dips below zero), then re-expire.
+        from .services_monthly_statement import is_closed, reopen_month_expiry, sync_expiries
+        closed = is_closed(year, month)
+        if closed and delta < 0:
+            reopen_month_expiry(employee, policy, year, month, actor=actor)
         txn, _ = apply_adjustment(
             employee=employee, leave_type=leave_type, year=year, amount=delta, reason=reason,
             actor=actor, idempotency_key=uuid.uuid4().hex, ip_address=ip_address, month=month,
         )
+        if closed:
+            sync_expiries(employee, policy, year, actor=actor)
     return {
         'status': 'updated' if previous else 'created',
         'previous': previous, 'value': value, 'delta': delta, 'transaction': txn,
@@ -422,16 +435,19 @@ def monthly_summary(employee, leave_type: str, year: int) -> dict | None:
     policy = LeavePolicy.objects.filter(leave_type=leave_type).first()
 
     credits = {m: Decimal('0') for m in range(1, 13)}
+    monthly = {m: Decimal('0') for m in range(1, 13)}   # monthly_credit rows only
     used    = {m: Decimal('0') for m in range(1, 13)}
     credits_outside_year = Decimal('0')
     used_next_year       = Decimal('0')
     approximated         = 0
 
-    for amount, created_at, txn_month in LeaveCreditTransaction.objects.filter(
+    for amount, created_at, txn_month, txn_type in LeaveCreditTransaction.objects.filter(
         employee=employee, leave_type=leave_type, year=year,
-    ).values_list('amount', 'created_at', 'month'):
-        if txn_month:  # monthly credits belong to the month they were set for
+    ).values_list('amount', 'created_at', 'month', 'txn_type'):
+        if txn_month:  # monthly credits/expiries belong to the month they were set for
             credits[txn_month] += amount
+            if txn_type == CREDIT_TXN_MONTHLY:
+                monthly[txn_month] += amount
             continue
         when = timezone.localtime(created_at)
         if when.year == year:
@@ -459,7 +475,8 @@ def monthly_summary(employee, leave_type: str, year: int) -> dict | None:
         'year':                 year,
         'months': [
             {'month': m, 'label': datetime.date(year, m, 1).strftime('%b %Y'),
-             'credit_adjustments': _f(credits[m]), 'used': _f(used[m])}
+             'credit_adjustments': _f(credits[m]), 'monthly_credit': _f(monthly[m]),
+             'other_adjustments': _f(credits[m] - monthly[m]), 'used': _f(used[m])}
             for m in range(1, 13)
         ],
         'credit_adjustments_outside_year': _f(credits_outside_year),

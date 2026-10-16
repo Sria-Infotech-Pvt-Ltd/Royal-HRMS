@@ -5,10 +5,11 @@
 // same endpoint (and set_monthly_credit rule) as manual entry: only the
 // difference from the current value is applied to the employee's balance.
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import CollapsibleCard from "./CollapsibleCard";
 import {
   MONTHS, creditYears, describeChange, validateMonthlyCredit,
   type MonthlyAssignment, type MonthlyAssignmentsResponse,
@@ -113,7 +114,6 @@ export default function MonthlyAssignmentsSection({ refreshKey, onChanged }: {
   refreshKey: number; onChanged: () => void;
 }) {
   const now = new Date();
-  const contentId = useId();
   // Collapsed on first load; month/year live here, so they survive collapsing.
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -140,27 +140,8 @@ export default function MonthlyAssignmentsSection({ refreshKey, onChanged }: {
   const summary = data?.summary;
 
   return (
-    <div className="card mb-24">
-      <button
-        type="button"
-        className="card-header"
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        aria-controls={contentId}
-        style={{
-          width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", font: "inherit",
-          borderBottom: open ? "1px solid var(--outline-v)" : "none",
-        }}
-      >
-        <span className="card-title"><i className="ti ti-list-details" /> Monthly Leave Assignments</span>
-        <i
-          className="ti ti-chevron-down"
-          aria-hidden="true"
-          style={{ fontSize: 18, color: "var(--on-variant)", transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none" }}
-        />
-      </button>
-      {open && (
-      <div id={contentId} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+    <CollapsibleCard icon="ti-list-details" title="Monthly Leave Assignments" open={open} onToggle={() => setOpen(o => !o)}>
+      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <select className="field-input" style={{ width: "auto", padding: "6px 10px" }} value={month}
             onChange={e => { setMonth(Number(e.target.value)); setOkMsg(null); }} aria-label="Month">
@@ -233,7 +214,6 @@ export default function MonthlyAssignmentsSection({ refreshKey, onChanged }: {
           </div>
         ) : null}
       </div>
-      )}
 
       {editing && (
         <EditAssignmentModal
@@ -242,6 +222,6 @@ export default function MonthlyAssignmentsSection({ refreshKey, onChanged }: {
           onSaved={message => { setEditing(null); setOkMsg(message); onChanged(); }}
         />
       )}
-    </div>
+    </CollapsibleCard>
   );
 }
