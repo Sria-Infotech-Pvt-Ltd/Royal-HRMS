@@ -70,6 +70,10 @@ export const API = {
     return: (assignmentId: string) => `/assets/assignments/${assignmentId}/return/`,
     sendToMaintenance: (id: string) => `/assets/${id}/send-to-maintenance/`,
     completeMaintenance: (recordId: string) => `/assets/maintenance/${recordId}/complete/`,
+    import:       "/assets/import/",
+    importSample: "/assets/import/sample/",   // + ?format=csv|xlsx
+    assignImport:       "/assets/assignments/import/",
+    assignImportSample: "/assets/assignments/import/sample/",   // + ?format=csv|xlsx
     categories: {
       list: "/assets/categories/",
       detail: (id: number | string) => `/assets/categories/${id}/`,

@@ -23,6 +23,7 @@ from apps.assets.serializers import (
     SendToMaintenanceSerializer,
 )
 from apps.branch.models import Branch
+from apps.assets.services_assignment import AssetAssignConflict, AssetNotAvailable, assign_asset
 
 logger = logging.getLogger(__name__)
 
@@ -435,48 +436,19 @@ class AssignAssetView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
 
-        asset = serializer.validated_data['asset']
-
         try:
-            with transaction.atomic():
-                # Re-check status inside the transaction (SELECT ... FOR
-                # UPDATE) — the partial unique constraint on AssetAssignment
-                # is the ultimate DB-level guard against a race here, but
-                # locking the Asset row too keeps the "already assigned"
-                # error message accurate rather than surfacing a raw
-                # IntegrityError to the caller under concurrent requests.
-                asset = Asset.objects.select_for_update().get(pk=asset.pk)
-                if asset.status != Asset.STATUS_AVAILABLE:
-                    return error(
-                        f'"{asset.asset_tag}" is not available — current status: {asset.get_status_display()}.',
-                        http_status=409,
-                    )
-
-                assignment = AssetAssignment.objects.create(
-                    asset=asset,
-                    employee=employee,
-                    assigned_date=serializer.validated_data['assigned_date'],
-                    condition_at_assignment=serializer.validated_data['condition_at_assignment'],
-                    expected_return_date=serializer.validated_data.get('expected_return_date'),
-                    assign_remarks=serializer.validated_data.get('remarks', ''),
-                    assigned_by=request.user,
-                )
-                asset.status = Asset.STATUS_ASSIGNED
-                asset.condition = serializer.validated_data['condition_at_assignment']
-                asset.save(update_fields=['status', 'condition', 'updated_at'])
-        except IntegrityError:
-            return error(
-                f'"{asset.asset_tag}" was just assigned to someone else — please refresh and try again.',
-                http_status=409,
+            assignment = assign_asset(
+                asset=serializer.validated_data['asset'],
+                employee=employee,
+                assigned_date=serializer.validated_data['assigned_date'],
+                condition_at_assignment=serializer.validated_data['condition_at_assignment'],
+                expected_return_date=serializer.validated_data.get('expected_return_date'),
+                remarks=serializer.validated_data.get('remarks', ''),
+                assigned_by=request.user,
+                ip_address=get_client_ip(request),
             )
-
-        AuditLog.objects.create(
-            user=request.user, action='asset_assigned', module='assets',
-            object_id=str(assignment.pk),
-            changes={'asset_tag': asset.asset_tag, 'employee': employee.full_name},
-            branch=asset.branch.branch_name, ip_address=get_client_ip(request),
-        )
-        logger.info('Asset %s assigned to %s by %s', asset.asset_tag, employee.email, request.user.email)
+        except (AssetNotAvailable, AssetAssignConflict) as exc:
+            return error(str(exc), http_status=409)
         return success(
             'Asset assigned successfully.',
             data=AssetAssignmentSerializer(assignment).data,

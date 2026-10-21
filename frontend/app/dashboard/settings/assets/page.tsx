@@ -6,6 +6,8 @@ import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import Modal from "@/components/Modal";
+import BulkAssignAssetsModal from "./_components/BulkAssignAssetsModal";
+import BulkImportAssetsModal from "./_components/BulkImportAssetsModal";
 import {
   Asset, AssetCategory, AssetTypeMaster, ASSET_CONDITION_OPTIONS, ASSET_STATUS_OPTIONS,
   MAINTENANCE_OUTCOME_OPTIONS, MaintenanceOutcome, OTHER,
@@ -54,6 +56,8 @@ export default function AssetsSettingsPage() {
   const branches = branchPage?.results ?? [];
 
   const [modal,   setModal]   = useState<"add" | "edit" | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [form,    setForm]    = useState(BLANK_FORM);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [errors,  setErrors]  = useState<Record<string, string>>({});
@@ -312,11 +316,23 @@ export default function AssetsSettingsPage() {
           <div className="page-title">Asset Management</div>
           <div className="page-sub">Track company equipment and who it&apos;s assigned to</div>
         </div>
-        {canCreate && (
+        {(canCreate || canEdit) && (
           <div className="page-actions">
-            <button className="btn btn-filled btn-sm" onClick={openAdd}>
-              <i className="ti ti-plus" /> Add Asset
-            </button>
+            {canEdit && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setBulkAssignOpen(true)}>
+                <i className="ti ti-users-group" /> Bulk Assign
+              </button>
+            )}
+            {canCreate && (
+              <>
+                <button className="btn btn-ghost btn-sm" onClick={() => setBulkOpen(true)}>
+                  <i className="ti ti-file-upload" /> Bulk Import
+                </button>
+                <button className="btn btn-filled btn-sm" onClick={openAdd}>
+                  <i className="ti ti-plus" /> Add Asset
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -780,6 +796,9 @@ export default function AssetsSettingsPage() {
           </div>
         </div>
       )}
+
+      {bulkOpen && <BulkImportAssetsModal onClose={() => setBulkOpen(false)} onImported={refetch} />}
+      {bulkAssignOpen && <BulkAssignAssetsModal onClose={() => setBulkAssignOpen(false)} onAssigned={refetch} />}
     </div>
   );
 }
