@@ -4310,7 +4310,7 @@ suite: 178 tests, OK.
 
 ### 1. Annual CTC saved as ₹3,99,996 instead of ₹4,00,000 (Employees > Basic pay)
 - Root cause (frontend only): the Basic pay dialog rebuilt the annual figure as `round(CTC/12) * 12` from the pay breakup and sent that as `annual_ctc`; any CTC not divisible by 12 drifted (400000 → 399996). Backend stores `annual_ctc` exactly as sent.
-- Fix: `frontend/hooks/useBasicPayEditor.ts` now sends/shows the entered CTC when the breakup total is within ₹12 of it (monthly rounding only); beyond that (earnings overrides) it still uses the breakup total. `PayBreakupTables.tsx` / `EmployeeBasicPayModal.tsx` show the same figure.
+- Fix: shared `annualCtcToSave()` in `frontend/lib/payBreakup.ts` — with no earnings overrides the typed CTC is saved/shown exactly; with overrides the re-summed breakup total is used. Used by `useBasicPayEditor.ts`. `PayBreakupTables.tsx` / `EmployeeBasicPayModal.tsx` show the same figure.
 - Same display drift fixed in the Hire wizard Basic pay step (`BasicPayStep.tsx`) — saved value was already exact.
 - Existing records saved with the drift (e.g. EMP00054) stay wrong until re-saved.
 
@@ -4319,6 +4319,10 @@ suite: 178 tests, OK.
 - Fix: backend (`accounts/views/employees_detail.py`) accepts a numeric id or a name (the `settings.edit` privileged-role guard still applies). Frontend (`EditRecordModal.tsx`) converts id → role name before save, resolves the existing role into the dropdown, and now also sends `employee_type`; the endpoint no longer locks `employee_type` after onboarding.
 - Tests: `EmployeeDetailPatchRoleLookupTests` in `apps/accounts/tests_employee_detail_patch_partial_update.py` (id, name, unknown id).
 - Local backend tests: run with `USE_SQLITE=1` (the `.env` Postgres is remote and slow for test DB creation).
+
+### Tests added (all passing locally)
+- `frontend/lib/annualCtcToSave.test.ts` (vitest): 400000, 750000, 2800000, 400001, 399999, 1000000, 123457, 600005 keep exact value; reproduces 399996 drift without the fix; override case. Full vitest: 76/76.
+- `AnnualCtcRoundTripTests` in `apps/payroll/tests_salary_pay_scale.py`: POST + history read-back for 7 CTC values, plus in-place PUT 750000 → 400000, all exact. Backend: 13/13 (`USE_SQLITE=1`).
 
 ### Workflow note
 Every UAT ticket: implement across the whole tool, test locally, update this file, then commit and push.

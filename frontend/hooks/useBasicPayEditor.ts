@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { buildPay, isMetro, professionalTaxState, type EarningOverrides, type OverrideKey } from "@/lib/payBreakup";
+import { annualCtcToSave, buildPay, isMetro, professionalTaxState, type EarningOverrides, type OverrideKey } from "@/lib/payBreakup";
 import { formatDateSlash } from "@/lib/formatDate";
 import { useFetch } from "@/hooks/useFetch";
 import { useToast } from "@/components/ToastProvider";
@@ -96,8 +96,7 @@ export function useBasicPayEditor(employee: EmployeeLike, onSaved: () => void) {
   // typed (an admin explicitly changed a component's amount), so only then
   // is the resummed breakup the correct annual figure.
   const hasOverrides = Object.keys(overrides).length > 0;
-  const breakupAnnual = breakup.monthlyCtc * 12;
-  const annualCostToCompany = hasOverrides ? breakupAnnual : Math.round(ctcNumber);
+  const annualCostToCompany = annualCtcToSave(ctcNumber, breakup.monthlyCtc, hasOverrides);
   const variance = current ? annualCostToCompany - Math.round(Number(current.annual_ctc)) : 0;
 
   const startsBeforeCurrent = !!current && !!effectiveFrom && effectiveFrom < current.effective_from;

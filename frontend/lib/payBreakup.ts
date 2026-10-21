@@ -117,3 +117,13 @@ export function buildPay(monthlyCtc: number, options: PayOptions = {}): PayBreak
     net: gross - (employeePf + employeeEsi + tax),
   }
 }
+
+/**
+ * The breakup rounds to whole monthly rupees, so `monthlyCtc * 12` drifts from the CTC the user typed
+ * (400000 -> 399996). With no earnings overrides the breakup is only a display of how the typed CTC splits,
+ * so the typed value is what to save and show. With overrides the real total can differ from what was typed,
+ * so the re-summed breakup is the correct annual figure.
+ */
+export function annualCtcToSave(enteredAnnualCtc: number, breakupMonthlyCtc: number, hasOverrides: boolean): number {
+  return hasOverrides ? breakupMonthlyCtc * 12 : Math.round(enteredAnnualCtc)
+}

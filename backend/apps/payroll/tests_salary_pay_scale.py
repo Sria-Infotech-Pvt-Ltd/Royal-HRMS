@@ -66,3 +66,41 @@ class SalaryPayScaleFieldsTests(TestCase):
 
     def test_a_viewer_cannot_save(self):
         self.assertEqual(_api(self.viewer).post(URL, self._body(), format='json').status_code, 403)
+
+
+class AnnualCtcRoundTripTests(TestCase):
+    """UAT: 400000 came back as 399996. The save endpoint must store and return the annual CTC exactly as sent."""
+
+    def setUp(self):
+        cache.clear()
+        editor_role = make_role('ctc_payroll', permission_codenames=['payroll.view', 'payroll.edit', 'employees.view'])
+        self.editor = make_user('ctc_edit@test.com', role=editor_role, employee_id='CTC1', branch=BRANCH)
+
+    def _save_and_read_back(self, annual_ctc, employee_id):
+        employee = make_user(f'{employee_id.lower()}@test.com', employee_id=employee_id, branch=BRANCH)
+        body = {
+            'employee': employee.employee_id, 'annual_ctc': annual_ctc, 'effective_from': '2026-10-12',
+            'reason': 'initial', 'pay_scale_group': 'L2', 'pay_scale_level': '01', 'basic_percent': 40,
+            'earnings_override': {},
+        }
+        response = _api(self.editor).post(URL, body, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        stored = EmployeeSalaryConfig.objects.get(employee=employee).annual_ctc
+        history = _api(self.editor).get(f'/api/payroll/employee-salary/history/{employee.pk}/').data['data']
+        return stored, history[0]['annual_ctc']
+
+    def test_uat_values_round_trip_exactly(self):
+        for index, annual_ctc in enumerate((400000, 750000, 2800000, 400001, 399999, 1000000, 123457)):
+            with self.subTest(annual_ctc=annual_ctc):
+                stored, returned = self._save_and_read_back(annual_ctc, f'CTCRT{index}')
+                self.assertEqual(int(stored), annual_ctc)
+                self.assertEqual(int(float(returned)), annual_ctc)
+
+    def test_update_in_place_keeps_exact_amount(self):
+        employee = make_user('ctc_upd@test.com', employee_id='CTCUPD', branch=BRANCH)
+        created = _api(self.editor).post(URL, {
+            'employee': employee.employee_id, 'annual_ctc': 750000, 'effective_from': '2026-10-12', 'reason': 'initial',
+        }, format='json').data['data']
+        response = _api(self.editor).put(f'{URL}{created["id"]}/', {'annual_ctc': 400000}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(int(EmployeeSalaryConfig.objects.get(pk=created['id']).annual_ctc), 400000)
