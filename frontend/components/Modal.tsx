@@ -7,7 +7,7 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "default" | "lg";
+  size?: "default" | "lg" | "xl";
   maxWidth?: number | string;
   zIndex?: number;
   /** Disables the header close (X) button and backdrop-click-to-close — for modals mid save/delete. */
@@ -55,7 +55,7 @@ export default function Modal({
       }}
     >
       <div
-        className={`modal${size === "lg" ? " modal-lg" : ""}`}
+        className={`modal${size === "lg" ? " modal-lg" : size === "xl" ? " modal-xl" : ""}`}
         style={{
           ...(maxWidth ? { maxWidth } : undefined),
           ...(scrollBody ? { display: "flex", flexDirection: "column", maxHeight: "90vh" } : undefined),

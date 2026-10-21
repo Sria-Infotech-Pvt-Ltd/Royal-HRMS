@@ -64,3 +64,17 @@ export function compareRows(previous: SalaryPreviewRow[], proposed: SalaryPrevie
     change: (next.get(name) ?? 0) - (prev.get(name) ?? 0),
   }));
 }
+
+export type MessageArea = "details" | "components" | "summary";
+
+/**
+ * Which section of the Assign CTC modal a server/client message belongs to,
+ * so it is shown next to what it is about. Display only — the text is unchanged.
+ */
+export function messageArea(text: string): MessageArea {
+  const t = text.toLowerCase();
+  if (t.includes("effective date") || t.includes("finalised") || t.includes("current revision")
+    || t.includes("no salary structure applies") || t.includes("annual ctc must")) return "details";
+  if (t.includes("do not equal the annual ctc") || t.includes("no basic component")) return "summary";
+  return "components";
+}

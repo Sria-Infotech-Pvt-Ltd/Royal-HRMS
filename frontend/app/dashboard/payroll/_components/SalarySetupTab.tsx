@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Modal from "@/components/Modal";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { quickCheck, toInputs } from "@/lib/salaryComponents";
+import { messageArea, quickCheck, toInputs, type MessageArea } from "@/lib/salaryComponents";
 import type {
   EmployeeSalaryConfig, SalaryComponentInput, SalaryPreview, SalaryStructureListItem,
 } from "@/types/payroll";
-import SalaryComponentsEditor from "./SalaryComponentsEditor";
+import SalaryComponentsEditor, { RevisionComparison, SalarySummary } from "./SalaryComponentsEditor";
 
 interface PagedResponse<T> { results: T[]; count: number; }
 interface Employee { id: string; uuid: string; full_name: string; employee_id: string; department: string; branch: string; }
@@ -28,6 +28,9 @@ function apiErrors(err: unknown, fallback: string): string[] {
   const data = (err as { response?: { data?: { message?: string; data?: { errors?: string[] } } } })?.response?.data;
   return data?.data?.errors?.length ? data.data.errors : [data?.message ?? fallback];
 }
+
+// Small muted helper text under fields / tables.
+const HELP: CSSProperties = { fontSize: 11.5, color: "var(--on-variant)", lineHeight: 1.4 };
 
 const fmt = (n: number | string) =>
   `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
@@ -254,127 +257,172 @@ export default function SalarySetupTab() {
       </div>
 
       {/* Assign / Edit CTC modal */}
-      {modal && (
-        <Modal
-          title={
-            <>
-              <i className="ti ti-currency-rupee" style={{ marginRight: 8 }} />
-              {modal.current ? "Update CTC" : "Assign CTC"} — {modal.employee.full_name}
-            </>
-          }
-          onClose={() => setModal(null)}
-          size="lg"
-          scrollBody
-          footer={
-            <>
-              <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>
-              <button
-                className="btn btn-filled"
-                onClick={save}
-                disabled={saving || previewing || !modal.annual_ctc || !modal.effective_from || !modal.components}
-              >
-                {saving ? <><i className="ti ti-loader-2 animate-spin" /> Saving…</> : <><i className="ti ti-check" /> Save CTC</>}
-              </button>
-            </>
-          }
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ padding: "10px 14px", background: "var(--bg-low)", borderRadius: "var(--radius)", fontSize: 12, color: "var(--on-variant)" }}>
-              <strong>{modal.employee.employee_id}</strong> · {modal.employee.department} · {modal.employee.branch}
-            </div>
-
-            {modal.current && (
-              <div className="alert alert-info" style={{ marginBottom: 0 }}>
-                <i className="ti ti-info-circle" />
-                <span>Current CTC: <strong>{fmt(modal.current.annual_ctc)}/year</strong> (effective {modal.current.effective_from}). Saving creates a new revision; the current one is kept in history and stays in force until the new effective date.</span>
-              </div>
-            )}
-
-            <div className="form-row cols-2">
-              <div className="field-group">
-                <label className="field-label">Annual CTC (₹) *</label>
-                <input
-                  type="number"
-                  className="field-input"
-                  min={0}
-                  step={1000}
-                  placeholder="e.g. 600000"
-                  value={modal.annual_ctc}
-                  onChange={e => setModal(m => m ? { ...m, annual_ctc: e.target.value } : m)}
-                />
-                {modal.annual_ctc && (
-                  <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>
-                    Monthly: {fmt(Number(modal.annual_ctc) / 12)}
-                  </span>
+      {modal && (() => {
+        // Each message is shown next to the section it is about (text unchanged).
+        const errors = [...new Set([...formErrors, ...(modal.components ? quickCheck(modal.components) : [])])];
+        const warnings = preview?.warnings ?? [];
+        const notes = (area: MessageArea) => (
+          <Messages errors={errors.filter(e => messageArea(e) === area)} warnings={warnings.filter(w => messageArea(w) === area)} />
+        );
+        const hasCtc = !!modal.annual_ctc && Number(modal.annual_ctc) > 0;
+        return (
+          <Modal
+            title={
+              <>
+                <i className="ti ti-currency-rupee" style={{ marginRight: 8 }} />
+                {modal.current ? "Update CTC" : "Assign CTC"} — {modal.employee.full_name}
+              </>
+            }
+            onClose={() => setModal(null)}
+            size="xl"
+            scrollBody
+            footer={
+              <>
+                <span style={{ marginRight: "auto", fontSize: 12, color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 6 }}>
+                  {previewing
+                    ? <><i className="ti ti-loader-2 animate-spin" /> Calculating…</>
+                    : modal.effective_from ? <>Saves a new revision effective {modal.effective_from}</> : null}
+                </span>
+                <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>
+                <button
+                  className="btn btn-filled"
+                  onClick={save}
+                  disabled={saving || previewing || !modal.annual_ctc || !modal.effective_from || !modal.components}
+                >
+                  {saving ? <><i className="ti ti-loader-2 animate-spin" /> Saving…</> : <><i className="ti ti-check" /> Save CTC</>}
+                </button>
+              </>
+            }
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+              {/* Employee strip */}
+              <div style={{
+                display: "flex", flexWrap: "wrap", gap: "6px 16px", justifyContent: "space-between", alignItems: "center",
+                padding: "10px 14px", background: "var(--bg-low)", borderRadius: "var(--radius)", fontSize: 12.5, color: "var(--on-variant)",
+              }}>
+                <span><strong style={{ color: "var(--on-bg)" }}>{modal.employee.employee_id}</strong> · {modal.employee.department || "—"} · {modal.employee.branch || "—"}</span>
+                {modal.current && (
+                  <span>Current CTC <strong style={{ color: "var(--on-bg)" }}>{fmt(modal.current.annual_ctc)}/year</strong> from {modal.current.effective_from}</span>
                 )}
               </div>
-              <div className="field-group">
-                <label className="field-label">Effective From *</label>
-                <input
-                  type="date"
-                  className="field-input"
-                  value={modal.effective_from}
-                  onChange={e => setModal(m => m ? { ...m, effective_from: e.target.value } : m)}
-                />
-              </div>
-            </div>
 
-            <div className="field-group">
-              <label className="field-label">Salary Structure Override</label>
-              <select
-                className="field-input"
-                value={modal.salary_structure}
-                onChange={e => changeStructure(e.target.value)}
-              >
-                <option value="">— Use branch / company default —</option>
-                {(structures ?? []).filter(s => s.is_active).map(s => (
-                  <option key={s.id} value={s.id}>{s.name}{s.is_default ? " (Default)" : ""}</option>
-                ))}
-              </select>
-              <span className="field-help">
-                Its components are the starting point below. Changing the structure reloads them.
-              </span>
-            </div>
+              <Section icon="ti-file-description" title="Salary details"
+                hint={modal.current
+                  ? "Saving creates a new revision. The current one stays in history and in force until the new effective date."
+                  : undefined}>
+                <div className="form-row cols-3" style={{ marginBottom: 0 }}>
+                  <div className="field-group">
+                    <label className="field-label" htmlFor="ctc-annual">Annual CTC (₹) *</label>
+                    <input
+                      id="ctc-annual"
+                      type="number"
+                      className="field-input"
+                      min={0}
+                      step={1000}
+                      placeholder="e.g. 600000"
+                      value={modal.annual_ctc}
+                      onChange={e => setModal(m => m ? { ...m, annual_ctc: e.target.value } : m)}
+                    />
+                    <span style={HELP}>{hasCtc ? `Monthly: ${fmt(Number(modal.annual_ctc) / 12)}` : "\u00a0"}</span>
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label" htmlFor="ctc-effective">Effective From *</label>
+                    <input
+                      id="ctc-effective"
+                      type="date"
+                      className="field-input"
+                      value={modal.effective_from}
+                      onChange={e => setModal(m => m ? { ...m, effective_from: e.target.value } : m)}
+                    />
+                    <span style={HELP}>Not before the current revision or a paid month.</span>
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label" htmlFor="ctc-structure">Salary Structure</label>
+                    <select
+                      id="ctc-structure"
+                      className="field-input"
+                      value={modal.salary_structure}
+                      onChange={e => changeStructure(e.target.value)}
+                    >
+                      <option value="">— Use branch / company default —</option>
+                      {(structures ?? []).filter(s => s.is_active).map(s => (
+                        <option key={s.id} value={s.id}>{s.name}{s.is_default ? " (Default)" : ""}</option>
+                      ))}
+                    </select>
+                    <span style={HELP}>Starting template; changing it reloads the components.</span>
+                  </div>
+                </div>
+                {notes("details")}
+              </Section>
 
-            <div className="field-group">
-              <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                Salary components for {modal.employee.full_name}
-                {preview?.template_structure && (
-                  <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(from {preview.template_structure.name})</span>
+              <Section icon="ti-list-details" title="Salary components"
+                hint={<>
+                  {preview?.template_structure ? <>From <strong>{preview.template_structure.name}</strong>. </> : null}
+                  Changes apply only to this employee&apos;s new revision — not to the shared structure or other employees.
+                </>}>
+                {!hasCtc ? (
+                  <p style={{ ...HELP, margin: 0 }}>Enter the annual CTC to load the components.</p>
+                ) : modal.components ? (
+                  <SalaryComponentsEditor
+                    rows={modal.components}
+                    preview={preview}
+                    disabled={saving}
+                    onChange={rows => setModal(m => (m ? { ...m, components: rows } : m))}
+                  />
+                ) : (
+                  <p style={{ ...HELP, margin: 0 }}><i className="ti ti-loader-2 animate-spin" /> Loading components…</p>
                 )}
-                {previewing && <i className="ti ti-loader-2 animate-spin" aria-label="Calculating" />}
-              </label>
-              {!modal.annual_ctc || Number(modal.annual_ctc) <= 0 ? (
-                <p className="field-help">Enter the annual CTC to load the components.</p>
-              ) : modal.components ? (
-                <SalaryComponentsEditor
-                  rows={modal.components}
-                  preview={preview}
-                  disabled={saving}
-                  onChange={rows => setModal(m => (m ? { ...m, components: rows } : m))}
-                />
-              ) : (
-                <p className="field-help">Loading components…</p>
+                {notes("components")}
+              </Section>
+
+              {hasCtc && modal.components && (
+                <Section icon="ti-calculator" title="Salary summary" hint="Employer PF/ESI are not part of these totals.">
+                  <SalarySummary preview={preview} />
+                  {notes("summary")}
+                </Section>
               )}
-              <span className="field-help">
-                Changes apply only to this employee&apos;s new revision — not to the shared structure or other employees.
-                Employer PF/ESI are not part of these totals.
-              </span>
-            </div>
 
-            {(formErrors.length > 0 || (preview?.warnings.length ?? 0) > 0 || (modal.components && quickCheck(modal.components).length > 0)) && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {[...new Set([...formErrors, ...(modal.components ? quickCheck(modal.components) : [])])].map(e => (
-                  <div key={e} className="alert alert-error" style={{ marginBottom: 0 }}><i className="ti ti-alert-circle" /><span>{e}</span></div>
-                ))}
-                {preview?.warnings.map(w => (
-                  <div key={w} className="alert alert-warn" style={{ marginBottom: 0 }}><i className="ti ti-alert-triangle" /><span>{w}</span></div>
-                ))}
-              </div>
-            )}
-          </div>
-        </Modal>
-      )}
+              {preview?.previous && <RevisionComparison preview={preview} />}
+            </div>
+          </Modal>
+        );
+      })()}
+    </div>
+  );
+}
+
+// ── Modal layout helpers ───────────────────────────────────────────────────────
+
+function Section({ icon, title, hint, children }: {
+  icon: string; title: string; hint?: ReactNode; children: ReactNode;
+}) {
+  return (
+    <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, color: "var(--on-bg)" }}>
+          <i className={`ti ${icon}`} style={{ color: "var(--primary)" }} /> {title}
+        </h3>
+        {hint && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--on-variant)" }}>{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Messages({ errors, warnings }: { errors: string[]; warnings: string[] }) {
+  if (!errors.length && !warnings.length) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {errors.map(e => (
+        <div key={e} className="alert alert-error" style={{ marginBottom: 0, padding: "8px 12px" }}>
+          <i className="ti ti-alert-circle" /><span>{e}</span>
+        </div>
+      ))}
+      {warnings.map(w => (
+        <div key={w} className="alert alert-warn" style={{ marginBottom: 0, padding: "8px 12px" }}>
+          <i className="ti ti-alert-triangle" /><span>{w}</span>
+        </div>
+      ))}
     </div>
   );
 }

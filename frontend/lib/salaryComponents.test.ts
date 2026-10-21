@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blankComponent, compareRows, quickCheck, toInputs } from "./salaryComponents";
+import { blankComponent, compareRows, messageArea, quickCheck, toInputs } from "./salaryComponents";
 import type { SalaryComponentInput, SalaryPreviewRow } from "@/types/payroll";
 
 const row = (over: Partial<SalaryComponentInput> = {}): SalaryComponentInput => ({
@@ -42,5 +42,18 @@ describe("salary component helpers", () => {
       { name: "HRA", previous: 10000, proposed: null, change: -10000 },
       { name: "Conveyance", previous: null, proposed: 1600, change: 1600 },
     ]);
+  });
+});
+
+describe("messageArea", () => {
+  it("places each message next to the section it is about", () => {
+    expect(messageArea("The effective date can't be before the current revision (2026-02-01).")).toBe("details");
+    expect(messageArea("Payroll up to 2026-01-31 is already finalised for this employee.")).toBe("details");
+    expect(messageArea("Same effective date as the current revision: this revision replaces it.")).toBe("details");
+    expect(messageArea("Annual CTC must be greater than zero.")).toBe("details");
+    expect(messageArea("Annual earnings (492000.00) do not equal the annual CTC (720000.00); difference 228000.00.")).toBe("summary");
+    expect(messageArea("No Basic component: Basic, PF on Basic and every % of Basic component will be 0.")).toBe("summary");
+    expect(messageArea('"HRA" appears more than once.')).toBe("components");
+    expect(messageArea("A component is a % of Basic, but there is no enabled Basic component.")).toBe("components");
   });
 });
