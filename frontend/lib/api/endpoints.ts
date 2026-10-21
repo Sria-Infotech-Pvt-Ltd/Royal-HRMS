@@ -41,6 +41,7 @@ export const API = {
       list: "/org-structure/positions/",
       detail: (id: string) => `/org-structure/positions/${id}/`,
       deactivate: (id: string) => `/org-structure/positions/${id}/deactivate/`,
+      permissions: (id: string) => `/org-structure/positions/${id}/permissions/`,
       activate: (id: string) => `/org-structure/positions/${id}/activate/`,
       placements: (id: string) => `/org-structure/positions/${id}/placements/`,
       placementsEnd: (id: string) => `/org-structure/positions/${id}/placements/end/`,

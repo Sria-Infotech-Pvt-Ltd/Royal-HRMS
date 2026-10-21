@@ -23,6 +23,8 @@ interface Props {
   onAssign: (positionId: string) => void;
   onVacate: (positionId: string) => void;
   onDeactivate: (positionId: string) => void;
+  canManagePermissions: boolean;
+  onPermissions: (positionId: string) => void;
   onReactivate: (positionId: string) => void;
   canDelete: boolean;
   onDelete: (positionId: string) => void;
@@ -118,7 +120,7 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
 
 export default function OrgDetail({
   selected, units, positions, jobs, branches, roles, canEdit, placementHistory, placementHistoryLoading, onSelect,
-  onAddSubUnit, onDeleteUnit, onAddPosition, onAssign, onVacate, onDeactivate, onReactivate, canDelete, onDelete, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
+  onAddSubUnit, onDeleteUnit, onAddPosition, onAssign, onVacate, onDeactivate, canManagePermissions, onPermissions, onReactivate, canDelete, onDelete, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
 }: Props) {
   if (!selected) {
     return (
@@ -260,6 +262,11 @@ export default function OrgDetail({
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {canManagePermissions && (
+              <button className="btn btn-ghost btn-sm" onClick={() => onPermissions(p.id)}>
+                <i className="ti ti-shield-lock" /> Permissions
+              </button>
+            )}
             {canEdit && (
               p.is_active ? (
                 <button className="btn btn-ghost btn-sm" onClick={() => onDeactivate(p.id)}>

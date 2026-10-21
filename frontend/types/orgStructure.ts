@@ -127,3 +127,18 @@ export interface JobTemplatePayload {
   band:       string;
   is_active?: boolean;
 }
+
+/** What access a seat carries (GET/PUT /org-structure/positions/<id>/permissions/). */
+export interface PositionPermissions {
+  position: string;
+  codenames: string[];
+  can_manage_team: boolean;
+  can_manage_branch: boolean;
+}
+
+export interface PermissionCatalogueItem {
+  codename: string;
+  action: string;
+  description?: string;
+  is_sensitive?: boolean;
+}

@@ -114,6 +114,7 @@ from apps.accounts.views import (
     PlacementDetailView,
     PositionActivateView,
     PositionDeactivateView,
+    PositionPermissionsView,
     PositionDetailView,
     PositionListCreateView,
     PositionPlacementEndView,
@@ -284,6 +285,7 @@ urlpatterns = [
 
     path('org-structure/units/',                          OrgUnitListCreateView.as_view(),        name='org-unit-list'),
     path('org-structure/units/<uuid:pk>/',                OrgUnitDetailView.as_view(),            name='org-unit-detail'),
+    path('org-structure/positions/<uuid:pk>/permissions/', PositionPermissionsView.as_view(),     name='position-permissions'),
     path('org-structure/units/<uuid:pk>/deactivate/',     OrgUnitDeactivateView.as_view(),        name='org-unit-deactivate'),
     path('org-structure/positions/',                      PositionListCreateView.as_view(),       name='position-list'),
     path('org-structure/positions/<uuid:pk>/',            PositionDetailView.as_view(),           name='position-detail'),

@@ -631,6 +631,12 @@ class Position(models.Model):
                         'branch.Branch', on_delete=models.SET_NULL, null=True, blank=True,
                         related_name='positions',
                     )
+    # Access follows the seat, not a Role: whoever holds this position today
+    # inherits its PositionPermission rows (see core.permissions) and these
+    # two scope flags — the same meaning Role.can_manage_team /
+    # Role.can_manage_branch have until Roles are removed.
+    can_manage_team   = models.BooleanField(default=False, help_text='The holder appears in manager dropdowns and manages a team.')
+    can_manage_branch = models.BooleanField(default=False, help_text='The holder has access to every employee and record in their own branch.')
     # Deactivate rather than delete once a position has placement history —
     # deleting history is a compliance problem (Placement.position is
     # on_delete=PROTECT for the same reason).
@@ -744,6 +750,27 @@ class Placement(models.Model):
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — {self.position.title} ({self.effective_from} – {self.effective_to or "present"})'
+
+
+class PositionPermission(models.Model):
+    """One permission granted to whoever holds a Position (replaces RolePermission once Roles are removed).
+
+    Effective permissions for a person = the permissions of the seat they currently hold (their Placement
+    covering today) — see core.permissions. Never granted to a person directly.
+    """
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    position   = models.ForeignKey(Position, on_delete=models.CASCADE, related_name='position_permissions')
+    permission = models.ForeignKey(Permission, on_delete=models.CASCADE, related_name='position_permissions')
+    granted_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_position_permissions'
+        unique_together = ('position', 'permission')
+
+    def __str__(self) -> str:
+        return f'{self.position.title} → {self.permission.codename}'
 
 
 class HireAction(models.Model):

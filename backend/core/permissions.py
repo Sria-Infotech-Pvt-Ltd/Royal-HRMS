@@ -4,33 +4,46 @@ from rest_framework.permissions import BasePermission
 _SAFE_METHODS = frozenset(('GET', 'HEAD', 'OPTIONS'))
 
 
+def _seat_permission_rows(user):
+    """PositionPermission rows for the seat `user` holds today (their Placement covering today)."""
+    from django.db.models import Q
+    from django.utils import timezone
+    from apps.accounts.models import PositionPermission
+
+    today = timezone.localdate()
+    return PositionPermission.objects.filter(
+        Q(position__placements__effective_to__isnull=True) | Q(position__placements__effective_to__gte=today),
+        position__placements__employee=user,
+        position__placements__effective_from__lte=today,
+        position__is_active=True,
+    )
+
+
 def has_perm(user, codename: str) -> bool:
     """
-    True if user's role carries the given permission codename.
+    True if the user holds `codename` through their ROLE (legacy) or through the POSITION they hold today.
 
     Single shared implementation — this used to be copy-pasted independently
     across 36 view/serializer files and had drifted into three incompatible
-    behaviors: superuser-bypass checked before vs. after the role-null guard
-    (so a superuser with no linked Role row passed in some views and was
-    denied in others), and some copies missing the superuser bypass
-    entirely. Always use this instead of redefining _has_perm locally.
+    behaviors. Always use this instead of redefining _has_perm locally.
+
+    Roles are being removed in favour of position-based access: permissions
+    are the union of both sources until the role path is deleted, so
+    migrating a seat's permissions in never takes anything away.
     """
     if not user:
         return False
-    # Superuser bypass checked BEFORE the role check — a superuser account
-    # with no linked Role row must still pass; otherwise the missing-role
-    # guard below would deny it first and this bypass would never run.
+    # Superuser bypass checked BEFORE anything else — a superuser account
+    # with no Role and no position must still pass.
     if getattr(user, 'is_superuser', False):
         return True
-    if not user.role:
-        return False
     # settings.edit is this codebase's universal "sees/does everything"
     # signal — checking it here (permission-based) instead of a hardcoded
-    # role name means any role actually granted settings.edit gets the same
-    # bypass, and revoking it from system_admin would actually revoke it.
-    return user.role.role_permissions.filter(
-        permission__codename__in={codename, 'settings.edit'}
-    ).exists()
+    # role name means anything actually granted settings.edit gets the same bypass.
+    wanted = {codename, 'settings.edit'}
+    if user.role and user.role.role_permissions.filter(permission__codename__in=wanted).exists():
+        return True
+    return _seat_permission_rows(user).filter(permission__codename__in=wanted).exists()
 
 
 def effective_permission_codenames(user) -> list[str]:
@@ -40,23 +53,19 @@ def effective_permission_codenames(user) -> list[str]:
     permission-gated nav item / route guard / usePermission() check agrees
     with what has_perm() above would actually allow server-side.
 
-    A superuser gets every real codename that exists, not just whatever its
-    linked Role happens to carry — mirrors has_perm()'s own superuser
-    bypass. Previously this list came from `user.role.role_permissions.all()`
-    independently in three different places (JWT token claims, the login
-    response, and nowhere accounting for is_superuser at all), so a
-    superuser account without every permission explicitly assigned to its
-    Role lost whole nav sections (e.g. Organization) despite has_perm()
-    itself already letting them through server-side.
+    A superuser gets every real codename that exists. Everyone else gets
+    their role's codenames (legacy) plus those of the position they hold today.
     """
     if not user:
         return []
     if getattr(user, 'is_superuser', False):
         from apps.accounts.models import Permission
         return list(Permission.objects.values_list('codename', flat=True))
-    if not user.role:
-        return []
-    return [rp.permission.codename for rp in user.role.role_permissions.all()]
+    codenames = set()
+    if user.role:
+        codenames.update(rp.permission.codename for rp in user.role.role_permissions.all())
+    codenames.update(_seat_permission_rows(user).values_list('permission__codename', flat=True))
+    return sorted(codenames)
 
 
 class RequiresSecureTransport(BasePermission):

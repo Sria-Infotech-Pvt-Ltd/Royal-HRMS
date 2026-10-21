@@ -13,6 +13,7 @@ import AssignHolderModal from "./AssignHolderModal";
 import SearchableSelect from "@/components/SearchableSelect";
 import EndPlacementModal from "./EndPlacementModal";
 import DeactivatePositionModal from "./DeactivatePositionModal";
+import PositionPermissionsModal from "./PositionPermissionsModal";
 import ManageJobTemplatesModal from "./ManageJobTemplatesModal";
 
 export interface EmployeeOption {
@@ -38,6 +39,7 @@ export type Selected = { type: "unit" | "position" | "person"; id: string } | nu
 export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { onBack?: () => void; initialSelectedUnitId?: string }) {
   const canEdit = useAnyPermission("org_structure.create", "org_structure.edit", "org_structure.delete");
   const canDelete = usePermission("org_structure.delete");
+  const canManagePermissions = usePermission("settings.edit");
 
   const [units,     setUnits]     = useState<OrgUnit[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -59,6 +61,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
   const [assignPositionId, setAssignPositionId] = useState<string | null>(null);
   const [endPositionId,    setEndPositionId]    = useState<string | null>(null);
   const [deactivatePositionId, setDeactivatePositionId] = useState<string | null>(null);
+  const [permissionsPositionId, setPermissionsPositionId] = useState<string | null>(null);
   const [manageJobsOpen,   setManageJobsOpen]   = useState(false);
 
   const [placementHistory,        setPlacementHistory]        = useState<Placement[]>([]);
@@ -307,6 +310,8 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
               onAssign={positionId => setAssignPositionId(positionId)}
               onVacate={positionId => setEndPositionId(positionId)}
               onDeactivate={positionId => setDeactivatePositionId(positionId)}
+              canManagePermissions={canManagePermissions}
+              onPermissions={positionId => setPermissionsPositionId(positionId)}
               canDelete={canDelete}
               onDelete={async positionId => {
                 beginFieldSave();
@@ -428,6 +433,13 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
           position={positions.find(p => p.id === deactivatePositionId) ?? null}
           onClose={() => setDeactivatePositionId(null)}
           onDeactivated={() => { setDeactivatePositionId(null); load(); }}
+        />
+      )}
+      {permissionsPositionId !== null && (
+        <PositionPermissionsModal
+          position={positions.find(p => p.id === permissionsPositionId) ?? null}
+          onClose={() => setPermissionsPositionId(null)}
+          onSaved={() => { setPermissionsPositionId(null); load(); }}
         />
       )}
       {manageJobsOpen && (

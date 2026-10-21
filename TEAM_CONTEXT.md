@@ -4343,6 +4343,19 @@ Every UAT ticket: implement across the whole tool, test locally, update this fil
 - Not built: the "✦ Suggest" chip on Annual fixed CTC — the reference's suggestion is a hardcoded grade→CTC table (L2 600000 …), which CLAUDE.md forbids; needs a real rule source (e.g. a pay-scale/grade settings table).
 - Still render-only (no post-hire write path, unchanged limitation): weekly off, shift, attendance scheme, leave plan, salary structure (CTC saves via salary config), work email, cost center (no data source yet).
 
+### 5. Removing Roles — access by org-chart position (PHASED; decisions agreed with the user)
+Decisions: (1) permissions are attached to each **Position** (seat); whoever holds it today inherits them; team/branch scope flags live on the seat too. (2) **Phased** rollout with data migration, each phase tested and pushed separately. (3) People with no seat: baseline employee self-service + the existing `is_superuser` flag (not a role) for full access, so nobody is locked out.
+
+**Phase 1 — DONE (additive, behaviour-preserving; roles still work):**
+- `PositionPermission` model (`hrms_position_permissions`) + `Position.can_manage_team` / `can_manage_branch` (migration `0192_position_permissions`).
+- `core/permissions.py`: `has_perm()` / `effective_permission_codenames()` = role permissions ∪ permissions of the seat the user holds today (Placement covering today, active position). `settings.edit` on a seat is full access, like on a role.
+- API `GET/PUT /api/org-structure/positions/<id>/permissions/` (GET: `org_chart.view`; PUT: `settings.edit` only, audit-logged as `position_permissions_update`). UI: "Permissions" button on a position in Organization (`PositionPermissionsModal.tsx`).
+- `python manage.py migrate_roles_to_positions [--apply]` copies each seat holder's role permissions + scope flags onto the seat (dry-run default, idempotent) and lists people with a role but no seat (`NO SEAT:`) who need a decision.
+- Tests: `apps/accounts/tests_position_permissions.py` (12).
+
+**Phase 2 — TODO (switch every check off Role):** about 40 places call `user.role.role_permissions...` directly instead of `core.permissions.has_perm` (e.g. `hrms/serializers.py`, `hrms/views/separation.py`, `bulk_import.py`, `employees_detail.py`, `voice_commands/executor_payroll.py`, `platform_core/services_authz.py`), ~12 ORM filters find "users who hold permission X" via `role__role_permissions__permission__codename` (approvers, payroll notifications, onboarding approvers — must become seat-based queries), and ~99 reads of `Role.can_manage_team / can_manage_branch / is_full_access / exclude_from_payroll / exclude_from_headcount / is_default_employee_role / is_assignable` need seat or user equivalents. Frontend `usePermission`, `proxy.ts` and the JWT already read `permissions` from `effective_permission_codenames`, so they keep working.
+**Phase 3 — TODO (delete Roles):** run `migrate_roles_to_positions --apply` on every environment and resolve every `NO SEAT` person first; then drop `User.role`, `Role`, `RolePermission`, `Position.default_role`, the roles API and Settings > Roles & Permissions page, and every Role dropdown (Hire wizard `EmploymentStep`, Edit record, bulk-import Role column, onboarding). Includes a new migration; do not edit committed ones.
+
 ### 6. UAT: Edit full record > Employment — `Role "4" does not exist` (Deepak EMP00055, Arjun EMP00006)
 - Cause: the older Employment step's Role dropdown submitted the Role's numeric id while `EmployeeDetailView._update_fields` looked roles up by name only. Already fixed in 4dcaaa2 (accepts id or name); the UAT build predates it. The rebuilt Employment section (f536c87) has no Role dropdown at all, so the current UI cannot trigger it.
 - Remaining gap closed: a JSON-number role (`4`, not `"4"`) crashed `.strip()`; `employees_detail.py` now does `str(data.get('role') or '').strip()`.
