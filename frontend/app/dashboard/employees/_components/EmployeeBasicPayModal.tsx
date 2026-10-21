@@ -108,7 +108,7 @@ export default function EmployeeBasicPayModal({ employee, onClose }: { employee:
       </div>
 
       <div className="hint">Monthly amounts. Any earning can be overridden; Special Allowance balances back to CTC and the statutory rows recalculate.</div>
-      <PayBreakupTables breakup={breakup} editable={canEdit} variance={editor.variance} hasRecord={!!current} onChange={editor.setOverride} />
+      <PayBreakupTables breakup={breakup} annualCostToCompany={editor.annualCostToCompany} editable={canEdit} variance={editor.variance} hasRecord={!!current} onChange={editor.setOverride} />
       {canEdit && (
         <div>
           <button className="rvbtn" type="button" onClick={editor.resetOverrides} disabled={!editor.hasOverrides}>Reset to derived amounts</button>

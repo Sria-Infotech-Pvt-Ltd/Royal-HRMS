@@ -5830,3 +5830,105 @@ x2, `toDisplayStatus` x2) and duplicate component names (`ClockWidget`, `Announc
   PowerShell (`Start-Service Memurai`) or unset `REDIS_URL` for the in-memory fallback.
 - The Drafts "Delete" uses a native `window.confirm`; browser automation must override it before
   clicking.
+
+---
+
+# Team Context — Basic Pay Annual CTC Rounding Fix (AIRA HRMS UAT ticket) (2026-10-21)
+
+## Ticket
+
+UAT report: entering Annual Fixed CTC = 400000 on Employee Detail > Basic Pay and saving produced
+a toast/stored value of ₹3,99,996 — a loss of ₹4. Control case (CTC = 750000) saved exactly as
+entered. Reporter's own hypothesis (correct): 400000 is not evenly divisible by 12, 750000 is.
+
+## Root cause
+
+`hooks/useBasicPayEditor.ts` computed the monthly breakup from the entered annual CTC
+(`Math.round(ctcNumber / 12)`), rounded that to a whole rupee, built the component breakup from the
+rounded monthly figure, then saved `breakup.monthlyCtc * 12` as the "annual CTC" — i.e. the
+rounded-and-remultiplied figure, not the literal value typed. 400000 / 12 = 33,333.33 -> rounds to
+33,333 -> x12 = 399,996. 750000 / 12 = 62,500.00 exactly, so no rounding loss occurred there,
+matching the control case precisely. Confirmed via `apps/payroll/serializers.py`
+(`validate_annual_ctc`) that the backend does no recomputation of its own — it stores whatever
+`annual_ctc` the frontend sends, so this was a pure frontend bug, not a backend/DB rounding issue.
+
+## Fix
+
+`hooks/useBasicPayEditor.ts` — the monthly breakup is only the *source of truth* for the saved
+annual figure when earnings overrides are actually set (an admin explicitly changed a component's
+amount, so the real total can genuinely differ from what was typed). With no overrides, the
+breakup is purely a cosmetic display of how the typed CTC splits up monthly, and the literal typed
+value is what gets saved:
+
+```ts
+const hasOverrides = Object.keys(overrides).length > 0;
+const breakupAnnual = breakup.monthlyCtc * 12;
+const annualCostToCompany = hasOverrides ? breakupAnnual : Math.round(ctcNumber);
+```
+
+## Test results (local, before push)
+
+| # | Case | Entered | Saved | Result |
+|---|------|---------|-------|--------|
+| 1 | Ticket scenario (Chaitra Babu, EMP00054 equivalent) | 400000 | 400000 | PASS |
+| 2 | Control case (Deepak) | 750000 | 750000 | PASS |
+| 3 | Small non-divisible-by-12 | 100000 | 100000 | PASS |
+| 4 | Large non-divisible-by-12 | 1234567 | 1234567 | PASS |
+| 5 | Exactly divisible by 12 | 1200000 | 1200000 | PASS |
+| 6 | With earnings overrides set | 400000 | 408000 (from breakup, by design) | PASS |
+
+Tests 1-2 also verified live end-to-end against the real `POST /api/payroll/employee-salary/`
+endpoint (Django `APIClient`, local dev DB, employee EMP00065) to confirm the backend persists the
+value exactly as sent with no server-side recomputation — both returned `annual_ctc` unchanged
+(`400000.00` and `750000.00` respectively). Test rows cleaned up after.
+
+`npx tsc --noEmit` clean. `npm run lint`: 9 problems / 0 errors (same pre-existing baseline as the
+2026-10-12 entry above — nothing new).
+
+## Key files changed
+
+`frontend/hooks/useBasicPayEditor.ts`
+
+## Notes for Next Developer
+
+- Never derive a saved annual CTC from a rounded monthly figure re-multiplied by 12 — always save
+  the literal entered value unless an override genuinely changes the real total.
+- `payBreakup.ts`'s `buildPay()` output (`monthlyCtc`, per-component amounts) is a *display*
+  breakdown of how an annual figure splits into whole monthly rupees — not itself a safe source for
+  the authoritative annual total.
+
+## Addendum — same rounding pattern in the Hire wizard / Edit Record "Basic pay" step
+
+`BasicPayStep.tsx` (shared by the Hire wizard and `EditRecordModal`'s Basic Pay tab) had the same
+display bug on its own live "Annual cost to company" summary row — computed from
+`Math.round(breakdown.monthly_cost_to_company) * 12`, drifting from the typed CTC for the same
+reason. Confirmed this was display-only, not data corruption: both save paths that use this step
+(`HireWizardClient.tsx:474`, `EditRecordModal.tsx:614`) already submit the literal typed
+`employment.annual_ctc` directly, never the preview breakdown's recomputed figure. Also confirmed
+the backend's own `estimate_salary_breakdown()` preview service (`apps/payroll/services_estimate.py:190`)
+has the identical `monthly * 12` pattern baked into its `annual_cost_to_company` field — out of
+scope to fix here since it's a deeper precision question across that whole preview engine's other
+fields (employer PF, gratuity provision, etc.), not specific to this ticket. Fixed `BasicPayStep.tsx`
+to just show the entered CTC directly (it has no override mechanism of its own, so there's never a
+legitimate reason for its display to diverge from what was typed), falling back to the breakdown's
+figure only when no CTC has been entered yet.
+
+## Addendum — related Role field format mismatch (Edit Record "Employment" tab)
+
+While testing this ticket, also found and fixed: the Employment tab's Employment type AND Role
+dropdowns were showing blank "Select" for every employee instead of their real values.
+- Employment type: `EditRecordModal.tsx`'s hydration never copied `employee_type` from the fetched
+  record into local state at all. Fixed to read it, and removed the no-op `onSetEmploymentType`
+  stub so the field is now actually editable and saves. Also removed the backend's
+  "locked once onboarding is complete" restriction specifically for `employee_type`
+  (`apps/accounts/views/employees_detail.py`) per explicit request — a Permanent employee can
+  genuinely move to Contract later, unlike e.g. full_name which really is a set-once fact.
+- Role: the shared `EmploymentStep`'s dropdown (built for the Hire wizard) uses the Role's numeric
+  id as its option values, but the employee record's `role` field is a name string — two different,
+  internally-consistent conventions elsewhere in the app colliding in one reused component. Fixed by
+  having `EditRecordModal` fetch the roles list itself to resolve name -> id for display. The
+  backend's PATCH handler (`employees_detail.py`) was also updated to accept the Role as either a
+  numeric id or a name (`Role.objects.get(pk=...)` tried first, `Role.objects.get(name=...)` as
+  fallback) so either calling convention works without the frontend needing to convert back before
+  saving. New tests: `apps/accounts/tests_employee_detail_patch_partial_update.py` ::
+  `EmployeeDetailPatchRoleLookupTests`.

@@ -42,8 +42,9 @@ function Group({ title, badge, badgeClass, lines, editable, onChange }: {
   );
 }
 
-export default function PayBreakupTables({ breakup, editable, variance, hasRecord, onChange }: {
+export default function PayBreakupTables({ breakup, annualCostToCompany, editable, variance, hasRecord, onChange }: {
   breakup: PayBreakup;
+  annualCostToCompany: number;
   editable: boolean;
   /** Annual cost to company minus the CTC on record. */
   variance: number;
@@ -59,7 +60,7 @@ export default function PayBreakupTables({ breakup, editable, variance, hasRecor
       <div className="paytot"><span>Monthly gross — paid to the employee</span><b>{inr(breakup.gross)}</b></div>
       <div className="paytot"><span>Employer contributions — on top of gross</span><b>{inr(breakup.employerTotal)}</b></div>
       <div className="paytot"><span>Monthly cost to company</span><b>{inr(breakup.monthlyCtc)}</b></div>
-      <div className="paytot"><span>Annual cost to company</span><b>{inr(breakup.monthlyCtc * 12)}</b></div>
+      <div className="paytot"><span>Annual cost to company</span><b>{inr(annualCostToCompany)}</b></div>
       <div className="paytot"><span>Statutory deductions</span><b>−{inr(breakup.deductionTotal)}</b></div>
       <div className="paytot"><span>Net take-home before income tax</span><b>{inr(breakup.net)}</b></div>
       {hasRecord && (

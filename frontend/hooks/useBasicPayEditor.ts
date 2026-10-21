@@ -87,7 +87,17 @@ export function useBasicPayEditor(employee: EmployeeLike, onSaved: () => void) {
     }),
     [ctcNumber, basicPercent, location, overrides],
   );
-  const annualCostToCompany = breakup.monthlyCtc * 12;
+  // The breakup rounds each component to a whole monthly rupee, so re-summing
+  // and ×12'ing it drifts from the entered amount whenever annual CTC isn't
+  // evenly divisible by 12 (400000 -> 399996). With no overrides, the
+  // breakup is purely a cosmetic display of how the typed CTC splits up, so
+  // the literal typed value is what should actually be saved. Overrides are
+  // the one case where the real total genuinely can differ from what was
+  // typed (an admin explicitly changed a component's amount), so only then
+  // is the resummed breakup the correct annual figure.
+  const hasOverrides = Object.keys(overrides).length > 0;
+  const breakupAnnual = breakup.monthlyCtc * 12;
+  const annualCostToCompany = hasOverrides ? breakupAnnual : Math.round(ctcNumber);
   const variance = current ? annualCostToCompany - Math.round(Number(current.annual_ctc)) : 0;
 
   const startsBeforeCurrent = !!current && !!effectiveFrom && effectiveFrom < current.effective_from;
@@ -133,7 +143,7 @@ export function useBasicPayEditor(employee: EmployeeLike, onSaved: () => void) {
     rows, current, loading: history.loading || detail.loading || !seeded, loadError: history.error,
     detail: detail.data, location,
     form: { effectiveFrom, setEffectiveFrom, reason, setReason, group, setGroup, level, setLevel, basicPercent, changeBasicPercent, annualCtc, setAnnualCtc },
-    breakup, annualCostToCompany, variance, hasOverrides: Object.keys(overrides).length > 0,
+    breakup, annualCostToCompany, variance, hasOverrides,
     setOverride, resetOverrides: () => setOverrides({}),
     delimitNote, delimitIsError: startsBeforeCurrent, formError, saving, save,
   };

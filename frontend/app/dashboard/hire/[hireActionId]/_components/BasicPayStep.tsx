@@ -54,6 +54,20 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
       .finally(() => setLoading(false));
   }, [annualCtc, salaryStructureId, branchName]);
 
+  // This step has no earnings-override UI of its own (unlike the standalone
+  // Basic Pay modal's useBasicPayEditor), so the "Annual cost to company"
+  // shown here should always just be the CTC that was typed -- never the
+  // preview breakdown's monthly_cost_to_company * 12, which drifts from it
+  // whenever annual_ctc isn't evenly divisible by 12 (the preview rounds
+  // each component to a whole monthly rupee first; 400000 -> 399996). What
+  // actually gets saved on submit is always the literal typed annual_ctc
+  // (see HireWizardClient.tsx/EditRecordModal.tsx), so this display should
+  // match that, not the breakdown's own lossy recomputation.
+  const enteredCtc = Number(annualCtc);
+  const annualCostToCompany = enteredCtc > 0
+    ? Math.round(enteredCtc)
+    : (breakdown ? Math.round(breakdown.monthly_cost_to_company) * 12 : 0);
+
   if (!annualCtc) {
     return (
       <div className="mstep on">
@@ -110,7 +124,7 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
                 so what's on screen is always internally consistent —
                 QA report #49: "54,012 x 12 = 6,48,144" (what a user would
                 manually check) didn't match the displayed "6,48,138". */}
-            <SummaryRow label="Annual cost to company" value={Math.round(breakdown.monthly_cost_to_company) * 12} />
+            <SummaryRow label="Annual cost to company" value={annualCostToCompany} />
             <SummaryRow label="Statutory deductions" formatted={INR_DEDUCTION(breakdown.total_deductions)} />
             <SummaryRow label="Net take-home before income tax" value={breakdown.net_pay} bold />
           </div>
