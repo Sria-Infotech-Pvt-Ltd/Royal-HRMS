@@ -83,6 +83,7 @@ export const API = {
     branches:    "/branch/branches/",
     bulkImport:  "/employees/bulk-import/",
     bulkImportSample: "/employees/bulk-import/sample/",
+    bulkImportStatus: (batchId: string) => `/employees/bulk-import/status/${batchId}/`,
   },
 
   hireActions: {

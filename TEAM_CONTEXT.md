@@ -4326,3 +4326,11 @@ suite: 178 tests, OK.
 
 ### Workflow note
 Every UAT ticket: implement across the whole tool, test locally, update this file, then commit and push.
+
+### 3. AIRA-UAT-003 — Bulk import "Network Error", outcome unknown
+- Already in place from earlier work: 120s client timeout for the upload, per-row `transaction.atomic()`, a `bulk_employee_import_started` AuditLog entry written before the loop (finished entry carries the same `batch_id`).
+- Gaps closed now: (a) the browser sends its own `batch_id` (UUID, `crypto.randomUUID()`) with the upload; the backend uses it if valid. (b) New `GET /api/employees/bulk-import/status/<batch_id>/` (`EmployeeBulkImportStatusView`, needs `employees.create`, only the uploader's own batches) returns `not_received | in_progress | interrupted | completed` with exact counts from the audit entries (`created_since_start` counts Users with `date_joined` ≥ start for in-progress/interrupted). (c) `BulkImportModal.tsx` checks the session with `GET /employees/me/` BEFORE uploading (refresh succeeds silently or the session-expired flow fires with nothing processed), and on a lost response/timeout/mid-upload 401 asks the status endpoint and shows a factual message (`lib/bulkImportStatus.ts`). The old "check your connection and try again" text is gone — it invited unsafe retries.
+- Re-uploading is safe: rows whose email already exists are skipped.
+- Server-side proxy/gunicorn timeouts are NOT in this repo (deploy/deploy.sh only) — if a real Network Error persists on UAT, check nginx `proxy_read_timeout` / gunicorn `--timeout` (default 30s) against the ~50-row import duration.
+- Tests: `BulkImportStatusTests` (7) in `apps/accounts/tests_bulk_import_qa58_59_61_65.py`; `lib/bulkImportStatus.test.ts` (5).
+- Local test caveat: row creation needs real Postgres (Placement ExclusionConstraint is a no-op/unsupported on SQLite), so the 3 older end-to-end import tests in that file fail under `USE_SQLITE=1` ("Subclasses must implement as_sql()") — pre-existing, unrelated; run them against a local Postgres.

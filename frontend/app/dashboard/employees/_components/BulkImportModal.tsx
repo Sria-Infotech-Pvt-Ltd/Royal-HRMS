@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { downloadCsv } from "@/lib/csv";
 import { downloadBlobFile } from "@/lib/downloadFile";
+import { describeBulkImportOutcome, type BulkImportStatus } from "@/lib/bulkImportStatus";
 import { EmployeeBulkImportError, EmployeeBulkImportResult } from "@/types/employeeBulkImport";
 import Modal from "@/components/Modal";
 
@@ -32,6 +33,15 @@ function downloadErrorReport(errors: EmployeeBulkImportError[]) {
     ["Row", "Email", "Field", "Error"],
     ...errors.map(e => [e.row, e.identifier, e.field, e.message]),
   ]);
+}
+
+async function fetchImportStatus(batchId: string): Promise<BulkImportStatus | null> {
+  try {
+    const res = await clientApi.get<{ data: BulkImportStatus }>(API.employees.bulkImportStatus(batchId), { timeout: 15000 });
+    return res.data.data;
+  } catch {
+    return null;
+  }
 }
 
 export default function BulkImportModal({ onClose, onSuccess }: Props) {
@@ -81,12 +91,25 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
     setUploading(true);
     setSubmitError(null);
     setResult(null);
+    // Sent with the upload so that, if the response is lost, the server can still tell us what happened to it.
+    const batchId = crypto.randomUUID();
     try {
+      // Check the session BEFORE sending 50 rows: clientApi refreshes an expired access token transparently, and
+      // if the session is really gone it signs the user out here, before anything has been processed.
+      try {
+        await clientApi.get(API.employees.me);
+      } catch {
+        setSubmitError("Your session has expired. Nothing was imported — sign in again and upload the file.");
+        return;
+      }
       const formData = new FormData();
       formData.append("file", file, file.name);
+      formData.append("batch_id", batchId);
+      // A 50-row import does several DB writes per row, so it needs far longer than clientApi's 15s default.
       const res = await clientApi.post<{ status: string; message: string; data: EmployeeBulkImportResult | null }>(
         API.employees.bulkImport,
         formData,
+        { timeout: 120000 },
       );
       if (res.data.data) {
         setResult(res.data.data);
@@ -95,9 +118,16 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
         setSubmitError(res.data.message || "Import failed. Please check your file and try again.");
       }
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Import failed. Please check your file and try again.";
-      setSubmitError(msg);
+      const e = err as { code?: string; status?: number; response?: { status?: number; data?: { message?: string } } };
+      const httpStatus = e.response?.status ?? e.status;
+      // A real validation/permission answer from the server (4xx/5xx other than 401) is shown as is. Anything else —
+      // no response, timeout, or 401 mid-import — means the outcome is unknown, so ask the server what happened.
+      if (httpStatus && httpStatus !== 401 && e.response?.data?.message) {
+        setSubmitError(e.response.data.message);
+      } else {
+        setSubmitError(describeBulkImportOutcome(await fetchImportStatus(batchId)));
+        onSuccess();
+      }
     } finally {
       setUploading(false);
     }

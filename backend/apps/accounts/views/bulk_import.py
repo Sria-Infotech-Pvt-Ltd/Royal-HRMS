@@ -212,6 +212,29 @@ class EmployeeBulkImportView(APIView):
         # len(failed_row_ids) == total_rows always holds.
         failed_row_ids: set = set()
 
+        # AIRA-UAT-003 — a request that dies mid-import (client timeout,
+        # dropped connection, etc.) previously left no trace at all: the
+        # only AuditLog entry was written after the full loop finished, so
+        # an interrupted import looked identical to one that was never
+        # attempted, even though rows processed before the interruption are
+        # already committed (each row is its own transaction.atomic() block
+        # below, not one all-or-nothing batch transaction). This "started"
+        # entry, correlated with the "finished" one below via batch_id, lets
+        # an admin confirm an import was attempted and roughly when, then
+        # cross-check actual User rows created after that timestamp if the
+        # "finished" entry never shows up.
+        import uuid as _uuid
+        # The browser sends its own batch_id so that, if the connection drops before the response
+        # arrives, it can still ask EmployeeBulkImportStatusView what happened to this exact import.
+        batch_id = _clean_batch_id(request.data.get('batch_id')) or str(_uuid.uuid4())
+        AuditLog.objects.create(
+            user       = request.user,
+            action     = 'bulk_employee_import_started',
+            module     = 'accounts',
+            changes    = {'batch_id': batch_id, 'total_rows': len(rows)},
+            ip_address = get_client_ip(request),
+        )
+
         for idx, raw_row in enumerate(rows, start=2):
             row_data = _normalize_employee_import_headers(raw_row)
             ser = EmployeeBulkImportRowSerializer(data=row_data)
@@ -328,100 +351,101 @@ class EmployeeBulkImportView(APIView):
 
             # Create the employee.
             try:
-                temp_password = ''.join(
-                    secrets.choice(string.ascii_letters + string.digits)
-                    for _ in range(12)
-                )
-                employee_id = EmployeeCodeSettings.generate_employee_id(
-                    first_name=vd['first_name'],
-                    last_name=vd['last_name'],
-                    date_of_joining=vd.get('date_of_joining'),
-                )
-                full_name   = f'{vd["first_name"]} {vd["last_name"]}'
+                with transaction.atomic():
+                    temp_password = ''.join(
+                        secrets.choice(string.ascii_letters + string.digits)
+                        for _ in range(12)
+                    )
+                    employee_id = EmployeeCodeSettings.generate_employee_id(
+                        first_name=vd['first_name'],
+                        last_name=vd['last_name'],
+                        date_of_joining=vd.get('date_of_joining'),
+                    )
+                    full_name   = f'{vd["first_name"]} {vd["last_name"]}'
 
-                user = User.objects.create_user(
-                    email                = email,
-                    password             = temp_password,
-                    full_name            = full_name,
-                    role                 = role_obj,
-                    employee_id          = employee_id,
-                    branch               = branch_name,
-                    phone                = vd.get('phone') or '',
-                    employee_type        = vd.get('employee_type') or 'Permanent',
-                    date_of_joining      = vd.get('date_of_joining'),
-                    must_change_password = True,
-                    onboarding_status    = User.ONBOARDING_PENDING,
-                )
-
-                if position_id_for_row is not None:
-                    assign_position(
-                        user, Position.objects.get(pk=position_id_for_row),
-                        effective_from=vd.get('date_of_joining') or timezone.localdate(),
-                        created_by=request.user,
+                    user = User.objects.create_user(
+                        email                = email,
+                        password             = temp_password,
+                        full_name            = full_name,
+                        role                 = role_obj,
+                        employee_id          = employee_id,
+                        branch               = branch_name,
+                        phone                = vd.get('phone') or '',
+                        employee_type        = vd.get('employee_type') or 'Permanent',
+                        date_of_joining      = vd.get('date_of_joining'),
+                        must_change_password = True,
+                        onboarding_status    = User.ONBOARDING_PENDING,
                     )
 
-                auto_fields = _auto_assign_managers(user)
-                if auto_fields:
-                    user.save(update_fields=[*auto_fields, 'updated_at'])
-
-                # Create EmployeeProfile with any optional fields present in the import sheet.
-                gender          = vd.get('gender') or ''
-                dob             = vd.get('date_of_birth')
-                blood           = vd.get('blood_group') or ''
-                address         = vd.get('address') or ''
-                uan_number      = vd.get('uan_number') or ''
-                aadhar_name     = vd.get('name_as_per_aadhar') or ''
-                if any([gender, dob, blood, address, uan_number, aadhar_name]):
-                    EmployeeProfile.objects.get_or_create(
-                        user=user,
-                        defaults={
-                            'gender':              gender,
-                            'date_of_birth':       dob,
-                            'blood_group':         blood,
-                            'current_address':     address,
-                            'uan_number':          uan_number,
-                            'name_as_per_aadhar':  aadhar_name,
-                        },
-                    )
-
-                # Create salary config if annual_ctc was provided in the import sheet.
-                annual_ctc_import = vd.get('annual_ctc') or ''
-                if annual_ctc_import:
-                    from decimal import Decimal as _Decimal, InvalidOperation
-                    from apps.payroll.models import EmployeeSalaryConfig as _SC
-                    try:
-                        ctc_value = _Decimal(str(annual_ctc_import).replace(',', ''))
-                        _SC.objects.create(
-                            employee=user,
-                            annual_ctc=ctc_value,
-                            effective_from=user.date_of_joining or user.date_joined.date(),
-                            is_active=True,
+                    if position_id_for_row is not None:
+                        assign_position(
+                            user, Position.objects.get(pk=position_id_for_row),
+                            effective_from=vd.get('date_of_joining') or timezone.localdate(),
+                            created_by=request.user,
                         )
-                    except InvalidOperation:
-                        logger.warning(
-                            'Invalid annual_ctc value "%s" for %s — skipping salary config',
-                            annual_ctc_import, email,
+
+                    auto_fields = _auto_assign_managers(user)
+                    if auto_fields:
+                        user.save(update_fields=[*auto_fields, 'updated_at'])
+
+                    # Create EmployeeProfile with any optional fields present in the import sheet.
+                    gender          = vd.get('gender') or ''
+                    dob             = vd.get('date_of_birth')
+                    blood           = vd.get('blood_group') or ''
+                    address         = vd.get('address') or ''
+                    uan_number      = vd.get('uan_number') or ''
+                    aadhar_name     = vd.get('name_as_per_aadhar') or ''
+                    if any([gender, dob, blood, address, uan_number, aadhar_name]):
+                        EmployeeProfile.objects.get_or_create(
+                            user=user,
+                            defaults={
+                                'gender':              gender,
+                                'date_of_birth':       dob,
+                                'blood_group':         blood,
+                                'current_address':     address,
+                                'uan_number':          uan_number,
+                                'name_as_per_aadhar':  aadhar_name,
+                            },
                         )
-                        row_errors.append({
-                            'row':     idx,
-                            'field':   'annual_ctc',
-                            'message': f'"{annual_ctc_import}" is not a valid number — salary config was not created for this employee.',
-                        })
-                    except Exception:
-                        logger.warning('Could not create salary config for %s from import', email)
 
-                # Auto-allocate leave balances based on active leave policies —
-                # same step EmployeeListCreateView.post() does for a single
-                # employee; this bulk path re-implements creation separately
-                # and had been missing it entirely.
-                from apps.hrms.views.leave_shared import _allocate_leaves_for_employee
-                _allocate_leaves_for_employee(user, user.date_of_joining)
+                    # Create salary config if annual_ctc was provided in the import sheet.
+                    annual_ctc_import = vd.get('annual_ctc') or ''
+                    if annual_ctc_import:
+                        from decimal import Decimal as _Decimal, InvalidOperation
+                        from apps.payroll.models import EmployeeSalaryConfig as _SC
+                        try:
+                            ctc_value = _Decimal(str(annual_ctc_import).replace(',', ''))
+                            _SC.objects.create(
+                                employee=user,
+                                annual_ctc=ctc_value,
+                                effective_from=user.date_of_joining or user.date_joined.date(),
+                                is_active=True,
+                            )
+                        except InvalidOperation:
+                            logger.warning(
+                                'Invalid annual_ctc value "%s" for %s — skipping salary config',
+                                annual_ctc_import, email,
+                            )
+                            row_errors.append({
+                                'row':     idx,
+                                'field':   'annual_ctc',
+                                'message': f'"{annual_ctc_import}" is not a valid number — salary config was not created for this employee.',
+                            })
+                        except Exception:
+                            logger.warning('Could not create salary config for %s from import', email)
 
-                seen_emails.add(email)
-                created_ids.append(employee_id)
-                created_rows.append({'row': idx, 'identifier': email,
-                                     'employee_id': employee_id})
-                logger.info('Bulk import: employee %s (%s) created', employee_id, email)
+                    # Auto-allocate leave balances based on active leave policies —
+                    # same step EmployeeListCreateView.post() does for a single
+                    # employee; this bulk path re-implements creation separately
+                    # and had been missing it entirely.
+                    from apps.hrms.views.leave_shared import _allocate_leaves_for_employee
+                    _allocate_leaves_for_employee(user, user.date_of_joining)
+
+                    seen_emails.add(email)
+                    created_ids.append(employee_id)
+                    created_rows.append({'row': idx, 'identifier': email,
+                                         'employee_id': employee_id})
+                    logger.info('Bulk import: employee %s (%s) created', employee_id, email)
 
             except Exception as exc:
                 logger.error('Bulk import row %d failed (%s): %s', idx, email, exc)
@@ -448,6 +472,7 @@ class EmployeeBulkImportView(APIView):
             action     = 'bulk_employee_import',
             module     = 'accounts',
             changes    = {
+                'batch_id':   batch_id,
                 'total_rows': total_rows,
                 'created':    created_count,
                 'skipped':    skipped_count,
@@ -474,6 +499,60 @@ class EmployeeBulkImportView(APIView):
                 'errors':               row_errors,
             },
         )
+
+
+def _clean_batch_id(raw) -> str:
+    """Return the canonical UUID string for `raw`, or '' if it is not a valid UUID."""
+    import uuid as _uuid
+    try:
+        return str(_uuid.UUID(str(raw)))
+    except (ValueError, AttributeError, TypeError):
+        return ''
+
+
+# A started import with no "finished" entry for longer than this is reported as interrupted rather than running.
+_IMPORT_STALE_AFTER = timedelta(minutes=10)
+
+
+class EmployeeBulkImportStatusView(APIView):
+    """What happened to a bulk import whose response never reached the browser (AIRA-UAT-003)?
+
+    Answers from the append-only AuditLog entries written by EmployeeBulkImportView:
+    not_received (nothing started, safe to upload again), in_progress, completed (exact counts),
+    or interrupted (started, never finished; `created_since_start` shows how many employees exist).
+    Re-uploading is always safe because rows whose email already exists are skipped.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, batch_id):
+        if not _has_perm(request.user, 'employees.create'):
+            return error(
+                'Only System Admin and HR Admin can perform bulk employee import.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+        batch = _clean_batch_id(batch_id)
+        logs = AuditLog.objects.filter(
+            user=request.user, module='accounts', changes__batch_id=batch,
+            action__in=('bulk_employee_import_started', 'bulk_employee_import'),
+        ).order_by('created_at')
+        started = next((log for log in logs if log.action == 'bulk_employee_import_started'), None)
+        finished = next((log for log in logs if log.action == 'bulk_employee_import'), None)
+
+        if started is None:
+            return success('No import with this id reached the server.', data={'state': 'not_received', 'batch_id': batch})
+        if finished is not None:
+            return success('Import finished.', data={
+                'state': 'completed', 'batch_id': batch, 'started_at': started.created_at,
+                'finished_at': finished.created_at,
+                **{key: finished.changes.get(key) for key in ('total_rows', 'created', 'skipped', 'failed')},
+            })
+        created_since_start = User.objects.filter(date_joined__gte=started.created_at).count()
+        is_stale = timezone.now() - started.created_at > _IMPORT_STALE_AFTER
+        return success('Import started but has not reported a result.', data={
+            'state': 'interrupted' if is_stale else 'in_progress', 'batch_id': batch,
+            'started_at': started.created_at, 'total_rows': started.changes.get('total_rows'),
+            'created_since_start': created_since_start,
+        })
 
 
 # ─── Employee Bulk Import — Sample Template ───────────────────────────────────
