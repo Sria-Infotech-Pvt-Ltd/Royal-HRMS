@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+from core.access import can_manage_team, users_with_permission
 import csv
 import io
 import logging
@@ -504,7 +505,7 @@ class OnboardingApprovalView(APIView):
             .order_by('-date_joined')
         )
         if not _has_perm(request.user, 'settings.edit'):
-            base_qs = base_qs.exclude(role__role_permissions__permission__codename='settings.edit')
+            base_qs = base_qs.exclude(users_with_permission('settings.edit'))
 
         stats = {
             'pending':   base_qs.filter(onboarding_status=User.ONBOARDING_PENDING).count(),
@@ -547,12 +548,11 @@ class OnboardingApprovalView(APIView):
             .prefetch_related('custom_field_files')
             .order_by('date_joined')
         )
-        role = request.user.role
         if not _has_perm(request.user, 'settings.edit'):
-            qs = qs.exclude(role__role_permissions__permission__codename='settings.edit')
+            qs = qs.exclude(users_with_permission('settings.edit'))
             # Same scoping as EmployeeListCreateView.get(): managers only see
             # their direct reports; everyone else is scoped to their own branch.
-            if role and role.can_manage_team:
+            if can_manage_team(request.user):
                 qs = qs.filter(reporting_manager=request.user)
             elif request.user.branch:
                 # A submitted candidate who hasn't been approved yet has no

@@ -96,7 +96,7 @@ class CarryForwardPreviewView(APIView):
 
         from apps.accounts.models import User
         employees = list(
-            User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+            User.objects.filter(is_active=True, employee_id__isnull=False).exclude(employee_id='')
         )
         policies = list(LeavePolicy.objects.filter(is_active=True, can_carry_forward=True))
 
@@ -140,7 +140,7 @@ class CarryForwardRunView(APIView):
 
         from apps.accounts.models import User
         employees = list(
-            User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+            User.objects.filter(is_active=True, employee_id__isnull=False).exclude(employee_id='')
         )
         policies = list(
             LeavePolicy.objects.filter(

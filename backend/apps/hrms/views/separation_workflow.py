@@ -1,3 +1,4 @@
+from core.access import can_manage_branch, can_manage_team
 import logging
 
 from django.utils import timezone
@@ -51,7 +52,7 @@ def _can_action_stage(user, sep_request, stage) -> bool:
         return _has_perm(user, 'separation.approve') and (not branch or branch == _user_branch(sep_request.employee))
     if stage.stage == SEP_STAGE_BRANCH_ADMIN:
         return bool(
-            user.role and user.role.can_manage_branch
+            can_manage_branch(user)
             and _user_branch(user) == _user_branch(sep_request.employee)
         )
     if stage.stage == SEP_STAGE_HR:
@@ -154,8 +155,7 @@ class SeparationHandoverTaskListCreateView(APIView):
         # step exists to enforce. Assigning within their team must go through
         # someone else (e.g. the approver) instead.
         assigned_to = serializer.validated_data.get('assigned_to')
-        role = request.user.role
-        is_manager_or_hr = bool(role and role.can_manage_team) or _has_perm(request.user, 'separation.approve')
+        is_manager_or_hr = can_manage_team(request.user) or _has_perm(request.user, 'separation.approve')
         if is_own and is_manager_or_hr and assigned_to and assigned_to.reporting_manager_id == request.user.id:
             return error('You cannot assign your own separation handover task to a member of your team.')
 
@@ -204,8 +204,7 @@ class SeparationHandoverTaskDetailView(APIView):
                 return error(first_error(serializer.errors))
 
             is_own = task.request.employee_id == user.id
-            role = user.role
-            is_manager_or_hr = bool(role and role.can_manage_team) or _has_perm(user, 'separation.approve')
+            is_manager_or_hr = can_manage_team(user) or _has_perm(user, 'separation.approve')
             assigned_to = serializer.validated_data.get('assigned_to')
             if is_own and is_manager_or_hr and assigned_to and assigned_to.reporting_manager_id == user.id:
                 return error('You cannot assign your own separation handover task to a member of your team.')
@@ -428,5 +427,5 @@ class SeparationActivityListView(APIView):
         sep_request, err = _get_visible_request(request_id, request.user)
         if err:
             return err
-        activities = sep_request.activities.select_related('actor', 'actor__role').all()
+        activities = sep_request.activities.select_related('actor').all()
         return success('Activity retrieved.', SeparationActivitySerializer(activities, many=True).data)

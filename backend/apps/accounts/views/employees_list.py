@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+from core.access import can_manage_team
 import csv
 import io
 import logging
@@ -161,13 +162,12 @@ class EmployeeListCreateView(APIView):
         # else's team.
         from apps.hrms.models import SEP_REJECTED, SeparationRequest
 
-        role = request.user.role
         own_sep_request_id = request.query_params.get('own_separation_request', '').strip()
         widen_for_own_separation = bool(own_sep_request_id) and SeparationRequest.objects.filter(
             id=own_sep_request_id, employee=request.user,
         ).exclude(status=SEP_REJECTED).exists()
 
-        if role and role.can_manage_team and not widen_for_own_separation:
+        if can_manage_team(request.user) and not widen_for_own_separation:
             qs = qs.filter(reporting_manager=request.user)
         elif not _has_perm(request.user, 'settings.edit') and request.user.branch:
             qs = qs.filter(branch=request.user.branch)
@@ -582,8 +582,7 @@ class EmployeeStatsView(APIView):
 
         base_qs = User.objects.filter(is_active__in=[True, False]).exclude(employee_id='')
 
-        role = request.user.role
-        if role and role.can_manage_team:
+        if can_manage_team(request.user):
             base_qs = base_qs.filter(reporting_manager=request.user)
         elif not _has_perm(request.user, 'settings.edit') and request.user.branch:
             base_qs = base_qs.filter(branch=request.user.branch)

@@ -1,3 +1,5 @@
+from core.permissions import has_perm
+from core.access import can_manage_team
 import logging
 
 from django.db import transaction
@@ -62,13 +64,7 @@ class SeparationReasonListView(APIView):
 
 
 def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    return user.role.role_permissions.filter(
-        permission__codename__in={codename, 'settings.edit'}
-    ).exists()
+    return has_perm(user, codename)
 
 
 def _user_branch(user) -> str:
@@ -79,7 +75,7 @@ def _approval_scope_filter(user) -> Q:
     """Scope filter for the HR/manager separation queue — excludes the viewer's own requests."""
     if _has_perm(user, 'settings.edit'):
         return ~Q(employee=user)
-    if user.role and user.role.can_manage_team:
+    if can_manage_team(user):
         return Q(employee__reporting_manager=user) & ~Q(employee=user)
     branch = _user_branch(user)
     branch_q = Q(employee__branch__iexact=branch) if branch else Q()
@@ -116,15 +112,10 @@ def _resolve_separation_chain(employee):
     """
     from ..models import SEP_STAGE_BRANCH_ADMIN, SEP_STAGE_MANAGER
 
-    role = employee.role
-    if role and role.can_manage_team:
+    if can_manage_team(employee):
         return [(SEP_STAGE_HR, employee.hr), (SEP_STAGE_BRANCH_ADMIN, None)]
 
-    is_hr_tier = bool(
-        role and role.role_permissions.filter(
-            permission__codename__in={'separation.approve', 'settings.edit'}
-        ).exists()
-    )
+    is_hr_tier = has_perm(employee, 'separation.approve')
     if is_hr_tier:
         return [(SEP_STAGE_BRANCH_ADMIN, None)]
 

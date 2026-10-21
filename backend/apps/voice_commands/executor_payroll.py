@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.permissions import has_perm
 from typing import Optional
 
 from django.contrib.auth import get_user_model
@@ -265,10 +266,7 @@ def _find_employees_by_name(request, name_query: str) -> list:
     # (e.g. accounts/views.py's _employee_out_of_branch_scope) rather than a
     # role-name string — keeps Branch Admin (can_manage_branch) correctly
     # branch-scoped here too, same as HR/employee.
-    is_org_admin = bool(
-        request.user.role
-        and request.user.role.role_permissions.filter(permission__codename='settings.edit').exists()
-    ) or getattr(request.user, 'is_superuser', False)
+    is_org_admin = has_perm(request.user, 'settings.edit')
     if not is_org_admin and request.user.branch:
         qs = qs.filter(branch=request.user.branch)
 

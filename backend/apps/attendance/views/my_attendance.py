@@ -16,6 +16,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+from core.access import can_manage_team
 import logging
 from datetime import timedelta
 
@@ -71,7 +72,7 @@ def _resolve_target_user(request):
     # reports only, everyone else (e.g. hr_admin) is scoped to their own
     # branch, mirroring the reporting-chain/branch scoping used in leave.py.
     if not _has_perm(request.user, 'settings.edit'):
-        if request.user.role and getattr(request.user.role, 'can_manage_team', False):
+        if can_manage_team(request.user):
             if user.reporting_manager_id != request.user.id:
                 return None, error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
         elif request.user.branch and user.branch != request.user.branch:

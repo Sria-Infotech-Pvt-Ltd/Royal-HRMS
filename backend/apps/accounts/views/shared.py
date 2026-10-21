@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+from core.access import can_manage_branch, can_manage_team, users_with_permission
 import csv
 import io
 import logging
@@ -155,7 +156,7 @@ def _auto_assign_managers(employee: 'User') -> list:
         hr_user = branch_obj.hr if branch_obj else None
         if not hr_user:
             hr_user = User.objects.filter(
-                role__role_permissions__permission__codename='employees.edit',
+                users_with_permission('employees.edit'),
                 branch__iexact=emp_branch, is_active=True,
             ).first()
         if hr_user and hr_user.pk != employee.pk:
@@ -163,7 +164,7 @@ def _auto_assign_managers(employee: 'User') -> list:
             changed.append('hr')
 
     # Managers are the reporting manager for others — they have none themselves.
-    if employee.role and employee.role.can_manage_team:
+    if can_manage_team(employee):
         return changed
 
     # Need at least a branch to find a manager.
@@ -457,7 +458,7 @@ def _employee_dict(user: User) -> dict:
     }
 
     # Managers ARE the reporting manager for others — they have no reporting manager themselves.
-    if not (user.role and user.role.can_manage_team):
+    if not can_manage_team(user):
         result['reporting_manager'] = {
             'id':   mgr.employee_id if mgr else None,
             'uuid': str(mgr.id)     if mgr else None,
@@ -530,8 +531,7 @@ def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
     approval time) — fall back to the source candidate's branch so HR can
     still see/act on their own branch's pending submissions.
     """
-    role = requesting_user.role
-    if role and role.can_manage_team:
+    if can_manage_team(requesting_user):
         return employee.reporting_manager_id != requesting_user.id
     if not _has_perm(requesting_user, 'settings.edit') and requesting_user.branch:
         employee_branch = employee.branch
@@ -1156,10 +1156,10 @@ def _can_manage_employee_documents(user, employee) -> bool:
         return False
     if _has_perm(user, 'settings.edit'):
         return True
-    if user.role and getattr(user.role, 'can_manage_branch', False):
+    if can_manage_branch(user):
         branch = (getattr(user, 'branch', '') or '').strip()
         return not branch or (getattr(employee, 'branch', '') or '').strip() == branch
-    if user.role and getattr(user.role, 'can_manage_team', False):
+    if can_manage_team(user):
         return employee.reporting_manager_id == user.id
     if employee.hr_id:
         return employee.hr_id == user.id
@@ -1252,7 +1252,7 @@ def _resolve_rule_approver(role, employee):
         return None
     if role.can_manage_team:
         rm = getattr(employee, 'reporting_manager', None)
-        if rm and rm.role and rm.role.can_manage_team:
+        if rm and can_manage_team(rm):
             return rm
         return None
     else:

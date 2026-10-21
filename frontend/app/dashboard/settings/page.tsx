@@ -11,6 +11,7 @@ interface OverviewData { admin_roles: number; audit_events_30d: number }
 const SETTINGS_ITEMS = [
   { id: "company",            cat: "company", icon: "ti-building",        iconClass: "sc-company", label: "Company Info",          desc: "Name, GST, address, registration details" },
   { id: "permissions",        cat: "company", icon: "ti-shield-lock",     iconClass: "sc-company", label: "Roles & Permissions",   desc: "Role-based access control for all users" },
+  { id: "access",             cat: "company", icon: "ti-key",             iconClass: "sc-company", label: "Access",                desc: "Permissions every employee has; positions carry the rest" },
   { id: "leave-policy",       cat: "modules", icon: "ti-beach",           iconClass: "sc-modules", label: "Leave Policy",          desc: "Configure leave types, accruals and limits" },
   { id: "approval-rules",     cat: "modules", icon: "ti-sitemap",         iconClass: "sc-modules", label: "Approval Rules",        desc: "Who approves leave, expenses, resignation and loans" },
   { id: "holiday-calendar",   cat: "modules", icon: "ti-calendar-event",  iconClass: "sc-modules", label: "Holiday Calendar",      desc: "Manage national, regional and company holidays" },
@@ -39,6 +40,7 @@ type CatId = "all" | "company" | "modules" | "comm" | "system";
 const ITEM_ROUTES: Record<string, string> = {
   company:                "/dashboard/settings/company",
   permissions:            "/dashboard/settings/permissions",
+  access:                 "/dashboard/settings/access",
   smtp:                   "/dashboard/settings/smtp",
   "email-templates":      "/dashboard/settings/email-templates",
   audit:                  "/dashboard/settings/audit",

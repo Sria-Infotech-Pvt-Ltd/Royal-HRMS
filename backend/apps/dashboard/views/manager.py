@@ -1,3 +1,4 @@
+from core.access import can_manage_team
 import hashlib
 import logging
 from datetime import timedelta
@@ -23,10 +24,10 @@ _TTL_BIRTHDAYS = 6 * 3600   # 6 h — team birthday data is stable
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _is_manager_or_lead(user) -> bool:
-    if not user or not user.role:
+    if not user:
         return False
-    # can_manage_team is the authoritative flag — set per-role, no role-name strings.
-    if user.role.can_manage_team:
+    # can_manage_team is the authoritative flag — set on the seat, no role-name strings.
+    if can_manage_team(user):
         return True
     # Admin/HR have employees.view — they also get manager dashboard access.
     if _has_perm(user, 'employees.view'):

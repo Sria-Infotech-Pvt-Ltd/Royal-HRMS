@@ -38,10 +38,9 @@ def is_full_access(user) -> bool:
     itself in this pass (that's the live production path, unchanged) —
     this is the NEW engine's own check, used only by scope_queryset()/
     can() below."""
-    if getattr(user, 'is_superuser', False):
-        return True
-    role = getattr(user, 'role', None)
-    return bool(role and role.is_full_access)
+    from core.access import is_full_access as _is_full_access
+
+    return _is_full_access(user)
 
 
 def _active_assignments(user, as_of: datetime.date):
@@ -140,10 +139,9 @@ def can(user, entity: EntityDefinition, action: str, record) -> bool:
 
 def _effective_permissions_uncached(user) -> frozenset[str]:
     from apps.accounts.models import RolePermission
-    codenames = set()
-    role = getattr(user, 'role', None)
-    if role is not None:
-        codenames.update(RolePermission.objects.filter(role=role).values_list('permission__codename', flat=True))
+    from core.permissions import effective_permission_codenames
+    # The seat the person holds, the company baseline and (until roles are deleted) their role.
+    codenames = set(effective_permission_codenames(user))
     for assignment in _active_assignments(user, datetime.date.today()):
         codenames.update(RolePermission.objects.filter(role=assignment.role).values_list('permission__codename', flat=True))
     return frozenset(codenames)

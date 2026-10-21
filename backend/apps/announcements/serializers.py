@@ -76,8 +76,6 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         user = request.user
-        if not user.role:
-            return False
         if _has_perm(user, 'settings.edit'):
             return True
         return obj.posted_by_id == user.id

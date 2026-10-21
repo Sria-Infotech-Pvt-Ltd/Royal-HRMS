@@ -6,6 +6,7 @@ Views: validate input → call service → return response.
 """
 from __future__ import annotations
 
+from core.access import can_manage_team
 import datetime
 import logging
 
@@ -86,7 +87,7 @@ def _manager_scope_employee_ids(user) -> list[str] | None:
     them every other manager's team too, not just their own.
     """
     try:
-        if user.role and getattr(user.role, 'can_manage_team', False):
+        if can_manage_team(user):
             return list(
                 user.direct_reports.filter(is_active=True).values_list('id', flat=True)
             )

@@ -5,6 +5,7 @@ gate transitions: cycle creation (notify L1 managers) and all-L1-complete
 """
 from __future__ import annotations
 
+from core.access import team_managers, users_with_permission
 import logging
 import threading
 
@@ -67,9 +68,7 @@ def notify_l1_approval_required(cycle) -> None:
     from django.contrib.auth import get_user_model
     User = get_user_model()
 
-    manager_qs = User.objects.filter(
-        is_active=True, role__can_manage_team=True,
-    ).select_related('role')
+    manager_qs = User.objects.filter(team_managers(), is_active=True)
     if cycle.branch:
         manager_qs = manager_qs.filter(branch=cycle.branch.branch_name)
 
@@ -100,10 +99,7 @@ def notify_l2_approval_required(cycle) -> None:
     from django.contrib.auth import get_user_model
     User = get_user_model()
 
-    hr_qs = User.objects.filter(
-        is_active=True,
-        role__role_permissions__permission__codename='payroll.edit',
-    ).distinct()
+    hr_qs = User.objects.filter(users_with_permission('payroll.edit'), is_active=True).distinct()
     if cycle.branch:
         hr_qs = hr_qs.filter(branch=cycle.branch.branch_name)
 

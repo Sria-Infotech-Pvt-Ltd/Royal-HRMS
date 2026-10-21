@@ -4,6 +4,12 @@ from rest_framework.permissions import BasePermission
 _SAFE_METHODS = frozenset(('GET', 'HEAD', 'OPTIONS'))
 
 
+def _is_saved_user(user) -> bool:
+    from django.db.models import Model
+
+    return isinstance(user, Model) and bool(user.pk)
+
+
 def _seat_permission_rows(user):
     """PositionPermission rows for the seat `user` holds today (their Placement covering today)."""
     from django.db.models import Q
@@ -19,7 +25,7 @@ def _seat_permission_rows(user):
     )
 
 
-def has_perm(user, codename: str) -> bool:
+def has_perm(user, codename: str, *, full_access_bypass: bool = True) -> bool:
     """
     True if the user holds `codename` through their ROLE (legacy) or through the POSITION they hold today.
 
@@ -35,15 +41,20 @@ def has_perm(user, codename: str) -> bool:
         return False
     # Superuser bypass checked BEFORE anything else — a superuser account
     # with no Role and no position must still pass.
-    if getattr(user, 'is_superuser', False):
+    if getattr(user, 'is_superuser', False) and full_access_bypass:
         return True
     # settings.edit is this codebase's universal "sees/does everything"
     # signal — checking it here (permission-based) instead of a hardcoded
     # role name means anything actually granted settings.edit gets the same bypass.
-    wanted = {codename, 'settings.edit'}
+    wanted = {codename, 'settings.edit'} if full_access_bypass else {codename}
     if user.role and user.role.role_permissions.filter(permission__codename__in=wanted).exists():
         return True
-    return _seat_permission_rows(user).filter(permission__codename__in=wanted).exists()
+    if not _is_saved_user(user):
+        return False  # a stand-in object, not a saved User: there is no seat or baseline to look up
+    if _seat_permission_rows(user).filter(permission__codename__in=wanted).exists():
+        return True
+    from core.access import baseline_codenames
+    return bool(baseline_codenames() & wanted)
 
 
 def effective_permission_codenames(user) -> list[str]:
@@ -64,7 +75,11 @@ def effective_permission_codenames(user) -> list[str]:
     codenames = set()
     if user.role:
         codenames.update(rp.permission.codename for rp in user.role.role_permissions.all())
+    if not _is_saved_user(user):
+        return sorted(codenames)
     codenames.update(_seat_permission_rows(user).values_list('permission__codename', flat=True))
+    from core.access import baseline_codenames
+    codenames.update(baseline_codenames())
     return sorted(codenames)
 
 
@@ -103,19 +118,8 @@ class HasSettingsPermission(BasePermission):
     def has_permission(self, request, view) -> bool:
         if not (request.user and request.user.is_authenticated):
             return False
-        # Superuser bypass checked BEFORE the role check — a superuser
-        # account with no linked Role row (e.g. created outside the normal
-        # create_superuser flow) must still pass; otherwise the missing-role
-        # guard below would deny it first and this bypass would never
-        # actually run for that account.
-        if request.user.is_superuser:
-            return True
-        if not request.user.role:
-            return False
         codename = 'settings.view' if request.method in _SAFE_METHODS else 'settings.edit'
-        return request.user.role.role_permissions.filter(
-            permission__codename=codename
-        ).exists()
+        return has_perm(request.user, codename)
 
 
 class HasCompletedOnboarding(BasePermission):
@@ -136,9 +140,8 @@ class HasCompletedOnboarding(BasePermission):
         # Superusers and anyone holding employees.view (system_admin, branch_admin,
         # HR — every admin-tier role) are exempt from onboarding: they're never
         # a new hire going through this flow themselves.
-        if user.is_superuser or (user.role and user.role.role_permissions.filter(permission__codename='employees.view').exists()):
-            return True
-        if user.role and getattr(user.role, 'can_manage_team', False):
+        from core.access import can_manage_team
+        if user.is_superuser or has_perm(user, 'employees.view') or can_manage_team(user):
             return True
         if user.onboarding_status != user.ONBOARDING_COMPLETE:
             return False

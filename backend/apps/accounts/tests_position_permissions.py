@@ -11,7 +11,8 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import AuditLog, OrgUnit, Permission, Placement, Position, PositionPermission
+from apps.accounts.models import AuditLog, BaselinePermission, OrgUnit, Permission, Placement, Position, PositionPermission, Role, User
+from core.access import can_manage_branch, can_manage_team, excluded_from_payroll, team_managers, users_with_permission
 from core.permissions import effective_permission_codenames, has_perm
 
 
@@ -150,3 +151,131 @@ class MigrateRolesToPositionsCommandTests(TestCase):
         )
         self.assertTrue(self.seat.can_manage_team)
         self.assertIn('0 seats', self._run('--apply'))
+
+
+class AccessHelperTests(TestCase):
+    """core.access: baseline permissions, seat flags and the "everyone who ..." conditions."""
+
+    def setUp(self):
+        cache.clear()
+        unit = OrgUnit.objects.create(name='Access Helper Test')
+        self.manager_seat = Position.objects.create(org_unit=unit, title='Team Lead', grade='L3', can_manage_team=True, can_manage_branch=True)
+        self.system_seat = Position.objects.create(org_unit=unit, title='Service Seat', grade='L1', exclude_from_payroll=True)
+        PositionPermission.objects.create(position=self.manager_seat, permission=_permission('leave.approve'))
+        role = make_role('plain_access_helper', permission_codenames=[])
+        self.lead = make_user('lead-access@test.com', role=role, employee_id='ACC1')
+        self.service = make_user('service-access@test.com', role=role, employee_id='ACC2')
+        self.nobody = make_user('nobody-access@test.com', role=role, employee_id='ACC3')
+        Placement.objects.create(position=self.manager_seat, employee=self.lead, effective_from=date.today())
+        Placement.objects.create(position=self.system_seat, employee=self.service, effective_from=date.today())
+
+    def test_seat_flags_drive_scope_helpers(self):
+        self.assertTrue(can_manage_team(self.lead))
+        self.assertTrue(can_manage_branch(self.lead))
+        self.assertFalse(can_manage_team(self.nobody))
+
+    def test_role_flags_still_count_until_roles_are_deleted(self):
+        legacy = make_role('legacy_manager_access', permission_codenames=[])
+        legacy.can_manage_team = True
+        legacy.save()
+        self.nobody.role = legacy
+        self.nobody.save()
+        self.assertTrue(can_manage_team(self.nobody))
+
+    def test_team_managers_condition_selects_seat_holders_and_works_in_exclude(self):
+        self.assertEqual(list(User.objects.filter(team_managers()).values_list('employee_id', flat=True)), ['ACC1'])
+        excluded = set(User.objects.exclude(team_managers()).values_list('employee_id', flat=True))
+        self.assertIn('ACC3', excluded)
+        self.assertNotIn('ACC1', excluded)
+
+    def test_users_with_permission_covers_seat_role_and_baseline(self):
+        self.assertEqual(list(User.objects.filter(users_with_permission('leave.approve')).values_list('employee_id', flat=True)), ['ACC1'])
+        role_holder = make_user('role-access@test.com', role=make_role('role_leave_access', permission_codenames=['leave.approve']), employee_id='ACC4')
+        self.assertEqual(sorted(User.objects.filter(users_with_permission('leave.approve')).values_list('employee_id', flat=True)), ['ACC1', 'ACC4'])
+        BaselinePermission.objects.create(permission=_permission('leave.approve'))
+        self.assertEqual(User.objects.filter(users_with_permission('leave.approve')).count(), User.objects.count())
+        self.assertTrue(role_holder.pk)
+
+    def test_excluded_from_payroll_follows_the_seat(self):
+        self.assertEqual(list(User.objects.filter(excluded_from_payroll()).values_list('employee_id', flat=True)), ['ACC2'])
+
+
+class BaselinePermissionTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.person = make_user('baseline-person@test.com', role=None, employee_id='BASE1')
+
+    def test_everyone_gets_baseline_permissions_without_a_role_or_seat(self):
+        self.assertFalse(has_perm(self.person, 'leave.apply'))
+        BaselinePermission.objects.create(permission=_permission('leave.apply'))
+        self.assertTrue(has_perm(self.person, 'leave.apply'))
+        self.assertEqual(effective_permission_codenames(self.person), ['leave.apply'])
+
+
+class MigrateBaselineAndPromotionTests(TestCase):
+    def setUp(self):
+        Role.objects.filter(is_default_employee_role=True).update(is_default_employee_role=False)
+        employee_role = make_role('default_emp_cmd', permission_codenames=['leave.apply', 'attendance.view'])
+        employee_role.is_default_employee_role = True
+        employee_role.save()
+        self.unit = OrgUnit.objects.create(name='Baseline Command Test')
+        self.seat = Position.objects.create(org_unit=self.unit, title='Engineer', grade='L2')
+        self.engineer = make_user('eng-cmd@test.com', role=employee_role, employee_id='BCMD1')
+        Placement.objects.create(position=self.seat, employee=self.engineer, effective_from=date.today())
+        admin_role = make_role('admin_cmd_seat', permission_codenames=['settings.edit'])
+        admin_role.is_full_access = True
+        admin_role.save()
+        self.admin = make_user('admin-cmd@test.com', role=admin_role, employee_id='BCMD2')
+
+    def _run(self, *args):
+        out = StringIO()
+        call_command('migrate_roles_to_positions', *args, stdout=out)
+        return out.getvalue()
+
+    def test_default_employee_permissions_become_baseline_not_seat_permissions(self):
+        self._run('--apply')
+        self.assertEqual(sorted(BaselinePermission.objects.values_list('permission__codename', flat=True)), ['attendance.view', 'leave.apply'])
+        self.assertFalse(self.seat.position_permissions.exists())
+
+    def test_unseated_admin_is_only_promoted_when_asked(self):
+        self.assertIn('NO SEAT: BCMD2', self._run('--apply'))
+        self.admin.refresh_from_db()
+        self.assertFalse(self.admin.is_superuser)
+        self.assertIn('PROMOTED to super-admin: BCMD2', self._run('--apply', '--promote-unseated-admins'))
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_superuser)
+
+
+class BaselinePermissionsApiTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        admin_role = make_role('admin_baseline_api', permission_codenames=['settings.edit'])
+        self.admin = make_user('admin-baseline@test.com', role=admin_role, employee_id='BAPI1')
+        self.plain = make_user('plain-baseline@test.com', role=make_role('plain_baseline_api', permission_codenames=[]), employee_id='BAPI2')
+        for codename in ('leave.apply', 'attendance.view'):
+            _permission(codename)
+        self.url = reverse('baseline-permissions')
+
+    def _client(self, user):
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return client
+
+    def test_admin_replaces_the_baseline_and_everyone_gets_it(self):
+        resp = self._client(self.admin).put(self.url, {'codenames': ['leave.apply', 'attendance.view']}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(has_perm(self.plain, 'leave.apply'))
+        self._client(self.admin).put(self.url, {'codenames': ['attendance.view']}, format='json')
+        self.assertFalse(has_perm(self.plain, 'leave.apply'))
+        self.assertEqual(AuditLog.objects.filter(action='baseline_permissions_update').count(), 2)
+
+    def test_any_signed_in_user_can_read_it(self):
+        BaselinePermission.objects.create(permission=_permission('leave.apply'))
+        resp = self._client(self.plain).get(self.url)
+        self.assertEqual(resp.data['data']['codenames'], ['leave.apply'])
+
+    def test_non_admin_cannot_change_it_and_full_access_cannot_be_baseline(self):
+        self.assertEqual(self._client(self.plain).put(self.url, {'codenames': ['leave.apply']}, format='json').status_code, 403)
+        self.assertEqual(self._client(self.admin).put(self.url, {'codenames': ['settings.edit']}, format='json').status_code, 400)
+        self.assertEqual(self._client(self.admin).put(self.url, {'codenames': ['no.such']}, format='json').status_code, 400)
+        self.assertFalse(BaselinePermission.objects.exists())

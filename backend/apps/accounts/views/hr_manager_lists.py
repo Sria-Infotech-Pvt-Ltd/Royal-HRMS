@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+from core.access import can_manage_team, team_managers, users_with_permission
 import csv
 import io
 import logging
@@ -142,11 +143,8 @@ class HRListView(APIView):
         # excludes any future role granted settings.edit, not just this name.
         hrs = (
             User.objects
-            .filter(
-                role__role_permissions__permission__codename='onboarding.approve',
-                is_active=True,
-            )
-            .exclude(role__role_permissions__permission__codename='settings.edit')
+            .filter(users_with_permission('onboarding.approve'), is_active=True)
+            .exclude(users_with_permission('settings.edit'))
             .filter(Q(branch__iexact=branch) | Q(managed_branches__branch_name__iexact=branch))
             .select_related('role')
             .distinct()
@@ -176,7 +174,7 @@ class ManagerListView(APIView):
             return error('department or branch query parameter is required.')
         managers = (
             User.objects
-            .filter(role__can_manage_team=True, is_active=True)
+            .filter(team_managers(), is_active=True)
             .select_related('role')
         )
         if department:
@@ -206,7 +204,7 @@ class EmployeeReportingManagerView(APIView):
         if employee is None:
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        if employee.role and employee.role.can_manage_team:
+        if can_manage_team(employee):
             return error('Managers do not have a reporting manager.')
 
         manager_id = request.data.get('reporting_manager_id')

@@ -13,10 +13,8 @@ class SoDBlockedError(Exception):
 
 def _user_codenames(user, *, including: set[str] | None = None) -> set[str]:
     from apps.accounts.models import RolePermission
-    codenames = set()
-    role = getattr(user, 'role', None)
-    if role is not None:
-        codenames.update(RolePermission.objects.filter(role=role).values_list('permission__codename', flat=True))
+    from core.permissions import effective_permission_codenames
+    codenames = set(effective_permission_codenames(user))
     from apps.platform_core.models import RoleAssignment
     for assignment in RoleAssignment.objects.filter(user=user, is_active=True).select_related('role'):
         codenames.update(RolePermission.objects.filter(role=assignment.role).values_list('permission__codename', flat=True))

@@ -58,8 +58,6 @@ class CanPostAnnouncement(BasePermission):
     def has_object_permission(self, request, view, obj) -> bool:
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return True
-        if not request.user.role:
-            return False
         if _has_perm(request.user, 'settings.edit'):
             return True
         return obj.posted_by_id == request.user.id

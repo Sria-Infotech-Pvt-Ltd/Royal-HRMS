@@ -1,3 +1,4 @@
+from core.access import can_manage_branch, can_manage_team
 import base64
 import csv
 import io
@@ -65,7 +66,7 @@ def _user_branch(user) -> str:
 
 
 def _is_branch_admin(user) -> bool:
-    return bool(user.role and getattr(user.role, 'can_manage_branch', False))
+    return can_manage_branch(user)
 
 
 def _branch_admin_covers(user, employee) -> bool:
@@ -171,7 +172,7 @@ def _approval_scope_filter(user) -> 'Q':
         branch_q = Q(employee__branch__iexact=branch) if branch else Q()
         return branch_q & Q(status__in=[REQ_PENDING, REQ_L2_PENDING]) & ~Q(employee=user)
 
-    is_manager = bool(user.role and user.role.can_manage_team)
+    is_manager = can_manage_team(user)
     scope = Q(l1_approver=user, status=REQ_PENDING) if is_manager else None
 
     if _has_perm(user, 'leave.approve'):
@@ -201,7 +202,7 @@ def _calendar_scope_filter(user) -> 'Q':
         return Q()
     # Same precedence as _approval_scope_filter above: can_manage_team must be
     # checked before leave.approve, since manager__team_lead holds both.
-    if user.role and user.role.can_manage_team:
+    if can_manage_team(user):
         return Q(employee__reporting_manager=user) | Q(employee=user)
     if _has_perm(user, 'leave.approve'):
         return Q(employee__branch__iexact=user.branch) if user.branch else Q()
@@ -464,7 +465,7 @@ def _can_adjust_balance(user, balance) -> bool:
     # so this must be checked before the broader leave.approve branch below —
     # otherwise a manager could adjust any same-branch employee's balance
     # instead of only their own direct reports.
-    if user.role and user.role.can_manage_team:
+    if can_manage_team(user):
         return balance.employee.reporting_manager_id == user.id
     if _has_perm(user, 'leave.approve'):
         branch = _user_branch(user)

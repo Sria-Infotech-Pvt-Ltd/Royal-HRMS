@@ -637,6 +637,8 @@ class Position(models.Model):
     # Role.can_manage_branch have until Roles are removed.
     can_manage_team   = models.BooleanField(default=False, help_text='The holder appears in manager dropdowns and manages a team.')
     can_manage_branch = models.BooleanField(default=False, help_text='The holder has access to every employee and record in their own branch.')
+    exclude_from_payroll   = models.BooleanField(default=False, help_text='The holder is left out of payroll processing (e.g. a system/API seat).')
+    exclude_from_headcount = models.BooleanField(default=False, help_text='The holder is left out of headcount-style dashboard counts.')
     # Deactivate rather than delete once a position has placement history —
     # deleting history is a compliance problem (Placement.position is
     # on_delete=PROTECT for the same reason).
@@ -771,6 +773,23 @@ class PositionPermission(models.Model):
 
     def __str__(self) -> str:
         return f'{self.position.title} → {self.permission.codename}'
+
+
+class BaselinePermission(models.Model):
+    """A permission EVERY employee has, whatever seat they hold (self-service: own leave, attendance, payslips...).
+
+    Replaces the permissions of the old "default employee" role. Edited by full-access users in Settings.
+    """
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    permission = models.OneToOneField(Permission, on_delete=models.CASCADE, related_name='baseline_grant')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_baseline_permissions'
+
+    def __str__(self) -> str:
+        return f'baseline → {self.permission.codename}'
 
 
 class HireAction(models.Model):

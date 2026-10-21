@@ -14,6 +14,7 @@ Maker-checker rules enforced here, not in the views:
 """
 from __future__ import annotations
 
+from core.access import can_manage_team
 import logging
 from datetime import datetime
 from typing import Optional
@@ -114,7 +115,7 @@ def _route_for(action_type: str, payload: dict) -> list:
 
 
 def _is_reporting_manager_of(user: User, employee: User) -> bool:
-    return employee.reporting_manager_id == user.id or bool(user.role and user.role.can_manage_team)
+    return employee.reporting_manager_id == user.id or can_manage_team(user)
 
 
 def build_steps(action_type: str, payload: dict, raiser: User, employee: User) -> list:

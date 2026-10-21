@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+from core.access import can_manage_branch, can_manage_team
 import csv
 import io
 import logging
@@ -215,8 +216,8 @@ class LoginView(APIView):
                 'onboarding_status':   user.onboarding_status,
                 'assessment_status':   _login_assessment_status(user),
                 'permissions':         permissions,
-                'can_manage_team':     user.role.can_manage_team if user.role else False,
-                'can_manage_branch':   user.role.can_manage_branch if user.role else False,
+                'can_manage_team':     can_manage_team(user),
+                'can_manage_branch':   can_manage_branch(user),
                 'is_superuser':        user.is_superuser or 'settings.edit' in permissions,
             },
         })

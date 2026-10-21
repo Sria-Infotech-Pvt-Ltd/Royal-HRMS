@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+from core.access import can_manage_team
 import os
 import re
 
@@ -2275,7 +2276,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
 
     def get_reporting_manager(self, obj):
         # Managers are the reporting manager for others — they have none of their own to show.
-        if obj.role and obj.role.can_manage_team:
+        if can_manage_team(obj):
             return None
         mgr = obj.reporting_manager
         if not mgr:

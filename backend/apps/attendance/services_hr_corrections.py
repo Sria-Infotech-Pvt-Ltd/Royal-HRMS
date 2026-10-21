@@ -15,6 +15,7 @@ Un-Punches list automatically.
 """
 from __future__ import annotations
 
+from core.access import can_manage_branch, can_manage_team
 import datetime
 import logging
 from zoneinfo import ZoneInfo
@@ -51,7 +52,7 @@ def _resolve_approval_chain(employee):
 
 
 def _is_branch_admin(user) -> bool:
-    return bool(user.role and getattr(user.role, 'can_manage_branch', False))
+    return can_manage_branch(user)
 
 
 def _branch_admin_covers(user, employee) -> bool:
@@ -135,7 +136,7 @@ def _approval_scope_filter(user) -> Q:
         branch = _user_branch(user)
         return Q(employee__branch=branch) if branch else Q()
 
-    is_manager = bool(user.role and user.role.can_manage_team)
+    is_manager = can_manage_team(user)
     scope = Q(l1_approver=user) if is_manager else None
 
     if _has_perm(user, 'attendance.create'):
@@ -172,7 +173,7 @@ def submit_correction(
     """
     l1, l2 = _resolve_approval_chain(employee)
 
-    if (employee.role and employee.role.can_manage_team) or l1 is None:
+    if can_manage_team(employee) or l1 is None:
         initial_status = AttendanceCorrection.STATUS_L2_PENDING
         l1_approver    = None
         l2_approver    = l2

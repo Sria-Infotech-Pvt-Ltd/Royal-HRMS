@@ -12,6 +12,7 @@ This is the baseline Phase 7A Task J's shadow-run parity checking will be
 compared against, so nothing here may diverge from the original even in
 small ways (formatting, log wording, etc. aside).
 """
+from core.access import excluded_from_payroll
 import logging
 from collections import defaultdict
 from datetime import date
@@ -328,7 +329,7 @@ def _eligible_employees_qs(cycle: PayrollCycle):
     what actually gets processed."""
     # Phase 4 Task B.3 — was .exclude(role__name__in=['system_admin']);
     # payroll-exclusion is now an explicit role attribute.
-    active_qs = User.objects.filter(is_active=True).exclude(role__exclude_from_payroll=True)
+    active_qs = User.objects.filter(is_active=True).exclude(excluded_from_payroll())
 
     # Mid-cycle leavers: an employee deactivated before this cycle is
     # processed was previously excluded outright by is_active=True above —
@@ -341,13 +342,13 @@ def _eligible_employees_qs(cycle: PayrollCycle):
     leaver_ids = (
         AttendanceRecord.objects
         .filter(employee__is_active=False, date__range=(cycle.cycle_start, cycle.cycle_end))
-        .exclude(employee__role__exclude_from_payroll=True)  # Phase 4 Task B.3 — was role__name__in=['system_admin']
+        .exclude(excluded_from_payroll('employee__'))
         .values_list('employee_id', flat=True)
         .distinct()
     )
     leaver_qs = User.objects.filter(id__in=leaver_ids)
 
-    employees_qs = (active_qs | leaver_qs).select_related('role')
+    employees_qs = (active_qs | leaver_qs)
 
     if cycle.branch:
         employees_qs = employees_qs.filter(branch=cycle.branch.branch_name)

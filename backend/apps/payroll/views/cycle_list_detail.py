@@ -1,3 +1,4 @@
+from core.access import team_managers
 import logging
 from collections import defaultdict
 from datetime import date
@@ -172,9 +173,7 @@ class PayrollCycleListView(APIView):
 
         # Seed one approval row per active manager in this branch (or all if global)
         try:
-            manager_qs = User.objects.filter(
-                is_active=True, role__can_manage_team=True,
-            ).exclude(pk=request.user.pk).select_related('role')
+            manager_qs = User.objects.filter(team_managers(), is_active=True).exclude(pk=request.user.pk)
 
             if branch_obj is not None:
                 manager_qs = manager_qs.filter(branch=branch_obj.branch_name)

@@ -36,3 +36,4 @@ from .hr_manager_lists import *  # noqa: F401,F403
 from .approval_workflow import *  # noqa: F401,F403
 from .bulk_import import *  # noqa: F401,F403
 from .position_permissions import *  # noqa: F401,F403
+from .baseline_permissions import *  # noqa: F401,F403

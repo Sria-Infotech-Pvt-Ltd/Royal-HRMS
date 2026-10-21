@@ -1,3 +1,4 @@
+from core.access import team_managers
 import logging
 from collections import defaultdict
 from datetime import date
@@ -202,9 +203,7 @@ class ManagerAttendanceApprovalListView(APIView):
             cycle.status == PayrollCycle.STATUS_ATTENDANCE_PENDING
             and not ManagerAttendanceApproval.objects.filter(cycle=cycle).exists()
         ):
-            manager_qs = User.objects.filter(
-                is_active=True, role__can_manage_team=True,
-            ).select_related('role')
+            manager_qs = User.objects.filter(team_managers(), is_active=True)
 
             if cycle.branch:
                 manager_qs = manager_qs.filter(branch=cycle.branch.branch_name)

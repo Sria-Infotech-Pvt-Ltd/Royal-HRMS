@@ -1,3 +1,4 @@
+from core.access import can_manage_branch, can_manage_team
 import logging
 
 from django.db import transaction
@@ -34,7 +35,7 @@ def _user_branch(user) -> str:
 
 
 def _is_branch_admin(user) -> bool:
-    return bool(user.role and getattr(user.role, 'can_manage_branch', False))
+    return can_manage_branch(user)
 
 
 def _branch_admin_covers(user, employee) -> bool:
@@ -90,7 +91,7 @@ def _approval_scope_filter(user) -> 'Q':
         branch_q = Q(employee__branch__iexact=branch) if branch else Q()
         return branch_q & Q(status__in=[REQ_PENDING, REQ_L2_PENDING]) & ~Q(employee=user)
 
-    is_manager = bool(user.role and user.role.can_manage_team)
+    is_manager = can_manage_team(user)
     scope = Q(l1_approver=user, status=REQ_PENDING) if is_manager else None
 
     if _has_perm(user, 'wfh.approve'):
@@ -201,7 +202,7 @@ class WorkFromHomeRequestListCreateView(APIView):
             # Managers skip L1 — their request routes directly to HR (L2), same
             # as leave — and escalate to L2 when there's no reporting manager at
             # all, so the request is never orphaned with no one to act on it.
-            if (request.user.role and request.user.role.can_manage_team) or l1 is None:
+            if can_manage_team(request.user) or l1 is None:
                 initial_status = REQ_L2_PENDING
                 l1_approver    = None
                 l2_approver    = l2

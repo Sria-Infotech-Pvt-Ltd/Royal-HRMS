@@ -1,3 +1,4 @@
+from core.access import can_manage_team
 import logging
 
 from django.utils import timezone
@@ -47,17 +48,17 @@ logger = logging.getLogger(__name__)
 
 
 def _can_l1_approve(user):
-    """True for any user whose role has can_manage_team, plus HR/sysadmin as fallback."""
-    if not user or not user.role:
+    """True for any user whose seat manages a team, plus HR/sysadmin as fallback."""
+    if not user:
         return False
     if getattr(user, 'is_superuser', False):
         return True
-    return bool(user.role.can_manage_team) or _has_perm(user, 'payroll.edit')
+    return can_manage_team(user) or _has_perm(user, 'payroll.edit')
 
 
 def _can_l2_approve(user):
     """True for users with payroll.edit (HR/sysadmin)."""
-    if not user or not user.role:
+    if not user:
         return False
     if getattr(user, 'is_superuser', False):
         return True

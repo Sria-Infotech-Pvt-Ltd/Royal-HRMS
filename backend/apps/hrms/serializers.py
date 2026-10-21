@@ -1,3 +1,5 @@
+from core.access import can_manage_branch
+from core.permissions import has_perm
 import logging
 import re
 
@@ -409,11 +411,7 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         user = request.user
         is_own = obj.employee_id == user.id
         is_pending = obj.status in ('pending', 'l2_pending')
-        has_perm = (
-            user.role is not None
-            and user.role.role_permissions.filter(permission__codename='leave.approve').exists()
-        )
-        return has_perm and not is_own and is_pending
+        return has_perm(user, 'leave.approve') and not is_own and is_pending
 
     def get_can_cancel(self, obj):
         """True only for the employee who submitted the request, while still pending."""
@@ -479,11 +477,7 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
         user = request.user
         is_own = obj.employee_id == user.id
         is_pending = obj.status in ('pending', 'l2_pending')
-        has_perm = (
-            user.role is not None
-            and user.role.role_permissions.filter(permission__codename='wfh.approve').exists()
-        )
-        return has_perm and not is_own and is_pending
+        return has_perm(user, 'wfh.approve') and not is_own and is_pending
 
     def get_can_cancel(self, obj):
         """True only for the employee who submitted the request, while still pending."""
@@ -719,31 +713,21 @@ def _stage_actionable(user, sep_request, stage) -> bool:
     ).exists()
     if earlier_pending:
         return False
-    if user.role and user.role.role_permissions.filter(permission__codename='settings.edit').exists():
+    if has_perm(user, 'settings.edit'):
         return True
     if stage.stage == SEP_STAGE_MANAGER:
         if stage.approver_id:
             return stage.approver_id == user.id
-        has_perm = bool(
-            user.role and user.role.role_permissions.filter(
-                permission__codename__in={'separation.approve', 'settings.edit'}
-            ).exists()
-        )
-        return has_perm and (not user.branch or user.branch == sep_request.employee.branch)
+        return has_perm(user, 'separation.approve') and (not user.branch or user.branch == sep_request.employee.branch)
     if stage.stage == SEP_STAGE_BRANCH_ADMIN:
         return bool(
-            user.role and user.role.can_manage_branch
+            can_manage_branch(user)
             and (user.branch or '') == (sep_request.employee.branch or '')
         )
     if stage.stage == SEP_STAGE_HR:
         if stage.approver_id:
             return stage.approver_id == user.id
-        has_perm = bool(
-            user.role and user.role.role_permissions.filter(
-                permission__codename__in={'separation.approve', 'settings.edit'}
-            ).exists()
-        )
-        return has_perm and (not user.branch or user.branch == sep_request.employee.branch)
+        return has_perm(user, 'separation.approve') and (not user.branch or user.branch == sep_request.employee.branch)
     return False
 
 
@@ -993,9 +977,7 @@ class SeparationClearanceSerializer(serializers.ModelSerializer):
         user = _authed_user(self.context)
         if not user or obj.request.employee_id == user.id or obj.status != APPROVAL_PENDING:
             return False
-        if user.role and user.role.role_permissions.filter(
-            permission__codename__in={'separation.approve', 'settings.edit'}
-        ).exists():
+        if has_perm(user, 'separation.approve'):
             return True
         if obj.clearance_type == SEP_CLEARANCE_MANAGER:
             from apps.accounts.services_approval import resolve_employee_org_unit_chief
@@ -1129,7 +1111,7 @@ class SeparationActivitySerializer(serializers.ModelSerializer):
         return obj.actor.full_name if obj.actor_id else 'System'
 
     def get_actor_role(self, obj):
-        return obj.actor.role.name if obj.actor_id and obj.actor.role_id else 'system'
+        return 'system'  # TODO(phase 3): actor role label is replaced by the actor's position title
 
 
 # ─── HR Help ────────────────────────────────────────────────────────────────────

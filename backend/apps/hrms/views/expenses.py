@@ -1,3 +1,4 @@
+from core.access import can_manage_branch, can_manage_team
 import logging
 
 from django.db import transaction
@@ -55,11 +56,11 @@ def _can_access_expense(user, expense) -> bool:
     if _has_perm(user, 'settings.edit'):
         return True
     # Branch Admin — unconditional access within their own branch
-    if user.role and getattr(user.role, 'can_manage_branch', False):
+    if can_manage_branch(user):
         branch = getattr(user, 'branch', '') or ''
         return not branch or (getattr(expense.employee, 'branch', '') or '') == branch
     # team leads / managers — scoped to their direct reports
-    if user.role and getattr(user.role, 'can_manage_team', False):
+    if can_manage_team(user):
         return expense.employee.reporting_manager_id == user.id
     # HR — scoped to their specifically assigned employees
     if expense.employee.hr_id:
@@ -88,11 +89,11 @@ class ExpenseListCreateView(APIView):
             # company-wide instead of just the employees they're allowed to act on.
             if _has_perm(request.user, 'settings.edit'):
                 pass
-            elif request.user.role and getattr(request.user.role, 'can_manage_branch', False):
+            elif can_manage_branch(request.user):
                 user_branch = getattr(request.user, 'branch', '') or ''
                 if user_branch:
                     queryset = queryset.filter(employee__branch=user_branch)
-            elif request.user.role and getattr(request.user.role, 'can_manage_team', False):
+            elif can_manage_team(request.user):
                 queryset = queryset.filter(employee__reporting_manager_id=request.user.id)
             else:
                 # HR — scoped to specifically assigned employees, falling back to

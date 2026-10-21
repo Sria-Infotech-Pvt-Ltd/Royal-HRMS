@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+from core.access import can_manage_team, users_with_permission
+from core.permissions import has_perm
 import csv
 import io
 import logging
@@ -457,7 +459,7 @@ class EmployeeDetailView(APIView):
 
         # Manual reporting manager assignment (overrides auto-assign; blocked for managers)
         if 'reporting_manager_id' in data:
-            if employee.role and employee.role.can_manage_team:
+            if can_manage_team(employee):
                 return error('Managers do not have a reporting manager.')
             rm_val = data.get('reporting_manager_id')
             if rm_val:
@@ -609,9 +611,9 @@ class EmployeeDetailView(APIView):
             return error('You cannot deactivate your own account.')
 
         if not new_status:
-            if employee.role and employee.role.role_permissions.filter(permission__codename='settings.edit').exists():
+            if has_perm(employee, 'settings.edit'):
                 active_admins = User.objects.filter(
-                    role__role_permissions__permission__codename='settings.edit',
+                    users_with_permission('settings.edit'),
                     is_active=True,
                 ).distinct().count()
                 if active_admins <= 1:
@@ -672,9 +674,9 @@ class EmployeeDetailView(APIView):
         if not employee.is_active:
             return error(f'Employee "{employee.full_name}" is already deactivated.')
 
-        if employee.role and employee.role.role_permissions.filter(permission__codename='settings.edit').exists():
+        if has_perm(employee, 'settings.edit'):
             active_admins = User.objects.filter(
-                role__role_permissions__permission__codename='settings.edit',
+                users_with_permission('settings.edit'),
                 is_active=True,
             ).distinct().count()
             if active_admins <= 1:

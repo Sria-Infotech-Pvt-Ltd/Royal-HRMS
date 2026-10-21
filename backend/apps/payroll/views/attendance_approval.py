@@ -1,3 +1,4 @@
+from core.access import can_manage_team
 import logging
 
 from django.db.models import Count, Sum, Q
@@ -17,12 +18,12 @@ HR_PERMISSION = 'payroll.edit'
 
 
 def _is_manager(user):
-    """True for users whose role has can_manage_team=True."""
-    if not user or not user.role:
+    """True for users whose seat manages a team."""
+    if not user:
         return False
     if getattr(user, 'is_superuser', False):
         return True
-    return bool(user.role.can_manage_team)
+    return can_manage_team(user)
 
 
 def _is_hr(user):

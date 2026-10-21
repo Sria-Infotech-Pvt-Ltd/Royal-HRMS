@@ -37,7 +37,7 @@ def reset_annual_leave_balances(self):
         prev_year = new_year - 1
 
         active_employees = list(
-            User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+            User.objects.filter(is_active=True, employee_id__isnull=False).exclude(employee_id='')
         )
         # Automatic task only runs policies set to automatic carry-forward mode.
         # Monthly-frequency policies are excluded too — they get their annual_days
@@ -158,7 +158,7 @@ def accrue_monthly_leave_balances(self):
         year  = today.year
 
         active_employees = list(
-            User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+            User.objects.filter(is_active=True, employee_id__isnull=False).exclude(employee_id='')
         )
         policies = list(LeavePolicy.objects.filter(is_active=True, accrual_frequency=ACCRUAL_MONTHLY))
 

@@ -7,6 +7,7 @@ own one-off HR-notification delivery.
 """
 from __future__ import annotations
 
+from core.access import users_with_permission
 import logging
 
 from celery import shared_task
@@ -55,7 +56,7 @@ def send_onboarding_submitted_notification_task(self, user_id):
                 hr_targets = [
                     (email, 'HR Team')
                     for email in User.objects.filter(
-                        role__role_permissions__permission__codename='onboarding.approve',
+                        users_with_permission('onboarding.approve'),
                         is_active=True,
                     ).exclude(email='').values_list('email', flat=True)
                 ]

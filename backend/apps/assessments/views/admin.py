@@ -374,7 +374,7 @@ class AssignAssessmentView(APIView):
 
         # ── Department or company-wide (bulk) ─────────────────────────────────
         from apps.accounts.models import User
-        employee_qs = User.objects.filter(is_active=True).exclude(role=None).exclude(employee_id='')
+        employee_qs = User.objects.filter(is_active=True).exclude(employee_id='')
         if department:
             from apps.accounts.services_approval import filter_queryset_by_department_name
             employee_qs = filter_queryset_by_department_name(employee_qs, department)

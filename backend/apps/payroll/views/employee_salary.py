@@ -1,3 +1,4 @@
+from core.access import can_manage_team
 import logging
 import uuid as _uuid_mod
 
@@ -48,7 +49,7 @@ class EmployeeSalaryConfigListView(APIView):
         #     configs, not their whole branch's.
         #   - Everyone else without settings.edit is branch-scoped.
         if not _is_admin(request.user):
-            if request.user.role and request.user.role.can_manage_team:
+            if can_manage_team(request.user):
                 configs = configs.filter(employee__reporting_manager=request.user)
             elif request.user.branch:
                 configs = configs.filter(employee__branch=request.user.branch)

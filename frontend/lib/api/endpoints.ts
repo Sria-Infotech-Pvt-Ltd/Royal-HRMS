@@ -106,6 +106,10 @@ export const API = {
     list: "/permissions/",
   },
 
+  access: {
+    baselinePermissions: "/settings/baseline-permissions/",
+  },
+
   settings: {
     audit: "/settings/audit/",
     emailLogs: "/settings/email-logs/",

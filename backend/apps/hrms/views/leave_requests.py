@@ -1,3 +1,4 @@
+from core.access import can_manage_team
 import base64
 import csv
 import io
@@ -207,7 +208,7 @@ class LeaveRequestListCreateView(APIView):
             # Managers skip L1 — their leave routes directly to HR (L2).
             # Also escalate to L2 when the employee has no reporting manager set,
             # so the request is never orphaned with no one to act on it.
-            if (request.user.role and request.user.role.can_manage_team) or l1 is None:
+            if can_manage_team(request.user) or l1 is None:
                 initial_status = REQ_L2_PENDING
                 l1_approver    = None
                 l2_approver    = l2

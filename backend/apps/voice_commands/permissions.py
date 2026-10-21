@@ -18,6 +18,8 @@ def has_required_permission(user, codename: str) -> bool:
     RolePermission rows or it doesn't, same as most existing call sites
     (e.g. hrms/views/leave.py, hrms/views/expenses.py, branch/views_access.py).
     """
-    if not user or not user.role:
-        return False
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
+    from core.permissions import has_perm
+
+    # No full-access bypass here: the codename itself must be held (by the seat, the baseline or, until
+    # roles are deleted, the role).
+    return has_perm(user, codename, full_access_bypass=False)

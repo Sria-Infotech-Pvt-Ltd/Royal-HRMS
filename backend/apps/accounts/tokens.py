@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.access import can_manage_branch, can_manage_team
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
@@ -26,8 +27,8 @@ def _volatile_claims(user) -> dict:
     return {
         'onboarding_status':     user.onboarding_status,
         'assessment_status':     user.assessment_status,
-        'can_manage_team':       bool(user.role and user.role.can_manage_team),
-        'can_manage_branch':     bool(user.role and user.role.can_manage_branch),
+        'can_manage_team':       can_manage_team(user),
+        'can_manage_branch':     can_manage_branch(user),
         'is_superuser':          user.is_superuser,
         'must_change_password':  user.must_change_password,
     }
