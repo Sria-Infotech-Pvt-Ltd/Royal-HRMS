@@ -9,8 +9,8 @@ import { useMemo } from "react";
 import DateInput from "@/components/shared/DateInput";
 import type { EmploymentDraft } from "../../hire/[hireActionId]/_components/EmploymentStep";
 import { useEmploymentLookups } from "@/hooks/useEmploymentLookups";
+import { EMPLOYMENT_TYPES } from "@/lib/employmentType";
 
-const EMPLOYMENT_TYPES = ["Permanent", "Contract", "Freelancer", "Consultant", "Part-Time", "Temporary", "Intern"];
 const WORK_MODES: [string, string][] = [["office", "Office"], ["hybrid", "Hybrid"], ["remote", "Remote"]];
 const ATTENDANCE_SCHEMES: [string, string][] = [["standard", "Standard – Office"], ["flexible", "Flexible"], ["shift_based", "Shift-based"]];
 const PROBATION_MONTHS = [3, 6, 12];
@@ -66,6 +66,7 @@ export default function EditRecordEmploymentStep({ value, onChange, positionTitl
         <div className="f"><label>Employment type <Required /></label>
           <select className="finput" value={value.employment_type} onChange={e => set("employment_type", e.target.value)}>
             <option value="">Select</option>
+            {value.employment_type && !EMPLOYMENT_TYPES.includes(value.employment_type) && <option value={value.employment_type}>{value.employment_type}</option>}
             {EMPLOYMENT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
           </select></div>
         <div className="f"><label>Probation period</label>

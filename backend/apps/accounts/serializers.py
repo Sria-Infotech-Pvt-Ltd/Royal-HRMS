@@ -2498,6 +2498,15 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
     def validate_email(self, value: str) -> str:
         return value.strip().lower()
 
+    def validate_employee_type(self, value: str) -> str:
+        from apps.accounts.employment_types import invalid_employment_type_message, normalize_employment_type
+        if not (value or '').strip():
+            return 'Permanent'
+        canonical = normalize_employment_type(value)
+        if canonical is None:
+            raise serializers.ValidationError(invalid_employment_type_message())
+        return canonical
+
     def validate_phone(self, value: str) -> str:
         value = value.strip()
         if value and not _EMP_PHONE_RE.match(value):

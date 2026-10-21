@@ -150,3 +150,51 @@ class EmployeeDetailPutEmploymentRoleTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.employee.refresh_from_db()
         self.assertNotEqual(self.employee.role, privileged)
+
+
+class EmploymentTypeNormalizationTests(TestCase):
+    """UAT: Edit record showed 'Select' for Employment type because imports stored free text ('Full Time')."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        hr_role = make_role('hr_emp_type', permission_codenames=['employees.edit', 'employees.view'])
+        self.client.force_authenticate(user=make_user('hr-type@test.com', role=hr_role, password='TestPass123!'))
+        self.employee = make_user(
+            'type-person@test.com', role=make_role('type_person_role', permission_codenames=[]),
+            full_name='Type Person', phone='9876500002', employee_id='EMPTYPE01', employee_type='Contract',
+        )
+        self.url = reverse('employee-detail', args=[self.employee.employee_id])
+
+    def test_free_text_type_is_stored_canonical(self):
+        for raw, expected in [('full time', 'Permanent'), ('PART TIME', 'Part-Time'), ('contractor', 'Contract')]:
+            resp = self.client.patch(self.url, {'employee_type': raw}, format='json')
+            self.assertEqual(resp.status_code, 200, resp.data)
+            self.employee.refresh_from_db()
+            self.assertEqual(self.employee.employee_type, expected)
+
+    def test_unknown_type_rejected_and_unchanged(self):
+        resp = self.client.patch(self.url, {'employee_type': 'Apprentice'}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.employee_type, 'Contract')
+
+    def test_blank_type_does_not_wipe_stored_value(self):
+        resp = self.client.patch(self.url, {'employee_type': '', 'work_location': 'Pune'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.employee_type, 'Contract')
+
+    def test_import_row_serializer_normalizes_type(self):
+        from apps.accounts.serializers import EmployeeBulkImportRowSerializer
+        base = {'first_name': 'A', 'last_name': 'B', 'email': 'a@b.test', 'role': 'employee', 'org_unit': 'X',
+                'position_title': 'Y', 'branch': 'HQ', 'date_of_joining': '2026-01-05'}
+        ok = EmployeeBulkImportRowSerializer(data={**base, 'employee_type': 'Full-Time'})
+        self.assertTrue(ok.is_valid(), ok.errors)
+        self.assertEqual(ok.validated_data['employee_type'], 'Permanent')
+        blank = EmployeeBulkImportRowSerializer(data={**base, 'employee_type': ''})
+        self.assertTrue(blank.is_valid(), blank.errors)
+        self.assertEqual(blank.validated_data['employee_type'], 'Permanent')
+        bad = EmployeeBulkImportRowSerializer(data={**base, 'employee_type': 'Apprentice'})
+        self.assertFalse(bad.is_valid())
+        self.assertIn('employee_type', bad.errors)

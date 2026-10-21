@@ -1,5 +1,6 @@
 "use client";
 
+import { EMPLOYMENT_TYPES } from "@/lib/employmentType";
 import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -57,7 +58,7 @@ interface EmploymentLookups {
   leavePolicies: { id: string | number; leave_type_display: string }[];
 }
 
-const EMP_TYPES = ["Permanent", "Contract", "Freelancer", "Consultant", "Part-Time", "Temporary", "Intern"];
+const EMP_TYPES = EMPLOYMENT_TYPES;
 const WORK_MODES = [["office", "Office"], ["remote", "Remote"], ["hybrid", "Hybrid"]];
 const PAY_GROUPS = [["monthly", "Monthly – India"], ["weekly", "Weekly"], ["biweekly", "Bi-Weekly"], ["daily", "Daily Wage"]];
 const ATTENDANCE_SCHEMES = [["standard", "Standard"], ["flexible", "Flexible"], ["shift_based", "Shift-based"]];
@@ -159,6 +160,7 @@ export default function EmploymentStep({
             onChange={e => onSetEmploymentType(e.target.value)}
             className="finput" style={{ cursor: "pointer" }}>
             <option value="">Select</option>
+            {value.employment_type && !EMP_TYPES.includes(value.employment_type) && <option value={value.employment_type}>{value.employment_type}</option>}
             {EMP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           {reservedEmployeeId && (

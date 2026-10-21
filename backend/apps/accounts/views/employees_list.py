@@ -111,6 +111,7 @@ from apps.accounts.serializers import (
     SMTPTestSerializer,
     VerifyOTPSerializer,
 )
+from apps.accounts.employment_types import invalid_employment_type_message, normalize_employment_type
 from apps.accounts.services_placement import assign_position, sync_from_position
 from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle, ResetPasswordRateThrottle
 from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
@@ -267,7 +268,8 @@ class EmployeeListCreateView(APIView):
         branch          = (request.data.get('branch')          or '').strip()
         date_of_joining = (request.data.get('date_of_joining') or '').strip()
         phone           = (request.data.get('phone')           or '').strip()
-        employee_type   = (request.data.get('employee_type')   or '').strip() or 'Permanent'
+        employee_type_raw = (request.data.get('employee_type') or '').strip()
+        employee_type   = normalize_employment_type(employee_type_raw) if employee_type_raw else 'Permanent'
         hr_id                 = (request.data.get('hr_id')                 or '').strip()
         reporting_manager_id  = (request.data.get('reporting_manager_id')  or '').strip()
         # Every role is hired onto a Position, department/designation are
@@ -293,6 +295,7 @@ class EmployeeListCreateView(APIView):
         if not last_name:       errs['last_name']       = 'Last name is required.'
         if not email:           errs['email']           = 'Email is required.'
         if not role_id:         errs['role']            = 'Role is required.'
+        if employee_type is None: errs['employee_type'] = invalid_employment_type_message()
         if is_branch_admin_role:
             if not designation: errs['designation'] = 'Designation is required.'
         elif not position_id:

@@ -52,6 +52,7 @@
 // fields, matching the explicit request) but are NOT sent on save; this is
 // stated in-code at the save call, not silently dropped without a trace.
 
+import { matchEmploymentType } from "@/lib/employmentType";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -357,7 +358,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       setRawRoleName(typeof rawRecord.role === "string" ? rawRecord.role : null);
       setEmployment(e => ({
         ...e,
-        employment_type: typeof rawRecord.employee_type === "string" ? rawRecord.employee_type : "",
+        employment_type: typeof rawRecord.employee_type === "string" ? matchEmploymentType(rawRecord.employee_type) : "",
         date_of_joining: emp.details.dateOfJoining ?? "",
         work_email: emp.email ?? "",
         branch: emp.details.branch ?? "",

@@ -41,6 +41,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from apps.accounts.employment_types import invalid_employment_type_message, normalize_employment_type
 from core.file_validation import validate_file_content as _validate_file_content
 from core.pagination import paginate, paginated_data
 from core.permissions import HasSettingsPermission, has_perm as _has_perm
@@ -336,6 +337,15 @@ class EmployeeDetailView(APIView):
 
         if 'employee_type' in data:
             employee_type = (data.get('employee_type') or '').strip()
+            if employee_type:
+                # Free text ("Full Time", "permanent") is matched to the canonical value; unknown values are
+                # rejected so the Employment type dropdown can always show what is stored.
+                employee_type = normalize_employment_type(employee_type) or ''
+                if not employee_type:
+                    message = invalid_employment_type_message()
+                    return error(message, data={'employee_type': message})
+            else:
+                employee_type = employee.employee_type  # blank = not chosen; never wipe the stored type
             # Unlike the other `locked` fields above, HR/admin can change
             # this after onboarding too -- a permanent employee can
             # genuinely move to contract (or vice versa) later in their
