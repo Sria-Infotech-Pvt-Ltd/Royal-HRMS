@@ -4303,3 +4303,22 @@ Verification before pushing: `manage.py check` clean, `makemigrations --check --
 (after the 1 hrms merge migration), `npx tsc --noEmit` clean (0 errors), `npm run lint` clean (same
 10 pre-existing warnings, 0 errors), full `apps.payroll` + `apps.accounts.tests_demo_workforce_data`
 suite: 178 tests, OK.
+
+---
+
+## Session Log — 2026-10-21 (UAT tickets: CTC rounding + role save)
+
+### 1. Annual CTC saved as ₹3,99,996 instead of ₹4,00,000 (Employees > Basic pay)
+- Root cause (frontend only): the Basic pay dialog rebuilt the annual figure as `round(CTC/12) * 12` from the pay breakup and sent that as `annual_ctc`; any CTC not divisible by 12 drifted (400000 → 399996). Backend stores `annual_ctc` exactly as sent.
+- Fix: `frontend/hooks/useBasicPayEditor.ts` now sends/shows the entered CTC when the breakup total is within ₹12 of it (monthly rounding only); beyond that (earnings overrides) it still uses the breakup total. `PayBreakupTables.tsx` / `EmployeeBasicPayModal.tsx` show the same figure.
+- Same display drift fixed in the Hire wizard Basic pay step (`BasicPayStep.tsx`) — saved value was already exact.
+- Existing records saved with the drift (e.g. EMP00054) stay wrong until re-saved.
+
+### 2. Edit full record > Employment: `Role "4" does not exist`
+- Root cause: Employment step's Role dropdown submits the Role's numeric id; `EmployeeDetailView._update_fields` looked roles up by name only.
+- Fix: backend (`accounts/views/employees_detail.py`) accepts a numeric id or a name (the `settings.edit` privileged-role guard still applies). Frontend (`EditRecordModal.tsx`) converts id → role name before save, resolves the existing role into the dropdown, and now also sends `employee_type`; the endpoint no longer locks `employee_type` after onboarding.
+- Tests: `EmployeeDetailPatchRoleLookupTests` in `apps/accounts/tests_employee_detail_patch_partial_update.py` (id, name, unknown id).
+- Local backend tests: run with `USE_SQLITE=1` (the `.env` Postgres is remote and slow for test DB creation).
+
+### Workflow note
+Every UAT ticket: implement across the whole tool, test locally, update this file, then commit and push.
