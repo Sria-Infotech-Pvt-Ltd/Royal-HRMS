@@ -66,7 +66,8 @@ import { apiToEmployee, type ApiEmployee } from "../[id]/_apiMapping";
 import BasicPayStep, { EMPTY_BASIC_PAY, type BasicPayDraft } from "../../hire/[hireActionId]/_components/BasicPayStep";
 import { STEPS as HIRE_STEPS } from "../../hire/[hireActionId]/_components/_wizardData";
 import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "../../hire/[hireActionId]/_components/StatutoryAccountsStep";
-import EmploymentStep, { EMPTY_EMPLOYMENT, type EmploymentDraft } from "../../hire/[hireActionId]/_components/EmploymentStep";
+import { EMPTY_EMPLOYMENT, type EmploymentDraft } from "../../hire/[hireActionId]/_components/EmploymentStep";
+import EditRecordEmploymentStep from "./EditRecordEmploymentStep";
 import DocumentsChecklistStep, { EMPTY_VERIFICATION, type VerificationDraft } from "../../hire/[hireActionId]/_components/DocumentsChecklistStep";
 import EmergencyContactsList, { type EmergencyContactEntry } from "../../hire/[hireActionId]/_components/EmergencyContactsList";
 import AddressFields, { EMPTY_ADDRESS_EXTRAS, type AddressExtras, type AddressFormFields } from "../../hire/[hireActionId]/_components/AddressFields";
@@ -248,6 +249,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   // revision row.
   const baselineCtc = useRef({ annualCtc: "", salaryStructure: "" });
   const [positionTitle, setPositionTitle] = useState("");
+  // Date of joining is only sent when changed, so saving never trips the backend's post-onboarding lock needlessly.
+  const baselineJoiningDate = useRef("");
   const [orgUnitName, setOrgUnitName] = useState("");
 
   const [statutory, setStatutory] = useState<StatutoryDraft>(EMPTY_STATUTORY);
@@ -355,6 +358,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       setEmployment(e => ({
         ...e,
         employment_type: typeof rawRecord.employee_type === "string" ? rawRecord.employee_type : "",
+        date_of_joining: emp.details.dateOfJoining ?? "",
+        work_email: emp.email ?? "",
         branch: emp.details.branch ?? "",
         reporting_manager_id: emp.details.reportingManagerId ?? "",
         dotted_line_manager_id: dottedLineManager?.uuid ?? "",
@@ -363,6 +368,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         probation_period_months: rawRecord.probation_period_months != null ? String(rawRecord.probation_period_months) : "",
         notice_period_days: rawRecord.notice_period_days != null ? String(rawRecord.notice_period_days) : "",
       }));
+      baselineJoiningDate.current = emp.details.dateOfJoining ?? "";
       setPositionTitle(emp.designation ?? "");
       setOrgUnitName(emp.department ?? "");
 
@@ -535,6 +541,10 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         // EmploymentStep's dropdown) -- the endpoint accepts either a
         // numeric id or a name, so this is sent as-is.
         role: employment.role || null,
+        // Only sent when the user picked a different position / joining date (see EditRecordEmploymentStep).
+        ...(employment.position ? { position: employment.position } : {}),
+        ...(employment.date_of_joining && employment.date_of_joining !== baselineJoiningDate.current
+          ? { date_of_joining: employment.date_of_joining } : {}),
         reporting_manager_id: employment.reporting_manager_id || null,
         dotted_line_manager_id: employment.dotted_line_manager_id || '',
         work_location: employment.work_location || '',
@@ -685,8 +695,10 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
           <div className="wiz-main">
             <div className="stephead" style={{ padding: "20px 24px 0" }}>
               <div>
-                <h3>{STEPS[step].label}</h3>
-                <p>{STEPS[step].sub}</p>
+                {step === 1
+                  ? <h3><em className="hl">Employment</em> details</h3>
+                  : <h3>{STEPS[step].label}</h3>}
+                <p>{step === 1 ? "Role, reporting line, work setup and pay." : STEPS[step].sub}</p>
               </div>
             </div>
 
@@ -923,12 +935,9 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
               )}
 
               {step === 1 && (
-                <EmploymentStep
+                <EditRecordEmploymentStep
                   value={employment} onChange={setEmployment}
-                  onSetEmploymentType={type => setEmployment(e => ({ ...e, employment_type: type }))}
-                  reservedEmployeeId=""
                   positionTitle={positionTitle} orgUnitName={orgUnitName}
-                  grade="" costCenter="" defaultRoleId={null} defaultRoleName={null}
                 />
               )}
 

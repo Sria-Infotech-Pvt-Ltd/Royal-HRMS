@@ -23,6 +23,9 @@ export interface EmploymentDraft {
   pay_group: string;
   attendance_scheme: string;
   leave_plan: string;
+  // Edit record only: the Hire wizard takes these from the hire action instead.
+  date_of_joining?: string;
+  position?: string;
 }
 
 export const EMPTY_EMPLOYMENT: EmploymentDraft = {
