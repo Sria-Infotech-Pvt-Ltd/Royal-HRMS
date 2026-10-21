@@ -292,6 +292,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                                       ["Professional Tax", p.pt_deduction],
                                       ["LWF (Employee)", p.lwf_employee],
                                       ["LOP Deduction", p.lop_deduction],
+                                      ...Object.entries(p.other_deductions ?? {}).map(([name, amt]) => [name, String(amt)]),
                                     ].map(([label, val]) => Number(val) > 0 && (
                                       <div key={label as string} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 13 }}>
                                         <span style={{ color: "var(--on-variant)" }}>- {label}</span>

@@ -123,6 +123,8 @@ export default function SalaryTab({ employeeId }: Props) {
                   <th>Annual CTC</th>
                   <th>Monthly CTC</th>
                   <th>Structure</th>
+                  <th>Components</th>
+                  <th>Saved by</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -132,11 +134,31 @@ export default function SalaryTab({ employeeId }: Props) {
                     <td>{fmtDate(h.effective_from)}</td>
                     <td style={{ fontVariantNumeric: "tabular-nums" }}>{INR(h.annual_ctc)}</td>
                     <td style={{ fontVariantNumeric: "tabular-nums" }}>{INR(h.monthly_ctc)}</td>
-                    <td>{h.structure_name ?? <span style={{ color: "var(--text-muted)" }}>Default</span>}</td>
+                    <td>{h.structure_name ?? h.template_structure_name ?? <span style={{ color: "var(--text-muted)" }}>Default</span>}</td>
+                    <td>
+                      {h.components && h.components.length > 0 ? (
+                        <details>
+                          <summary style={{ cursor: "pointer", fontSize: 12 }}>{h.components.filter(c => c.is_enabled).length} components</summary>
+                          <table style={{ fontSize: 12, marginTop: 6 }}>
+                            <tbody>
+                              {h.components.filter(c => c.is_enabled).map(c => (
+                                <tr key={c.id}>
+                                  <td style={{ paddingRight: 12 }}>{c.name}{c.component_type === "deduction" ? " (deduction)" : ""}</td>
+                                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{INR(c.monthly_amount)}/mo</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </details>
+                      ) : (
+                        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>From structure</span>
+                      )}
+                    </td>
+                    <td style={{ fontSize: 12 }}>{h.created_by_name ?? "—"}</td>
                     <td>
                       {h.is_active
-                        ? <span className="status-badge status-active">Active</span>
-                        : <span className="status-badge status-inactive">Superseded</span>
+                        ? <span className="status-badge status-active">Latest</span>
+                        : <span className="status-badge status-inactive">Earlier revision</span>
                       }
                     </td>
                   </tr>

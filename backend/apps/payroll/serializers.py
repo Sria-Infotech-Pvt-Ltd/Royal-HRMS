@@ -6,6 +6,7 @@ from .models import (
     SalaryComponent,
     BranchPayrollConfig,
     EmployeeSalaryConfig,
+    EmployeeSalaryComponent,
     PayrollCycle,
     ManagerAttendanceApproval,
     EmployeePayslip,
@@ -118,6 +119,8 @@ class StatutoryConfigSerializer(serializers.ModelSerializer):
 
 
 class SalaryComponentSerializer(serializers.ModelSerializer):
+    role = serializers.ChoiceField(choices=SalaryComponent.ROLE_CHOICES, required=False)
+
     class Meta:
         model = SalaryComponent
         fields = [
@@ -125,6 +128,7 @@ class SalaryComponentSerializer(serializers.ModelSerializer):
             'name',
             'component_type',
             'calculation_type',
+            'role',
             'value',
             'is_taxable',
             'is_active',
@@ -133,6 +137,14 @@ class SalaryComponentSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        # Callers that don't send a role get the one payroll has always
+        # derived from the name ("Basic", "HRA", "Special Allowance").
+        if 'role' not in validated_data:
+            from apps.payroll.services_salary_components import role_for_name
+            validated_data['role'] = role_for_name(validated_data.get('name', ''))
+        return super().create(validated_data)
 
 
 class SalaryStructureSerializer(serializers.ModelSerializer):
@@ -186,11 +198,32 @@ class BranchPayrollConfigSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'branch_name', 'branch_state', 'structure_name', 'created_at', 'updated_at']
 
 
+class EmployeeSalaryComponentSerializer(serializers.ModelSerializer):
+    """Read-only — one component of one salary revision (the saved snapshot)."""
+    annual_amount = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EmployeeSalaryComponent
+        fields = [
+            'id', 'source_component', 'name', 'component_type', 'calculation_type', 'role', 'value',
+            'monthly_amount', 'annual_amount', 'is_taxable', 'is_enabled', 'order',
+        ]
+        read_only_fields = fields
+
+    def get_annual_amount(self, obj):
+        return str(obj.monthly_amount * 12)
+
+
 class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.full_name', read_only=True)
     employee_id_code = serializers.CharField(source='employee.employee_id', read_only=True)
     structure_name = serializers.CharField(source='salary_structure.name', read_only=True)
     monthly_ctc = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    template_structure_name = serializers.CharField(source='template_structure.name', read_only=True, default=None)
+    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default=None)
+    # The revision's own component snapshot (empty for older revisions,
+    # which payroll still calculates from the live structure).
+    components = EmployeeSalaryComponentSerializer(many=True, read_only=True)
 
     class Meta:
         model = EmployeeSalaryConfig
@@ -203,14 +236,19 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
             'monthly_ctc',
             'salary_structure',
             'structure_name',
+            'template_structure',
+            'template_structure_name',
+            'components',
             'effective_from',
             'is_active',
+            'created_by_name',
             'created_at',
             'updated_at',
         ]
         read_only_fields = [
             'id', 'employee_name', 'employee_id_code',
-            'structure_name', 'monthly_ctc', 'created_at', 'updated_at',
+            'structure_name', 'monthly_ctc', 'template_structure', 'template_structure_name', 'components',
+            'created_by_name', 'created_at', 'updated_at',
         ]
 
 
@@ -327,6 +365,7 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
             'hra',
             'special_allowance',
             'other_earnings',
+            'other_deductions',
             'reimbursements',
             'bonus',
             'bonus_breakdown',
@@ -357,7 +396,7 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'employee_name', 'employee_id_code', 'department', 'branch',
             'cycle_start', 'cycle_end', 'pay_date',
-            'gross_earnings', 'lop_deduction', 'total_deductions', 'net_pay',
+            'gross_earnings', 'lop_deduction', 'total_deductions', 'net_pay', 'other_deductions',
             'status', 'payslip_pdf', 'sent_at', 'query_deadline', 'paid_at',
             'open_query_count', 'created_at', 'updated_at',
         ]

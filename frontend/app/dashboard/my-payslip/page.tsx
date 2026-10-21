@@ -23,6 +23,7 @@ interface ApiPayslip {
   hra: string;
   special_allowance: string;
   other_earnings: Record<string, number>;
+  other_deductions?: Record<string, number>;
   reimbursements: string;
   bonus: string;
   gross_earnings: string;
@@ -415,6 +416,9 @@ export default function MyPayslipPage() {
                   <DeductionRow label="ESI"                   value={slip.esi_employee} />
                   <DeductionRow label="Professional Tax (PT)" value={slip.pt_deduction} />
                   <DeductionRow label="Labour Welfare Fund"   value={slip.lwf_employee} />
+                  {Object.entries(slip.other_deductions ?? {}).map(([name, amt]) => (
+                    <DeductionRow key={name} label={name} value={amt} />
+                  ))}
                   <DeductionRow label="Loss of Pay (LOP)"     value={slip.lop_deduction} highlight />
                 </div>
                 <div className="flex justify-between items-center px-4 py-3 border-t mt-1" style={{ background: "var(--error-c)", borderColor: "var(--error-c)" }}>

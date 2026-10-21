@@ -20,12 +20,32 @@ export interface SalaryComponent {
   name: string;
   component_type: "earning" | "deduction" | "allowance";
   calculation_type: "percentage_of_ctc" | "percentage_of_basic" | "fixed";
+  /** Which payslip line it fills; payroll finds Basic by this, not by name. */
+  role: SalaryComponentRole;
   value: string;
   is_taxable: boolean;
   is_active: boolean;
   order: number;
   created_at: string;
   updated_at: string;
+}
+
+export type SalaryComponentRole = "basic" | "hra" | "special_allowance" | "other";
+
+/** One component of one employee's salary revision (saved snapshot). */
+export interface EmployeeSalaryComponent {
+  id: string;
+  source_component: string | null;
+  name: string;
+  component_type: SalaryComponent["component_type"];
+  calculation_type: SalaryComponent["calculation_type"];
+  role: SalaryComponentRole;
+  value: string;
+  monthly_amount: string;
+  annual_amount: string;
+  is_taxable: boolean;
+  is_enabled: boolean;
+  order: number;
 }
 
 export interface SalaryStructure {
@@ -94,10 +114,62 @@ export interface EmployeeSalaryConfig {
   monthly_ctc: string;
   salary_structure: string | null;
   structure_name: string | null;
+  /** Structure the components were copied from (display only). */
+  template_structure?: string | null;
+  template_structure_name?: string | null;
+  /** Empty for older revisions, which payroll still calculates from the live structure. */
+  components?: EmployeeSalaryComponent[];
   effective_from: string;
   is_active: boolean;
+  /** Who saved the revision (null for revisions saved before this was recorded). */
+  created_by_name?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** A component row as previewed / submitted from Assign CTC. */
+export interface SalaryComponentInput {
+  source_component: string | null;
+  name: string;
+  component_type: SalaryComponent["component_type"];
+  calculation_type: SalaryComponent["calculation_type"];
+  role: SalaryComponentRole;
+  value: string;
+  order: number;
+  is_taxable: boolean;
+  is_enabled: boolean;
+}
+
+export interface SalaryPreviewRow extends SalaryComponentInput {
+  monthly_amount: string;
+  annual_amount: string;
+}
+
+export interface SalaryPreviewTotals {
+  annual_ctc: string;
+  monthly_ctc: string;
+  monthly_earnings: string;
+  annual_earnings: string;
+  monthly_deductions: string;
+  annual_deductions: string;
+  annual_difference: string;
+}
+
+/** POST /payroll/employee-salary/ with dry_run=true. */
+export interface SalaryPreview {
+  template_structure: { id: string; name: string } | null;
+  components: SalaryPreviewRow[];
+  totals: SalaryPreviewTotals;
+  warnings: string[];
+  previous: null | {
+    id: string;
+    annual_ctc: string;
+    effective_from: string;
+    structure_name: string | null;
+    is_snapshot: boolean;
+    components: SalaryPreviewRow[];
+    totals: SalaryPreviewTotals;
+  };
 }
 
 export interface ProcessPayrollResult {
@@ -190,6 +262,8 @@ export interface EmployeePayslip {
   hra: string;
   special_allowance: string;
   other_earnings: Record<string, number>;
+  /** Deduction-type salary components (included in total_deductions). */
+  other_deductions?: Record<string, number>;
   reimbursements: string;
   bonus: string;
   bonus_breakdown: BonusEntry[];

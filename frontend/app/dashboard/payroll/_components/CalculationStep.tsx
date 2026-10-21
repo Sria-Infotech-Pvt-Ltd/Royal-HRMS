@@ -135,6 +135,7 @@ export default function CalculationStep({ cycleId, onNext, onBack }: Props) {
                           ["Prof. Tax",     p.pt_deduction],
                           ["LWF",           p.lwf_employee],
                           ["LOP Deduction", p.lop_deduction],
+                          ...Object.entries(p.other_deductions ?? {}).map(([name, amt]) => [name, String(amt)]),
                         ].map(([k, v]) => Number(v) > 0 && (
                           <div key={k as string} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13 }}>
                             <span style={{ color: "var(--on-variant)" }}>- {k}</span>

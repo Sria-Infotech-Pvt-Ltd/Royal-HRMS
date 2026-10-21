@@ -212,6 +212,20 @@ class SalaryComponent(models.Model):
         (CALC_FIXED, 'Fixed Amount'),
     ]
 
+    # Which payslip line a component fills. Payroll used to find these by
+    # exact name ("Basic", "HRA", "Special Allowance"); the role makes that
+    # explicit so renaming a component can't silently zero Basic (and PF).
+    ROLE_BASIC = 'basic'
+    ROLE_HRA = 'hra'
+    ROLE_SPECIAL_ALLOWANCE = 'special_allowance'
+    ROLE_OTHER = 'other'
+    ROLE_CHOICES = [
+        (ROLE_BASIC, 'Basic'),
+        (ROLE_HRA, 'HRA'),
+        (ROLE_SPECIAL_ALLOWANCE, 'Special Allowance'),
+        (ROLE_OTHER, 'Other'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     structure = models.ForeignKey(
         SalaryStructure,
@@ -225,6 +239,7 @@ class SalaryComponent(models.Model):
         max_digits=10, decimal_places=4,
         help_text='Percentage (e.g. 40.00 for 40%) or fixed rupee amount',
     )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ROLE_OTHER)
     is_taxable = models.BooleanField(default=True)
     is_active = models.BooleanField(default=True)
     order = models.PositiveSmallIntegerField(default=0)
@@ -317,7 +332,28 @@ class EmployeeSalaryConfig(models.Model):
         help_text='Leave blank to use branch/company default',
     )
     effective_from = models.DateField()
+    # Latest revision saved for the employee (what the screens show as
+    # "current"). Payroll picks the revision applicable to each cycle by
+    # effective date — see services_salary_components.applicable_configs.
     is_active = models.BooleanField(default=True)
+    # The shared structure this revision's components were copied from
+    # (employee pick → branch → company default at save time). Display only:
+    # payroll uses the copied EmployeeSalaryComponent rows, not this.
+    template_structure = models.ForeignKey(
+        SalaryStructure,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    # Who saved this revision (null for revisions saved before this was recorded).
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -331,6 +367,56 @@ class EmployeeSalaryConfig(models.Model):
     @property
     def monthly_ctc(self):
         return self.annual_ctc / 12
+
+
+class EmployeeSalaryComponent(models.Model):
+    """
+    One salary component of one employee's salary revision — a snapshot, so
+    later edits to the shared structure (or to another employee) never change
+    it. A revision with no rows (older records, onboarding / bulk-import
+    configs) is still calculated from the live structure as before.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    salary_config = models.ForeignKey(
+        EmployeeSalaryConfig,
+        on_delete=models.CASCADE,
+        related_name='components',
+    )
+    # The template component this row was copied from; null for components
+    # added only for this employee (or if the template row is later removed).
+    source_component = models.ForeignKey(
+        SalaryComponent,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    name = models.CharField(max_length=100)
+    component_type = models.CharField(max_length=20, choices=SalaryComponent.COMPONENT_TYPE_CHOICES)
+    calculation_type = models.CharField(max_length=30, choices=SalaryComponent.CALCULATION_TYPE_CHOICES)
+    role = models.CharField(
+        max_length=20, choices=SalaryComponent.ROLE_CHOICES, default=SalaryComponent.ROLE_OTHER,
+    )
+    value = models.DecimalField(
+        max_digits=10, decimal_places=4,
+        help_text='Percentage (e.g. 40.00 for 40%) or fixed monthly rupee amount',
+    )
+    # Monthly amount at save time, for display/history. Payroll recalculates
+    # from calculation_type + value + the revision's CTC.
+    monthly_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    is_taxable = models.BooleanField(default=True)
+    is_enabled = models.BooleanField(default=True)
+    order = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'payroll_employee_salary_components'
+        ordering = ['order', 'name']
+        unique_together = [('salary_config', 'name')]
+
+    def __str__(self):
+        return f'{self.salary_config_id} › {self.name}'
 
 
 class PayrollCycle(models.Model):
@@ -495,6 +581,11 @@ class EmployeePayslip(models.Model):
     other_earnings = models.JSONField(
         default=dict, blank=True,
         help_text='Additional components keyed by component name and amount',
+    )
+    # Salary components of type "deduction", keyed by name (included in total_deductions).
+    other_deductions = models.JSONField(
+        default=dict, blank=True,
+        help_text='Deduction-type salary components keyed by component name and amount',
     )
 
     # Reimbursements + bonuses (optional — governed by PayrollSettings toggles)

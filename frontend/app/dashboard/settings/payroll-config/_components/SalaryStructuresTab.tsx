@@ -25,11 +25,13 @@ interface ComponentFormState {
   value: string;
   is_taxable: boolean;
   order: string;
+  /** "" = decided from the name on the server (Basic / HRA / Special Allowance), as before. */
+  role: "" | "basic" | "hra" | "special_allowance" | "other";
 }
 
 const EMPTY_COMP: ComponentFormState = {
   name: "", component_type: "earning", calculation_type: "percentage_of_ctc",
-  value: "", is_taxable: true, order: "0",
+  value: "", is_taxable: true, order: "0", role: "",
 };
 
 export default function SalaryStructuresTab() {
@@ -108,6 +110,7 @@ export default function SalaryStructuresTab() {
         value: compForm.value,
         is_taxable: compForm.is_taxable,
         order: Number(compForm.order),
+        ...(compForm.role ? { role: compForm.role } : {}),
       });
       setCompForm(EMPTY_COMP);
       setShowAddComp(false);
@@ -352,6 +355,19 @@ export default function SalaryStructuresTab() {
                 </select>
               </Field>
             </div>
+            <Field label="Payslip line">
+              <select
+                value={compForm.role}
+                onChange={e => setCompForm(p => ({ ...p, role: e.target.value as ComponentFormState["role"] }))}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+              >
+                <option value="">Auto (from the name)</option>
+                <option value="basic">Basic</option>
+                <option value="hra">HRA</option>
+                <option value="special_allowance">Special Allowance</option>
+                <option value="other">Other</option>
+              </select>
+            </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={compForm.calculation_type === "fixed" ? "Amount (₹)" : "Percentage (%)"} required>
                 <input

@@ -17,9 +17,7 @@ from apps.payroll.models import (
     PayrollCycle,
     PayrollSettings,
     EmployeePayslip,
-    EmployeeSalaryConfig,
     SalaryStructure,
-    SalaryComponent,
     StatutoryConfig,
     PayrollAdjustment,
     ManagerAttendanceApproval,
@@ -33,6 +31,9 @@ from apps.payroll.serializers import (
 from apps.accounts.models import AuditLog, User
 from apps.attendance.models import AttendanceRecord, AttendanceSettings, AttendanceLateMarkRules
 from apps.branch.models import Branch
+from apps.payroll.services_salary_components import (
+    applicable_configs, calculate, specs_for_revision, specs_from_structure,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ _PF_DEFAULT_CEILING = Decimal('15000.00')
 # exactly the same columns as before.
 _PAYSLIP_FIELDS = [
     'salary_structure',
-    'annual_ctc', 'monthly_ctc', 'basic', 'hra', 'special_allowance', 'other_earnings',
+    'annual_ctc', 'monthly_ctc', 'basic', 'hra', 'special_allowance', 'other_earnings', 'other_deductions',
     'reimbursements', 'bonus', 'gross_earnings', 'total_working_days', 'lop_days',
     'lop_deduction', 'pf_wage_base', 'pf_employee', 'pf_employer', 'esi_employee', 'esi_employer',
     'pt_deduction', 'lwf_employee', 'lwf_employer', 'adjustments_earning',
@@ -109,32 +110,20 @@ def _compute_employee_payslip(
     silently drift back in as an unconfigurable fallback.
     """
     monthly_ctc = salary_config.monthly_ctc
-    basic = Decimal('0')
-    hra = Decimal('0')
-    special_allowance = Decimal('0')
-    other_earnings = {}
-    other_earnings_total = Decimal('0')
-
-    for component in components:
-        if component.calculation_type == SalaryComponent.CALC_PCT_CTC:
-            amount = monthly_ctc * component.value / 100
-        elif component.calculation_type == SalaryComponent.CALC_PCT_BASIC:
-            amount = basic * component.value / 100
-        else:
-            amount = component.value
-
-        name_lower = component.name.lower()
-        if name_lower == 'basic':
-            basic = amount
-        elif name_lower == 'hra':
-            hra = amount
-        elif name_lower == 'special allowance':
-            special_allowance = amount
-        else:
-            # JSONField can't store Decimal directly — cast to float for storage,
-            # but keep the running total in Decimal to avoid binary float noise.
-            other_earnings[component.name] = float(amount)
-            other_earnings_total += amount
+    # `components` are ComponentSpecs — the revision's own snapshot, or the
+    # live structure for older revisions (services_salary_components).
+    # Basic is found by role and calculated first; deduction-type components
+    # are subtracted below instead of being added to gross.
+    breakdown = calculate(components, monthly_ctc)
+    basic = breakdown.basic
+    hra = breakdown.hra
+    special_allowance = breakdown.special_allowance
+    other_earnings_total = breakdown.other_earnings_total
+    component_deductions = breakdown.other_deductions_total
+    # JSONField can't store Decimal directly — cast to float for storage,
+    # but keep the running totals in Decimal to avoid binary float noise.
+    other_earnings = {name: float(amount) for name, amount in breakdown.other_earnings.items()}
+    other_deductions = {name: float(amount) for name, amount in breakdown.other_deductions.items()}
 
     gross = basic + hra + special_allowance + other_earnings_total
 
@@ -207,6 +196,7 @@ def _compute_employee_payslip(
 
     total_deductions = (
         lop_deduction + pf_employee + esi_employee + pt + lwf_employee + adj_deduction
+        + component_deductions
     )
     net_pay = gross + adj_earning - total_deductions
 
@@ -218,6 +208,7 @@ def _compute_employee_payslip(
         'hra':                   hra,
         'special_allowance':     special_allowance,
         'other_earnings':        other_earnings,
+        'other_deductions':      other_deductions,
         'reimbursements':        Decimal('0'),  # populated in wizard reimbursements step
         'bonus':                 Decimal('0'),  # populated in wizard bonuses step
         'gross_earnings':        gross,
@@ -337,20 +328,10 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     employees = list(employees_qs)
     employee_ids = [e.id for e in employees]
 
-    # ── Bulk fetch: latest active salary config per employee ───────────────
-    # (was: EmployeeSalaryConfig.objects.filter(employee=employee, ...).first()
-    #  inside the loop — 1 query per employee, plus a hidden extra query per
-    #  employee when accessing salary_config.salary_structure without
-    #  select_related, now fixed here too.)
-    salary_config_by_employee = {}
-    for cfg in (
-        EmployeeSalaryConfig.objects
-        .filter(employee_id__in=employee_ids, is_active=True, effective_from__lte=cycle.cycle_end)
-        .select_related('salary_structure')
-        .order_by('employee_id', '-effective_from')
-    ):
-        # First row seen per employee (ordered by -effective_from) is the latest.
-        salary_config_by_employee.setdefault(cfg.employee_id, cfg)
+    # ── Bulk fetch: the salary revision in force for this cycle, per employee ──
+    # By effective date, so a future-dated revision doesn't leave the months
+    # before it without a salary (see services_salary_components._applicable).
+    salary_config_by_employee = applicable_configs(employee_ids, cycle.cycle_end)
 
     # ── Bulk fetch: every branch referenced by these employees ─────────────
     # (was: Branch.objects.filter(branch_name=employee.branch).first() inside the loop)
@@ -435,7 +416,8 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
             components_cache[structure.id] = list(
                 structure.components.filter(is_active=True).order_by('order')
             )
-        return components_cache[structure.id]
+        # Fresh specs per employee: calculate() writes amounts onto them.
+        return specs_from_structure(components_cache[structure.id])
 
     def _statutory_for(state):
         if state is None:
@@ -456,17 +438,15 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
         branch_obj = branch_by_name.get(employee.branch)
         branch_config = getattr(branch_obj, 'payroll_config', None) if branch_obj else None
 
-        # Resolve structure: employee override -> branch -> default
-        structure = salary_config.salary_structure
-        if structure is None and branch_config and branch_config.salary_structure:
-            structure = branch_config.salary_structure
-        if structure is None:
-            structure = default_structure
-        if structure is None:
+        # The revision's own components; older revisions without a snapshot
+        # resolve the live structure as before: employee override -> branch -> default.
+        components, structure = specs_for_revision(
+            salary_config, employee, branch_config=branch_config,
+            default_structure=default_structure, structure_specs=_components_for,
+        )
+        if components is None:
             skipped.append(f'{employee.full_name} (no structure)')
             continue
-
-        components = _components_for(structure)
         statutory = _statutory_for(branch_obj.state) if branch_obj else None
         adjustments = adjustments_by_employee.get(employee.id, [])
 

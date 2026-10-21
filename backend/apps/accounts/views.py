@@ -5668,17 +5668,21 @@ class OnboardingApprovalView(APIView):
             if annual_ctc_raw:
                 from decimal import Decimal as _Decimal
                 from django.utils import timezone as _tz
-                from apps.payroll.models import EmployeeSalaryConfig as _SalaryConfig
+                from apps.payroll.services_salary_components import assign_salary as _assign_salary
                 try:
                     _annual_ctc = _Decimal(annual_ctc_raw)
-                    _SalaryConfig.objects.filter(employee=target, is_active=True).update(is_active=False)
-                    _SalaryConfig.objects.create(
+                    # Same revision + component copy as Assign CTC, in its own
+                    # savepoint; approving twice with the same CTC/date reuses it.
+                    _, _created = _assign_salary(
                         employee=target,
                         annual_ctc=_annual_ctc,
                         effective_from=target.date_of_joining or _tz.now().date(),
-                        is_active=True,
+                        source='onboarding_approval',
+                        user=request.user,
+                        ip_address=get_client_ip(request),
                     )
-                    logger.info('EmployeeSalaryConfig created for %s via onboarding approval', target.email)
+                    logger.info('EmployeeSalaryConfig %s for %s via onboarding approval',
+                                'created' if _created else 'already present', target.email)
                 except Exception:
                     logger.exception('Failed to create salary config for %s during onboarding approval', target.email)
 
@@ -6783,14 +6787,17 @@ class EmployeeBulkImportView(APIView):
                 annual_ctc_import = vd.get('annual_ctc') or ''
                 if annual_ctc_import:
                     from decimal import Decimal as _Decimal, InvalidOperation
-                    from apps.payroll.models import EmployeeSalaryConfig as _SC
+                    from apps.payroll.services_salary_components import assign_salary as _assign_salary
                     try:
                         ctc_value = _Decimal(str(annual_ctc_import).replace(',', ''))
-                        _SC.objects.create(
+                        # Revision + component copy in one savepoint (nothing half-saved).
+                        _assign_salary(
                             employee=user,
                             annual_ctc=ctc_value,
                             effective_from=user.date_of_joining or user.date_joined.date(),
-                            is_active=True,
+                            source='employee_bulk_import',
+                            user=request.user,
+                            ip_address=get_client_ip(request),
                         )
                     except InvalidOperation:
                         logger.warning(
