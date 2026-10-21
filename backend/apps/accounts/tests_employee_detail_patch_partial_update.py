@@ -92,3 +92,61 @@ class EmployeeDetailPatchRoleLookupTests(TestCase):
     def test_unknown_role_id_still_rejected(self):
         resp = self._patch_role('999999')
         self.assertEqual(resp.status_code, 400)
+
+
+class EmployeeDetailPutEmploymentRoleTests(TestCase):
+    """UAT (Deepak EMP00055 / Arjun EMP00006): Edit full record > Employment PUT with the existing Employee role
+    rejected as 'Role "4" does not exist' and nothing persisted."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        hr_role = make_role('hr_put_role', permission_codenames=['employees.edit', 'employees.view'])
+        self.client.force_authenticate(user=make_user('hr-put@test.com', role=hr_role, password='TestPass123!'))
+        self.employee_role = make_role('employee_put_role', permission_codenames=[])
+        self.manager = make_user('mgr-put@test.com', role=make_role('mgr_put_role', permission_codenames=[]),
+                                 full_name='Rakesh Manager', employee_id='EMPMGR01')
+        # An imported employee: onboarding not complete, no role yet.
+        self.employee = make_user(
+            'imported-put@test.com', role=make_role('imported_put_role', permission_codenames=[]),
+            full_name='Imported Person', phone='9876500001', employee_id='EMPIMP01',
+            onboarding_status='draft',
+        )
+
+    def _put(self, role):
+        payload = {
+            'employee_type': 'Permanent', 'role': role, 'reporting_manager_id': str(self.manager.pk),
+            'dotted_line_manager_id': '', 'work_location': 'Hyderabad', 'work_mode': 'office',
+            'probation_period_months': '6', 'notice_period_days': '30',
+        }
+        return self.client.put(reverse('employee-detail', args=[self.employee.employee_id]), payload, format='json')
+
+    def test_put_full_employment_payload_with_role_id_string_persists(self):
+        resp = self._put(str(self.employee_role.pk))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.role, self.employee_role)
+        self.assertEqual(self.employee.reporting_manager_id, self.manager.pk)
+        self.assertEqual(self.employee.employee_type, 'Permanent')
+        self.assertEqual(self.employee.work_location, 'Hyderabad')
+        self.assertEqual(self.employee.notice_period_days, 30)
+
+    def test_put_role_sent_as_json_number_persists(self):
+        resp = self._put(self.employee_role.pk)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.role, self.employee_role)
+
+    def test_put_unknown_role_rejected_and_nothing_persisted(self):
+        old_role = self.employee.role
+        resp = self._put('999999')
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.role, old_role)
+
+    def test_put_privileged_role_still_blocked(self):
+        privileged = make_role('privileged_put_role', permission_codenames=['settings.edit'])
+        resp = self._put(str(privileged.pk))
+        self.assertEqual(resp.status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertNotEqual(self.employee.role, privileged)

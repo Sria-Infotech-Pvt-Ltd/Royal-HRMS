@@ -230,7 +230,8 @@ class EmployeeDetailView(APIView):
         # the lock is real, not just an absent button.
         locked = employee.onboarding_status == User.ONBOARDING_COMPLETE
 
-        role_name = (data.get('role') or '').strip()
+        # str() first: a JSON client may send the id as a number (4), not "4" — .strip() would 500 on an int.
+        role_name = str(data.get('role') or '').strip()
         if role_name:
             try:
                 # The shared Employment step's Role dropdown submits the Role's numeric id,

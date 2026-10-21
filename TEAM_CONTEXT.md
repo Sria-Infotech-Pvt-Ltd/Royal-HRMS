@@ -4342,3 +4342,10 @@ Every UAT ticket: implement across the whole tool, test locally, update this fil
 - Role has no field in this layout (reference has none); the employee's existing role is still sent unchanged on save, so role cannot be changed from Edit record any more — use Perform an action / roles screens. Revisit if HR needs it back.
 - Not built: the "✦ Suggest" chip on Annual fixed CTC — the reference's suggestion is a hardcoded grade→CTC table (L2 600000 …), which CLAUDE.md forbids; needs a real rule source (e.g. a pay-scale/grade settings table).
 - Still render-only (no post-hire write path, unchanged limitation): weekly off, shift, attendance scheme, leave plan, salary structure (CTC saves via salary config), work email, cost center (no data source yet).
+
+### 6. UAT: Edit full record > Employment — `Role "4" does not exist` (Deepak EMP00055, Arjun EMP00006)
+- Cause: the older Employment step's Role dropdown submitted the Role's numeric id while `EmployeeDetailView._update_fields` looked roles up by name only. Already fixed in 4dcaaa2 (accepts id or name); the UAT build predates it. The rebuilt Employment section (f536c87) has no Role dropdown at all, so the current UI cannot trigger it.
+- Remaining gap closed: a JSON-number role (`4`, not `"4"`) crashed `.strip()`; `employees_detail.py` now does `str(data.get('role') or '').strip()`.
+- Tests: `EmployeeDetailPutEmploymentRoleTests` (4) in `apps/accounts/tests_employee_detail_patch_partial_update.py` — PUT with the full ticket payload on an imported (onboarding `draft`) employee: role id string, role id number, unknown id rejected with nothing saved, `settings.edit` role still blocked. The number test fails without the fix.
+- Known unrelated failure: `tests_employee_master.ModelCreationTests.test_bank_account_encrypts_account_number` fails on SQLite with or without this change.
+- UAT needs a redeploy of New-AI to pick the fix up; existing records are unaffected (the save was rejected, nothing was written).
