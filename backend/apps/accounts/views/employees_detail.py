@@ -233,7 +233,12 @@ class EmployeeDetailView(APIView):
         role_name = (data.get('role') or '').strip()
         if role_name:
             try:
-                new_role = Role.objects.get(name=role_name)
+                # The shared Employment step's Role dropdown submits the Role's numeric id,
+                # other editors submit its name -- accept either.
+                if role_name.isdigit():
+                    new_role = Role.objects.get(pk=int(role_name))
+                else:
+                    new_role = Role.objects.get(name=role_name)
             except Role.DoesNotExist:
                 return error(f'Role "{role_name}" does not exist.')
             if new_role.role_permissions.filter(permission__codename='settings.edit').exists():
@@ -330,11 +335,12 @@ class EmployeeDetailView(APIView):
 
         if 'employee_type' in data:
             employee_type = (data.get('employee_type') or '').strip()
-            if locked and employee_type != employee.employee_type:
-                return error(
-                    'Employee type is locked once onboarding is complete and can no longer be changed here.',
-                    http_status=status.HTTP_409_CONFLICT,
-                )
+            # Unlike the other `locked` fields above, HR/admin can change
+            # this after onboarding too -- a permanent employee can
+            # genuinely move to contract (or vice versa) later in their
+            # tenure, so this isn't a "set once at hire" fact the way
+            # full_name etc. are. Still audit-logged below like any other
+            # change, so it's traceable even though it's not blocked.
             if employee.employee_type != employee_type:
                 changes['employee_type'] = {'from': employee.employee_type, 'to': employee_type}
             employee.employee_type = employee_type

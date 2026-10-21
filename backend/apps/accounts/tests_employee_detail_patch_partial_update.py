@@ -58,3 +58,37 @@ class EmployeeDetailPatchPartialUpdateTests(TestCase):
             format='json',
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class EmployeeDetailPatchRoleLookupTests(TestCase):
+    """UAT: Edit full record > Employment sent the Role's numeric id and failed with 'Role "4" does not exist'."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        hr_role = make_role('hr_admin_role_lookup', permission_codenames=['employees.edit', 'employees.view'])
+        self.client.force_authenticate(user=make_user('hr-role@test.com', role=hr_role, password='TestPass123!'))
+        self.target_role = make_role('employee_role_lookup', permission_codenames=[])
+        self.employee = make_user(
+            'employee-role@test.com', role=make_role('old_role_lookup', permission_codenames=[]),
+            password='TestPass123!', full_name='Role Tester', phone='9876543211', employee_id='EMPROLE01',
+        )
+
+    def _patch_role(self, value):
+        return self.client.patch(reverse('employee-detail', args=[self.employee.employee_id]), {'role': value}, format='json')
+
+    def test_role_accepted_by_numeric_id(self):
+        resp = self._patch_role(str(self.target_role.pk))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.role, self.target_role)
+
+    def test_role_accepted_by_name(self):
+        resp = self._patch_role(self.target_role.name)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.role, self.target_role)
+
+    def test_unknown_role_id_still_rejected(self):
+        resp = self._patch_role('999999')
+        self.assertEqual(resp.status_code, 400)

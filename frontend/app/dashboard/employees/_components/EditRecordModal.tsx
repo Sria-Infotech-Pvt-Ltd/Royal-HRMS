@@ -215,6 +215,32 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   const [accessCard, setAccessCard] = useState({ cardNumber: "", validFrom: "", validTill: "" });
 
   const [employment, setEmployment] = useState<EmploymentDraft>(EMPTY_EMPLOYMENT);
+  // EmploymentStep's own Role dropdown (built for the Hire wizard) uses
+  // numeric Role ids as option values, but this employee record's `role`
+  // field (and the backend's write path for it, which looks a Role up by
+  // `name`) speaks role NAME strings -- the same convention this page's
+  // own older generic field editor already uses for its Role dropdown.
+  // Fetched here just to translate between the two formats: resolve the
+  // employee's role name to the matching id for display, and convert back
+  // to a name before saving. rawRoleName holds the fetched employee's role
+  // name until this list arrives -- state, not a ref, so this resolver
+  // effect correctly re-fires however the two independent fetches
+  // (employee record, roles list) happen to race.
+  const [roles, setRoles] = useState<{ id: number; name: string; display_name: string }[]>([]);
+  const [rawRoleName, setRawRoleName] = useState<string | null>(null);
+  useEffect(() => {
+    clientApi
+      .get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(
+        `${API.roles.list}?page_size=100`,
+      )
+      .then(({ data }) => setRoles(data.data.results ?? []))
+      .catch(() => {/* non-blocking — Role dropdown just stays unresolved if this fails */});
+  }, []);
+  useEffect(() => {
+    if (!roles.length || rawRoleName == null) return;
+    const match = roles.find(r => r.name === rawRoleName);
+    if (match) setEmployment(e => ({ ...e, role: String(match.id) }));
+  }, [roles, rawRoleName]);
   const [basicPay, setBasicPay] = useState<BasicPayDraft>(EMPTY_BASIC_PAY);
   // Baseline CTC/structure as loaded — a new EmployeeSalaryConfig revision
   // is only created on save if these actually changed, so opening and
@@ -323,9 +349,13 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       };
       setEmergencyContacts(legacyEmergency.name ? [legacyEmergency] : []);
 
+      // Role is resolved separately once the roles list arrives (see the
+      // [roles, rawRoleName]-triggered effect above).
+      setRawRoleName(typeof rawRecord.role === "string" ? rawRecord.role : null);
       setEmployment(e => ({
         ...e,
-        role: emp.details.ssRole ?? "", branch: emp.details.branch ?? "",
+        employment_type: typeof rawRecord.employee_type === "string" ? rawRecord.employee_type : "",
+        branch: emp.details.branch ?? "",
         reporting_manager_id: emp.details.reportingManagerId ?? "",
         dotted_line_manager_id: dottedLineManager?.uuid ?? "",
         work_location: typeof rawRecord.work_location === "string" ? rawRecord.work_location : "",
@@ -499,7 +529,11 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         // Employment — only the fields with a real write path (see the
         // module docstring above for which EmploymentDraft fields have
         // none yet and are therefore NOT sent here).
+        employee_type: employment.employment_type || '',
         branch: employment.branch || null,
+        // employment.role holds the Role's numeric id (matching the shared
+        // EmploymentStep's dropdown) -- the endpoint accepts either a
+        // numeric id or a name, so this is sent as-is.
         role: employment.role || null,
         reporting_manager_id: employment.reporting_manager_id || null,
         dotted_line_manager_id: employment.dotted_line_manager_id || '',
@@ -890,8 +924,10 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
 
               {step === 1 && (
                 <EmploymentStep
-                  value={employment} onChange={setEmployment} onSetEmploymentType={() => {}}
-                  reservedEmployeeId={employee.code} positionTitle={positionTitle} orgUnitName={orgUnitName}
+                  value={employment} onChange={setEmployment}
+                  onSetEmploymentType={type => setEmployment(e => ({ ...e, employment_type: type }))}
+                  reservedEmployeeId=""
+                  positionTitle={positionTitle} orgUnitName={orgUnitName}
                   grade="" costCenter="" defaultRoleId={null} defaultRoleName={null}
                 />
               )}
