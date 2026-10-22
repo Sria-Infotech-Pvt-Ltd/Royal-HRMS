@@ -23,6 +23,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
   const [processErr, setProcessErr] = useState<string | null>(null);
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [skipped, setSkipped]       = useState<string[]>([]);
+  const [zeroGross, setZeroGross]   = useState<string[]>([]);
 
   // Always fetch payslips — if they already exist (cycle previously computed), show results directly.
   const { data: payslipPage, loading, refetch } =
@@ -79,6 +80,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
         : undefined;
       const res = await clientApi.post<{ data: ProcessPayrollResult }>(API.payroll.processCycle(cycleId), body);
       setSkipped(res.data.data.skipped ?? []);
+      setZeroGross(res.data.data.zero_gross ?? []);
       setProcessed(true);
       refetch();
     } catch (error: unknown) {
@@ -172,6 +174,16 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
       {/* Results */}
       {showResults && (
         <>
+          {zeroGross.length > 0 && (
+            <div className="alert alert-warn" style={{ alignItems: "flex-start" }}>
+              <i className="ti ti-alert-triangle" />
+              <span>
+                {zeroGross.length} payslip{zeroGross.length > 1 ? "s" : ""} came to ₹0 although a CTC is set: {zeroGross.join(", ")}.
+                Their salary components produced no amount (for example a &ldquo;% of Basic&rdquo; component with nothing on the Basic
+                payslip line). Fix the salary in Payroll → Salary Setup and reprocess — the salary transfer can&apos;t be confirmed until then.
+              </span>
+            </div>
+          )}
           {skipped.length > 0 && (
             <div className="alert alert-warn" style={{ alignItems: "flex-start" }}>
               <i className="ti ti-alert-triangle" />

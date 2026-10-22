@@ -40,7 +40,16 @@ function period(cycle: PayrollCycle) {
   return new Date(cycle.cycle_start).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
-interface PaginatedPayslips { results: EmployeePayslip[]; count: number; }
+/** Server totals over every payslip in the cycle (not just the rows loaded here). */
+interface CycleTotals {
+  total_gross_earnings: string;
+  total_total_deductions: string;
+  total_net_pay: string;
+  total_pf_employee: string;
+  count: number;
+  zero_gross_count: number;
+}
+interface PaginatedPayslips { results: EmployeePayslip[]; count: number; totals?: CycleTotals; }
 
 const ECR_ELIGIBLE_STATUSES = ["payslips_generated", "query_window_open", "paid", "closed"];
 
@@ -61,10 +70,18 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
   const payslips = psData?.results ?? [];
   const payslipsTruncated = psData != null && psData.count > payslips.length;
 
-  const totalGross      = payslips.reduce((s, p) => s + parseFloat(p.gross_earnings  || "0"), 0);
-  const totalDeductions = payslips.reduce((s, p) => s + parseFloat(p.total_deductions || "0"), 0);
-  const totalNet        = payslips.reduce((s, p) => s + parseFloat(p.net_pay          || "0"), 0);
-  const totalPF         = payslips.reduce((s, p) => s + parseFloat(p.pf_employee     || "0"), 0);
+  // Server totals cover every saved payslip; summing the loaded rows is only a fallback.
+  const totals = psData?.totals;
+  const sumRows = (f: "gross_earnings" | "total_deductions" | "net_pay" | "pf_employee") =>
+    payslips.reduce((s, p) => s + parseFloat(p[f] || "0"), 0);
+  const totalGross      = totals ? Number(totals.total_gross_earnings)   : sumRows("gross_earnings");
+  const totalDeductions = totals ? Number(totals.total_total_deductions) : sumRows("total_deductions");
+  const totalNet        = totals ? Number(totals.total_net_pay)          : sumRows("net_pay");
+  const totalPF         = totals ? Number(totals.total_pf_employee)      : sumRows("pf_employee");
+  // Saved payslips with no earnings and nothing to pay although a CTC is set.
+  const zeroPay = (p: EmployeePayslip) =>
+    Number(p.gross_earnings) <= 0 && Number(p.net_pay) <= 0 && Number(p.annual_ctc) > 0;
+  const zeroCount = totals ? totals.zero_gross_count : payslips.filter(zeroPay).length;
 
   const downloadEcr = useCallback(async () => {
     if (!cycle) return;
@@ -293,7 +310,20 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
 
       {payslipsTruncated && (
         <div className="alert alert-warn" style={{ marginBottom: 16 }}>
-          <i className="ti ti-alert-triangle" /> Showing {payslips.length} of {psData!.count} payslips. Summary totals below reflect only the visible rows. The ECR download still includes all employees.
+          <i className="ti ti-alert-triangle" /> Showing {payslips.length} of {psData!.count} payslips. {totals ? "Summary totals below include every payslip." : "Summary totals below reflect only the visible rows."} The ECR download still includes all employees.
+        </div>
+      )}
+
+      {!loadPs && zeroCount > 0 && (
+        <div className="alert alert-warn" style={{ marginBottom: 16 }}>
+          <i className="ti ti-alert-triangle" />
+          <span>
+            {zeroCount} payslip{zeroCount > 1 ? "s have" : " has"} ₹0 earnings and ₹0 net pay although a CTC is set — the
+            employee&apos;s salary components produced no amount (for example a &ldquo;% of Basic&rdquo; component with nothing on
+            the Basic payslip line). {cycle && ["paid", "closed"].includes(cycle.status)
+              ? "This cycle is already paid; its payslips are kept as saved."
+              : "Fix the salary in Payroll → Salary Setup and re-process before payment."}
+          </span>
         </div>
       )}
 
@@ -337,14 +367,17 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "var(--bg-mid)" }}>
-                  {["#", "Employee", "Dept", "Gross", "Deductions", "Net Pay", "PF", "LOP", "Status"].map(h => (
+                  {["#", "Employee", "Dept", "Gross", "Deductions", "Net Pay", "PF", "LOP", "Status", ""].map(h => (
                     <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 700, fontSize: 11, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".04em", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {payslips.map((ps, idx) => (
-                  <tr key={ps.id} style={{ borderTop: "1px solid var(--outline-v)" }}>
+                  <tr key={ps.id}
+                    style={{ borderTop: "1px solid var(--outline-v)", cursor: "pointer", background: zeroPay(ps) ? "var(--warn-c)" : undefined }}
+                    title="View payslip"
+                    onClick={() => router.push(`/dashboard/payroll/payslips/${ps.id}`)}>
                     <td style={{ padding: "8px 12px", color: "var(--on-variant)", fontSize: 12 }}>{idx + 1}</td>
                     <td style={{ padding: "8px 12px" }}>
                       <div style={{ fontWeight: 600, color: "var(--on-bg)" }}>{ps.employee_name}</div>
@@ -360,6 +393,12 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
                       <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: ps.status === "paid" ? "#dcfce7" : "#f3f4f6", color: ps.status === "paid" ? "#16a34a" : "var(--on-variant)" }}>
                         {ps.status}
                       </span>
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      <Link href={`/dashboard/payroll/payslips/${ps.id}`} className="btn btn-ghost btn-sm"
+                        onClick={e => e.stopPropagation()} aria-label={`View payslip of ${ps.employee_name}`}>
+                        <i className="ti ti-eye" /> View
+                      </Link>
                     </td>
                   </tr>
                 ))}

@@ -278,11 +278,15 @@ class EmployeeWiseComponentTests(SalaryFixtureMixin, TestCase):
     def test_legacy_correction_rows_still_resolve_as_before(self):
         # Data saved before this change may contain a later-saved, earlier-dated
         # correction; payroll keeps using the correction, as it did then.
+        from django.utils import timezone
         first = EmployeeSalaryConfig.objects.create(employee=self.emp_a, annual_ctc=D('600000'),
                                                     effective_from=datetime.date(2026, 2, 1), is_active=False)
-        EmployeeSalaryConfig.objects.create(employee=self.emp_a, annual_ctc=D('540000'),
-                                            effective_from=datetime.date(2026, 1, 1))
-        self.assertIsNotNone(first.pk)
+        second = EmployeeSalaryConfig.objects.create(employee=self.emp_a, annual_ctc=D('540000'),
+                                                     effective_from=datetime.date(2026, 1, 1))
+        # Saved one after the other (explicit times: the clock can tie within one test).
+        now = timezone.now()
+        EmployeeSalaryConfig.objects.filter(pk=first.pk).update(created_at=now - datetime.timedelta(minutes=5))
+        EmployeeSalaryConfig.objects.filter(pk=second.pk).update(created_at=now)
         mar = self.cycle(3)
         process_payroll_cycle(mar)
         self.assertEqual(self.payslip(mar, self.emp_a).annual_ctc, D('540000.00'))

@@ -493,7 +493,11 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
         cycle.status = PayrollCycle.STATUS_PAYSLIPS_GENERATED
         cycle.save(update_fields=['status', 'updated_at'])
 
-    return {'created_count': len(computed), 'skipped': skipped}
+    # Payslips whose components all came to 0 although a CTC is set — reported
+    # here and refused at transfer confirmation / mark-paid (services_payslip_checks).
+    names = {e.id: e.full_name for e in employees}
+    zero_gross = [names[eid] for eid, f in computed.items() if f['gross_earnings'] <= 0 and f['net_pay'] <= 0 and f['annual_ctc'] > 0]
+    return {'created_count': len(computed), 'skipped': skipped, 'zero_gross': zero_gross}
 
 
 def _can_l1_approve(user):
@@ -1014,7 +1018,8 @@ class ProcessPayrollView(APIView):
         )
         return success(
             f"Payroll processed. {result['created_count']} payslips generated.",
-            {'payslip_count': result['created_count'], 'skipped': result['skipped']},
+            {'payslip_count': result['created_count'], 'skipped': result['skipped'],
+             'zero_gross': result.get('zero_gross', [])},
         )
 
 
@@ -1068,6 +1073,11 @@ class MarkCyclePaidView(APIView):
             PayrollCycle.STATUS_PAYSLIPS_GENERATED,
         ]:
             return error('Cycle must have payslips generated before marking as paid.')
+
+        from apps.payroll.services_payslip_checks import zero_gross_message, zero_gross_payslips
+        invalid = zero_gross_payslips(cycle)
+        if invalid:
+            return error(zero_gross_message(invalid), data={'zero_gross': invalid})
 
         # Dual-confirmation gate: money only moves once the employee side
         # (every payslip acknowledged/resolved) AND the employer side (this

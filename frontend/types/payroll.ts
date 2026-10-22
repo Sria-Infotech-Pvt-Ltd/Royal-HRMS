@@ -175,6 +175,8 @@ export interface SalaryPreview {
 export interface ProcessPayrollResult {
   payslip_count: number;
   skipped: string[];
+  /** Employees whose payslip came to ₹0 gross and net although a CTC is set. */
+  zero_gross?: string[];
 }
 
 export interface EligibleEmployee {

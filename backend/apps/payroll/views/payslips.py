@@ -84,10 +84,10 @@ class CyclePayslipListView(APIView):
 
         page_obj, paginator = paginate(payslips, request)
         serializer = EmployeePayslipSerializer(page_obj.object_list, many=True)
-        return success(
-            'Payslips retrieved.',
-            paginated_data(paginator, page_obj, serializer.data),
-        )
+        from apps.payroll.services_payslip_checks import cycle_totals
+        data = paginated_data(paginator, page_obj, serializer.data)
+        data['totals'] = cycle_totals(cycle.payslips.all())
+        return success('Payslips retrieved.', data)
 
 
 class PayslipDetailView(APIView):
@@ -98,8 +98,15 @@ class PayslipDetailView(APIView):
     def get(self, request, pk):
         payslip = get_object_or_404(EmployeePayslip.objects.select_related('employee', 'cycle'), pk=pk)
 
-        if not _has_perm(request.user, 'payroll.view') and payslip.employee_id != request.user.id:
+        is_own = payslip.employee_id == request.user.id
+        if not _has_perm(request.user, 'payroll.view') and not is_own:
             return error('You can only view your own payslips.', http_status=403)
+        # Same branch scoping as CyclePayslipListView: without settings.edit,
+        # only payslips of your own branch's cycles (your own payslip always).
+        if not is_own and not _has_perm(request.user, 'settings.edit'):
+            branch_obj = _resolve_user_branch(request.user)
+            if branch_obj is None or payslip.cycle.branch_id != branch_obj.id:
+                return error('Payslip not found.', http_status=404)
 
         return success('Payslip retrieved.', EmployeePayslipSerializer(payslip).data)
 

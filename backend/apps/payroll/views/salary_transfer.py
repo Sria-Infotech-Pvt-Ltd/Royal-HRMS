@@ -111,6 +111,11 @@ class ConfirmSalaryTransferView(APIView):
         if batch.status == SalaryTransferBatch.STATUS_CONFIRMED:
             return error("This cycle's salary transfer has already been confirmed.")
 
+        from apps.payroll.services_payslip_checks import zero_gross_message, zero_gross_payslips
+        invalid = zero_gross_payslips(cycle)
+        if invalid:
+            return error(zero_gross_message(invalid), data={'zero_gross': invalid})
+
         payslips = list(
             cycle.payslips.select_related('employee', 'employee__profile')
         )
