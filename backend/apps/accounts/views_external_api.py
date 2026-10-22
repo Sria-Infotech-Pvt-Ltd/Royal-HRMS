@@ -15,6 +15,7 @@ _basic_employee_dict()'s trailing comment.
 """
 from __future__ import annotations
 
+from django.db.models import Q
 from django.utils.dateparse import parse_datetime
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -97,7 +98,17 @@ class ExternalEmployeeBasicListView(APIView):
     throttle_classes       = [ExternalAPIKeyThrottle]
 
     def get(self, request):
-        users = User.objects.select_related('reporting_manager').order_by('employee_id')
+        # Accounts with no employee_id (e.g. the AIRA superuser/admin login)
+        # aren't real employees -- Budgeting's sync treats absence from this
+        # list as "no longer employed" and revokes access, so a blank id
+        # here isn't just noise, it breaks their sync outright. Applied
+        # before include_inactive/updated_since so count/total_pages always
+        # reflect the filtered set, regardless of those params.
+        users = (
+            User.objects.select_related('reporting_manager')
+            .exclude(Q(employee_id__isnull=True) | Q(employee_id=''))
+            .order_by('employee_id')
+        )
 
         include_inactive = request.query_params.get('include_inactive', '').lower() == 'true'
         if not include_inactive:

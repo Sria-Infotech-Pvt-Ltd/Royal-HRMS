@@ -4401,3 +4401,10 @@ Decisions: (1) permissions are attached to each **Position** (seat); whoever hol
 - Verified on the Neon dev DB: candidate create -> interview scheduled (email) -> interview done -> selected (email) -> portal login (email); HR onboarding approval converts the candidate to an employee holding a seat; the Hire wizard completes end to end. Conversion and hire were run inside a rolled-back transaction with SMTP mocked (they need the person's real PAN/Aadhaar/bank details and documents, which are never invented).
 - Lesson: SQLite tests cannot catch Postgres-only problems (row-lock joins, same-transaction DDL). Run new migrations once against the Neon dev DB before pushing.
 
+
+### External Employees API: exclude accounts with no employee_id
+- Ticket: Project Budgeting's sync aborts entirely if any record in `GET /api/external/employees/` has a blank employee_id (it treats absence from the list as "no longer employed" and revokes access, so it refuses inconsistent data outright). The AIRA superuser/admin login has a blank employee_id and was always included, breaking every sync.
+- Fix: `ExternalEmployeeBasicListView.get` (`apps/accounts/views_external_api.py`) now excludes `employee_id__isnull=True` or `employee_id=''` before any other filtering, so `count`/`total_pages` always reflect the filtered set regardless of `include_inactive`/`updated_since`. Did not assign the superuser a fake employee_id (would make them appear as a real employee in Budgeting) -- excluded instead, per the ticket's explicit instruction.
+- Note: `User.employee_id` is `blank=True` but not `null=True` in this schema -- no real row can ever be NULL, so the `isnull=True` branch of the exclusion is a harmless no-op here, kept for defensiveness/portability rather than dropped.
+- Also fixed in the same file: `test_response_contains_only_basic_fields` was asserting the OLD (pre-Budgeting-integration) field set and already failing before this ticket -- updated to the real, already-shipped response shape.
+- Tests: 4 new (`ExternalEmployeeListBlankEmployeeIdTests`), full `tests_external_api.py` suite 11/11 passing.

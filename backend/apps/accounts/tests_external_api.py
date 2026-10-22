@@ -70,8 +70,14 @@ class ExternalEmployeeListDataTests(TestCase):
         resp = self._get()
         self.assertEqual(resp.status_code, 200, resp.data)
         row = next(r for r in resp.data['data']['results'] if r['employee_id'] == 'EMP00002')
+        # Field set expanded for the Budgeting integration (first_name/
+        # last_name/phone/reporting_manager_employee_id/date_of_joining/
+        # employment_type/exit_date/updated_at) -- this assertion was stale
+        # and failing against that already-shipped response shape.
         self.assertEqual(set(row.keys()), {
-            'employee_id', 'full_name', 'email', 'department', 'designation', 'role', 'branch', 'is_active',
+            'employee_id', 'full_name', 'first_name', 'last_name', 'email', 'phone',
+            'department', 'designation', 'role', 'branch', 'reporting_manager_employee_id',
+            'date_of_joining', 'employment_type', 'is_active', 'exit_date', 'updated_at',
         })
         self.assertEqual(row['full_name'], 'Jane Doe')
         # No bank/PAN/Aadhaar-shaped keys ever, under any name.
@@ -91,3 +97,59 @@ class ExternalEmployeeListDataTests(TestCase):
         self.assertIsNotNone(log)
         self.assertIsNone(log.user)
         self.assertEqual(log.changes.get('client'), 'project_budget_tool')
+
+
+class ExternalEmployeeListBlankEmployeeIdTests(TestCase):
+    """A blank employee_id (e.g. the AIRA superuser/admin login) must never
+    appear in this list — Budgeting's sync treats absence from it as "no
+    longer employed" and revokes access, so a blank id breaks their sync."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        _make_key('project_budget_tool')
+        role = make_role('external_api_test_role3')
+        make_user('real.employee@test.com', role=role, employee_id='EMP00003', full_name='Real Employee')
+        self.admin = make_user(
+            'admin@test.com', role=role, employee_id='', full_name='Admin Login',
+            is_superuser=True, is_staff=True,
+        )
+
+    def _get(self):
+        return self.client.get(reverse('external-employee-list'), HTTP_X_API_KEY='eak_testkey123')
+
+    def test_blank_employee_id_not_in_results(self):
+        resp = self._get()
+        self.assertEqual(resp.status_code, 200, resp.data)
+        ids = [r['employee_id'] for r in resp.data['data']['results']]
+        emails = [r['email'] for r in resp.data['data']['results']]
+        self.assertIn('EMP00003', ids)
+        self.assertNotIn('', ids)
+        self.assertNotIn('admin@test.com', emails)
+
+    def test_null_employee_id_excluded_at_queryset_level(self):
+        # User.employee_id is `blank=True` but NOT `null=True` (models.py) --
+        # the column itself can't actually hold NULL, so there's no row to
+        # create here. Confirms the exclusion's `employee_id__isnull=True`
+        # branch is still correct/harmless (a no-op against this schema,
+        # not a dead/wrong clause) rather than silently dropping it.
+        from apps.accounts.models import User
+        self.assertFalse(User.objects.filter(employee_id__isnull=True).exists())
+
+    def test_count_excludes_blank_employee_id_accounts(self):
+        resp = self._get()
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data['data']['count'], 1)
+
+    def test_blank_employee_id_still_excluded_with_include_inactive(self):
+        # The exclusion applies regardless of include_inactive/updated_since
+        # (per the fix's own requirement) — confirm it isn't only applied
+        # on the default, unfiltered path.
+        resp = self.client.get(
+            reverse('external-employee-list'),
+            {'include_inactive': 'true'},
+            HTTP_X_API_KEY='eak_testkey123',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        emails = [r['email'] for r in resp.data['data']['results']]
+        self.assertNotIn('admin@test.com', emails)
