@@ -4408,3 +4408,7 @@ Decisions: (1) permissions are attached to each **Position** (seat); whoever hol
 - Note: `User.employee_id` is `blank=True` but not `null=True` in this schema -- no real row can ever be NULL, so the `isnull=True` branch of the exclusion is a harmless no-op here, kept for defensiveness/portability rather than dropped.
 - Also fixed in the same file: `test_response_contains_only_basic_fields` was asserting the OLD (pre-Budgeting-integration) field set and already failing before this ticket -- updated to the real, already-shipped response shape.
 - Tests: 4 new (`ExternalEmployeeListBlankEmployeeIdTests`), full `tests_external_api.py` suite 11/11 passing.
+
+### 7. New people were flagged "assessments pending" with nothing assigned (2026-10-22)
+- Auto-assigning assessments on hire/onboarding was already removed (commit 8e2fae2), but `User.assessment_status` still DEFAULTED to `pending`, so every new hire/created/imported employee carried a stale "pending" flag that the employee-portal gate (`HasCompletedOnboarding`) and the login token read. Default is now `complete` (assessments are opt-in: assigning one flips it to pending, finishing flips it back). Migration `accounts 0197` also clears the stale flag for anyone with no pending assignment. Verified on Neon: a fresh hire gets `complete`.
+- Status labels in the Employees list: "Onboarding" = active AND still on the emailed temporary password (`must_change_password`); it turns "Active" after the first password change. Not related to data completeness.

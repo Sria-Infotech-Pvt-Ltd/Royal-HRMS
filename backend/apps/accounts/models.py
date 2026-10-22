@@ -314,10 +314,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     # screen (see onboarding/page.tsx's own fix for that), had no way to see
     # it again.
     onboarding_rejection_remarks = models.TextField(blank=True, default='')
+    # Assessments are opt-in (assigned manually), so a new person starts with nothing waiting. Assigning one
+    # flips this to pending; finishing them flips it back to complete.
     assessment_status       = models.CharField(
                                   max_length=20,
                                   choices=ASSESSMENT_CHOICES,
-                                  default=ASSESSMENT_PENDING,
+                                  default=ASSESSMENT_COMPLETE,
                               )
     # New hires start on probation; the Confirmation action (see
     # views.EmployeeConfirmView) is the only thing that flips this to
