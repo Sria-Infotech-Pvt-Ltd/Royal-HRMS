@@ -12,7 +12,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
 BEFORE = [('accounts', '0194_approval_rule_approver_kinds'), ('platform_core', '0021_add_position_links')]
-AFTER = [('accounts', '0195_remove_roles'), ('platform_core', '0022_remove_role_links')]
+AFTER = [('accounts', '0196_remove_roles'), ('platform_core', '0022_remove_role_links')]
 
 
 class RolesRemovalMigrationTests(TransactionTestCase):

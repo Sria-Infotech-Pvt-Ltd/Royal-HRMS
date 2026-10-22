@@ -2,19 +2,10 @@
 
 PostgresOnlyAddConstraint/PostgresOnlyRemoveConstraint wrap Django's own
 AddConstraint/RemoveConstraint so a Postgres-only constraint (ExclusionConstraint,
-which generates `EXCLUDE USING gist (...)` SQL with no SQLite equivalent) is a
-no-op on any other backend, the same way Django's own BtreeGistExtension
-operation already no-ops on non-Postgres (see django.contrib.postgres.operations.
-CreateExtension.database_forwards) rather than crashing the whole migration
-history. Local dev can run against SQLite (see config/settings.py's
-DATABASE_URL default) without ever hitting these; production (Neon Postgres)
-gets the real constraint exactly as before — nothing changes there.
-
-This intentionally means the "no double-booking" guarantee these two
-constraints exist for is NOT enforced at the DB level on SQLite — only
-Postgres gets the real guarantee. That trade-off is deliberate: SQLite here
-is for local development convenience only, never a production target for
-this app (see the settings.py comment on DATABASE_URL's default).
+which generates `EXCLUDE USING gist (...)` SQL) is a no-op on any other
+backend. The project now runs on PostgreSQL only (see config/settings.py), so
+these guards never skip anything; they are kept because already-applied
+migrations import them and applied migrations must not be edited.
 """
 from __future__ import annotations
 

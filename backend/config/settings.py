@@ -104,27 +104,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
 # ─── Database ────────────────────────────────────────────────────────────────
-# USE_SQLITE=1 in .env forces the local sqlite file regardless of whatever
-# DATABASE_URL is set to — a deliberate, explicit opt-in for local dev only
-# (avoids depending on Neon/network access while coding) rather than relying
-# on commenting DATABASE_URL out, which is easy to forget to undo before a
-# real deploy. Never used in production: this app relies on a real Postgres
-# ExclusionConstraint (see Placement in apps/accounts/models.py) to enforce
-# "no employee/position double-booking" at the DB level — sqlite has no
-# equivalent, so those two constraints are no-ops when running this way (see
-# apps/accounts/migration_utils.py). Fine for local dev; never acceptable for
-# any shared/production environment.
-if env.bool('USE_SQLITE', default=False):
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db_local.sqlite3',
-        },
-    }
-else:
-    DATABASES = {
-        'default': env.db('DATABASE_URL', default=f'sqlite:///{BASE_DIR}/db.sqlite3')
-    }
+# PostgreSQL only (Neon in every environment). The app relies on Postgres features — e.g. the ExclusionConstraints on
+# Placement that stop one person holding two seats / one seat having two holders — so there is no other supported
+# database. DATABASE_URL is required; Django's tests create their own separate `test_*` database on the same server.
+DATABASES = {'default': env.db('DATABASE_URL')}
+if DATABASES['default'].get('ENGINE') != 'django.db.backends.postgresql':
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured('DATABASE_URL must be a postgresql:// URL (this app supports PostgreSQL only).')
 DATABASES['default']['CONN_MAX_AGE'] = env.int('DB_CONN_MAX_AGE', default=60)
 # Neon (and any managed cloud Postgres) requires sslmode to be forwarded to
 # psycopg2 — but a local PostgreSQL server (e.g. pgAdmin) almost never has

@@ -58,7 +58,7 @@ class SendPortalLoginView(APIView):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         try:
-            candidate = Candidate.objects.select_related('branch').select_for_update().get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').select_for_update(of=('self',)).get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
         if not _can_access_candidate(request.user, candidate):
@@ -201,7 +201,7 @@ class ResendPortalLoginView(APIView):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         try:
-            candidate = Candidate.objects.select_related('branch').select_for_update().get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').select_for_update(of=('self',)).get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
         if not _can_access_candidate(request.user, candidate):

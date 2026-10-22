@@ -367,7 +367,7 @@ def _revoke_portal_access(request, pk):
         return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
     try:
         with transaction.atomic():
-            candidate = Candidate.objects.select_related('branch').select_for_update().get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').select_for_update(of=('self',)).get(pk=pk)
             if not _can_access_candidate(request.user, candidate):
                 return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
             if not candidate.portal_credentials_sent or not candidate.portal_user_id:
