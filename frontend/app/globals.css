@@ -750,7 +750,7 @@ textarea.field-input {
      VoiceCommandButton.tsx) — QA report #51 found it covering the
      Hire wizard's Next/Close footer buttons on every step because both
      shared the same z-index and DOM order decided the winner. */
-  z-index: 1100;
+  z-index: 1200; /* above the side drawer (1101) so a modal opened from it is never hidden; below toasts (9999) */
   display: none;
   align-items: center;
   justify-content: center;

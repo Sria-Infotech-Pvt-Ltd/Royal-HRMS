@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
   title: ReactNode;
@@ -46,7 +47,11 @@ export default function Modal({
   const mouseDownOnOverlay = useRef(false);
   const titleId = useId();
 
-  return (
+  // Rendered at the top level of the page (document.body), not where the caller happens to sit in the tree. A
+  // position:fixed element inside a transformed ancestor — e.g. the employee side panel, which slides in with
+  // `transform: translateX(...)` — is positioned and clipped against THAT ancestor, not the screen, so a modal
+  // opened from inside the panel appeared half-hidden underneath it.
+  const overlay = (
     <div
       className="modal-overlay open"
       style={zIndex ? { zIndex } : undefined}
@@ -106,4 +111,5 @@ export default function Modal({
       </div>
     </div>
   );
+  return typeof document === "undefined" ? overlay : createPortal(overlay, document.body);
 }
