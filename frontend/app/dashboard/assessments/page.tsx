@@ -116,7 +116,7 @@ export default function AssessmentsPage() {
       title:          form.title,
       description:    form.description,
       is_active:      form.is_active,
-      is_default:     form.is_default,
+      is_default:     false, // assessments are never auto-assigned; HR assigns them explicitly
       pass_percentage: Number(form.pass_percentage) || 70,
       max_attempts:   form.max_attempts !== "" ? Number(form.max_attempts) : null,
       time_limit_mins: form.time_limit_mins !== "" ? Number(form.time_limit_mins) : null,
@@ -258,7 +258,6 @@ export default function AssessmentsPage() {
                     <div className="flex items-center gap-8 flex-wrap mb-4">
                       <span className="font-semibold text-[var(--on-bg)]">{a.title}</span>
                       {a.is_active  && <span className="badge badge-success">Active</span>}
-                      {a.is_default && <span className="badge badge-info">Default</span>}
                     </div>
                     {a.description && <p className="text-sm text-[var(--on-variant)] mb-4">{a.description}</p>}
                     <div className="flex items-center gap-12 flex-wrap" style={{ fontSize: 12, color: "var(--on-variant)" }}>
@@ -366,11 +365,6 @@ export default function AssessmentsPage() {
                   <input type="checkbox" checked={form.is_active}
                     onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} />
                   Active
-                </label>
-                <label className="flex items-center gap-8 cursor-pointer text-sm">
-                  <input type="checkbox" checked={form.is_default}
-                    onChange={e => setForm(p => ({ ...p, is_default: e.target.checked }))} />
-                  Default (auto-assign)
                 </label>
               </div>
         </Modal>

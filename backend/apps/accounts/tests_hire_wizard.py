@@ -471,6 +471,17 @@ class HireCompletionSideEffectTests(HireWizardTestCase):
         self.action.refresh_from_db()
         self.assertEqual(self.action.created_employee.employee_id, self.action.reserved_employee_id)
 
+    def test_new_hire_is_never_flagged_as_having_assessments_pending(self):
+        # Assessments are opt-in: nothing is assigned on hire, so nothing may be flagged as waiting.
+        from apps.accounts.models import User
+        from apps.assessments.models import CandidateAssignment
+        resp = self._complete(self.action)
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.action.refresh_from_db()
+        employee = self.action.created_employee
+        self.assertFalse(CandidateAssignment.objects.filter(employee=employee).exists())
+        self.assertEqual(employee.assessment_status, User.ASSESSMENT_COMPLETE)
+
 
 class HireActionEmailValidationTests(HireWizardTestCase):
     """QA report #31 — 'bad-email' was accepted and saved via a direct PATCH
