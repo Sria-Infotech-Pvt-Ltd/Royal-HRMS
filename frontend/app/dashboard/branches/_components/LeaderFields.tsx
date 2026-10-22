@@ -1,14 +1,16 @@
 "use client";
 
-import type { ApiEmployeeOption, LeaderForm } from "./_data";
+import SearchableSelect from "@/components/SearchableSelect";
+import type { ApiEmployeeOption, BranchAdminSeat, LeaderForm } from "./_data";
 
 export default function LeaderFields({
-  label, form, setForm, employees, errors, prefix,
+  label, form, setForm, employees, seats, errors, prefix,
 }: {
   label: string;
   form: LeaderForm;
   setForm: (updater: (f: LeaderForm) => LeaderForm) => void;
   employees: ApiEmployeeOption[];
+  seats: BranchAdminSeat[];
   errors: Record<string, string>;
   prefix: string;
 }) {
@@ -89,14 +91,14 @@ export default function LeaderFields({
             </div>
           </div>
           <div className="field-group">
-            <input
-              type="text"
-              className={`field-input${errors[`${prefix}Designation`] ? " field-error" : ""}`}
-              value={form.designation}
-              onChange={e => set("designation", e.target.value)}
-              placeholder="Designation"
+            <SearchableSelect
+              inputClassName="field-input"
+              value={form.positionId}
+              onChange={v => set("positionId", v)}
+              placeholder={seats.length ? "— Position with branch-wide access —" : "No position with branch-wide access yet"}
+              options={seats.map(s => ({ value: s.id, label: `${s.title} — ${s.org_unit_name}${s.holder_name ? ` (held by ${s.holder_name})` : ""}` }))}
             />
-            {errors[`${prefix}Designation`] && <p className="field-error-msg">{errors[`${prefix}Designation`]}</p>}
+            {errors[`${prefix}Position`] && <p className="field-error-msg">{errors[`${prefix}Position`]}</p>}
           </div>
         </>
       )}

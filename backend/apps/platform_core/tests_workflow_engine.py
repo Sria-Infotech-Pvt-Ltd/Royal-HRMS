@@ -40,6 +40,14 @@ class WorkflowEngineTestBase(TestCase):
         self.record.employee = self.requester  # resolvers read record.employee
         self.record.save()
 
+    def _seat_held_by(self, user):
+        import datetime as _dt
+        from apps.accounts.models import OrgUnit, Placement, Position
+        unit, _ = OrgUnit.objects.get_or_create(name='Workflow Test Unit')
+        seat = Position.objects.create(org_unit=unit, title='Finance Approver', grade='L2')
+        Placement.objects.create(position=seat, employee=user, effective_from=_dt.date(2020, 1, 1))
+        return seat
+
     def _make_definition(self, *, priority=0):
         definition = WorkflowDefinition.objects.create(
             code='vehicle_allocation_approval', name='Vehicle Allocation Approval',
@@ -192,7 +200,7 @@ class QuorumAndSkipTests(WorkflowEngineTestBase):
         definition = WorkflowDefinition.objects.create(code='quorum_any', name='Any', entity=self.entity, priority=3)
         step = WorkflowStep.objects.create(
             definition=definition, code='s1', label='S1', order=0, step_type=WorkflowStep.TYPE_APPROVAL,
-            resolver='role_scoped', resolver_params={'role_id': self.role.pk, 'scope': 'global'},
+            resolver='position_scoped', resolver_params={'position_id': str(self._seat_held_by(self.finance).pk), 'scope': 'global'},
             quorum=WorkflowStep.QUORUM_ANY_ONE,
         )
         wf_defs.publish(definition)

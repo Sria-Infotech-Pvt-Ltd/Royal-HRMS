@@ -1,11 +1,11 @@
 """Who may do / see what — resolved from the ORG CHART (the position a person holds today), not from a Role.
 
-Three sources, combined so nothing is ever taken away while Roles are being retired:
+Two sources:
   * the seat the person holds today (Placement covering today on an active Position),
-  * the company-wide BASELINE permissions every employee gets (self-service),
-  * the legacy Role (removed in the last phase; the `_role_*` helpers below are the only code that touches it).
+  * the company-wide BASELINE permissions every employee gets (self-service).
+Plus the `is_superuser` flag on the person for full access.
 
-Use these helpers instead of reading `user.role...` or filtering `role__...` anywhere in the codebase.
+Use these helpers for every access decision.
 """
 from __future__ import annotations
 
@@ -45,14 +45,16 @@ def _seat_flag(user, flag: str) -> bool:
     return bool(seat and getattr(seat, flag))
 
 
-def _role_flag(user, flag: str) -> bool:
-    role = getattr(user, 'role', None)
-    return bool(role and getattr(role, flag, False))
-
-
 def has_seat_flag(user, flag: str) -> bool:
-    """True if the user's seat (or, until roles are deleted, their role) carries the scope flag."""
-    return _seat_flag(user, flag) or _role_flag(user, flag)
+    """True if the user's seat carries the scope flag."""
+    return _seat_flag(user, flag)
+
+
+def holders_of_position(position_id):
+    """Users who hold the given position today (a queryset, so callers can narrow it further)."""
+    from apps.accounts.models import User
+
+    return User.objects.filter(_covers_today('placements__'), placements__position_id=position_id).distinct()
 
 
 def can_manage_team(user) -> bool:
@@ -69,7 +71,7 @@ def is_full_access(user) -> bool:
 
     if not user:
         return False
-    return bool(getattr(user, 'is_superuser', False) or _role_flag(user, 'is_full_access') or has_perm(user, 'settings.edit'))
+    return bool(getattr(user, 'is_superuser', False) or has_perm(user, 'settings.edit'))
 
 
 # ── Permissions ────────────────────────────────────────────────────────────────
@@ -91,7 +93,7 @@ def _pk_in(prefix: str, ids) -> Q:
 
 
 def users_with_permission(codename: str, prefix: str = '') -> Q:
-    """Users holding `codename` through their seat, the baseline, or (legacy) their role."""
+    """Users holding `codename` through their seat or the company baseline."""
     from apps.accounts.models import User
 
     if codename in baseline_codenames():
@@ -100,16 +102,14 @@ def users_with_permission(codename: str, prefix: str = '') -> Q:
         _covers_today('placements__'),
         placements__position__position_permissions__permission__codename=codename,
     ).values('pk')
-    through_role = User.objects.filter(role__role_permissions__permission__codename=codename).values('pk')
-    return _pk_in(prefix, through_seat) | _pk_in(prefix, through_role)
+    return _pk_in(prefix, through_seat)
 
 
 def _users_with_flag(flag: str, prefix: str) -> Q:
     from apps.accounts.models import User
 
     through_seat = User.objects.filter(_covers_today('placements__'), **{f'placements__position__{flag}': True}).values('pk')
-    through_role = User.objects.filter(**{f'role__{flag}': True}).values('pk')
-    return _pk_in(prefix, through_seat) | _pk_in(prefix, through_role)
+    return _pk_in(prefix, through_seat)
 
 
 def team_managers(prefix: str = '') -> Q:

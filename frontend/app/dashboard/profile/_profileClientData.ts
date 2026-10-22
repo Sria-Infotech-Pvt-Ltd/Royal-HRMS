@@ -16,7 +16,6 @@ export interface ProfileData {
   department:        string;
   designation:       string;
   branch:            string;
-  role_display:      string;
   date_of_joining:   string | null;
   date_joined:       string | null;
   work_location:     string | null;

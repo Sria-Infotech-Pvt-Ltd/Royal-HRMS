@@ -9,7 +9,6 @@ import SearchableSelect from "@/components/SearchableSelect";
 export interface EmploymentDraft {
   employment_type: string;
   work_email: string;
-  role: string;
   branch: string;
   reporting_manager_id: string;
   dotted_line_manager_id: string;
@@ -30,7 +29,7 @@ export interface EmploymentDraft {
 }
 
 export const EMPTY_EMPLOYMENT: EmploymentDraft = {
-  employment_type: "", work_email: "", role: "", branch: "", reporting_manager_id: "", dotted_line_manager_id: "",
+  employment_type: "", work_email: "", branch: "", reporting_manager_id: "", dotted_line_manager_id: "",
   work_location: "", work_mode: "", probation_period_months: "", notice_period_days: "",
   weekly_off_policy: "", working_hours_policy: "", salary_structure: "", annual_ctc: "",
   pay_group: "monthly", attendance_scheme: "standard", leave_plan: "",
@@ -49,7 +48,6 @@ const EMPLOYMENT_LOOKUPS_CACHE_TTL_MS = 5 * 60 * 1000;
 let employmentLookupsCache: { data: EmploymentLookups; expiresAt: number } | null = null;
 
 interface EmploymentLookups {
-  roles: { id: number; display_name: string }[];
   branches: { id: number; branch_name: string }[];
   people: { id: string; full_name: string; employee_id: string }[];
   weeklyPolicies: { id: string; name: string }[];
@@ -72,15 +70,12 @@ interface Props {
   orgUnitName: string;
   grade: string;
   costCenter: string;
-  defaultRoleId: string | null;
-  defaultRoleName: string | null;
 }
 
 export default function EmploymentStep({
   value, onChange, onSetEmploymentType, reservedEmployeeId,
-  positionTitle, orgUnitName, grade, costCenter, defaultRoleId, defaultRoleName,
+  positionTitle, orgUnitName, grade, costCenter,
 }: Props) {
-  const [roles, setRoles] = useState<{ id: number; display_name: string }[]>([]);
   const [branches, setBranches] = useState<{ id: number; branch_name: string }[]>([]);
   const [people, setPeople] = useState<{ id: string; full_name: string; employee_id: string }[]>([]);
   const [weeklyPolicies, setWeeklyPolicies] = useState<{ id: string; name: string }[]>([]);
@@ -91,7 +86,6 @@ export default function EmploymentStep({
   useEffect(() => {
     if (employmentLookupsCache && employmentLookupsCache.expiresAt > Date.now()) {
       const c = employmentLookupsCache.data;
-      setRoles(c.roles);
       setBranches(c.branches);
       setPeople(c.people);
       setWeeklyPolicies(c.weeklyPolicies);
@@ -102,16 +96,14 @@ export default function EmploymentStep({
     }
 
     Promise.allSettled([
-      clientApi.get<{ data: { results: typeof roles } }>(API.roles.list, { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: typeof branches } }>(API.employees.branches, { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: typeof people } }>(API.employees.list, { params: { page_size: 200 } }),
       clientApi.get<{ data: { results: typeof weeklyPolicies } }>(API.attendance.weeklyDayPolicies, { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: typeof shiftPolicies } }>(API.attendance.workingHoursPolicies, { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: typeof structures } }>(API.payroll.structures, { params: { page_size: 100 } }),
       clientApi.get<{ data: typeof leavePolicies }>(API.leave.policy),
-    ]).then(([r, b, p, w, s, st, lp]) => {
+    ]).then(([b, p, w, s, st, lp]) => {
       const resolved: EmploymentLookups = {
-        roles:          r.status === "fulfilled" ? (r.value.data.data.results ?? []) : [],
         branches:       b.status === "fulfilled" ? (b.value.data.data.results ?? []) : [],
         people:         p.status === "fulfilled" ? (p.value.data.data.results ?? []) : [],
         weeklyPolicies: w.status === "fulfilled" ? (w.value.data.data.results ?? []) : [],
@@ -119,7 +111,6 @@ export default function EmploymentStep({
         structures:     st.status === "fulfilled" ? (st.value.data.data.results ?? []) : [],
         leavePolicies:  lp.status === "fulfilled" ? (lp.value.data.data ?? []) : [],
       };
-      setRoles(resolved.roles);
       setBranches(resolved.branches);
       setPeople(resolved.people);
       setLeavePolicies(resolved.leavePolicies);
@@ -131,7 +122,7 @@ export default function EmploymentStep({
       // partial/failed result would keep serving empty dropdowns for the
       // next 5 minutes even after a transient failure (e.g. QA #66's
       // intermittent 503) has cleared up.
-      const allFulfilled = [r, b, p, w, s, st, lp].every(x => x.status === "fulfilled");
+      const allFulfilled = [b, p, w, s, st, lp].every(x => x.status === "fulfilled");
       if (allFulfilled) {
         employmentLookupsCache = {
           data: resolved,
@@ -273,21 +264,8 @@ export default function EmploymentStep({
       </div>
 
       <div className="divider" />
-      <div className="sechead">ROLE &amp; PAY</div>
+      <div className="sechead">COMPENSATION</div>
       <div className="g3">
-        <div className="f">
-          <label>
-            Role <span className="req">*</span>
-            {defaultRoleId && <span className="tag">FROM POSITION</span>}
-          </label>
-          <SearchableSelect value={value.role} onChange={v => set("role", v)}
-            placeholder="Select" options={roles.map(r => ({ value: String(r.id), label: r.display_name }))} />
-          {defaultRoleId ? (
-            <div className="hint">Suggested from this position&apos;s default role ({defaultRoleName}) — change it if this hire needs something different.</div>
-          ) : (
-            <div className="hint">This position has no default role set. Set one on the Position in Org Chart so future hires into this seat fill in automatically.</div>
-          )}
-        </div>
         <div className="f">
           <label>Salary structure</label>
           <SearchableSelect value={value.salary_structure} onChange={v => set("salary_structure", v)}

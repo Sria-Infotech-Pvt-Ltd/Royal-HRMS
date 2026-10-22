@@ -82,8 +82,6 @@ from apps.accounts.models import (
     Placement,
     Position,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -109,7 +107,6 @@ from apps.accounts.serializers import (
     PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
-    RoleSerializer,
     SMTPSettingsSerializer,
     SMTPTestSerializer,
     VerifyOTPSerializer,
@@ -232,26 +229,6 @@ class EmployeeDetailView(APIView):
         # even after the UI stopped offering a way to. Enforced here now so
         # the lock is real, not just an absent button.
         locked = employee.onboarding_status == User.ONBOARDING_COMPLETE
-
-        # str() first: a JSON client may send the id as a number (4), not "4" — .strip() would 500 on an int.
-        role_name = str(data.get('role') or '').strip()
-        if role_name:
-            try:
-                # The shared Employment step's Role dropdown submits the Role's numeric id,
-                # other editors submit its name -- accept either.
-                if role_name.isdigit():
-                    new_role = Role.objects.get(pk=int(role_name))
-                else:
-                    new_role = Role.objects.get(name=role_name)
-            except Role.DoesNotExist:
-                return error(f'Role "{role_name}" does not exist.')
-            if new_role.role_permissions.filter(permission__codename='settings.edit').exists():
-                return error(f'"{new_role.display_name}" cannot be assigned via employee edit.')
-            old_role = employee.role.name if employee.role else None
-            if old_role != new_role.name:
-                changes['role'] = {'from': old_role, 'to': new_role.name}
-            employee.role = new_role
-            update_fields.append('role')
 
         # department/designation are Position-derived only — set exclusively
         # via assign_position() below (position_obj), never by direct edit.
@@ -546,7 +523,7 @@ class EmployeeDetailView(APIView):
                 changes['department'] = {'from': old_department, 'to': employee.department}
             update_fields = [f for f in update_fields if f not in ('designation', 'department')]
 
-        promotion_changed = 'designation' in changes or 'role' in changes
+        promotion_changed = 'designation' in changes
 
         with transaction.atomic():
             employee.save(update_fields=list(dict.fromkeys(update_fields)))
@@ -568,14 +545,10 @@ class EmployeeDetailView(APIView):
 
             if promotion_changed:
                 desig_change  = changes.get('designation', {})
-                role_change   = changes.get('role', {})
-                current_role_name = employee.role.name if employee.role else ''
                 PromotionRecord.objects.create(
                     employee              = employee,
                     previous_designation  = desig_change.get('from', employee.designation) or '',
                     new_designation       = desig_change.get('to', employee.designation) or '',
-                    previous_role         = role_change.get('from', current_role_name) or '',
-                    new_role              = role_change.get('to', current_role_name) or '',
                     effective_date        = effective_date,
                     remarks               = remarks,
                     promoted_by           = request.user,

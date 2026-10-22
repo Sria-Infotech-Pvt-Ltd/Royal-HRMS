@@ -12,12 +12,10 @@ _PERMISSION_DENIED_MESSAGE = "You don't have permission to do that."
 
 
 def _fake_request(has_payroll_view_own: bool = True, user_id: int = 55):
-    role_permissions = MagicMock()
-    role_permissions.filter.return_value.exists.return_value = has_payroll_view_own
     request = MagicMock()
     request.META = {}
     request.user = SimpleNamespace(
-        role=SimpleNamespace(role_permissions=role_permissions), id=user_id, pk=user_id,
+        _grant=has_payroll_view_own, id=user_id, pk=user_id,
     )
     return request
 
@@ -298,3 +296,21 @@ class DownloadPhraseRoutingTests(SimpleTestCase):
         call_args = mock_view_cls.as_view.return_value.call_args
         sent_body = json.loads(call_args.args[0].body)
         self.assertIn('hra deduction', sent_body['description'])
+
+
+# These tests exercise the executors with stand-in users, without a database. The permission gate is answered by the
+# stand-in itself (`_grant`); the gate's real behaviour is covered against real users in test_permissions.py.
+_gate_patch = None
+
+
+def setUpModule():
+    global _gate_patch
+    _gate_patch = patch(
+        'apps.voice_commands.executor.has_required_permission',
+        side_effect=lambda user, codename: bool(getattr(user, '_grant', False)),
+    )
+    _gate_patch.start()
+
+
+def tearDownModule():
+    _gate_patch.stop()

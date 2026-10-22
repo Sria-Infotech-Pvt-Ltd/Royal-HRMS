@@ -10,10 +10,10 @@ from .fields import EntityDefinition
 
 class ListViewDefinition(TimestampedModel):
     VISIBILITY_SYSTEM = 'system'
-    VISIBILITY_ROLE = 'role'
+    VISIBILITY_POSITION = 'position'
     VISIBILITY_PERSONAL = 'personal'
     VISIBILITY_CHOICES = [
-        (VISIBILITY_SYSTEM, 'System'), (VISIBILITY_ROLE, 'Role'), (VISIBILITY_PERSONAL, 'Personal'),
+        (VISIBILITY_SYSTEM, 'System'), (VISIBILITY_POSITION, 'Position'), (VISIBILITY_PERSONAL, 'Personal'),
     ]
 
     entity = models.ForeignKey(EntityDefinition, on_delete=models.CASCADE, related_name='list_views')
@@ -26,7 +26,7 @@ class ListViewDefinition(TimestampedModel):
     default_sort = models.CharField(max_length=100, blank=True, help_text='field code, optionally "-field" for descending.')
 
     visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default=VISIBILITY_SYSTEM)
-    role = models.ForeignKey('accounts.Role', on_delete=models.CASCADE, null=True, blank=True, related_name='+')
+    position = models.ForeignKey('accounts.Position', on_delete=models.CASCADE, null=True, blank=True, related_name='+')
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='+')
     is_default = models.BooleanField(default=False)
 

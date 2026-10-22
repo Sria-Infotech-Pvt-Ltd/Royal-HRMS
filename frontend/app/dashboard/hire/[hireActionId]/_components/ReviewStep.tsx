@@ -80,7 +80,6 @@ export default function ReviewStep(props: Props) {
   if (!form.date_of_birth) blockingReasons.push("Date of birth");
   if (!form.gender) blockingReasons.push("Gender");
   if (!employment.employment_type) blockingReasons.push("Employment type");
-  if (!employment.role) blockingReasons.push("Role");
   if (!employment.branch) blockingReasons.push("Company code");
   if (!panNumber.trim()) blockingReasons.push("PAN");
   if (!aadhaarNumber.trim()) blockingReasons.push("Aadhaar");
@@ -100,9 +99,9 @@ export default function ReviewStep(props: Props) {
 
   const fieldsFilled = [
     firstName, lastName, form.date_of_birth, form.gender, employment.employment_type,
-    employment.role, employment.branch, panNumber,
+    employment.branch, panNumber,
   ].filter(Boolean).length;
-  const completeness = Math.round((fieldsFilled / 8) * 100);
+  const completeness = Math.round((fieldsFilled / 7) * 100);
 
   return (
     <div className="mstep on">

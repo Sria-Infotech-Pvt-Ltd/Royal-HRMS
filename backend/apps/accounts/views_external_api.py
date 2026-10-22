@@ -66,7 +66,8 @@ def _basic_employee_dict(user: User) -> dict:
         'phone':                           user.phone,
         'department':                      user.department,
         'designation':                     user.designation,
-        'role':                            user.role.display_name if user.role else '',
+        # Kept for existing integrations: used to be the role's display name, now the seat's title.
+        'role':                            user.designation or '',
         'branch':                          user.branch,
         'reporting_manager_employee_id':   user.reporting_manager.employee_id if user.reporting_manager_id else None,
         'date_of_joining':                 user.date_of_joining.isoformat() if user.date_of_joining else None,
@@ -96,7 +97,7 @@ class ExternalEmployeeBasicListView(APIView):
     throttle_classes       = [ExternalAPIKeyThrottle]
 
     def get(self, request):
-        users = User.objects.select_related('role', 'reporting_manager').order_by('employee_id')
+        users = User.objects.select_related('reporting_manager').order_by('employee_id')
 
         include_inactive = request.query_params.get('include_inactive', '').lower() == 'true'
         if not include_inactive:
@@ -136,7 +137,7 @@ class ExternalEmployeeDetailView(APIView):
     throttle_classes       = [ExternalAPIKeyThrottle]
 
     def get(self, request, employee_id):
-        user = User.objects.select_related('role', 'reporting_manager').filter(employee_id=employee_id).first()
+        user = User.objects.select_related('reporting_manager').filter(employee_id=employee_id).first()
         if user is None:
             return error('No employee found with that employee_id.', http_status=404)
 

@@ -161,9 +161,9 @@ def handle_no_approver(instance: WorkflowInstance, step: WorkflowStep, record, *
     if step.no_approver_action == WorkflowStep.NO_APPROVER_SKIP:
         move_past_step(instance, step, record, requester=requester)
         return
-    if step.no_approver_action == WorkflowStep.NO_APPROVER_FALLBACK_ROLE and step.no_approver_fallback_role_id:
-        from apps.accounts.models import User
-        fallback_users = list(User.objects.filter(role_id=step.no_approver_fallback_role_id, is_active=True))
+    if step.no_approver_action == WorkflowStep.NO_APPROVER_FALLBACK_POSITION and step.no_approver_fallback_position_id:
+        from core.access import holders_of_position
+        fallback_users = list(holders_of_position(step.no_approver_fallback_position_id).filter(is_active=True))
         if fallback_users:
             instance.current_step_codes = [step.code]
             instance.save(update_fields=['current_step_codes'])

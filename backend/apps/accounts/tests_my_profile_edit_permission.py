@@ -11,7 +11,6 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import Role
 
 
 def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
@@ -49,12 +48,11 @@ class MyProfileEditPermissionTests(TestCase):
         resp = self.client.patch(reverse('my-profile'), {'phone': '9876543210'}, format='json')
         self.assertEqual(resp.status_code, 200, resp.data)
 
-    def test_seeded_employee_role_has_it_revoked_by_default(self):
+    def test_plain_employee_without_the_permission_cannot_self_edit(self):
         # Product decision: employees can't self-edit their profile/photo
         # unless HR explicitly turns it back on for the 'employee' role
         # (migration 0174) — every OTHER role keeps it granted (0172).
-        employee_role = Role.objects.get(name='employee')
-        make_user('real-employee@test.com', role=employee_role)
+        make_user('real-employee@test.com')
         _login(self.client, 'real-employee@test.com')
 
         resp = self.client.patch(reverse('my-profile'), {'phone': '9876543210'}, format='json')

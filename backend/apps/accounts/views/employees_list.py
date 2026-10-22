@@ -80,8 +80,6 @@ from apps.accounts.models import (
     Placement,
     Position,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -107,7 +105,6 @@ from apps.accounts.serializers import (
     PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
-    RoleSerializer,
     SMTPSettingsSerializer,
     SMTPTestSerializer,
     VerifyOTPSerializer,
@@ -139,7 +136,7 @@ class EmployeeListCreateView(APIView):
 
         qs = (
             User.objects
-            .select_related('role', 'profile', 'reporting_manager')
+            .select_related('profile', 'reporting_manager')
             .prefetch_related('employee_documents')
             .prefetch_related('custom_field_files')
             .filter(is_active__in=[True, False])
@@ -264,7 +261,6 @@ class EmployeeListCreateView(APIView):
         first_name      = (request.data.get('first_name')      or '').strip()
         last_name       = (request.data.get('last_name')       or '').strip()
         email           = (request.data.get('email')           or '').strip().lower()
-        role_id         = request.data.get('role')
         branch          = (request.data.get('branch')          or '').strip()
         date_of_joining = (request.data.get('date_of_joining') or '').strip()
         phone           = (request.data.get('phone')           or '').strip()
@@ -272,33 +268,18 @@ class EmployeeListCreateView(APIView):
         employee_type   = normalize_employment_type(employee_type_raw) if employee_type_raw else 'Permanent'
         hr_id                 = (request.data.get('hr_id')                 or '').strip()
         reporting_manager_id  = (request.data.get('reporting_manager_id')  or '').strip()
-        # Every role is hired onto a Position, department/designation are
-        # always derived from it (via assign_position()'s sync) — except a
-        # Branch Admin, who oversees every department in the branch rather
-        # than sitting in one seat, so they keep the original free-text
-        # designation entry and no department at all. Matched by capability,
-        # not a hardcoded role name, same as everywhere else this distinction
-        # is made (see applyLeaderRole on the frontend).
+        # Everyone is hired onto a Position: department and designation are always derived from it (via
+        # assign_position()'s sync), and so is their access. A branch administrator is simply someone placed
+        # in a position that carries branch-wide access.
         position_id     = (request.data.get('position')        or '').strip()
-        designation     = (request.data.get('designation')     or '').strip()
-
-        role_for_dept_check = None
-        if role_id:
-            try:
-                role_for_dept_check = Role.objects.filter(pk=role_id).first()
-            except (ValueError, ValidationError):
-                role_for_dept_check = None
-        is_branch_admin_role = bool(role_for_dept_check and role_for_dept_check.can_manage_branch)
+        designation     = ''
 
         errs = {}
         if not first_name:      errs['first_name']      = 'First name is required.'
         if not last_name:       errs['last_name']       = 'Last name is required.'
         if not email:           errs['email']           = 'Email is required.'
-        if not role_id:         errs['role']            = 'Role is required.'
         if employee_type is None: errs['employee_type'] = invalid_employment_type_message()
-        if is_branch_admin_role:
-            if not designation: errs['designation'] = 'Designation is required.'
-        elif not position_id:
+        if not position_id:
             errs['position'] = 'Position is required.'
         if not branch:          errs['branch']          = 'Company Code is required.'
         if not date_of_joining: errs['date_of_joining'] = 'Date of joining is required.'
@@ -377,13 +358,9 @@ class EmployeeListCreateView(APIView):
                 data={'email': field_msg},
             )
 
-        try:
-            role = Role.objects.get(pk=role_id)
-        except (Role.DoesNotExist, ValueError, TypeError):
-            return error('Invalid role.', data={'role': 'Role not found.'})
-
-        if role.role_permissions.filter(permission__codename='settings.edit').exists():
-            return error(f'"{role.display_name}" cannot be assigned via employee creation.')
+        # Full org-wide access is never handed out by creating an employee into a seat that carries it.
+        if position_obj.position_permissions.filter(permission__codename='settings.edit').exists():
+            return error(f'"{position_obj.title}" carries full access and cannot be filled via employee creation.')
 
         selected_hr = None
         if hr_id:
@@ -394,10 +371,10 @@ class EmployeeListCreateView(APIView):
 
         selected_manager = None
         if reporting_manager_id:
-            if role.can_manage_team:
+            if position_obj.can_manage_team:
                 return error(
                     'Managers do not have a reporting manager.',
-                    data={'reporting_manager_id': 'Not applicable for this role.'},
+                    data={'reporting_manager_id': 'Not applicable for this position.'},
                 )
             try:
                 selected_manager = User.objects.get(pk=reporting_manager_id, is_active=True)
@@ -421,7 +398,6 @@ class EmployeeListCreateView(APIView):
                 email           = email,
                 password        = temp_password,
                 full_name       = full_name,
-                role            = role,
                 employee_id     = employee_id,
                 department      = department,
                 designation     = designation,
@@ -503,7 +479,7 @@ class EmployeeListCreateView(APIView):
                 changes={
                     'name': full_name, 'email': email,
                     'department': department, 'designation': designation,
-                    'role': role.name, 'employee_id': employee_id,
+                    'position': position_obj.title, 'employee_id': employee_id,
                 },
                 branch=user.branch,
                 ip_address=get_client_ip(request),

@@ -39,9 +39,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         return obj.posted_by.full_name if obj.posted_by_id else 'Former Employee'
 
     def get_posted_by_role(self, obj: Announcement) -> str:
-        if obj.posted_by_id and obj.posted_by.role:
-            return obj.posted_by.role.display_name
-        return ''
+        return (obj.posted_by.designation or '') if obj.posted_by_id else ''
 
     # ── target labels ─────────────────────────────────────────────────────────
 

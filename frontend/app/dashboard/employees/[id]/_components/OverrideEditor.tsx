@@ -105,7 +105,7 @@ export default function OverrideEditor({ row, employeeCode, branch, defaultManag
           />
         </div>
 
-        {row.l2_approver_role && (
+        {row.l2_approver_kind && (
           <div className="field-group">
             <label className="field-label">
               L2 Approver

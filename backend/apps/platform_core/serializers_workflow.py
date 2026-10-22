@@ -13,7 +13,7 @@ class WorkflowStepSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'definition', 'code', 'label', 'order', 'step_type', 'resolver', 'resolver_params',
             'quorum', 'quorum_n', 'skip_if_approver_is_requester', 'skip_if_same_as_previous_step',
-            'skip_condition', 'auto_approve_condition', 'no_approver_action', 'no_approver_fallback_role',
+            'skip_condition', 'auto_approve_condition', 'no_approver_action', 'no_approver_fallback_position',
             'branch_condition', 'branch_next_step_code_if_true', 'branch_next_step_code_if_false',
             'require_remarks', 'editable_field_codes', 'sla_due_in_hours', 'sla_business_hours_only',
             'sla_reminder_hours', 'sla_escalation_after_hours', 'sla_escalation_resolver',

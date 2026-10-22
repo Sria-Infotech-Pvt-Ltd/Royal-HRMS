@@ -59,8 +59,6 @@ from apps.accounts.models import (
     Permission,
     Placement,
     Position,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -75,99 +73,6 @@ class PermissionSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Permission
         fields = ('id', 'codename', 'module', 'action')
-
-
-class RoleSerializer(serializers.ModelSerializer):
-    permissions  = serializers.SerializerMethodField()
-    user_count   = serializers.SerializerMethodField()
-    # Write-only: list of codenames sent by client when creating / updating
-    permission_codenames = serializers.ListField(
-        child      = serializers.CharField(max_length=100),
-        write_only = True,
-        required   = False,
-        default    = list,
-    )
-
-    class Meta:
-        model  = Role
-        fields = (
-            'id', 'name', 'display_name', 'is_active', 'can_manage_team',
-            'can_manage_branch', 'is_system_role',
-            'permissions', 'permission_codenames', 'user_count',
-            'created_at', 'updated_at',
-        )
-        # can_manage_branch is writable the same way can_manage_team already
-        # is — an admin can grant unconditional branch-scoped access to any
-        # role, not just the seeded Branch Admin. Callers (e.g. the "assign
-        # Branch Admin" picker) find the role by this capability instead of
-        # matching its name, same as core/permissions.py does server-side.
-        # is_system_role is never settable by any client — provisioning-time only.
-        read_only_fields = ('id', 'created_at', 'updated_at', 'is_system_role')
-
-    def get_permissions(self, obj: Role) -> list[str]:
-        # Uses prefetch_related('role_permissions__permission') cache — no extra query.
-        return [rp.permission.codename for rp in obj.role_permissions.all()]
-
-    def get_user_count(self, obj: Role) -> int:
-        # Uses annotated active_user_count when available — no extra query.
-        if hasattr(obj, 'active_user_count'):
-            return obj.active_user_count
-        return obj.users.filter(is_active=True).count()
-
-    def validate_name(self, value: str) -> str:
-        if not _NAME_RE.match(value):
-            raise serializers.ValidationError(
-                'Role name must start with a letter and contain only lowercase letters, '
-                'digits, and underscores (e.g. hr_admin).'
-            )
-        return value
-
-    def validate_permission_codenames(self, value: list[str]) -> list[str]:
-        if not value:
-            return value
-        if len(value) > 200:
-            raise serializers.ValidationError(
-                'A role cannot be assigned more than 200 permissions at once.'
-            )
-        existing = set(
-            Permission.objects.filter(codename__in=value)
-                              .values_list('codename', flat=True)
-        )
-        invalid = set(value) - existing
-        if invalid:
-            raise serializers.ValidationError(
-                f'Unknown permission codename(s): {", ".join(sorted(invalid))}'
-            )
-        return value
-
-    def create(self, validated_data: dict) -> Role:
-        from django.db import transaction
-        codenames = validated_data.pop('permission_codenames', [])
-        with transaction.atomic():
-            role = Role.objects.create(**validated_data)
-            self._sync_permissions(role, codenames)
-        return role
-
-    def update(self, instance: Role, validated_data: dict) -> Role:
-        from django.db import transaction
-        codenames = validated_data.pop('permission_codenames', None)
-        with transaction.atomic():
-            for attr, value in validated_data.items():
-                setattr(instance, attr, value)
-            instance.save()
-            if codenames is not None:
-                self._sync_permissions(instance, codenames)
-        return instance
-
-    @staticmethod
-    def _sync_permissions(role: Role, codenames: list[str]) -> None:
-        role.role_permissions.all().delete()
-        if codenames:
-            perms = Permission.objects.filter(codename__in=codenames)
-            RolePermission.objects.bulk_create(
-                [RolePermission(role=role, permission=p) for p in perms],
-                ignore_conflicts=True,
-            )
 
 
 # ─── Auth serializers ─────────────────────────────────────────────────────────
@@ -535,7 +440,6 @@ class PositionSerializer(serializers.ModelSerializer):
     org_unit_name       = serializers.CharField(source='org_unit.name', read_only=True)
     job_template_name   = serializers.CharField(source='job_template.name', read_only=True, default=None)
     branch_name         = serializers.CharField(source='branch.branch_name', read_only=True, default=None)
-    default_role_name   = serializers.CharField(source='default_role.display_name', read_only=True, default=None)
     holder              = serializers.SerializerMethodField()
     holder_name         = serializers.SerializerMethodField()
     holder_employee_id  = serializers.SerializerMethodField()
@@ -549,30 +453,15 @@ class PositionSerializer(serializers.ModelSerializer):
             'id', 'org_unit', 'org_unit_name', 'job_template', 'job_template_name',
             'title', 'grade', 'is_chief', 'is_active',
             'holder', 'holder_name', 'holder_employee_id', 'holder_since', 'scheduled',
-            'branch', 'branch_name', 'default_role', 'default_role_name',
+            'branch', 'branch_name', 'can_manage_team', 'can_manage_branch',
             'reports_to', 'created_at', 'updated_at',
         )
         read_only_fields = (
+            'can_manage_team', 'can_manage_branch',
             'id', 'org_unit_name', 'job_template_name', 'is_active',
             'holder', 'holder_name', 'holder_employee_id', 'holder_since', 'scheduled',
-            'branch_name', 'default_role_name', 'reports_to', 'created_at', 'updated_at',
+            'branch_name', 'reports_to', 'created_at', 'updated_at',
         )
-
-    def validate_default_role(self, value):
-        # Same rule as assigning a Role to an employee directly (Create/Edit
-        # Employee, views.py) — a seat can't default to a Role that carries
-        # settings.edit, one level up from the employee-level guard. A
-        # can_manage_branch role is excluded too: Branch Admin is assigned
-        # via Designation, never via a Position, so it could never actually
-        # be reached through a seat's default anyway.
-        if value and (
-            value.role_permissions.filter(permission__codename='settings.edit').exists()
-            or value.can_manage_branch
-        ):
-            raise serializers.ValidationError(
-                f'"{value.display_name}" cannot be set as a seat\'s default role.'
-            )
-        return value
 
     def validate_title(self, value: str) -> str:
         value = value.strip()
@@ -1326,9 +1215,7 @@ class AuditLogSerializer(serializers.ModelSerializer):
         return obj.user.email if obj.user_id else None
 
     def get_actor_role(self, obj: AuditLog) -> str | None:
-        if obj.user_id and obj.user.role_id:
-            return obj.user.role.display_name
-        return None
+        return (obj.user.designation or None) if obj.user_id else None
 
 
 # ─── Document Center ──────────────────────────────────────────────────────────
@@ -2113,8 +2000,6 @@ class OnboardingPipelineSerializer(serializers.ModelSerializer):
 # ─── Onboarding Approval ──────────────────────────────────────────────────────
 
 class OnboardingApprovalSerializer(serializers.ModelSerializer):
-    role_name        = serializers.CharField(source='role.name',         read_only=True, default='')
-    role_display     = serializers.CharField(source='role.display_name', read_only=True, default='')
     # NOT a plain nested EmployeeProfileSerializer — that serializer is the
     # self-service one (/onboarding/, /employees/me/) and legitimately
     # returns your OWN full pan_number/aadhaar_number/account_number/
@@ -2144,7 +2029,7 @@ class OnboardingApprovalSerializer(serializers.ModelSerializer):
         model  = User
         fields = [
             'id', 'full_name', 'email', 'phone', 'department', 'designation', 'branch',
-            'role_name', 'role_display', 'employee_id', 'date_of_joining',
+            'employee_id', 'date_of_joining',
             'onboarding_status', 'date_joined',
             'candidate_id', 'position_applied',
             'profile', 'documents', 'family_members', 'nominees',
@@ -2207,8 +2092,6 @@ class OnboardingApprovalSerializer(serializers.ModelSerializer):
 # ─── My Profile (authenticated employee view) ─────────────────────────────────
 
 class MyProfileSerializer(serializers.ModelSerializer):
-    role_name       = serializers.CharField(source='role.name',         read_only=True, default='')
-    role_display    = serializers.CharField(source='role.display_name', read_only=True, default='')
     profile         = EmployeeProfileSerializer(read_only=True)
     assessment_status  = serializers.SerializerMethodField()
     reporting_manager  = serializers.SerializerMethodField()
@@ -2235,7 +2118,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'id', 'full_name', 'email', 'phone', 'employee_id',
             'department', 'designation', 'branch', 'employee_type',
             'org_unit_name', 'position_title',
-            'role_name', 'role_display', 'date_of_joining', 'date_joined',
+            'date_of_joining', 'date_joined',
             'work_location', 'onboarding_status', 'onboarding_rejection_remarks', 'assessment_status',
             'employment_status', 'employment_status_display', 'notice_period_days',
             'reporting_manager', 'reporting_approver', 'hr',
@@ -2307,8 +2190,8 @@ class MyProfileSerializer(serializers.ModelSerializer):
             if CandidateAssignment.objects.filter(candidate=candidate, status__in=pending_statuses).exists():
                 return 'pending'
 
-        # For role-bearing users also check employee-based assignments
-        if obj.role_id:
+        # For real employees also check employee-based assignments
+        if obj.employee_id:
             if CandidateAssignment.objects.filter(employee=obj, status__in=pending_statuses).exists():
                 return 'pending'
             return 'complete'
@@ -2380,54 +2263,24 @@ class MyProfileUpdateSerializer(serializers.Serializer):
 
 class ApprovalWorkflowRuleSerializer(serializers.ModelSerializer):
     workflow_label    = serializers.CharField(source='get_workflow_type_display', read_only=True)
-    l1_approver_role  = serializers.SerializerMethodField()
-    l1_approver_label = serializers.SerializerMethodField()
-    l2_approver_role  = serializers.SerializerMethodField()
-    l2_approver_label = serializers.SerializerMethodField()
+    l1_approver_label = serializers.CharField(source='get_l1_approver_kind_display', read_only=True)
+    l2_approver_label = serializers.CharField(source='get_l2_approver_kind_display', read_only=True)
 
     class Meta:
         from apps.accounts.models import ApprovalWorkflowRule as _Rule
         model  = _Rule
         fields = [
             'workflow_type', 'workflow_label',
-            'l1_approver_role', 'l1_approver_label',
-            'l2_approver_role', 'l2_approver_label',
+            'l1_approver_kind', 'l1_approver_label',
+            'l2_approver_kind', 'l2_approver_label',
         ]
-
-    def get_l1_approver_role(self, obj):
-        return obj.l1_approver_role_id
-
-    def get_l1_approver_label(self, obj) -> str:
-        return obj.l1_approver_role.display_name if obj.l1_approver_role else ''
-
-    def get_l2_approver_role(self, obj):
-        return obj.l2_approver_role_id
-
-    def get_l2_approver_label(self, obj) -> str:
-        return obj.l2_approver_role.display_name if obj.l2_approver_role else ''
 
 
 class ApprovalWorkflowRuleUpdateSerializer(serializers.Serializer):
     from apps.accounts.models import ApprovalWorkflowRule as _Rule
     workflow_type    = serializers.ChoiceField(choices=[c[0] for c in _Rule.WORKFLOW_CHOICES])
-    l1_approver_role = serializers.IntegerField(min_value=1)
-    l2_approver_role = serializers.IntegerField(min_value=1, required=False, allow_null=True, default=None)
-
-    def validate_l1_approver_role(self, value):
-        from apps.accounts.models import Role
-        try:
-            return Role.objects.get(pk=value, is_active=True)
-        except Role.DoesNotExist:
-            raise serializers.ValidationError('Role not found or inactive.')
-
-    def validate_l2_approver_role(self, value):
-        if value is None:
-            return None
-        from apps.accounts.models import Role
-        try:
-            return Role.objects.get(pk=value, is_active=True)
-        except Role.DoesNotExist:
-            raise serializers.ValidationError('Role not found or inactive.')
+    l1_approver_kind = serializers.ChoiceField(choices=[c[0] for c in _Rule.APPROVER_CHOICES])
+    l2_approver_kind = serializers.ChoiceField(choices=[c[0] for c in _Rule.APPROVER_CHOICES], required=False, allow_blank=True, default='')
 
 
 # ── Employee Bulk Import ───────────────────────────────────────────────────────
@@ -2462,7 +2315,6 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
     email           = serializers.EmailField()
     phone           = serializers.CharField(max_length=20, required=False,
                                              allow_blank=True, default='')
-    role            = serializers.CharField(max_length=100)
     org_unit        = serializers.CharField(max_length=150)
     position_title  = serializers.CharField(max_length=150)
     branch          = serializers.CharField(max_length=100)
@@ -2514,12 +2366,6 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
             )
-        return value
-
-    def validate_role(self, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError('Role is required.')
         return value
 
     def validate_uan_number(self, value: str) -> str:

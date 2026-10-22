@@ -17,15 +17,25 @@ from apps.platform_core.services_document_engine import (
     SensitiveFieldNotPermittedError, UndeclaredVariableError, generate_document, issue_document,
     record_click_to_accept, render_template, revoke_and_reissue,
 )
-from apps.platform_core.models import RoleAssignment
+from apps.accounts.models import OrgUnit, Placement, Position
+from apps.platform_core.models import PositionAssignment
 from apps.platform_core.services_report_builder import ReportSecurityError, run_report
 
 
-def _grant_scope_all(user, role):
+def _grant_scope_all(user, position):
     import datetime as _dt
-    return RoleAssignment.objects.create(
-        user=user, role=role, scope_type=RoleAssignment.SCOPE_ALL, effective_from=_dt.date(2020, 1, 1),
+    return PositionAssignment.objects.create(
+        user=user, position=position, scope_type=PositionAssignment.SCOPE_ALL, effective_from=_dt.date(2020, 1, 1),
     )
+
+
+def _seat_for(user):
+    """A new position held by `user` from the start of 2020."""
+    import datetime as _dt
+    unit, _ = OrgUnit.objects.get_or_create(name='Phase 9A Unit')
+    seat = Position.objects.create(org_unit=unit, title=_unique('Seat'), grade='L1')
+    Placement.objects.create(position=seat, employee=user, effective_from=_dt.date(2020, 1, 1))
+    return seat
 from apps.payroll.models import PayComponent
 from apps.performance.models import RatingScale
 
@@ -50,22 +60,23 @@ class ReportBuilderSecurityTests(TestCase):
     def test_hidden_field_blocks_report_validation(self):
         entity = _make_entity()
         sensitive_field = FieldDefinition.objects.create(entity=entity, code='amount', label='Amount', data_type='decimal', is_sensitive=True)
-        role = make_role(_unique('role'))
+        author = _make_employee()
         from apps.platform_core.services_report_builder import validate_definition
         report = ReportDefinition.objects.create(
             code=_unique('RPT'), name='x', base_entity=entity, columns=[{'field_code': 'amount'}],
         )
-        FieldPermission.objects.create(role=role, entity=entity, field_code='amount', access='hidden')
+        FieldPermission.objects.create(position=_seat_for(author), entity=entity, field_code='amount', access='hidden')
         with self.assertRaises(ReportSecurityError):
-            validate_definition(report, role)
+            validate_definition(report, author)
 
     def test_masked_field_is_masked_in_results(self):
         entity = _make_entity()
         FieldDefinition.objects.create(entity=entity, code='salary', label='Salary', data_type='decimal', is_sensitive=True)
         role = make_role(_unique('role'))
         employee = _make_employee(role)
-        _grant_scope_all(employee, role)
-        FieldPermission.objects.create(role=role, entity=entity, field_code='salary', access='masked')
+        seat = _seat_for(employee)
+        _grant_scope_all(employee, seat)
+        FieldPermission.objects.create(position=seat, entity=entity, field_code='salary', access='masked')
         CustomRecord.objects.create(entity=entity, owner=employee, data={'salary': 100000})
 
         report = ReportDefinition.objects.create(
@@ -80,8 +91,9 @@ class ReportBuilderSecurityTests(TestCase):
         FieldDefinition.objects.create(entity=entity, code='salary', label='Salary', data_type='decimal', is_sensitive=True)
         role = make_role(_unique('role'))
         employee = _make_employee(role)
-        _grant_scope_all(employee, role)
-        FieldPermission.objects.create(role=role, entity=entity, field_code='salary', access='read')
+        seat = _seat_for(employee)
+        _grant_scope_all(employee, seat)
+        FieldPermission.objects.create(position=seat, entity=entity, field_code='salary', access='read')
         CustomRecord.objects.create(entity=entity, owner=employee, data={'salary': 100000})
 
         report = ReportDefinition.objects.create(
@@ -96,8 +108,9 @@ class ReportBuilderSecurityTests(TestCase):
         FieldDefinition.objects.create(entity=entity, code='salary', label='Salary', data_type='decimal', is_sensitive=True)
         role = make_role(_unique('role'))
         employee = _make_employee(role)
-        _grant_scope_all(employee, role)
-        FieldPermission.objects.create(role=role, entity=entity, field_code='salary', access='read')
+        seat = _seat_for(employee)
+        _grant_scope_all(employee, seat)
+        FieldPermission.objects.create(position=seat, entity=entity, field_code='salary', access='read')
         for i in range(5):
             CustomRecord.objects.create(entity=entity, owner=employee, data={'salary': 100000 + i})
 

@@ -23,10 +23,10 @@ from django.db import models
 
 class ReportDefinition(models.Model):
     VISIBILITY_PERSONAL  = 'personal'
-    VISIBILITY_ROLES     = 'roles'
+    VISIBILITY_POSITIONS = 'positions'
     VISIBILITY_EVERYONE  = 'everyone'
     VISIBILITY_CHOICES = [
-        (VISIBILITY_PERSONAL, 'Personal'), (VISIBILITY_ROLES, 'Specific roles'), (VISIBILITY_EVERYONE, 'Everyone with access'),
+        (VISIBILITY_PERSONAL, 'Personal'), (VISIBILITY_POSITIONS, 'Specific positions'), (VISIBILITY_EVERYONE, 'Everyone with access'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -36,7 +36,7 @@ class ReportDefinition(models.Model):
     base_entity = models.ForeignKey('platform_core.EntityDefinition', on_delete=models.PROTECT, related_name='report_definitions')
     owner = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='report_definitions_owned')
     visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default=VISIBILITY_PERSONAL)
-    shared_role_names = models.JSONField(default=list, blank=True, help_text='Role names this report is shared to, when visibility=roles.')
+    shared_position_titles = models.JSONField(default=list, blank=True, help_text='Position titles this report is shared to, when visibility=positions.')
 
     # [{"field_code": "amount", "label": "Amount"}, ...] — field_code must
     # exist on base_entity's FieldDefinition set; validated at save time.
@@ -95,7 +95,7 @@ class Dashboard(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=60, unique=True)
     name = models.CharField(max_length=150)
-    role_name = models.CharField(max_length=50, blank=True, help_text='Blank = personal dashboard (see owner); set = a role default.')
+    position_title = models.CharField(max_length=150, blank=True, help_text='Blank = personal dashboard (see owner); set = the default for people in this position.')
     owner = models.ForeignKey('accounts.User', on_delete=models.CASCADE, null=True, blank=True, related_name='personal_dashboards')
     layout = models.JSONField(default=list, help_text='[{"widget_id": "...", "x": 0, "y": 0, "w": 4, "h": 2}, ...]')
 

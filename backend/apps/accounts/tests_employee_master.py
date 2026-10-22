@@ -211,7 +211,7 @@ class ModelCreationTests(TestCase):
         number_hash = blind_index('ABCDE1234F')
         IdentityDocument.objects.create(content_type=ct, object_id=str(self.employee.pk), type=doc_type, number='ABCDE1234F', number_hash=number_hash)
 
-        other_user = make_user('master-data-2@test.com', role=self.employee.role)
+        other_user = make_user('master-data-2@test.com')
         with self.assertRaises(Exception):
             IdentityDocument.objects.create(content_type=ct, object_id=str(other_user.pk), type=doc_type, number='ABCDE1234F', number_hash=number_hash)
 

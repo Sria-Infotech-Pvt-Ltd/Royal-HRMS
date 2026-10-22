@@ -18,7 +18,7 @@ class ListViewError(Exception):
 
 
 def resolve_default_view(entity, user) -> ListViewDefinition | None:
-    """Personal default (if the user saved one) beats a role default,
+    """Personal default (if the user saved one) beats a position default,
     which beats the system default — most-specific-to-the-user wins,
     same precedence direction as Phase 1's feature-flag overrides."""
     qs = ListViewDefinition.objects.filter(entity=entity, is_default=True)
@@ -27,11 +27,13 @@ def resolve_default_view(entity, user) -> ListViewDefinition | None:
     if personal:
         return personal
 
-    role_id = getattr(user, 'role_id', None)
-    if role_id:
-        role_view = qs.filter(visibility=ListViewDefinition.VISIBILITY_ROLE, role_id=role_id).first()
-        if role_view:
-            return role_view
+    from core.access import current_seat
+
+    seat = current_seat(user)
+    if seat is not None:
+        position_view = qs.filter(visibility=ListViewDefinition.VISIBILITY_POSITION, position_id=seat.pk).first()
+        if position_view:
+            return position_view
 
     return qs.filter(visibility=ListViewDefinition.VISIBILITY_SYSTEM).first()
 
@@ -39,10 +41,12 @@ def resolve_default_view(entity, user) -> ListViewDefinition | None:
 def list_views_for_user(entity, user):
     from django.db.models import Q
     qs = ListViewDefinition.objects.filter(entity=entity)
-    role_id = getattr(user, 'role_id', None)
+    from core.access import current_seat
+
+    seat = current_seat(user)
     visible = Q(visibility=ListViewDefinition.VISIBILITY_SYSTEM)
-    if role_id:
-        visible |= Q(visibility=ListViewDefinition.VISIBILITY_ROLE, role_id=role_id)
+    if seat is not None:
+        visible |= Q(visibility=ListViewDefinition.VISIBILITY_POSITION, position_id=seat.pk)
     visible |= Q(visibility=ListViewDefinition.VISIBILITY_PERSONAL, owner=user)
     return qs.filter(visible)
 

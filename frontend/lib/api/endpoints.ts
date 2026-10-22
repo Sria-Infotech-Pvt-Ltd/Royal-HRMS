@@ -97,11 +97,6 @@ export const API = {
     documentDetail:  (id: string, docId: string) => `/hire-actions/${id}/documents/${docId}/`,
   },
 
-  roles: {
-    list: "/roles/",
-    detail: (id: string | number) => `/roles/${id}/`,
-  },
-
   permissions: {
     list: "/permissions/",
   },

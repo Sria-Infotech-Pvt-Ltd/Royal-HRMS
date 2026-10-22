@@ -126,8 +126,6 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
         phone:           raw.phone ?? "",
         employee_type:   raw.employee_type ?? "",
         date_of_joining: raw.date_of_joining ?? "",
-        role:            raw.role ?? "",
-        role_display:    raw.role_display ?? "",
         branch:          raw.branch ?? "",
         department:      raw.department ?? "",
         designation:     raw.designation ?? "",

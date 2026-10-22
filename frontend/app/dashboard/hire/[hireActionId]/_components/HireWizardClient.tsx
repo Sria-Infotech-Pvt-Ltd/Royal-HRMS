@@ -227,9 +227,6 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       setEmployment(e => ({
         ...e,
         ...(d as Partial<EmploymentDraft>),
-        // Suggest the position's default role only if nothing was saved
-        // yet — never overwrite an HR override on a resumed draft.
-        role: (d.role as string | undefined) || data.default_role_id || "",
         employment_type: data.employment_type,
       }));
       setBasicPay(b => ({ ...b, ...(d as Partial<BasicPayDraft>) }));
@@ -385,7 +382,6 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       }
       case 1:
         if (!employment.employment_type) return "Select an employment type.";
-        if (!employment.role) return "Select a role.";
         if (!employment.branch) return "Select a company code.";
         if (employment.work_email.trim() && !EMAIL_RE.test(employment.work_email.trim())) {
           return "Enter a valid work email address.";
@@ -466,7 +462,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       ...addressExtras,
       salutation, first_name: firstName, middle_name: middleName, last_name: lastName,
       display_name: displayName, nationality, place_of_birth: placeOfBirth, email, phone,
-      role: employment.role, branch: employment.branch, work_email: employment.work_email,
+      branch: employment.branch, work_email: employment.work_email,
       reporting_manager_id: employment.reporting_manager_id, dotted_line_manager_id: employment.dotted_line_manager_id,
       work_location: employment.work_location, work_mode: employment.work_mode,
       probation_period_months: employment.probation_period_months, notice_period_days: employment.notice_period_days,
@@ -597,7 +593,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       !phone.trim() && "Mobile number",
     ].filter(Boolean) as string[];
     m[1] = [
-      !employment.employment_type && "Employment type", !employment.role && "Role",
+      !employment.employment_type && "Employment type",
       !employment.branch && "Company code",
     ].filter(Boolean) as string[];
     m[3] = [
@@ -615,7 +611,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     return m;
   }, [
     firstName, lastName, form.date_of_birth, form.gender, nationality, email, phone,
-    employment.employment_type, employment.role, employment.branch,
+    employment.employment_type, employment.branch,
     statutory.pan_number, statutory.aadhaar_number, statutory.account_holder_name,
     statutory.account_number, statutory.ifsc_code, educationEntries, documents,
   ]);
@@ -923,7 +919,6 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               reservedEmployeeId={action.reserved_employee_id}
               positionTitle={action.position_title} orgUnitName={action.org_unit_name} grade={action.grade}
               costCenter=""
-              defaultRoleId={action.default_role_id} defaultRoleName={action.default_role_name}
             />
           )}
 

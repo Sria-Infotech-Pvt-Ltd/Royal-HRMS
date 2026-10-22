@@ -106,7 +106,6 @@ export const MAX_NATIONAL_PHONE_DIGITS = 10;
 export interface HireActionData {
   id: string; reason: string; reason_display: string; effective_from: string; position: string;
   position_title: string; org_unit_name: string; grade: string;
-  default_role_id: string | null; default_role_name: string | null;
   employment_type: string; reserved_employee_id: string; status: string;
   draft_data: Record<string, unknown>;
   photo_url: string | null;
@@ -114,7 +113,7 @@ export interface HireActionData {
 
 export const STEPS: HireStepDef[] = [
   { label: "Personal identity", sub: "Name, photo, DOB, contact", required: 7 },
-  { label: "Employment", sub: "Role, reporting, work setup", required: 3 },
+  { label: "Employment", sub: "Reporting line, work setup, pay", required: 3 },
   { label: "Basic pay", sub: "Wage types and pay scale" },
   { label: "Statutory & accounts", sub: "PAN, PF, ESI, bank", required: 5, tag: { label: "Sensitive", tone: "sensitive" } },
   { label: "Family & nomination", sub: "Dependants and nominees", group: "Records & compliance", tag: { label: "EPFO", tone: "info" } },

@@ -64,7 +64,7 @@ export function ApprovalModal({
     const lname        = parts.length > 1 ? parts[parts.length - 1] : "";
     const companyName  = company?.company_name ?? "";
     const approverName = currentUser?.name ?? "";
-    const approverRole = (currentUser?.role ?? "").replace(/_/g, " ");
+    const approverRole = currentUser?.designation ?? "";
 
     const ctx: Record<string, string> = {
       // Name — all common aliases in both cases

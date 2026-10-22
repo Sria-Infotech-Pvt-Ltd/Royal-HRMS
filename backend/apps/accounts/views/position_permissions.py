@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.accounts.models import AuditLog, Permission, Position, PositionPermission
+from apps.accounts.services_sessions import current_holder_ids, force_relogin
 from core.permissions import has_perm as _has_perm
 from core.responses import error, get_client_ip, success
 
@@ -67,6 +68,8 @@ class PositionPermissionsView(APIView):
                     setattr(position, flag, bool(request.data[flag]))
             position.save(update_fields=['can_manage_team', 'can_manage_branch', 'updated_at'])
         after = _seat_payload(position)
+        if after != before:
+            force_relogin(current_holder_ids(position))
         AuditLog.objects.create(
             user=request.user, action='position_permissions_update', module='org_structure',
             object_id=str(position.pk), changes={'before': before, 'after': after},

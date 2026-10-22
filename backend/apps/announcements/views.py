@@ -91,7 +91,7 @@ def _visible_qs(request) -> 'QuerySet[Announcement]':
             queryset=AnnouncementReaction.objects.filter(user=request.user),
             to_attr='_user_reactions',
         )
-    ).select_related('posted_by', 'posted_by__role', 'target_org_unit', 'target_branch')
+    ).select_related('posted_by', 'target_org_unit', 'target_branch')
 
 
 # ─── Views ────────────────────────────────────────────────────────────────────

@@ -56,26 +56,22 @@ export interface BranchDistribution {
 export type Envelope<T> = { status: string; message: string; data: T };
 export type Paginated<T> = { count: number; page: number; page_size: number; total_pages: number; results: T[] };
 
-export interface ApiRole {
-  id: number; name: string; display_name: string;
-  can_manage_branch: boolean; permissions: string[];
-}
+/** A seat that carries branch-wide access — what a Company Code Admin is placed in. */
+export interface BranchAdminSeat { id: string; title: string; org_unit_name: string; holder_name: string | null }
 export interface ApiEmployeeOption {
-  id: string; uuid: string; employee_id: string; full_name: string; email: string; branch: string; role: string;
+  id: string; uuid: string; employee_id: string; full_name: string; email: string; branch: string;
 }
 
 export interface LeaderForm {
   // "new" invites a brand-new person via the same create-and-email-credentials
-  // flow as the Employees page; "existing" instead re-roles/re-branches an
-  // employee who's already in the company (a transfer, not a new hire).
-  // No department field — a Branch Admin oversees every department in the
-  // branch, not one, unlike every other role.
+  // flow as the Employees page, placed in a seat that carries branch-wide access; "existing" instead moves an
+  // employee who's already in the company to this branch (a transfer, not a new hire).
   mode: "new" | "existing";
-  name: string; email: string; designation: string;
+  name: string; email: string; positionId: string;
   employeeId: string; search: string;
 }
 export const EMPTY_LEADER: LeaderForm = {
-  mode: "new", name: "", email: "", designation: "Branch Manager",
+  mode: "new", name: "", email: "", positionId: "",
   employeeId: "", search: "",
 };
 

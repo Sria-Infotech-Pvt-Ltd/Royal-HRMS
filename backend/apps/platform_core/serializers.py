@@ -158,7 +158,7 @@ class FeatureFlagSerializer(serializers.ModelSerializer):
 class FeatureFlagOverrideSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeatureFlagOverride
-        fields = ['id', 'flag', 'legal_entity', 'role', 'user', 'enabled']
+        fields = ['id', 'flag', 'legal_entity', 'position', 'user', 'enabled']
 
 
 class ModuleToggleSerializer(serializers.ModelSerializer):

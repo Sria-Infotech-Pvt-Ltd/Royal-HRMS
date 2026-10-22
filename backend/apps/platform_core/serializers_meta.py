@@ -59,5 +59,5 @@ class ListViewDefinitionSerializer(serializers.ModelSerializer):
         model = ListViewDefinition
         fields = [
             'id', 'entity', 'code', 'name', 'columns', 'default_filters', 'default_sort',
-            'visibility', 'role', 'owner', 'is_default', 'created_at', 'updated_at',
+            'visibility', 'position', 'owner', 'is_default', 'created_at', 'updated_at',
         ]

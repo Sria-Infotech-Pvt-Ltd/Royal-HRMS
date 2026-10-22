@@ -80,8 +80,6 @@ from apps.accounts.models import (
     Placement,
     Position,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -107,7 +105,6 @@ from apps.accounts.serializers import (
     PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
-    RoleSerializer,
     SMTPSettingsSerializer,
     SMTPTestSerializer,
     VerifyOTPSerializer,
@@ -146,7 +143,7 @@ class HRListView(APIView):
             .filter(users_with_permission('onboarding.approve'), is_active=True)
             .exclude(users_with_permission('settings.edit'))
             .filter(Q(branch__iexact=branch) | Q(managed_branches__branch_name__iexact=branch))
-            .select_related('role')
+            
             .distinct()
             .order_by('full_name')
         )
@@ -175,7 +172,7 @@ class ManagerListView(APIView):
         managers = (
             User.objects
             .filter(team_managers(), is_active=True)
-            .select_related('role')
+            
         )
         if department:
             managers = managers.filter(department__iexact=department)

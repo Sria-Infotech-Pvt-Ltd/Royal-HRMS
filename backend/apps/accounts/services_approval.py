@@ -13,16 +13,16 @@ from django.db.models import Q
 from django.utils import timezone
 
 if TYPE_CHECKING:
-    from apps.accounts.models import OrgUnit, Role, User
+    from apps.accounts.models import OrgUnit, User
 
 
-def resolve_approver(role: 'Role | None', employee: 'User') -> 'User | None':
-    """Resolve a Role FK to the actual User approver for a given employee."""
-    if role is None:
-        return None
-    if role.can_manage_team:
+def resolve_approver(kind: str, employee: 'User') -> 'User | None':
+    """Resolve an approver kind ('reporting_manager' | 'hr' | '') to the actual User for an employee."""
+    if kind == 'reporting_manager':
         return getattr(employee, 'reporting_manager', None)
-    return getattr(employee, 'hr', None)
+    if kind == 'hr':
+        return getattr(employee, 'hr', None)
+    return None
 
 
 def resolve_approval_chain(employee: 'User', workflow_type: str) -> tuple:
@@ -43,8 +43,8 @@ def resolve_approval_chain(employee: 'User', workflow_type: str) -> tuple:
     if not rule:
         return None, None
 
-    l1 = resolve_approver(rule.l1_approver_role, employee) if rule.l1_approver_role else None
-    l2 = resolve_approver(rule.l2_approver_role, employee) if rule.l2_approver_role else None
+    l1 = resolve_approver(rule.l1_approver_kind, employee)
+    l2 = resolve_approver(rule.l2_approver_kind, employee)
     return l1, l2
 
 

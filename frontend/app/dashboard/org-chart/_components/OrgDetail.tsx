@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStructure";
-import type { BranchOption, RoleOption, Selected } from "./OrgStructureClient";
+import type { BranchOption, Selected } from "./OrgStructureClient";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import SearchableSelect from "@/components/SearchableSelect";
 
@@ -12,7 +12,6 @@ interface Props {
   positions: Position[];
   jobs: JobTemplate[];
   branches: BranchOption[];
-  roles: RoleOption[];
   canEdit: boolean;
   placementHistory: Placement[];
   placementHistoryLoading: boolean;
@@ -119,7 +118,7 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
 }
 
 export default function OrgDetail({
-  selected, units, positions, jobs, branches, roles, canEdit, placementHistory, placementHistoryLoading, onSelect,
+  selected, units, positions, jobs, branches, canEdit, placementHistory, placementHistoryLoading, onSelect,
   onAddSubUnit, onDeleteUnit, onAddPosition, onAssign, onVacate, onDeactivate, canManagePermissions, onPermissions, onReactivate, canDelete, onDelete, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
 }: Props) {
   if (!selected) {
@@ -375,16 +374,6 @@ export default function OrgDetail({
               onChange={v => onPositionField(p.id, "branch", v || null)}
               placeholder="Company-wide"
               options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
-              inputClassName="field-input"
-            />
-          </div>
-          <div className="field-group">
-            <label className="field-label">Default role <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(suggested to HR when hiring into this seat)</span></label>
-            <SearchableSelect
-              value={p.default_role != null ? String(p.default_role) : ""} disabled={!canEdit}
-              onChange={v => onPositionField(p.id, "default_role", v || null)}
-              placeholder="None"
-              options={roles.map(r => ({ value: String(r.id), label: r.display_name }))}
               inputClassName="field-input"
             />
           </div>

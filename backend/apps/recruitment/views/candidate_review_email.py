@@ -211,7 +211,7 @@ class SendCandidateEmailView(APIView):
             if not candidate:
                 # Fallback: direct-hire employee — look up User directly
                 try:
-                    direct_user = User.objects.select_related('role').get(employee_id=pk)
+                    direct_user = User.objects.get(employee_id=pk)
                 except User.DoesNotExist:
                     return error(
                         f'No candidate or employee found with ID "{pk}".',

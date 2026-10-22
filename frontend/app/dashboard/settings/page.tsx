@@ -6,11 +6,10 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { KpiTile } from "@/components/dashboard/ModuleOverviewKit";
 
-interface OverviewData { admin_roles: number; audit_events_30d: number }
+interface OverviewData { access_seats: number; audit_events_30d: number }
 
 const SETTINGS_ITEMS = [
   { id: "company",            cat: "company", icon: "ti-building",        iconClass: "sc-company", label: "Company Info",          desc: "Name, GST, address, registration details" },
-  { id: "permissions",        cat: "company", icon: "ti-shield-lock",     iconClass: "sc-company", label: "Roles & Permissions",   desc: "Role-based access control for all users" },
   { id: "access",             cat: "company", icon: "ti-key",             iconClass: "sc-company", label: "Access",                desc: "Permissions every employee has; positions carry the rest" },
   { id: "leave-policy",       cat: "modules", icon: "ti-beach",           iconClass: "sc-modules", label: "Leave Policy",          desc: "Configure leave types, accruals and limits" },
   { id: "approval-rules",     cat: "modules", icon: "ti-sitemap",         iconClass: "sc-modules", label: "Approval Rules",        desc: "Who approves leave, expenses, resignation and loans" },
@@ -39,7 +38,6 @@ type CatId = "all" | "company" | "modules" | "comm" | "system";
 
 const ITEM_ROUTES: Record<string, string> = {
   company:                "/dashboard/settings/company",
-  permissions:            "/dashboard/settings/permissions",
   access:                 "/dashboard/settings/access",
   smtp:                   "/dashboard/settings/smtp",
   "email-templates":      "/dashboard/settings/email-templates",
@@ -82,7 +80,7 @@ export default function SettingsPage() {
 
       <div className="stats">
         <KpiTile label="CONFIGURED" value={SETTINGS_ITEMS.length} sub="Settings groups" tone="brand" />
-        <KpiTile label="ADMIN USERS" value={data?.admin_roles ?? "—"} sub="Role-based access" tone="ok" />
+        <KpiTile label="ACCESS SEATS" value={data?.access_seats ?? "—"} sub="Positions with extra access" tone="ok" />
         <KpiTile label="AUTOMATIONS" value="—" sub="Not yet configured" tone="warn" />
         <KpiTile label="AUDIT EVENTS" value={data?.audit_events_30d ?? "—"} sub="Last 30 days" tone="brand" />
       </div>

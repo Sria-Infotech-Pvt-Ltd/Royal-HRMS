@@ -17,7 +17,7 @@ hr_manager_lists, approval_workflow, bulk_import).
 from .shared import *  # noqa: F401,F403
 
 from .auth import *  # noqa: F401,F403
-from .roles_permissions import *  # noqa: F401,F403
+from .permissions_catalogue import *  # noqa: F401,F403
 from .org_structure import *  # noqa: F401,F403
 from .smtp_settings import *  # noqa: F401,F403
 from .email_templates import *  # noqa: F401,F403

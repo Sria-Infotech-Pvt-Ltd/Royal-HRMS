@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 
+from django.db.models import Q
+
 from apps.platform_core import cache as metadata_cache
 from apps.platform_core.models import FeatureFlag, FeatureFlagOverride, ModuleToggle
 
@@ -26,17 +28,18 @@ def is_enabled(code: str, *, user=None, legal_entity=None) -> bool:
     user_id = getattr(user, 'pk', None)
     entity_id = getattr(legal_entity, 'pk', legal_entity)
 
+    from apps.platform_core.services_authz import positions_for_user
+    position_ids = positions_for_user(user) if user_id is not None else []
     overrides = FeatureFlagOverride.objects.filter(flag=flag).filter(
-        models_or_none(user_id=user_id, role_id=getattr(getattr(user, 'role', None), 'pk', None), legal_entity_id=entity_id)
+        models_or_none(user_id=user_id, legal_entity_id=entity_id) | Q(position_id__in=position_ids)
     )
-    # Most specific override wins: user > role > legal_entity.
+    # Most specific override wins: user > position > legal_entity.
     user_override = next((o for o in overrides if o.user_id == user_id and user_id is not None), None)
     if user_override:
         return user_override.enabled
-    role_id = getattr(getattr(user, 'role', None), 'pk', None)
-    role_override = next((o for o in overrides if o.role_id == role_id and role_id is not None), None)
-    if role_override:
-        return role_override.enabled
+    position_override = next((o for o in overrides if o.position_id in position_ids), None)
+    if position_override:
+        return position_override.enabled
     entity_override = next((o for o in overrides if o.legal_entity_id == entity_id and entity_id is not None), None)
     if entity_override:
         return entity_override.enabled

@@ -391,15 +391,13 @@ class SettingsOverviewView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from apps.accounts.models import AuditLog, Role
+        from apps.accounts.models import AuditLog, Position
 
         today = timezone.localdate()
-        # Phase 4 Task B.3 — was .exclude(name='employee'); "admin-ish
-        # roles" now means "every active role except the default
-        # employee role," by attribute rather than hardcoded name.
-        admin_roles = Role.objects.filter(is_active=True).exclude(is_default_employee_role=True).count()
+        # Seats that carry extra access beyond what every employee gets.
+        access_seats = Position.objects.filter(is_active=True, position_permissions__isnull=False).distinct().count()
         audit_events_30d = AuditLog.objects.filter(created_at__date__gte=today - datetime.timedelta(days=30)).count()
 
         return success('Settings overview retrieved.', {
-            'admin_roles': admin_roles, 'audit_events_30d': audit_events_30d,
+            'access_seats': access_seats, 'audit_events_30d': audit_events_30d,
         })

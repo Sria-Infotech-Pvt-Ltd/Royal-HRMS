@@ -115,7 +115,7 @@ class FormFieldPlacement(TimestampedModel):
     # existing permission system on every read/write regardless of what
     # this restricts to in the UI. See FieldPlacementRoleRestriction and
     # PHASE2_REPORT.md's "Risks" section.
-    restricted_to_roles = models.ManyToManyField('accounts.Role', blank=True, related_name='+')
+    restricted_to_positions = models.ManyToManyField('accounts.Position', blank=True, related_name='+')
 
     class Meta:
         db_table = 'platform_form_field_placements'

@@ -81,8 +81,6 @@ from apps.accounts.models import (
     Placement,
     Position,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -108,7 +106,6 @@ from apps.accounts.serializers import (
     PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
-    RoleSerializer,
     SMTPSettingsSerializer,
     SMTPTestSerializer,
     VerifyOTPSerializer,
@@ -164,7 +161,7 @@ class OnboardingApprovalView(APIView):
                          http_status=status.HTTP_403_FORBIDDEN)
 
         try:
-            target = User.objects.select_related('role').get(pk=user_id)
+            target = User.objects.get(pk=user_id)
         except User.DoesNotExist:
             return error('User not found.', http_status=status.HTTP_404_NOT_FOUND)
 
@@ -252,16 +249,10 @@ class OnboardingApprovalView(APIView):
             except Candidate.DoesNotExist:
                 linked_candidate = None
 
-            needs_conversion = not target.role and not target.employee_id
+            needs_conversion = not target.employee_id
             if needs_conversion:
-                # Phase 4 Task B.3 — was Role.objects.get(name='employee');
-                # the default role for new hires is now an explicit
-                # attribute, not a hardcoded role name.
-                try:
-                    employee_role = Role.objects.get(is_default_employee_role=True)
-                except Role.DoesNotExist:
-                    return error('No role is marked as the default employee role. Set one in Roles settings first.')
-                target.role = employee_role
+                # Everyone already gets the company baseline permissions; further access comes from the
+                # position they are placed in.
                 if not target.date_of_joining:
                     from django.utils import timezone as tz
                     target.date_of_joining = tz.now().date()
@@ -306,7 +297,7 @@ class OnboardingApprovalView(APIView):
             auto_fields = _auto_assign_managers(target)
             target.save(update_fields=list(dict.fromkeys([
                 'onboarding_status', 'must_change_password', 'onboarding_rejection_remarks',
-                'role', 'employee_id', 'date_of_joining',
+                'employee_id', 'date_of_joining',
                 'designation', 'department', 'branch',
                 'reporting_manager', 'reporting_manager_from_org_chart', 'hr',
                 *auto_fields,
@@ -500,7 +491,7 @@ class OnboardingApprovalView(APIView):
                 ],
                 candidate_portal__isnull=False,
             )
-            .select_related('role')
+            
             .distinct()
             .order_by('-date_joined')
         )
@@ -543,7 +534,7 @@ class OnboardingApprovalView(APIView):
         qs = (
             User.objects
             .filter(onboarding_status__in=[User.ONBOARDING_SUBMITTED, User.ONBOARDING_REJECTED])
-            .select_related('role', 'profile')
+            .select_related('profile')
             .prefetch_related('employee_documents')
             .prefetch_related('custom_field_files')
             .order_by('date_joined')
@@ -590,7 +581,7 @@ class OnboardingApprovalView(APIView):
         try:
             target = (
                 User.objects
-                .select_related('role', 'profile')
+                .select_related('profile')
                 .prefetch_related('employee_documents')
                 .prefetch_related('custom_field_files')
                 .prefetch_related('family_members')

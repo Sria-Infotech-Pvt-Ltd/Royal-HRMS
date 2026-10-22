@@ -23,7 +23,7 @@ import datetime
 from django.db.models import Q
 
 from apps.platform_core import cache as metadata_cache
-from apps.platform_core.models import EntityDefinition, RoleAssignment
+from apps.platform_core.models import EntityDefinition, PositionAssignment
 
 
 class AuthzError(Exception):
@@ -44,13 +44,13 @@ def is_full_access(user) -> bool:
 
 
 def _active_assignments(user, as_of: datetime.date):
-    return RoleAssignment.objects.filter(
+    return PositionAssignment.objects.filter(
         user=user, is_active=True, effective_from__lte=as_of,
-    ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=as_of)).select_related('role')
+    ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=as_of)).select_related('position')
 
 
-def effective_scopes_for_entity(user, entity_code: str, *, as_of=None) -> list[RoleAssignment]:
-    """Every active RoleAssignment the user holds that is relevant —
+def effective_scopes_for_entity(user, entity_code: str, *, as_of=None) -> list[PositionAssignment]:
+    """Every active PositionAssignment the user holds that is relevant —
     Task B.1's "effective rights are the union" of all assignments.
     `scope_type=SCOPE_ALL`/role-specific filtering by entity isn't
     narrowed per-entity in this pass (an assignment grants its scope for
@@ -62,22 +62,22 @@ def effective_scopes_for_entity(user, entity_code: str, *, as_of=None) -> list[R
     return list(_active_assignments(user, as_of))
 
 
-def _custom_record_scope_filter(assignment: RoleAssignment, user) -> Q | None:
+def _custom_record_scope_filter(assignment: PositionAssignment, user) -> Q | None:
     """Task C.2's mapping for CustomRecord: owner, or parent-record's
     owning employee. Returns None for a scope type not meaningfully
     expressible for a custom record (e.g. org_unit — no org-unit field
     exists generically on CustomRecord) rather than silently matching
     everything or nothing."""
     scope = assignment.scope_type
-    if scope == RoleAssignment.SCOPE_ALL:
+    if scope == PositionAssignment.SCOPE_ALL:
         return Q()
-    if scope == RoleAssignment.SCOPE_OWN:
+    if scope == PositionAssignment.SCOPE_OWN:
         return Q(owner=user)
-    if scope == RoleAssignment.SCOPE_LEGAL_ENTITY:
+    if scope == PositionAssignment.SCOPE_LEGAL_ENTITY:
         if assignment.scope_values:
             return Q(legal_entity_id__in=assignment.scope_values)
         return None
-    if scope == RoleAssignment.SCOPE_MY_LEGAL_ENTITY:
+    if scope == PositionAssignment.SCOPE_MY_LEGAL_ENTITY:
         legal_entity_id = getattr(user, 'legal_entity_id', None)
         return Q(legal_entity_id=legal_entity_id) if legal_entity_id else None
     return None  # direct_reports/org_unit/branch/employee_group etc. — not expressible for a generic CustomRecord without a declared mapping (Task C.5)
@@ -103,7 +103,7 @@ def scope_queryset(user, entity: EntityDefinition, action: str, queryset, *, as_
     # silently contributed NOTHING to the union instead of "everything" —
     # a real bug caught by test_all_scope_sees_everything before this
     # ever reached a real caller.
-    if any(a.scope_type == RoleAssignment.SCOPE_ALL for a in assignments):
+    if any(a.scope_type == PositionAssignment.SCOPE_ALL for a in assignments):
         return queryset
 
     combined = Q(pk__in=[])  # start from "nothing" — union in anything granted
@@ -138,12 +138,13 @@ def can(user, entity: EntityDefinition, action: str, record) -> bool:
 # ─── Task K — cached effective permissions ──────────────────────────────────
 
 def _effective_permissions_uncached(user) -> frozenset[str]:
-    from apps.accounts.models import RolePermission
+    from apps.accounts.models import PositionPermission
     from core.permissions import effective_permission_codenames
-    # The seat the person holds, the company baseline and (until roles are deleted) their role.
+    # The seat the person holds, the company baseline and (until roles are deleted) their role ...
     codenames = set(effective_permission_codenames(user))
+    # ... plus every position they are additionally assigned.
     for assignment in _active_assignments(user, datetime.date.today()):
-        codenames.update(RolePermission.objects.filter(role=assignment.role).values_list('permission__codename', flat=True))
+        codenames.update(PositionPermission.objects.filter(position=assignment.position).values_list('permission__codename', flat=True))
     return frozenset(codenames)
 
 
@@ -166,3 +167,16 @@ def has_perm_v2(user, codename: str) -> bool:
     if is_full_access(user):
         return True
     return codename in effective_permissions(user)
+
+
+def positions_for_user(user, as_of=None) -> list[int]:
+    """Ids of every position whose access applies to `user`: the seat they hold plus active extra assignments."""
+    from core.access import current_seat
+
+    as_of = as_of or datetime.date.today()
+    ids = []
+    seat = current_seat(user)
+    if seat is not None:
+        ids.append(seat.pk)
+    ids.extend(a.position_id for a in _active_assignments(user, as_of) if a.position_id not in ids)
+    return ids

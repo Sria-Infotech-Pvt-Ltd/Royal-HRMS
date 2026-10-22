@@ -12,12 +12,12 @@ class SoDBlockedError(Exception):
 
 
 def _user_codenames(user, *, including: set[str] | None = None) -> set[str]:
-    from apps.accounts.models import RolePermission
+    from apps.accounts.models import PositionPermission
     from core.permissions import effective_permission_codenames
     codenames = set(effective_permission_codenames(user))
-    from apps.platform_core.models import RoleAssignment
-    for assignment in RoleAssignment.objects.filter(user=user, is_active=True).select_related('role'):
-        codenames.update(RolePermission.objects.filter(role=assignment.role).values_list('permission__codename', flat=True))
+    from apps.platform_core.models import PositionAssignment
+    for assignment in PositionAssignment.objects.filter(user=user, is_active=True).select_related('position'):
+        codenames.update(PositionPermission.objects.filter(position=assignment.position).values_list('permission__codename', flat=True))
     if including:
         codenames |= including
     return codenames
@@ -59,7 +59,7 @@ def existing_violations_report() -> list[dict]:
     report = []
     for rule in SoDRule.objects.filter(is_active=True):
         set_a, set_b = set(rule.conflicting_permissions_a), set(rule.conflicting_permissions_b)
-        for user in User.objects.filter(is_active=True).select_related('role'):
+        for user in User.objects.filter(is_active=True):
             codenames = _user_codenames(user)
             if (codenames & set_a) and (codenames & set_b):
                 report.append({'rule': rule.code, 'user_id': str(user.pk), 'severity': rule.severity})

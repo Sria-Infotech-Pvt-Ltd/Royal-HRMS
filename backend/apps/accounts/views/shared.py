@@ -88,8 +88,6 @@ from apps.accounts.models import (
     Placement,
     Position,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -115,7 +113,6 @@ from apps.accounts.serializers import (
     PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
-    RoleSerializer,
     SMTPSettingsSerializer,
     SMTPTestSerializer,
     VerifyOTPSerializer,
@@ -427,8 +424,6 @@ def _employee_dict(user: User) -> dict:
         'core_skills':    p.core_skills    if p else '',
         'certifications': p.certifications if p else '',
         'employee_type':  user.employee_type,
-        'role':           user.role.name         if user.role else '',
-        'role_display':   user.role.display_name if user.role else '',
         'date_of_joining': str(user.date_of_joining) if user.date_of_joining else '',
         'date_joined':    user.date_joined.date().isoformat(),
         'is_active':      user.is_active,
@@ -509,7 +504,7 @@ def _get_employee(identifier: str):
     try:
         return (
             User.objects
-            .select_related('role', 'profile', 'reporting_manager', 'hr')
+            .select_related('profile', 'reporting_manager', 'hr')
             .prefetch_related('employee_documents')
             .prefetch_related('custom_field_files')
             .get(employee_id=identifier)
@@ -1217,15 +1212,12 @@ def _ensure_default_rules():
     missing  = [wf for wf in _WORKFLOW_ORDER if wf not in existing]
     if not missing:
         return
-    manager_role = Role.objects.filter(can_manage_team=True, is_active=True).first()
-    hr_role      = None
-    perm = Permission.objects.filter(codename='leave.approve').first()
-    if perm:
-        rp = RolePermission.objects.filter(permission=perm, role__is_active=True).select_related('role').first()
-        if rp:
-            hr_role = rp.role
     ApprovalWorkflowRule.objects.bulk_create([
-        ApprovalWorkflowRule(workflow_type=wf, l1_approver_role=manager_role, l2_approver_role=hr_role)
+        ApprovalWorkflowRule(
+            workflow_type=wf,
+            l1_approver_kind=ApprovalWorkflowRule.APPROVER_REPORTING_MANAGER,
+            l2_approver_kind=ApprovalWorkflowRule.APPROVER_HR,
+        )
         for wf in missing
     ])
 
@@ -1234,32 +1226,29 @@ def _serialize_rule(rule: ApprovalWorkflowRule) -> dict:
     return {
         'workflow_type':      rule.workflow_type,
         'workflow_label':     rule.get_workflow_type_display(),
-        'l1_approver_role':   rule.l1_approver_role_id,
-        'l1_approver_label':  rule.l1_approver_role.display_name if rule.l1_approver_role else '',
-        'l2_approver_role':   rule.l2_approver_role_id,
-        'l2_approver_label':  rule.l2_approver_role.display_name if rule.l2_approver_role else '',
+        'l1_approver_kind':   rule.l1_approver_kind,
+        'l1_approver_label':  rule.get_l1_approver_kind_display(),
+        'l2_approver_kind':   rule.l2_approver_kind,
+        'l2_approver_label':  rule.get_l2_approver_kind_display(),
     }
 
 
-def _resolve_rule_approver(role, employee):
-    """Resolve a Role FK to the actual User approver for a given employee.
+def _resolve_rule_approver(kind, employee):
+    """Resolve an approver kind to the actual User approver for a given employee.
 
-    Roles with can_manage_team=True resolve via employee.reporting_manager;
-    all other roles resolve via employee.hr. Validates the assigned person
-    still holds the expected capability.
+    'reporting_manager' resolves via employee.reporting_manager, 'hr' via employee.hr.
+    Validates the assigned person still holds the expected capability.
     """
-    if role is None:
-        return None
-    if role.can_manage_team:
+    if kind == 'reporting_manager':
         rm = getattr(employee, 'reporting_manager', None)
         if rm and can_manage_team(rm):
             return rm
         return None
-    else:
+    if kind == 'hr':
         hr_user = getattr(employee, 'hr', None)
         if hr_user and _has_perm(hr_user, 'leave.approve'):
             return hr_user
-        return None
+    return None
 
 
 def _build_matrix_row(rule: ApprovalWorkflowRule, override, employee=None) -> dict:
@@ -1267,7 +1256,7 @@ def _build_matrix_row(rule: ApprovalWorkflowRule, override, employee=None) -> di
     if override and override.l1_override:
         l1_id, l1_name, l1_is_override = str(override.l1_override.id), override.l1_override.full_name, True
     else:
-        l1_user = _resolve_rule_approver(rule.l1_approver_role, employee) if employee else None
+        l1_user = _resolve_rule_approver(rule.l1_approver_kind, employee) if employee else None
         l1_id   = str(l1_user.id) if l1_user else None
         l1_name = l1_user.full_name if l1_user else None
         l1_is_override = False
@@ -1275,7 +1264,7 @@ def _build_matrix_row(rule: ApprovalWorkflowRule, override, employee=None) -> di
     if override and override.l2_override:
         l2_id, l2_name, l2_is_override = str(override.l2_override.id), override.l2_override.full_name, True
     else:
-        l2_user = _resolve_rule_approver(rule.l2_approver_role, employee) if employee else None
+        l2_user = _resolve_rule_approver(rule.l2_approver_kind, employee) if employee else None
         l2_id   = str(l2_user.id) if l2_user else None
         l2_name = l2_user.full_name if l2_user else None
         l2_is_override = False
@@ -1283,13 +1272,13 @@ def _build_matrix_row(rule: ApprovalWorkflowRule, override, employee=None) -> di
     return {
         'workflow_type':     rule.workflow_type,
         'workflow_label':    rule.get_workflow_type_display(),
-        'l1_approver_role':  rule.l1_approver_role_id,
-        'l1_approver_label': rule.l1_approver_role.display_name if rule.l1_approver_role else '',
+        'l1_approver_kind':  rule.l1_approver_kind,
+        'l1_approver_label': rule.get_l1_approver_kind_display(),
         'l1_approver_id':    l1_id,
         'l1_approver_name':  l1_name,
         'l1_is_override':    l1_is_override,
-        'l2_approver_role':  rule.l2_approver_role_id,
-        'l2_approver_label': rule.l2_approver_role.display_name if rule.l2_approver_role else '',
+        'l2_approver_kind':  rule.l2_approver_kind,
+        'l2_approver_label': rule.get_l2_approver_kind_display(),
         'l2_approver_id':    l2_id,
         'l2_approver_name':  l2_name,
         'l2_is_override':    l2_is_override,
@@ -1303,7 +1292,6 @@ _EMP_IMPORT_COL_MAP = {
     'email address': 'email', 'email_address': 'email',
     'phone': 'phone', 'mobile': 'phone', 'phone number': 'phone',
     'phone_number': 'phone', 'mobile number': 'phone',
-    'role': 'role',
     # Org Unit + Position resolve to a real Position, with department/
     # designation derived from it (same as Create Employee's own Position
     # picker) — a "Department"/"Designation" column is not recognized here;

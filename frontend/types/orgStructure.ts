@@ -50,6 +50,8 @@ export interface Position {
   job_template_name:   string | null;
   title:               string;
   grade:               string;
+  can_manage_team?:   boolean;
+  can_manage_branch?: boolean;
   is_chief:            boolean;
   is_active:           boolean;
   // holder/holder_name/holder_employee_id/holder_since are all derived from
@@ -73,8 +75,6 @@ export interface Position {
   // suggested (not enforced) to HR at Create Employee time. Never changes
   // an existing holder's Role automatically — see backend Position model
   // docstring for why.
-  default_role:        number | null;
-  default_role_name:   string | null;
   reports_to:          PositionReportsTo | null;
   created_at:           string;
   updated_at:           string;
@@ -119,7 +119,6 @@ export interface PositionPayload {
   grade:        string;
   is_chief:     boolean;
   branch?:      number | null;
-  default_role?: number | null;
 }
 
 export interface JobTemplatePayload {

@@ -1,85 +1,90 @@
 """
-Regression test: updating a Role's permissions must force-logout every
-active user currently holding that role (blacklist their outstanding
-refresh tokens) — permissions are baked into the JWT at login and
-deliberately not re-derived on the silent 15-minute refresh
-(see FreshClaimsTokenRefreshSerializer's own docstring), so without this,
-an already-logged-in user keeps acting on the OLD permission set for up
-to the refresh token's full 7-day lifetime after an admin changes what
-their role can do.
+Changing what a position (or everyone) may do must end the sessions of the people affected, so they pick up the new
+permissions at their next login instead of acting on the old set for the life of their refresh token.
+
+Permissions are copied into the login token (see apps.accounts.tokens), while backend has_perm() checks already read
+the database fresh. Blacklisting the affected people's outstanding tokens is what keeps the two in step.
 """
 from __future__ import annotations
+
+from datetime import date, timedelta
 
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.factories import make_role, make_user
+from apps.accounts.factories import make_permission, make_role, make_user
+from apps.accounts.models import OrgUnit, Placement, Position
 
 
-class RolePermissionChangeForcesLogoutTests(TestCase):
+class PermissionChangeForcesLogoutTests(TestCase):
     def setUp(self):
         cache.clear()
-        self.admin_role = make_role('settings_admin_test', permission_codenames=['settings.edit'])
-        self.admin = make_user('roleadmin@test.com', role=self.admin_role, password='TestPass123!')
+        self.admin = make_user('seatadmin@test.com', role=make_role('settings_admin_test', permission_codenames=['settings.edit']))
         self.client = APIClient()
         self.client.force_authenticate(user=self.admin)
+        for codename in ('employees.edit_own_profile', 'leave.view'):
+            make_permission(codename)
 
-        self.target_role = make_role('employee_logout_test')
-        self.target_user = make_user('affected-employee@test.com', role=self.target_role)
-        # Only inactive users should be spared — not exercised here, but
-        # kept in mind: is_active=True is the default from make_user.
+        unit = OrgUnit.objects.create(name='Logout Test Unit')
+        self.seat = Position.objects.create(org_unit=unit, title='Analyst', grade='L2')
+        self.holder = make_user('seat-holder@test.com')
+        Placement.objects.create(position=self.seat, employee=self.holder, effective_from=date.today() - timedelta(days=1))
+        self.url = reverse('position-permissions', args=[self.seat.pk])
 
-    def _refresh_token_for(self, user):
+    def _token_for(self, user):
         return RefreshToken.for_user(user)
 
-    def test_updating_role_permissions_blacklists_active_users_tokens(self):
-        token = self._refresh_token_for(self.target_user)
-        self.assertFalse(BlacklistedToken.objects.filter(token__jti=str(token['jti'])).exists())
+    def _is_blacklisted(self, token) -> bool:
+        return BlacklistedToken.objects.filter(token__jti=str(token['jti'])).exists()
 
-        resp = self.client.put(reverse('role-detail', args=[self.target_role.id]), {
-            'name': self.target_role.name,
-            'display_name': self.target_role.display_name,
-            'can_manage_team': False,
-            'can_manage_branch': False,
-            'permission_codenames': ['employees.edit_own_profile'],
-        }, format='json')
+    def test_changing_a_positions_permissions_blacklists_the_holders_tokens(self):
+        token = self._token_for(self.holder)
+        self.assertFalse(self._is_blacklisted(token))
+
+        resp = self.client.put(self.url, {'codenames': ['employees.edit_own_profile']}, format='json')
         self.assertEqual(resp.status_code, 200, resp.data)
 
-        self.assertTrue(BlacklistedToken.objects.filter(token__jti=str(token['jti'])).exists())
+        self.assertTrue(self._is_blacklisted(token))
 
-    def test_inactive_users_tokens_are_not_blacklisted_needlessly(self):
-        inactive_user = make_user('inactive-employee@test.com', role=self.target_role)
-        inactive_user.is_active = False
-        inactive_user.save(update_fields=['is_active'])
-        token = self._refresh_token_for(inactive_user)
+    def test_saving_the_same_permissions_again_does_not_log_anyone_out(self):
+        self.client.put(self.url, {'codenames': ['leave.view']}, format='json')
+        token = self._token_for(self.holder)
 
-        resp = self.client.put(reverse('role-detail', args=[self.target_role.id]), {
-            'name': self.target_role.name,
-            'display_name': self.target_role.display_name,
-            'can_manage_team': False,
-            'can_manage_branch': False,
-            'permission_codenames': [],
-        }, format='json')
+        resp = self.client.put(self.url, {'codenames': ['leave.view']}, format='json')
         self.assertEqual(resp.status_code, 200, resp.data)
 
-        self.assertFalse(BlacklistedToken.objects.filter(token__jti=str(token['jti'])).exists())
+        self.assertFalse(self._is_blacklisted(token))
 
-    def test_other_roles_tokens_are_unaffected(self):
-        other_role = make_role('other_role_logout_test')
-        other_user = make_user('other-role-employee@test.com', role=other_role)
-        token = self._refresh_token_for(other_user)
+    def test_inactive_holders_tokens_are_not_blacklisted_needlessly(self):
+        inactive = make_user('inactive-holder@test.com')
+        inactive.is_active = False
+        inactive.save(update_fields=['is_active'])
+        Placement.objects.filter(employee=self.holder).update(employee=inactive)
+        token = self._token_for(inactive)
 
-        resp = self.client.put(reverse('role-detail', args=[self.target_role.id]), {
-            'name': self.target_role.name,
-            'display_name': self.target_role.display_name,
-            'can_manage_team': False,
-            'can_manage_branch': False,
-            'permission_codenames': [],
-        }, format='json')
+        self.client.put(self.url, {'codenames': ['leave.view']}, format='json')
+
+        self.assertFalse(self._is_blacklisted(token))
+
+    def test_other_positions_holders_are_unaffected(self):
+        other_unit = OrgUnit.objects.create(name='Other Logout Unit')
+        other_seat = Position.objects.create(org_unit=other_unit, title='Clerk', grade='L1')
+        other_person = make_user('other-holder@test.com')
+        Placement.objects.create(position=other_seat, employee=other_person, effective_from=date.today() - timedelta(days=1))
+        token = self._token_for(other_person)
+
+        self.client.put(self.url, {'codenames': ['leave.view']}, format='json')
+
+        self.assertFalse(self._is_blacklisted(token))
+
+    def test_changing_the_baseline_logs_everyone_out(self):
+        token = self._token_for(self.holder)
+
+        resp = self.client.put(reverse('baseline-permissions'), {'codenames': ['leave.view']}, format='json')
         self.assertEqual(resp.status_code, 200, resp.data)
 
-        self.assertFalse(BlacklistedToken.objects.filter(token__jti=str(token['jti'])).exists())
+        self.assertTrue(self._is_blacklisted(token))

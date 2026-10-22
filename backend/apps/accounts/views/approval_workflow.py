@@ -79,8 +79,6 @@ from apps.accounts.models import (
     Placement,
     Position,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -106,7 +104,6 @@ from apps.accounts.serializers import (
     PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
-    RoleSerializer,
     SMTPSettingsSerializer,
     SMTPTestSerializer,
     VerifyOTPSerializer,
@@ -151,13 +148,11 @@ class ApprovalWorkflowRuleView(APIView):
         data = serializer.validated_data
         _ensure_default_rules()
 
-        rule = ApprovalWorkflowRule.objects.select_related(
-            'l1_approver_role', 'l2_approver_role'
-        ).get(workflow_type=data['workflow_type'])
-        rule.l1_approver_role = data['l1_approver_role']
-        rule.l2_approver_role = data.get('l2_approver_role') or None
+        rule = ApprovalWorkflowRule.objects.get(workflow_type=data['workflow_type'])
+        rule.l1_approver_kind = data['l1_approver_kind']
+        rule.l2_approver_kind = data.get('l2_approver_kind') or ''
         rule.updated_by       = request.user
-        rule.save(update_fields=['l1_approver_role', 'l2_approver_role', 'updated_by', 'updated_at'])
+        rule.save(update_fields=['l1_approver_kind', 'l2_approver_kind', 'updated_by', 'updated_at'])
 
         from core.cache_service import ApprovalWorkflowCacheService
         ApprovalWorkflowCacheService.invalidate(data['workflow_type'])
@@ -205,7 +200,7 @@ class EmployeeApprovalMatrixView(APIView):
         _ensure_default_rules()
         rules = {
             r.workflow_type: r
-            for r in ApprovalWorkflowRule.objects.select_related('l1_approver_role', 'l2_approver_role')
+            for r in ApprovalWorkflowRule.objects.all()
         }
         overrides = {
             o.workflow_type: o

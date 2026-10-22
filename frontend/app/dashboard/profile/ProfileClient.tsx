@@ -144,7 +144,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           <div style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 3 }}>
             {profile?.designation && profile?.department
               ? `${profile.designation} · ${profile.department}`
-              : (profile?.role_display ?? session.role)}
+              : (profile?.designation || profile?.department || "")}
           </div>
           <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
             {profile?.employee_id && (

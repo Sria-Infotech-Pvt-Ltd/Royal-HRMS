@@ -26,19 +26,21 @@ def _specific_user(record, params, *, requester=None):
     return [user] if user else []
 
 
-def _role_scoped(record, params, *, requester=None):
-    """New — Task A.2's "role (with scope: same branch, same org unit,
-    same legal entity, global)". params: {"role_id": ..., "scope":
+def _position_scoped(record, params, *, requester=None):
+    """New — Task A.2's "whoever holds a position (with scope: same branch, same org unit,
+    same legal entity, global)". params: {"position_id": ..., "scope":
     "global"|"branch"|"org_unit"|"legal_entity"}. The employee whose
     record this is comes from `record.employee` / `record` itself if it
     IS a User (custom-entity convention: records needing an employee
     scope declare an `employee` FK)."""
     from apps.accounts.models import User
-    role_id = params.get('role_id')
+    position_id = params.get('position_id')
     scope = params.get('scope', 'global')
     employee = getattr(record, 'employee', record if isinstance(record, User) else None)
 
-    qs = User.objects.filter(role_id=role_id, is_active=True)
+    from core.access import holders_of_position
+
+    qs = holders_of_position(position_id).filter(is_active=True)
     if scope == 'global' or employee is None:
         return list(qs)
     if scope == 'branch':
@@ -47,7 +49,7 @@ def _role_scoped(record, params, *, requester=None):
         return list(qs.filter(legal_entity_id=getattr(employee, 'legal_entity_id', None)))
     if scope == 'org_unit':
         return list(qs.filter(placements__position__org_unit_id=getattr(employee, 'org_unit_id', None)).distinct())
-    raise ResolverError(f'Unknown role scope: {scope!r}')
+    raise ResolverError(f'Unknown position scope: {scope!r}')
 
 
 def _reporting_manager_level_n(record, params, *, requester=None):
@@ -145,7 +147,7 @@ def _rule_expression(record, params, *, requester=None):
 
 RESOLVERS = {
     'specific_user': _specific_user,
-    'role_scoped': _role_scoped,
+    'position_scoped': _position_scoped,
     'reporting_manager_level_n': _reporting_manager_level_n,
     'dotted_line_manager': _dotted_line_manager,
     'org_unit_chief': _org_unit_chief,

@@ -77,24 +77,13 @@ export default function EmployeeProfilePage({
   const [rawApiDocuments, setRawApiDocuments] = useState<ApiDocument[]>([]);
   const { data: documentTypeConfigData } = useFetch<DocumentTypeConfig[]>(API.onboarding.documentTypeConfig);
 
-  const [roleOptions,     setRoleOptions]     = useState<FieldOption[]>([]);
   const [branchOptions,   setBranchOptions]   = useState<FieldOption[]>([]);
 
-  // fetch dropdown lists once on mount — use allSettled so one failure does
-  // not block the others from loading. GET /roles/ is intentionally open to
-  // any authenticated user (needed for role-selector dropdowns like this
-  // one) — see RoleListCreateView.get().
+  // fetch dropdown lists once on mount — use allSettled so one failure does not block the others from loading.
   useEffect(() => {
     Promise.allSettled([
-      clientApi.get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(`${API.roles.list}?page_size=100`),
       clientApi.get<{ data: { results: { id: number; branch_name: string }[] } }>(API.branches.list),
-    ]).then(([roles, branches]) => {
-      if (roles.status === "fulfilled")
-        setRoleOptions(
-          roles.value.data.data.results
-            .filter(r => r.name !== "system_admin")
-            .map(r => ({ value: r.name, label: r.display_name }))
-        );
+    ]).then(([branches]) => {
       if (branches.status === "fulfilled")
         setBranchOptions(branches.value.data.data.results.map(b => ({ value: b.branch_name, label: b.branch_name })));
     });
@@ -219,7 +208,6 @@ export default function EmployeeProfilePage({
         // only now (see PromotionTab.tsx's "Reassign Position" action), not
         // editable through this generic save.
         branch:                 values.branch                || null,
-        role:                   values.ssRole                || null,
         is_active:              employee?.status !== "inactive",
         reporting_manager_id:   values.reportingManagerId   || null,
         reporting_approver_id:  values.reportingApproverId  || null,
@@ -292,9 +280,9 @@ export default function EmployeeProfilePage({
       setSaving(false);
     }
   }
-  function onPositionReassigned(designation: string, department: string, role: string, positionId: string, orgUnitId: string) {
-    setValues(v => ({ ...v, designation, ssRole: role, ...(department ? { department } : {}) }));
-    setBaseValues(v => ({ ...v, designation, ssRole: role, ...(department ? { department } : {}) }));
+  function onPositionReassigned(designation: string, department: string, positionId: string, orgUnitId: string) {
+    setValues(v => ({ ...v, designation, ...(department ? { department } : {}) }));
+    setBaseValues(v => ({ ...v, designation, ...(department ? { department } : {}) }));
     setEmployee(prev => (prev ? { ...prev, designation, ...(department ? { department } : {}) } : prev));
     setCurrentPositionId(positionId);
     setCurrentOrgUnitId(orgUnitId);
@@ -443,13 +431,6 @@ export default function EmployeeProfilePage({
               uploadingDocType={uploadingDocType}
               docUploadError={docUploadError}
               fieldOptions={{
-                ssRole: [
-                  { value: "", label: "Select role" },
-                  ...(values.ssRole && !roleOptions.find(o => o.value === values.ssRole)
-                    ? [{ value: values.ssRole, label: values.ssRole }]
-                    : []),
-                  ...roleOptions,
-                ],
                 branch: [
                   { value: "", label: "Select branch" },
                   ...(values.branch && !branchOptions.find(o => o.value === values.branch)
@@ -586,10 +567,8 @@ export default function EmployeeProfilePage({
           employeeId={id}
           employeeName={employee.firstName + (employee.lastName ? " " + employee.lastName : "")}
           currentDesignation={values.designation ?? ""}
-          currentRole={values.ssRole ?? "employee"}
           currentPositionId={currentPositionId}
           currentOrgUnitId={currentOrgUnitId}
-          roleOptions={roleOptions}
           onPositionReassigned={onPositionReassigned}
         />
       ) : tab === "wishes" ? (

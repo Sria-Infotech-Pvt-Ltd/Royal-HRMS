@@ -195,3 +195,17 @@ class SpeechMessagePayloadThreadingTests(SimpleTestCase):
             payload = handle_transcript(request, 'check my attendance')
 
         self.assertIsNone(payload['speech_message'])
+
+
+# These tests are about what gets SPOKEN, not about who may run an intent, so the permission gate is open.
+_gate_patch = None
+
+
+def setUpModule():
+    global _gate_patch
+    _gate_patch = patch('apps.voice_commands.executor.has_required_permission', return_value=True)
+    _gate_patch.start()
+
+
+def tearDownModule():
+    _gate_patch.stop()

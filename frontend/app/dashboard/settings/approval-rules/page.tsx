@@ -5,21 +5,14 @@ import { useRouter } from "next/navigation";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
-import type { GlobalApprovalRule, ApprovalWorkflowType } from "@/types/approvalMatrix";
+import type { GlobalApprovalRule, ApprovalWorkflowType, ApproverKind } from "@/types/approvalMatrix";
 import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
 
-interface RoleOption {
-  id:           number;
-  name:         string;
-  display_name: string;
-  is_active:    boolean;
-}
-
-interface RolesPage {
-  results: RoleOption[];
-  count:   number;
-}
+const APPROVER_OPTIONS: { value: ApproverKind; label: string }[] = [
+  { value: "reporting_manager", label: "Reporting manager" },
+  { value: "hr",                label: "HR partner" },
+];
 
 const WORKFLOW_ICONS: Record<string, string> = {
   leave:                 "ti-beach",
@@ -30,29 +23,27 @@ const WORKFLOW_ICONS: Record<string, string> = {
 interface EditState {
   workflow_type:    ApprovalWorkflowType;
   workflow_label:   string;
-  l1_approver_role: number | null;
-  l2_approver_role: number | null;
+  l1_approver_kind: ApproverKind;
+  l2_approver_kind: ApproverKind;
 }
 
 export default function ApprovalRulesPage() {
   const router = useRouter();
 
   const { data, loading, error, refetch } = useFetch<GlobalApprovalRule[]>(API.settings.approvalRules);
-  const { data: rolesPage, loading: loadingRoles } = useFetch<RolesPage>(`${API.roles.list}?is_active=true&page_size=100`);
 
   const [editing,  setEditing]  = useState<EditState | null>(null);
   const [saving,   setSaving]   = useState(false);
   const [apiError, setApiError] = useState("");
 
   const rules = data ?? [];
-  const roles: RoleOption[] = rolesPage?.results ?? [];
 
   function openEdit(rule: GlobalApprovalRule) {
     setEditing({
       workflow_type:    rule.workflow_type,
       workflow_label:   rule.workflow_label,
-      l1_approver_role: rule.l1_approver_role,
-      l2_approver_role: rule.l2_approver_role,
+      l1_approver_kind: rule.l1_approver_kind,
+      l2_approver_kind: rule.l2_approver_kind,
     });
     setApiError("");
   }
@@ -64,8 +55,8 @@ export default function ApprovalRulesPage() {
     try {
       await clientApi.patch(API.settings.approvalRules, {
         workflow_type:    editing.workflow_type,
-        l1_approver_role: editing.l1_approver_role,
-        l2_approver_role: editing.l2_approver_role || null,
+        l1_approver_kind: editing.l1_approver_kind,
+        l2_approver_kind: editing.l2_approver_kind,
       });
       refetch();
       setEditing(null);
@@ -82,7 +73,7 @@ export default function ApprovalRulesPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Approval Rules</div>
-          <div className="page-sub">Configure which role approves each workflow — globally, with per-employee overrides on the employee profile.</div>
+          <div className="page-sub">Configure who approves each workflow — globally, with per-employee overrides on the employee profile.</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
@@ -111,8 +102,8 @@ export default function ApprovalRulesPage() {
               <thead>
                 <tr style={{ borderBottom: "2px solid var(--outline-v)" }}>
                   <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600, width: "25%" }}>Workflow</th>
-                  <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600 }}>L1 Approver Role</th>
-                  <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600 }}>L2 Approver Role</th>
+                  <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600 }}>L1 approver</th>
+                  <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600 }}>L2 approver</th>
                   <th style={{ width: 80 }} />
                 </tr>
               </thead>
@@ -135,7 +126,7 @@ export default function ApprovalRulesPage() {
                     <td style={{ padding: "14px", color: "var(--on-bg)" }}>
                       {rule.l1_approver_label || <span style={{ opacity: 0.5, color: "var(--on-variant)" }}>Not set</span>}
                     </td>
-                    <td style={{ padding: "14px", color: rule.l2_approver_role ? "var(--on-bg)" : "var(--on-variant)" }}>
+                    <td style={{ padding: "14px", color: rule.l2_approver_kind ? "var(--on-bg)" : "var(--on-variant)" }}>
                       {rule.l2_approver_label || <span style={{ opacity: 0.5 }}>Single level</span>}
                     </td>
                     <td style={{ padding: "14px", textAlign: "right" }}>
@@ -166,7 +157,7 @@ export default function ApprovalRulesPage() {
               <button
                 className="btn btn-primary"
                 onClick={handleSave}
-                disabled={saving || !editing.l1_approver_role}
+                disabled={saving || !editing.l1_approver_kind}
               >
                 {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save Rule"}
               </button>
@@ -180,28 +171,26 @@ export default function ApprovalRulesPage() {
           )}
 
           <div className="field-group mb-16">
-            <label className="field-label">L1 Approver Role *</label>
+            <label className="field-label">L1 approver *</label>
             <SearchableSelect
-              value={editing.l1_approver_role != null ? String(editing.l1_approver_role) : ""}
-              onChange={v => setEditing(prev => prev ? { ...prev, l1_approver_role: v ? Number(v) : null } : prev)}
-              disabled={loadingRoles}
-              placeholder={loadingRoles ? "Loading roles…" : "— Select role —"}
-              options={roles.map(r => ({ value: String(r.id), label: r.display_name }))}
+              value={editing.l1_approver_kind}
+              onChange={v => setEditing(prev => prev ? { ...prev, l1_approver_kind: v as ApproverKind } : prev)}
+              placeholder="— Select who approves —"
+              options={APPROVER_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
               inputClassName="field-input"
             />
           </div>
 
           <div className="field-group">
             <label className="field-label">
-              L2 Approver Role{" "}
+              L2 approver{" "}
               <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>(leave blank for single-level)</span>
             </label>
             <SearchableSelect
-              value={editing.l2_approver_role != null ? String(editing.l2_approver_role) : ""}
-              onChange={v => setEditing(prev => prev ? { ...prev, l2_approver_role: v ? Number(v) : null } : prev)}
-              disabled={loadingRoles}
+              value={editing.l2_approver_kind}
+              onChange={v => setEditing(prev => prev ? { ...prev, l2_approver_kind: v as ApproverKind } : prev)}
               placeholder="— Single level (no L2) —"
-              options={roles.map(r => ({ value: String(r.id), label: r.display_name }))}
+              options={APPROVER_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
               inputClassName="field-input"
             />
           </div>

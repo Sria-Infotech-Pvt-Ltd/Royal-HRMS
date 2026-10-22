@@ -9,7 +9,7 @@ export interface UserInfo {
   userId:              string;
   email:             string;
   name:              string;
-  role:              string;
+  designation:       string;
   branch:            string;
   permissions:       string[];
   onboarding_status: string;   // 'pending' | 'submitted' | 'complete'
@@ -22,7 +22,7 @@ export interface UserInfo {
 export function saveAuth(user: UserInfo) {
   // Signal cookie — lets middleware know the user is authenticated
   document.cookie = `${AUTH_COOKIE}=1; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
-  // User info cookie — lets server components and middleware read name/role/permissions
+  // User info cookie — lets server components and middleware read name/designation/permissions
   document.cookie = `${USER_COOKIE}=${encodeURIComponent(JSON.stringify(user))}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
 }
 

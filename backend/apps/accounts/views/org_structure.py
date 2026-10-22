@@ -79,8 +79,6 @@ from apps.accounts.models import (
     Placement,
     Position,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -106,7 +104,6 @@ from apps.accounts.serializers import (
     PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
-    RoleSerializer,
     SMTPSettingsSerializer,
     SMTPTestSerializer,
     VerifyOTPSerializer,
@@ -496,6 +493,8 @@ class PositionListCreateView(APIView):
             except (TypeError, ValueError):
                 return error('branch filter must be a valid integer ID.')
             qs = qs.filter(branch_id=branch_id)
+        if request.query_params.get('can_manage_branch') == 'true':
+            qs = qs.filter(can_manage_branch=True, is_active=True)
         # See the matching comment on OrgUnitListCreateView.get() — same
         # max_page_size clamp was truncating any org chart bigger than 100
         # positions (e.g. 223 positions -> only the first 100 ever returned).

@@ -5,7 +5,6 @@ import { usePermission } from "@/hooks/usePermission";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import type { FieldOption } from "../../_data";
 import { formatDate } from "@/lib/formatDate";
 import SearchableSelect from "@/components/SearchableSelect";
 import DateInput from "@/components/shared/DateInput";
@@ -14,7 +13,6 @@ interface Props {
   employeeId: string;
   employeeName: string;
   currentDesignation: string;
-  currentRole: string;
   // The Position/Org Unit this employee already holds (from their current
   // Placement) — prefills the Reassign Position modal below instead of
   // always starting blank, since this action is only ever taken on an
@@ -22,12 +20,9 @@ interface Props {
   // (e.g. a Company Code Admin, who has no Position at all).
   currentPositionId: string;
   currentOrgUnitId: string;
-  roleOptions: FieldOption[];
-  // Position reassignment can change designation, department, and
-  // (optionally, in the same action) role — a single callback covers all
-  // three, unlike the old separate Promote Employee / Reassign Position
-  // split this replaces.
-  onPositionReassigned: (designation: string, department: string, role: string, positionId: string, orgUnitId: string) => void;
+  // Position reassignment changes designation, department and — because access follows the position —
+  // what the person is allowed to do.
+  onPositionReassigned: (designation: string, department: string, positionId: string, orgUnitId: string) => void;
 }
 
 interface PromotionRecord {
@@ -68,12 +63,9 @@ const INR = (n: string | number) =>
 
 const fmtDate = (d: string) => formatDate(d);
 
-const labelFor = (options: FieldOption[], value: string) =>
-  options.find(o => o.value === value)?.label ?? value;
-
 export default function PromotionTab({
-  employeeId, employeeName, currentDesignation, currentRole,
-  currentPositionId, currentOrgUnitId, roleOptions, onPositionReassigned,
+  employeeId, employeeName, currentDesignation,
+  currentPositionId, currentOrgUnitId, onPositionReassigned,
 }: Props) {
   const canEdit = usePermission("employees.edit");
 
@@ -83,14 +75,11 @@ export default function PromotionTab({
   const [reassignOrgUnit, setReassignOrgUnit] = useState("");
   const [reassignPosition, setReassignPosition] = useState("");
   const [reassignDate, setReassignDate] = useState("");
-  const [reassignRole, setReassignRole] = useState(currentRole);
-  const [roleConfirmed, setRoleConfirmed] = useState(false);
   const [reassignSubmitting, setReassignSubmitting] = useState(false);
   const [reassignError, setReassignError] = useState<string | null>(null);
   const { units, positionsForUnit, loading: positionsLoading } = useOrgUnitsAndPositions();
   const reassignPositionOptions = positionsForUnit(reassignOrgUnit);
   const reassignSelectedPosition = reassignPositionOptions.find(p => p.id === reassignPosition);
-  const isElevated = reassignRole !== currentRole;
   // A click's target is resolved at mouseup, not mousedown — selecting text
   // inside the modal and releasing past its edge would otherwise land on the
   // overlay and close it. Only close when the gesture both started AND ended
@@ -125,8 +114,6 @@ export default function PromotionTab({
     setReassignOrgUnit(currentOrgUnitId);
     setReassignPosition(currentPositionId);
     setReassignDate(new Date().toISOString().split("T")[0]);
-    setReassignRole(currentRole);
-    setRoleConfirmed(false);
     setReassignError(null);
     setShowReassignModal(true);
   }
@@ -140,35 +127,25 @@ export default function PromotionTab({
       setReassignError("Effective date is required.");
       return;
     }
-    if (isElevated && !roleConfirmed) {
-      setReassignError("Confirm the role change before submitting.");
-      return;
-    }
     setReassignSubmitting(true);
     setReassignError(null);
     try {
       const res = await clientApi.put(API.employees.detail(employeeId), {
         position: reassignPosition, effective_date: reassignDate,
-        ...(isElevated ? { role: reassignRole } : {}),
       });
       const updated = res.data?.data as {
-        designation?: string; department?: string; role?: string;
+        designation?: string; department?: string;
         position_id?: string | null; org_unit_id?: string | null;
       } | undefined;
       await fetchHistory();
       onPositionReassigned(
         updated?.designation ?? currentDesignation,
         updated?.department ?? "",
-        updated?.role ?? currentRole,
         updated?.position_id ?? reassignPosition,
         updated?.org_unit_id ?? reassignOrgUnit,
       );
       setShowReassignModal(false);
-      setSuccessMsg(
-        isElevated
-          ? "Position and role reassigned. New access applies at the employee's next login."
-          : "Position reassigned. Designation and department updated to match."
-      );
+      setSuccessMsg("Position reassigned. Designation, department and access now follow the new position.");
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
@@ -197,7 +174,7 @@ export default function PromotionTab({
         <div className="card-body">
           <div className="text-[20px] font-semibold">{currentDesignation || "—"}</div>
           <div className="text-[13px] text-muted mt-1">
-            {employeeName} · {labelFor(roleOptions, currentRole)}
+            {employeeName}
           </div>
         </div>
       </div>
@@ -215,7 +192,7 @@ export default function PromotionTab({
           <div className="empty-state">
             <i className="ti ti-award" />
             <h3>No promotions yet</h3>
-            <p>Designation and role changes for this employee will be listed here.</p>
+            <p>Designation and position changes for this employee will be listed here.</p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -236,7 +213,6 @@ export default function PromotionTab({
                         <span>{h.fromDesignation}</span>
                         <i className="ti ti-arrow-right text-muted" />
                         <span className="font-medium">{h.toDesignation}</span>
-                        {h.roleChanged && <span className="badge badge-warn">Role change</span>}
                         {h.linkedCtc && (
                           <span className="badge badge-success" title="CTC revised for this promotion — see the Salary tab">
                             <i className="ti ti-currency-rupee" /> {INR(h.linkedCtc)}
@@ -301,44 +277,12 @@ export default function PromotionTab({
                 <DateInput className="field-input" value={reassignDate} onChange={isoDate => { setReassignDate(isoDate); setReassignError(null); }} />
               </div>
 
-              <div className="field-group">
-                <label className="field-label">New role <span className="text-muted">(optional)</span></label>
-                <SearchableSelect
-                  inputClassName="field-input"
-                  value={reassignRole}
-                  onChange={v => { setReassignRole(v); setRoleConfirmed(false); setReassignError(null); }}
-                  options={[
-                    ...(!roleOptions.find(o => o.value === currentRole) ? [{ value: currentRole, label: currentRole }] : []),
-                    ...roleOptions,
-                  ]}
-                />
-              </div>
-
               {reassignSelectedPosition?.holder_name && reassignSelectedPosition.holder_employee_id !== employeeId && (
                 <div className="alert alert-warn">
                   <i className="ti ti-info-circle" />
                   {reassignSelectedPosition.holder_name}&apos;s placement on this position will be closed the day
                   before the effective date above and kept in history.
                 </div>
-              )}
-
-              {isElevated && (
-                <>
-                  <div className="alert alert-warn">
-                    <i className="ti ti-shield-lock" />
-                    This grants {labelFor(roleOptions, reassignRole)} access. New permissions apply at the
-                    employee&apos;s next login.
-                  </div>
-                  <label className="flex items-start gap-2 text-[13px]">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={roleConfirmed}
-                      onChange={e => setRoleConfirmed(e.target.checked)}
-                    />
-                    I confirm this role change and its access impact.
-                  </label>
-                </>
               )}
 
               <div className="text-[11.5px] text-muted">

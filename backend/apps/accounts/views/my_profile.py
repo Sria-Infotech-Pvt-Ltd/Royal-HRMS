@@ -79,8 +79,6 @@ from apps.accounts.models import (
     Placement,
     Position,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -106,7 +104,6 @@ from apps.accounts.serializers import (
     PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
-    RoleSerializer,
     SMTPSettingsSerializer,
     SMTPTestSerializer,
     VerifyOTPSerializer,
@@ -137,7 +134,7 @@ class MyProfileView(APIView):
         # was its own extra query on an endpoint hit on every dashboard page
         # load (DashboardShell's topbar avatar fetch).
         user = User.objects.select_related(
-            'role', 'profile', 'reporting_manager', 'reporting_approver', 'hr',
+            'profile', 'reporting_manager', 'reporting_approver', 'hr',
         ).get(pk=request.user.pk)
         return success('Profile retrieved.', MyProfileSerializer(user, context={'request': request}).data)
 

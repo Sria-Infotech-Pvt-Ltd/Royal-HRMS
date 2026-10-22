@@ -100,7 +100,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
 
 @admin.register(FeatureFlagOverride)
 class FeatureFlagOverrideAdmin(admin.ModelAdmin):
-    list_display = ('flag', 'legal_entity', 'role', 'user', 'enabled')
+    list_display = ('flag', 'legal_entity', 'position', 'user', 'enabled')
 
 
 @admin.register(ModuleToggle)

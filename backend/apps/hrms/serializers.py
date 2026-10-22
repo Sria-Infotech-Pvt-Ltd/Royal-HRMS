@@ -1,4 +1,4 @@
-from core.access import can_manage_branch
+from core.access import can_manage_branch, can_manage_team
 from core.permissions import has_perm
 import logging
 import re
@@ -731,6 +731,20 @@ def _stage_actionable(user, sep_request, stage) -> bool:
     return False
 
 
+def _actor_group(actor) -> str:
+    """Coarse label for the activity timeline, derived from what the actor can do (not from a role)."""
+    from core.access import is_full_access
+    if is_full_access(actor):
+        return 'system_admin'
+    if can_manage_branch(actor):
+        return 'branch_admin'
+    if can_manage_team(actor):
+        return 'manager'
+    if has_perm(actor, 'separation.approve'):
+        return 'hr_admin'
+    return 'employee'
+
+
 def _authed_user(context):
     request = context.get('request')
     if not request or not request.user or not request.user.is_authenticated:
@@ -1111,7 +1125,7 @@ class SeparationActivitySerializer(serializers.ModelSerializer):
         return obj.actor.full_name if obj.actor_id else 'System'
 
     def get_actor_role(self, obj):
-        return 'system'  # TODO(phase 3): actor role label is replaced by the actor's position title
+        return _actor_group(obj.actor) if obj.actor_id else 'system'
 
 
 # ─── HR Help ────────────────────────────────────────────────────────────────────

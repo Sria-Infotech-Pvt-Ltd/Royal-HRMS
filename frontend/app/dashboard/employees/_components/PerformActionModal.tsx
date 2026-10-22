@@ -338,7 +338,7 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
               route={route}
               effectiveFromLabel={DATE_FMT(effectiveFrom)}
               raisedByName={currentUser?.name ?? "—"}
-              raisedByRole={currentUser?.role ?? "—"}
+              raisedByRole={currentUser?.designation || "—"}
               // Safe: this whole block only renders inside `{actionType && (...)}`,
               // and `reversibility` is only ever null when actionType is falsy.
               reversibility={reversibility as { text: string; tone: "purple" | "amber" }}

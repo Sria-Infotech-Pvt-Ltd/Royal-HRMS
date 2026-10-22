@@ -1,7 +1,6 @@
 """Regression tests for Org Chart's Position/OrgUnit endpoints — no prior
 test coverage exercised position creation, the "one chief per org unit"
-exclusivity rule, or the default_role restriction (a seat can't default to
-a role that carries settings.edit or can_manage_branch).
+exclusivity rule.
 """
 from __future__ import annotations
 
@@ -54,29 +53,6 @@ class PositionCreateValidationTests(TestCase):
             'org_unit': str(self.unit.id), 'title': 'Engineer',
         }, format='json')
         self.assertEqual(resp.status_code, 403)
-
-    def test_default_role_carrying_settings_edit_rejected(self):
-        admin_role = make_role('would_be_sysadmin_test', permission_codenames=['settings.edit'])
-        resp = self.client.post(reverse('position-list'), {
-            'org_unit': str(self.unit.id), 'title': 'Engineer', 'default_role': admin_role.id,
-        }, format='json')
-        self.assertEqual(resp.status_code, 400)
-
-    def test_default_role_with_can_manage_branch_rejected(self):
-        branch_admin_role = make_role('would_be_branch_admin_test', can_manage_team=False)
-        branch_admin_role.can_manage_branch = True
-        branch_admin_role.save(update_fields=['can_manage_branch'])
-        resp = self.client.post(reverse('position-list'), {
-            'org_unit': str(self.unit.id), 'title': 'Engineer', 'default_role': branch_admin_role.id,
-        }, format='json')
-        self.assertEqual(resp.status_code, 400)
-
-    def test_ordinary_default_role_accepted(self):
-        hr_role = make_role('ordinary_hr_test', permission_codenames=['employees.view'])
-        resp = self.client.post(reverse('position-list'), {
-            'org_unit': str(self.unit.id), 'title': 'HR Associate', 'default_role': hr_role.id,
-        }, format='json')
-        self.assertEqual(resp.status_code, 200, resp.data)
 
     def test_creating_a_new_chief_unseats_the_previous_one_in_the_same_unit(self):
         first_chief = Position.objects.create(org_unit=self.unit, title='Head of Engineering', is_chief=True)

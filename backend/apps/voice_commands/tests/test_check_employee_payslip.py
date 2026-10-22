@@ -11,12 +11,10 @@ _PERMISSION_DENIED_MESSAGE = "You don't have permission to do that."
 
 
 def _fake_request(has_payroll_view: bool = True, user_id: int = 90, branch=None):
-    role_permissions = MagicMock()
-    role_permissions.filter.return_value.exists.return_value = has_payroll_view
     request = MagicMock()
     request.META = {}
     request.user = SimpleNamespace(
-        role=SimpleNamespace(role_permissions=role_permissions, name='hr_admin'),
+        _grant=has_payroll_view,
         id=user_id, pk=user_id, branch=branch,
     )
     return request
@@ -293,3 +291,21 @@ class SingleMatchImmediateResponseTests(SimpleTestCase):
         self.assertEqual(call_kwargs.get('pk'), 'payslip-55')
         mock_force_authenticate.assert_called_once()
         self.assertEqual(mock_force_authenticate.call_args.kwargs['user'], request.user)
+
+
+# These tests exercise the executors with stand-in users, without a database. The permission gate is answered by the
+# stand-in itself (`_grant`); the gate's real behaviour is covered against real users in test_permissions.py.
+_gate_patch = None
+
+
+def setUpModule():
+    global _gate_patch
+    _gate_patch = patch(
+        'apps.voice_commands.executor.has_required_permission',
+        side_effect=lambda user, codename: bool(getattr(user, '_grant', False)),
+    )
+    _gate_patch.start()
+
+
+def tearDownModule():
+    _gate_patch.stop()

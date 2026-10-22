@@ -76,11 +76,11 @@ class WorkflowStep(TimestampedModel):
     QUORUM_N_OF_M = 'n_of_m'
     QUORUM_CHOICES = [(QUORUM_ANY_ONE, 'Any one'), (QUORUM_ALL, 'All'), (QUORUM_N_OF_M, 'N of M')]
 
-    NO_APPROVER_FALLBACK_ROLE = 'fallback_role'
+    NO_APPROVER_FALLBACK_POSITION = 'fallback_position'
     NO_APPROVER_SKIP = 'skip'
     NO_APPROVER_BLOCK = 'block_and_alert'
     NO_APPROVER_CHOICES = [
-        (NO_APPROVER_FALLBACK_ROLE, 'Fall back to a role'), (NO_APPROVER_SKIP, 'Skip this step'),
+        (NO_APPROVER_FALLBACK_POSITION, 'Fall back to a position'), (NO_APPROVER_SKIP, 'Skip this step'),
         (NO_APPROVER_BLOCK, 'Block and alert admin'),
     ]
 
@@ -109,7 +109,7 @@ class WorkflowStep(TimestampedModel):
     skip_condition = models.JSONField(default=dict, blank=True)
     auto_approve_condition = models.JSONField(default=dict, blank=True)
     no_approver_action = models.CharField(max_length=20, choices=NO_APPROVER_CHOICES, default=NO_APPROVER_BLOCK)
-    no_approver_fallback_role = models.ForeignKey('accounts.Role', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    no_approver_fallback_position = models.ForeignKey('accounts.Position', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
 
     # condition_branch only: rule expression -> next WorkflowStep.code
     branch_condition = models.JSONField(default=dict, blank=True)

@@ -39,7 +39,6 @@ class RoleBasedRefreshToken(RefreshToken):
     def for_user(cls, user) -> RoleBasedRefreshToken:
         token = super().for_user(user)
 
-        token['role']                 = user.role.name if user.role else None
         token['full_name']            = user.full_name
         token['email']                = user.email
         token['employee_id']          = user.employee_id or ''

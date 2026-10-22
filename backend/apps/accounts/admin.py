@@ -19,21 +19,12 @@ from apps.accounts.models import (
     PasswordResetToken,
     Permission,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
 
 
 # ─── Role & Permissions ───────────────────────────────────────────────────────
-
-@admin.register(Role)
-class RoleAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'display_name', 'is_active')
-    search_fields = ('name', 'display_name')
-    list_filter   = ('is_active',)
-
 
 @admin.register(Permission)
 class PermissionAdmin(admin.ModelAdmin):
@@ -42,25 +33,19 @@ class PermissionAdmin(admin.ModelAdmin):
     search_fields = ('codename',)
 
 
-@admin.register(RolePermission)
-class RolePermissionAdmin(admin.ModelAdmin):
-    list_display = ('role', 'permission', 'granted_at')
-    list_filter  = ('role',)
-
-
 # ─── User ─────────────────────────────────────────────────────────────────────
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display   = ('email', 'full_name', 'role', 'employee_id', 'department', 'branch', 'is_active', 'must_change_password', 'date_joined')
-    list_filter    = ('role', 'is_active', 'must_change_password', 'is_staff')
+    list_display   = ('email', 'full_name', 'employee_id', 'department', 'branch', 'is_active', 'must_change_password', 'date_joined')
+    list_filter    = ('is_active', 'must_change_password', 'is_staff')
     search_fields  = ('email', 'full_name', 'employee_id', 'department', 'branch')
     ordering       = ('email',)
     readonly_fields = ('id', 'date_joined', 'updated_at', 'last_login_ip')
 
     fieldsets = (
         (None, {'fields': ('id', 'email', 'password')}),
-        ('Personal info', {'fields': ('full_name', 'role', 'employee_id', 'department', 'designation', 'branch', 'phone', 'date_of_joining')}),
+        ('Personal info', {'fields': ('full_name', 'employee_id', 'department', 'designation', 'branch', 'phone', 'date_of_joining')}),
         ('Reporting', {'fields': ('reporting_manager', 'hr')}),
         ('Onboarding', {'fields': ('onboarding_status', 'assessment_status')}),
         ('Security', {'fields': ('must_change_password', 'failed_login_attempts', 'locked_until', 'last_login_ip')}),
@@ -71,7 +56,7 @@ class UserAdmin(BaseUserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'full_name', 'role', 'password1', 'password2'),
+            'fields': ('email', 'full_name', 'password1', 'password2'),
         }),
     )
 
@@ -237,7 +222,7 @@ class EmployeeDocumentAdmin(admin.ModelAdmin):
 
 @admin.register(ApprovalWorkflowRule)
 class ApprovalWorkflowRuleAdmin(admin.ModelAdmin):
-    list_display  = ('workflow_type', 'l1_approver_role', 'l2_approver_role', 'updated_at')
+    list_display  = ('workflow_type', 'l1_approver_kind', 'l2_approver_kind', 'updated_at')
     readonly_fields = ('updated_at', 'updated_by')
 
 

@@ -20,7 +20,7 @@ export function exportStatusLabel(r: ApiEmployee): string {
 export function employeesToCsv(rows: ApiEmployee[]): string {
   const headers = [
     "Employee ID", "Name", "Email", "Phone", "Department", "Designation", "Branch",
-    "Role", "Date of Joining", "Status", "Reporting Manager", "Org Unit",
+    "Date of Joining", "Status", "Reporting Manager", "Org Unit",
   ];
   const csvRows = rows.map(r => [
     r.employee_id, r.full_name, r.email, r.phone,
@@ -29,7 +29,7 @@ export function employeesToCsv(rows: ApiEmployee[]): string {
     // the table row does (org_unit_name first, falling back to the legacy
     // field) instead of the always-blank legacy field alone.
     r.org_unit_name || r.department || "",
-    r.designation, r.branch, r.role_display, r.date_of_joining,
+    r.designation, r.branch, r.date_of_joining,
     exportStatusLabel(r),
     r.reporting_manager?.name ?? "",
     r.org_unit_name ?? "",

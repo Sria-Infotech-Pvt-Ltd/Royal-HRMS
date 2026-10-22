@@ -18,8 +18,8 @@ class FieldSecurityError(Exception):
         super().__init__(message)
 
 
-def _default_access(field_def, role) -> str:
-    """Task E.2 — sensitive fields are masked by default for every role
+def _default_access(field_def, user) -> str:
+    """Task E.2 — sensitive fields are masked by default for everyone
     unless granted otherwise; other fields default to read (never a
     silent "edit" default — that would silently widen access)."""
     if field_def.is_sensitive:
@@ -27,14 +27,27 @@ def _default_access(field_def, role) -> str:
     return FieldPermission.ACCESS_READ
 
 
-def resolve_field_access(role, entity, field_def, *, context: dict | None = None) -> str:
-    """Returns one of hidden/masked/read/edit for this (role, field)."""
-    grant = FieldPermission.objects.filter(role=role, entity=entity, field_code=field_def.code).first()
-    if grant is None:
-        return _default_access(field_def, role)
-    if grant.condition and not rules.evaluate(grant.condition, context or {}):
-        return _default_access(field_def, role)
-    return grant.access
+_ACCESS_RANK = {
+    FieldPermission.ACCESS_HIDDEN: 0, FieldPermission.ACCESS_MASKED: 1,
+    FieldPermission.ACCESS_READ: 2, FieldPermission.ACCESS_EDIT: 3,
+}
+
+
+def resolve_field_access(user, entity, field_def, *, context: dict | None = None) -> str:
+    """Returns one of hidden/masked/read/edit for this (person, field).
+
+    A person's grants come from the position they hold plus any extra positions assigned to them; when several
+    apply, the most permissive one wins (the same union rule as permissions).
+    """
+    from apps.platform_core.services_authz import positions_for_user
+
+    grants = FieldPermission.objects.filter(
+        position_id__in=positions_for_user(user), entity=entity, field_code=field_def.code,
+    )
+    levels = [g.access for g in grants if not g.condition or rules.evaluate(g.condition, context or {})]
+    if not levels:
+        return _default_access(field_def, user)
+    return max(levels, key=lambda level: _ACCESS_RANK[level])
 
 
 def mask_value(value, field_def) -> str:
@@ -48,7 +61,7 @@ def mask_value(value, field_def) -> str:
     return '***'
 
 
-def apply_field_security(role, entity, field_defs: list, values: dict, *, context: dict | None = None, for_write: bool = False) -> dict:
+def apply_field_security(user, entity, field_defs: list, values: dict, *, context: dict | None = None, for_write: bool = False) -> dict:
     """Applied to a {field_code: value} dict (the same shape
     services_attributes.read()/validate() already use) — hidden fields
     are dropped entirely; masked fields are replaced; read-only fields
@@ -58,7 +71,7 @@ def apply_field_security(role, entity, field_defs: list, values: dict, *, contex
         code = field_def.code
         if code not in values:
             continue
-        access = resolve_field_access(role, entity, field_def, context=context)
+        access = resolve_field_access(user, entity, field_def, context=context)
         if access == FieldPermission.ACCESS_HIDDEN:
             continue
         if for_write:
@@ -73,7 +86,7 @@ def apply_field_security(role, entity, field_defs: list, values: dict, *, contex
     return result
 
 
-def validate_filter_sort_fields(role, entity, field_defs_by_code: dict, *, filter_fields: list[str], sort_field: str | None) -> None:
+def validate_filter_sort_fields(user, entity, field_defs_by_code: dict, *, filter_fields: list[str], sort_field: str | None) -> None:
     """Task E.3's "filtering or sorting by a hidden or masked field is
     rejected" — raises FieldSecurityError rather than silently dropping
     the filter (which could itself be a signal that leaks information:
@@ -82,12 +95,12 @@ def validate_filter_sort_fields(role, entity, field_defs_by_code: dict, *, filte
         field_def = field_defs_by_code.get(code)
         if field_def is None:
             continue
-        access = resolve_field_access(role, entity, field_def)
+        access = resolve_field_access(user, entity, field_def)
         if access in (FieldPermission.ACCESS_HIDDEN, FieldPermission.ACCESS_MASKED):
-            raise FieldSecurityError(f'Cannot filter by "{field_def.label}" — this field is {access} for your role.')
+            raise FieldSecurityError(f'Cannot filter by "{field_def.label}" — this field is {access} for your position.')
     if sort_field:
         field_def = field_defs_by_code.get(sort_field.lstrip('-'))
         if field_def is not None:
-            access = resolve_field_access(role, entity, field_def)
+            access = resolve_field_access(user, entity, field_def)
             if access in (FieldPermission.ACCESS_HIDDEN, FieldPermission.ACCESS_MASKED):
-                raise FieldSecurityError(f'Cannot sort by "{field_def.label}" — this field is {access} for your role.')
+                raise FieldSecurityError(f'Cannot sort by "{field_def.label}" — this field is {access} for your position.')

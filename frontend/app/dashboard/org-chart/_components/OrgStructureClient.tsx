@@ -27,13 +27,6 @@ export interface BranchOption {
   branch_name: string;
 }
 
-export interface RoleOption {
-  id: number;
-  display_name: string;
-  permissions: string[];
-  can_manage_branch: boolean;
-}
-
 export type Selected = { type: "unit" | "position" | "person"; id: string } | null;
 
 export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { onBack?: () => void; initialSelectedUnitId?: string }) {
@@ -46,7 +39,6 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
   const [jobs,       setJobs]       = useState<JobTemplate[]>([]);
   const [employees,  setEmployees]  = useState<EmployeeOption[]>([]);
   const [branches,   setBranches]   = useState<BranchOption[]>([]);
-  const [roles,      setRoles]      = useState<RoleOption[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [loadError,  setLoadError]  = useState<string | null>(null);
 
@@ -92,27 +84,18 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
     setLoading(true);
     setLoadError(null);
     try {
-      const [unitsRes, posRes, jobsRes, empRes, branchRes, rolesRes] = await Promise.all([
+      const [unitsRes, posRes, jobsRes, empRes, branchRes] = await Promise.all([
         clientApi.get(`${API.orgStructure.units.list}?page_size=1000`),
         clientApi.get(`${API.orgStructure.positions.list}?page_size=1000`),
         clientApi.get(API.orgStructure.jobTemplates.list),
         clientApi.get(API.employees.list, { params: { page_size: 200, status: "active" } }),
         clientApi.get(API.branches.list, { params: { page_size: 200 } }),
-        clientApi.get(API.roles.list, { params: { page_size: 100 } }),
       ]);
       setUnits(unitsRes.data?.data?.results ?? []);
       setPositions(posRes.data?.data?.results ?? []);
       setJobs(jobsRes.data?.data ?? []);
       setEmployees(empRes.data?.data?.results ?? []);
       setBranches(branchRes.data?.data?.results ?? []);
-      // Matched by capability, not name — a settings.edit-holding role can't
-      // be a seat's default (mirrors the same exclusion at Create Employee),
-      // and neither can a can_manage_branch role: Branch Admin is assigned
-      // via Designation, never via a Position, so it'd never actually be
-      // reachable through a seat's Default Role anyway.
-      setRoles((rolesRes.data?.data?.results ?? []).filter(
-        (r: RoleOption) => !r.permissions.includes("settings.edit") && !r.can_manage_branch,
-      ));
     } catch (err: unknown) {
       setLoadError((err as { message?: string })?.message ?? "Failed to load organisation structure.");
     } finally {
@@ -291,7 +274,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
           )}
           <div style={{ padding: "18px 20px" }}>
             <OrgDetail
-              selected={selected} units={units} positions={positions} jobs={jobs} branches={branches} roles={roles} canEdit={canEdit}
+              selected={selected} units={units} positions={positions} jobs={jobs} branches={branches} canEdit={canEdit}
               placementHistory={placementHistory} placementHistoryLoading={placementHistoryLoading}
               onSelect={setSelected}
               onAddSubUnit={unitId => setAddUnitParent(unitId)}
@@ -407,7 +390,6 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
           unit={units.find(u => u.id === addPositionUnit) ?? null}
           jobs={jobs}
           branches={branches}
-          roles={roles}
           hasChief={positions.some(p => p.org_unit === addPositionUnit && p.is_chief)}
           onClose={() => setAddPositionUnit(null)}
           onCreated={position => { setAddPositionUnit(null); setSelected({ type: "position", id: position.id }); load(); }}

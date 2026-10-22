@@ -13,7 +13,7 @@
 //                             order and labels reconstructed here)
 //                            + EmergencyContactsList (real import)  legacy single emergency_* fields,
 //                                                                   shown as one list entry
-//   1 Employment             EmploymentStep (real import)           User fields (role/branch/reporting
+//   1 Employment             EmploymentStep (real import)           User fields (branch/reporting
 //                                                                   lines/work setup) — see note below
 //                                                                   on fields with no write path yet
 //   2 Basic pay              BasicPayStep (real import)              computed live via the real
@@ -41,8 +41,8 @@
 // spurious revision row (see the save handler below for the exact check).
 //
 // Note on Employment: EmploymentStep itself fetches its own dropdown data
-// (roles/branches/people/policies) — passed through here unchanged. Some
-// of its fields map to real, now-writable User columns (role, branch,
+// (positions/people/policies) — passed through here unchanged. Some
+// of its fields map to real, now-writable User columns (branch,
 // reporting_manager_id, dotted_line_manager_id, work_location, work_mode,
 // probation_period_months, notice_period_days — see the backend
 // employees_detail.py whitelist extension that went with this change).
@@ -217,32 +217,6 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   const [accessCard, setAccessCard] = useState({ cardNumber: "", validFrom: "", validTill: "" });
 
   const [employment, setEmployment] = useState<EmploymentDraft>(EMPTY_EMPLOYMENT);
-  // EmploymentStep's own Role dropdown (built for the Hire wizard) uses
-  // numeric Role ids as option values, but this employee record's `role`
-  // field (and the backend's write path for it, which looks a Role up by
-  // `name`) speaks role NAME strings -- the same convention this page's
-  // own older generic field editor already uses for its Role dropdown.
-  // Fetched here just to translate between the two formats: resolve the
-  // employee's role name to the matching id for display, and convert back
-  // to a name before saving. rawRoleName holds the fetched employee's role
-  // name until this list arrives -- state, not a ref, so this resolver
-  // effect correctly re-fires however the two independent fetches
-  // (employee record, roles list) happen to race.
-  const [roles, setRoles] = useState<{ id: number; name: string; display_name: string }[]>([]);
-  const [rawRoleName, setRawRoleName] = useState<string | null>(null);
-  useEffect(() => {
-    clientApi
-      .get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(
-        `${API.roles.list}?page_size=100`,
-      )
-      .then(({ data }) => setRoles(data.data.results ?? []))
-      .catch(() => {/* non-blocking — Role dropdown just stays unresolved if this fails */});
-  }, []);
-  useEffect(() => {
-    if (!roles.length || rawRoleName == null) return;
-    const match = roles.find(r => r.name === rawRoleName);
-    if (match) setEmployment(e => ({ ...e, role: String(match.id) }));
-  }, [roles, rawRoleName]);
   const [basicPay, setBasicPay] = useState<BasicPayDraft>(EMPTY_BASIC_PAY);
   // Baseline CTC/structure as loaded — a new EmployeeSalaryConfig revision
   // is only created on save if these actually changed, so opening and
@@ -353,9 +327,6 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       };
       setEmergencyContacts(legacyEmergency.name ? [legacyEmergency] : []);
 
-      // Role is resolved separately once the roles list arrives (see the
-      // [roles, rawRoleName]-triggered effect above).
-      setRawRoleName(typeof rawRecord.role === "string" ? rawRecord.role : null);
       setEmployment(e => ({
         ...e,
         employment_type: typeof rawRecord.employee_type === "string" ? matchEmploymentType(rawRecord.employee_type) : "",
@@ -538,10 +509,6 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         // none yet and are therefore NOT sent here).
         employee_type: employment.employment_type || '',
         branch: employment.branch || null,
-        // employment.role holds the Role's numeric id (matching the shared
-        // EmploymentStep's dropdown) -- the endpoint accepts either a
-        // numeric id or a name, so this is sent as-is.
-        role: employment.role || null,
         // Only sent when the user picked a different position / joining date (see EditRecordEmploymentStep).
         ...(employment.position ? { position: employment.position } : {}),
         ...(employment.date_of_joining && employment.date_of_joining !== baselineJoiningDate.current
@@ -699,7 +666,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                 {step === 1
                   ? <h3><em className="hl">Employment</em> details</h3>
                   : <h3>{STEPS[step].label}</h3>}
-                <p>{step === 1 ? "Role, reporting line, work setup and pay." : STEPS[step].sub}</p>
+                <p>{step === 1 ? "Position, reporting line, work setup and pay." : STEPS[step].sub}</p>
               </div>
             </div>
 

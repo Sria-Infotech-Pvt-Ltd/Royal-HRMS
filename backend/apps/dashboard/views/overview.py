@@ -411,7 +411,7 @@ def push_leave_update(approving_user_id) -> None:
     from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
     from apps.recruitment.models import Candidate
 
-    approving_user = User.objects.filter(pk=approving_user_id).select_related('role').first()
+    approving_user = User.objects.filter(pk=approving_user_id).first()
     branch = _hr_dashboard_branch(approving_user)
 
     leave_qs      = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING])

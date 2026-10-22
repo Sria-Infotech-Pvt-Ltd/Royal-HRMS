@@ -64,7 +64,7 @@ def _resolve_onboarding_target(request, user_id: str):
     if not has_perm(request.user, 'onboarding.edit'):
         return None, error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
     try:
-        target = User.objects.select_related('role').get(pk=user_id)
+        target = User.objects.get(pk=user_id)
     except (User.DoesNotExist, ValueError):
         return None, error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
     if _employee_out_of_branch_scope(request.user, target):

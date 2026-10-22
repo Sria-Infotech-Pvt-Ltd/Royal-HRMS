@@ -17,7 +17,7 @@ interface LoginApiResponse {
       id: string;
       email: string;
       full_name: string;
-      role: string;
+      designation: string;
       branch: string;
       permissions: string[];
       must_change_password: boolean;
@@ -76,7 +76,7 @@ export default function LoginPage() {
         userId: d.user.id,
         email: d.user.email,
         name: d.user.full_name,
-        role: d.user.role,
+        designation: d.user.designation ?? "",
         branch: d.user.branch ?? "",
         permissions: d.user.permissions ?? [],
         onboarding_status: d.user.onboarding_status ?? "complete",

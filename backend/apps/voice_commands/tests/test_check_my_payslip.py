@@ -10,9 +10,7 @@ _PERMISSION_DENIED_MESSAGE = "You don't have permission to do that."
 
 
 def _fake_request(has_payroll_view_own: bool):
-    role_permissions = MagicMock()
-    role_permissions.filter.return_value.exists.return_value = has_payroll_view_own
-    user = SimpleNamespace(role=SimpleNamespace(role_permissions=role_permissions), id=1, pk=1)
+    user = SimpleNamespace(_grant=has_payroll_view_own, id=1, pk=1)
 
     request = MagicMock()
     request.META = {}
@@ -126,3 +124,21 @@ class CheckMyPayslipExecutorTests(SimpleTestCase):
         mock_model.objects.filter.return_value.select_related.return_value.order_by.assert_called_once_with(
             '-cycle__cycle_start',
         )
+
+
+# These tests exercise the executors with stand-in users, without a database. The permission gate is answered by the
+# stand-in itself (`_grant`); the gate's real behaviour is covered against real users in test_permissions.py.
+_gate_patch = None
+
+
+def setUpModule():
+    global _gate_patch
+    _gate_patch = patch(
+        'apps.voice_commands.executor.has_required_permission',
+        side_effect=lambda user, codename: bool(getattr(user, '_grant', False)),
+    )
+    _gate_patch.start()
+
+
+def tearDownModule():
+    _gate_patch.stop()

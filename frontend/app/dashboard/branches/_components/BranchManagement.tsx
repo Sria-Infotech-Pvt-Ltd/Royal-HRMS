@@ -11,7 +11,7 @@ import ToggleSwitch from "@/components/ToggleSwitch";
 import type { GSTRegistration } from "@/types/company";
 import {
   type StateObj, type CityObj, type Branch, type BranchStats, type BranchDistribution,
-  type Envelope, type Paginated, type ApiRole, type ApiEmployeeOption, type LeaderForm,
+  type Envelope, type Paginated, type BranchAdminSeat, type ApiEmployeeOption, type LeaderForm,
   EMPTY_LEADER, isLeaderActive, EMAIL_RE, OTHER_CITY, BRANCH_NAME_RE, CITY_NAME_RE,
 } from "./_data";
 import LeaderFields from "./LeaderFields";
@@ -57,7 +57,7 @@ export default function BranchManagement() {
   // afterward on the Employees page. Optional — leaving it blank is fine.
   const [branchAdminForm, setBranchAdminForm] = useState<LeaderForm>(EMPTY_LEADER);
   const [leaderErrors,    setLeaderErrors]    = useState<Record<string, string>>({});
-  const [roles, setRoles] = useState<ApiRole[]>([]);
+  const [branchAdminSeats, setBranchAdminSeats] = useState<BranchAdminSeat[]>([]);
   const [leaderEmployees, setLeaderEmployees] = useState<ApiEmployeeOption[]>([]);
   const [inviteAlert, setInviteAlert] = useState<{ type: "warn" | "success"; text: string } | null>(null);
   const [transferConfirm, setTransferConfirm] = useState<TransferConfirmState | null>(null);
@@ -239,7 +239,7 @@ export default function BranchManagement() {
         if (!f.name.trim())        errs.branchAdminName        = "Name is required.";
         if (!f.email.trim())       errs.branchAdminEmail       = "Email is required.";
         else if (!EMAIL_RE.test(f.email.trim())) errs.branchAdminEmail = "Enter a valid email.";
-        if (!f.designation.trim()) errs.branchAdminDesignation = "Designation is required.";
+        if (!f.positionId)         errs.branchAdminPosition    = "Select the position they will hold.";
       }
     }
     return errs;
@@ -257,19 +257,9 @@ export default function BranchManagement() {
   //    the backend doesn't require it for this role (see
   //    EmployeeListCreateView.post's department_required check).
   const applyLeaderRole = async (f: LeaderForm, branchName: string) => {
-    // Found by capability, not by name — a role can be renamed from Settings
-    // at any time, so matching a literal string like "branch_admin" would
-    // silently break. Also excludes settings.edit roles: a role that happens
-    // to carry both can_manage_branch and settings.edit is company-wide, not
-    // branch-scoped, and this picker must never hand out that much access.
-    const role = roles.find(r => r.can_manage_branch && !r.permissions.includes("settings.edit"));
-    if (!role) throw new Error("No Company Code Admin role is set up for this company yet.");
-
     if (f.mode === "existing") {
-      await clientApi.put(API.employees.detail(f.employeeId), {
-        role: role.name,
-        branch: branchName,
-      });
+      // Their access comes from the position they hold; this only moves them to the new Company Code.
+      await clientApi.put(API.employees.detail(f.employeeId), { branch: branchName });
       return;
     }
 
@@ -280,8 +270,7 @@ export default function BranchManagement() {
     await clientApi.post(API.employees.list, {
       first_name, last_name,
       email: f.email.trim(),
-      role: role.id,
-      designation: f.designation.trim(),
+      position: f.positionId,
       branch: branchName,
       date_of_joining: new Date().toISOString().slice(0, 10),
     });
@@ -488,20 +477,11 @@ export default function BranchManagement() {
                 geofencing_enabled: false, latitude: "", longitude: "", allowed_radius_meters: "150",
               });
               Promise.allSettled([
-                clientApi.get<{ data: { results: ApiRole[] } }>(API.roles.list,        { params: { page_size: 100 } }),
+                clientApi.get<{ data: { results: BranchAdminSeat[] } }>(API.orgStructure.positions.list, { params: { page_size: 500, can_manage_branch: "true" } }),
                 clientApi.get<{ data: { results: ApiEmployeeOption[] } }>(API.employees.list, { params: { page_size: 50, status: "active" } }),
-              ]).then(([r, e]) => {
-                setRoles(r.status === "fulfilled" ? r.value.data.data.results : []);
-                // Never offer the company's own system_admin(s) here — this
-                // picker only ever re-roles someone into branch_admin, and a
-                // system_admin must never be silently demoted by picking them
-                // by accident (same exclusion AddEmployeeModal already
-                // applies to the role dropdown itself).
-                setLeaderEmployees(
-                  e.status === "fulfilled"
-                    ? (e.value.data.data?.results ?? []).filter(emp => emp.role !== "system_admin")
-                    : [],
-                );
+              ]).then(([seats, e]) => {
+                setBranchAdminSeats(seats.status === "fulfilled" ? seats.value.data.data.results : []);
+                setLeaderEmployees(e.status === "fulfilled" ? (e.value.data.data?.results ?? []) : []);
               });
             }}>
               <i className="ti ti-plus" /> Add Company Code
@@ -785,7 +765,7 @@ export default function BranchManagement() {
                   </div>
                   <LeaderFields
                     label="Company Code Admin" form={branchAdminForm} setForm={setBranchAdminForm}
-                    employees={leaderEmployees} errors={leaderErrors} prefix="branchAdmin"
+                    employees={leaderEmployees} seats={branchAdminSeats} errors={leaderErrors} prefix="branchAdmin"
                   />
                 </div>
               )}

@@ -42,7 +42,7 @@ interface ProfileData {
 export interface ApprovalUser {
   id: string; full_name: string; email: string; phone: string;
   department: string; designation: string; branch: string;
-  role_name: string; role_display: string; employee_id: string;
+  employee_id: string;
   onboarding_status: string; date_joined: string;
   candidate_id?: number | null;
   profile: ProfileData | null;
@@ -318,7 +318,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
               <Row label="Org Unit"    value={user.department} />
               <Row label="Designation" value={user.designation} />
               <Row label="Company Code" value={user.branch} />
-              <Row label="Role"        value={user.role_display || "Candidate"} />
+              <Row label="Designation" value={user.designation || "Candidate"} />
             </SectionCard>
 
             {user.profile && (
@@ -528,7 +528,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
           {showAssign && !alreadyPositioned && (
             <div style={{ marginTop: "1.25rem", padding: "1rem", borderRadius: 8, border: "1px solid var(--outline-v)", background: "var(--bg-mid)" }}>
               <div style={{ fontWeight: 700, fontSize: ".82rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--primary)", marginBottom: ".75rem" }}>
-                <i className="ti ti-user-check" style={{ marginRight: 6 }} />Assign Role
+                <i className="ti ti-user-check" style={{ marginRight: 6 }} />Assign Position
               </div>
 
               {assignErr && (

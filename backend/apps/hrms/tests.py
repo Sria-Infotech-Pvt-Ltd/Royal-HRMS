@@ -12,7 +12,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.accounts.factories import make_role, make_user
+from apps.accounts.factories import make_role, make_user, place_in_seat
 from apps.accounts.models import ApprovalWorkflowRule
 from apps.hrms.models import CarryForwardLog, Expense, LeaveBalance, LeavePolicy
 from apps.hrms.tasks import expire_unused_carry_forward
@@ -82,9 +82,6 @@ class LeaveBalanceAdjustDecimalTests(TestCase):
 
     def test_employee_cannot_adjust_own_balance(self):
         _login(self.client, 'leaveemp@test.com')
-        # Grant the employee leave.approve to isolate the self-adjustment
-        # check specifically, rather than the permission check.
-        self.employee.role.role_permissions.filter(permission__codename='leave.approve')
         resp = self.client.patch(
             reverse('leave-balance-adjust', kwargs={'balance_id': self.balance.pk}),
             {'total_days': 100},
@@ -115,8 +112,8 @@ class LeaveRequestFlowTests(TestCase):
         ApprovalWorkflowRule.objects.update_or_create(
             workflow_type=ApprovalWorkflowRule.WORKFLOW_LEAVE,
             defaults={
-                'l1_approver_role': manager_role,
-                'l2_approver_role': None,
+                'l1_approver_kind': ApprovalWorkflowRule.APPROVER_REPORTING_MANAGER,
+                'l2_approver_kind': '',
             },
         )
         LeavePolicy.objects.update_or_create(
@@ -224,8 +221,8 @@ class LeaveRequestFlowTests(TestCase):
             format='json',
         )
         request_id = create_resp.data['data']['id']
-        self.employee.role = make_role('employee_with_approve', permission_codenames=['leave.approve'])
-        self.employee.save(update_fields=['role'])
+        # Give the employee leave.approve through a seat, to isolate the self-approval check from the permission check.
+        place_in_seat(self.employee, make_role('employee_with_approve', permission_codenames=['leave.approve']))
 
         resp = self.client.post(
             reverse('leave-request-approve', kwargs={'request_id': request_id}),

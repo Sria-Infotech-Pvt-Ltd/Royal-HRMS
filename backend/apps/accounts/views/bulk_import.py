@@ -79,8 +79,6 @@ from apps.accounts.models import (
     Placement,
     Position,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -106,7 +104,6 @@ from apps.accounts.serializers import (
     PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
-    RoleSerializer,
     SMTPSettingsSerializer,
     SMTPTestSerializer,
     VerifyOTPSerializer,
@@ -179,12 +176,6 @@ class EmployeeBulkImportView(APIView):
             branch_map[b.branch_name.strip().lower()] = b.branch_name.strip()
             if b.branch_code:
                 branch_map[b.branch_code.strip().lower()] = b.branch_name.strip()
-
-        # role: lower_name/lower_display → Role obj
-        role_map: dict = {}
-        for r in Role.objects.filter(is_active=True):
-            role_map[r.name.lower()]         = r
-            role_map[r.display_name.lower()] = r
 
         # (lower org unit name, lower position title) → list of matching
         # active Position ids — more than one hit (e.g. two same-titled
@@ -327,25 +318,14 @@ class EmployeeBulkImportView(APIView):
                 continue
             position_id_for_row = matches[0]
 
-            # Role existence check.
-            role_raw = vd['role']
-            role_obj = role_map.get(role_raw.lower())
-            if role_obj is None:
+            # Access comes from the position; a seat with full org-wide access is never filled by import.
+            if Position.objects.filter(pk=position_id_for_row, position_permissions__permission__codename='settings.edit').exists():
                 failed_row_ids.add(idx)
                 row_errors.append({
                     'row':        idx,
-                    'field':      'role',
+                    'field':      'position',
                     'identifier': email,
-                    'message':    f'Role "{role_raw}" not found.',
-                })
-                continue
-            if role_obj.role_permissions.filter(permission__codename='settings.edit').exists():
-                failed_row_ids.add(idx)
-                row_errors.append({
-                    'row':        idx,
-                    'field':      'role',
-                    'identifier': email,
-                    'message':    f'"{role_obj.display_name}" cannot be assigned via bulk import.',
+                    'message':    f'"{title_raw}" carries full access and cannot be filled via bulk import.',
                 })
                 continue
 
@@ -367,7 +347,6 @@ class EmployeeBulkImportView(APIView):
                         email                = email,
                         password             = temp_password,
                         full_name            = full_name,
-                        role                 = role_obj,
                         employee_id          = employee_id,
                         branch               = branch_name,
                         phone                = vd.get('phone') or '',
@@ -580,7 +559,7 @@ class EmployeeBulkImportSampleView(APIView):
 
     _HEADERS = [
         'First Name', 'Last Name', 'Work Email', 'Mobile Number',
-        'Role', 'Org Unit', 'Position', 'Company Code', 'Employee Type',
+        'Org Unit', 'Position', 'Company Code', 'Employee Type',
         'Date of Joining', 'Gender', 'Date of Birth', 'Blood Group', 'Address',
     ]
 
@@ -602,25 +581,18 @@ class EmployeeBulkImportSampleView(APIView):
             .order_by('id')
             .first()
         )
-        role = (
-            Role.objects.filter(is_active=True)
-            .exclude(role_permissions__permission__codename='settings.edit')
-            .order_by('id')
-            .first()
-        )
-
-        if not (branch and position and position.org_unit and role):
+        if not (branch and position and position.org_unit):
             # Nothing to build a guaranteed-importable row from yet (a
             # brand-new install with no org structure configured) — say so
             # plainly instead of shipping example values that will fail.
             return [[
-                'Set up at least one Branch, Org Unit + Position, and Role first',
-                '', '', '', '', '', '', '', '', '', '', '', '', '',
+                'Set up at least one Branch, Org Unit and Position first',
+                '', '', '', '', '', '', '', '', '', '', '', '',
             ]]
 
         return [[
             'John', 'Doe', 'john.doe@company.com', '9876543210',
-            role.display_name, position.org_unit.name, position.title,
+            position.org_unit.name, position.title,
             branch.branch_code or branch.branch_name, 'Permanent',
             date.today().isoformat(), 'Male', '1995-06-20', 'B+', '123 Main Street',
         ]]

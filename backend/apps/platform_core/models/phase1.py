@@ -437,7 +437,7 @@ class FeatureFlag(TimestampedModel):
 class FeatureFlagOverride(TimestampedModel):
     flag         = models.ForeignKey(FeatureFlag, on_delete=models.CASCADE, related_name='overrides')
     legal_entity = models.ForeignKey(LegalEntity, on_delete=models.CASCADE, null=True, blank=True, related_name='+')
-    role         = models.ForeignKey('accounts.Role', on_delete=models.CASCADE, null=True, blank=True, related_name='+')
+    position     = models.ForeignKey('accounts.Position', on_delete=models.CASCADE, null=True, blank=True, related_name='+')
     user         = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='+')
     enabled      = models.BooleanField()
 

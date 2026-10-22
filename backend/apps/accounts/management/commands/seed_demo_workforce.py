@@ -34,7 +34,7 @@ from apps.accounts.demo_workforce_attendance import generate_for_employee, weekl
 from apps.accounts.demo_workforce_payroll import PayrollStepError, run_cycle
 from apps.accounts.management.commands.seed_demo_employee_details import fill_user
 from apps.accounts.management.commands.seed_demo_personas import PERSONAS, create_missing_personas
-from apps.accounts.models import EmployeeCodeSettings, Placement, Position, Role, User
+from apps.accounts.models import EmployeeCodeSettings, Placement, Position, User
 from apps.accounts.services_placement import assign_position
 from apps.attendance.models import EmployeeWeeklyOffAssignment, WeeklyDayPolicy
 from apps.attendance.services_hr import bulk_assign_weekly_off
@@ -153,8 +153,7 @@ class Command(BaseCommand):
 
     def _actor(self, email):
         query = User.objects.filter(is_active=True)
-        actor = query.filter(email=email).first() if email else query.filter(is_superuser=True).first() or query.filter(
-            role__name='system_admin').first()
+        actor = query.filter(email=email).first() if email else query.filter(is_superuser=True).first()
         if actor is None:
             raise CommandError('No admin found to run payroll — pass --actor-email of an active admin.')
         return actor
@@ -176,7 +175,7 @@ class Command(BaseCommand):
         return _ensure_branches(), _ensure_holidays(), _ensure_weekly_off_policy()
 
     @transaction.atomic
-    def _create_one(self, row, branches, role, manager):
+    def _create_one(self, row, branches, is_lead, manager):
         first, last, gender, city, unit, joined, kind = row
         email = data.email_for(first, last)
         user = User.objects.filter(email=email).first()
@@ -187,25 +186,26 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f'  no vacant seat in {unit} — skipped {first} {last}'))
             return None, False
         user = User.objects.create_user(
-            email=email, password=data.PASSWORD, full_name=f'{first} {last}', role=role,
+            email=email, password=data.PASSWORD, full_name=f'{first} {last}',
             employee_id=EmployeeCodeSettings.generate_employee_id(first_name=first.split()[0], last_name=last, date_of_joining=joined),
             employee_type=kind, date_of_joining=joined, branch=branches[city].branch_name, phone='',
             must_change_password=False, onboarding_status=User.ONBOARDING_COMPLETE,
             assessment_status=User.ASSESSMENT_COMPLETE,
         )
         assign_position(user, seats[0], effective_from=joined)
+        if is_lead:  # a team lead's seat manages a team
+            Position.objects.filter(pk=seats[0].pk).update(can_manage_team=True)
         User.objects.filter(pk=user.pk).update(branch=branches[city].branch_name, reporting_manager=manager)
         return user, True
 
     def _create_people(self, branches, policy, with_photos) -> list:
-        employee_role, manager_role = Role.objects.get(name='employee'), Role.objects.get(name='manager')
         qa_manager = User.objects.filter(email='manager@example.com').first()
         leads, people, created = {}, [], 0
         for row in data.ROSTER:
             city = row[3]
             is_lead = data.team_leads().get(city) == (row[0], row[1])
             manager = qa_manager if city == 'Hyderabad' else leads.get(city)
-            user, was_created = self._create_one(row, branches, manager_role if is_lead else employee_role, manager)
+            user, was_created = self._create_one(row, branches, is_lead, manager)
             if user is None:
                 continue
             created += was_created

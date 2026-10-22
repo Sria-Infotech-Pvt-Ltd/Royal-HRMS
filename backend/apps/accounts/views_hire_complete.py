@@ -21,7 +21,7 @@ from rest_framework import status
 
 from core.permissions import has_perm as _has_perm
 from core.responses import error, success, get_client_ip
-from apps.accounts.models import AuditLog, Company, EmployeeDocument, HireAction, HireActionDocument, Role, User
+from apps.accounts.models import AuditLog, Company, EmployeeDocument, HireAction, HireActionDocument, User
 from apps.accounts.services_placement import assign_position
 from apps.accounts.utils import send_template_email
 from apps.accounts.views_hire import _hire_action_dict, _DENIED
@@ -273,21 +273,18 @@ class HireActionCompleteView(APIView):
         first_name = (draft.get('first_name') or '').strip()
         last_name  = (draft.get('last_name')  or '').strip()
         email      = (draft.get('email')      or '').strip().lower()
-        role_id    = draft.get('role')
         branch     = (draft.get('branch')     or '').strip()
-        if not all([first_name, last_name, email, role_id, branch]):
-            return error('First name, last name, email, role and company code are required before hiring.')
+        if not all([first_name, last_name, email, branch]):
+            return error('First name, last name, email and company code are required before hiring.')
 
         missing = _missing_hire_requirements(action, draft)
         if missing:
             return error(f'Complete these before hiring: {", ".join(missing)}.')
         if User.objects.filter(email=email).exists():
             return error('A user with this email already exists.')
-        role = Role.objects.filter(pk=role_id).first()
-        if not role:
-            return error('Selected role not found.')
-        if role.role_permissions.filter(permission__codename='settings.edit').exists():
-            return error('System Admin accounts cannot be created through the Hire flow.')
+        # Access comes from the position they are hired into; full org-wide access is never handed out by hiring.
+        if action.position.position_permissions.filter(permission__codename='settings.edit').exists():
+            return error('Positions with full access cannot be filled through the Hire flow.')
 
         # Emailed to the new hire below (hire_welcome_credentials template) so
         # they can log in immediately — must_change_password stays True so
@@ -297,11 +294,17 @@ class HireActionCompleteView(APIView):
 
         with transaction.atomic():
             user = User.objects.create_user(
-                email=email, password=temp_password, full_name=full_name, role=role,
+                email=email, password=temp_password, full_name=full_name,
                 employee_id=action.reserved_employee_id, department='', designation='',
                 branch=branch, phone=(draft.get('phone') or '').strip(),
                 employee_type=action.employment_type, date_of_joining=action.effective_from,
-                must_change_password=True, onboarding_status=User.ONBOARDING_PENDING,
+                # Hire wizard already collects everything onboarding would
+                # ask for (personal, statutory, documents, family) directly
+                # from HR -- unlike a recruitment-pipeline conversion
+                # (candidate_portal.py), there's nothing left for this
+                # employee to self-report, so they should never be routed
+                # into the self-service onboarding wizard on first login.
+                must_change_password=True, onboarding_status=User.ONBOARDING_COMPLETE,
                 work_location=(draft.get('work_location') or '').strip(),
                 work_mode=(draft.get('work_mode') or '').strip(),
                 probation_period_months=draft.get('probation_period_months') or None,
@@ -377,7 +380,7 @@ class HireActionCompleteView(APIView):
                 user=request.user, action='employee_created', module='accounts',
                 object_id=str(user.id),
                 changes={
-                    'name': full_name, 'email': email, 'role': role.name,
+                    'name': full_name, 'email': email, 'position': action.position.title,
                     'employee_id': action.reserved_employee_id, 'via': 'hire_action',
                 },
                 branch=user.branch, ip_address=get_client_ip(request),

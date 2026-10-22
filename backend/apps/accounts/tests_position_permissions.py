@@ -2,16 +2,14 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from io import StringIO
 
 from django.core.cache import cache
-from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import AuditLog, BaselinePermission, OrgUnit, Permission, Placement, Position, PositionPermission, Role, User
+from apps.accounts.models import AuditLog, BaselinePermission, OrgUnit, Permission, Placement, Position, PositionPermission, User
 from core.access import can_manage_branch, can_manage_team, excluded_from_payroll, team_managers, users_with_permission
 from core.permissions import effective_permission_codenames, has_perm
 
@@ -41,10 +39,8 @@ class SeatPermissionTests(TestCase):
         self.assertTrue(has_perm(self.person, 'payroll.view'))
         self.assertFalse(has_perm(self.person, 'payroll.edit'))
 
-    def test_person_with_no_role_at_all_still_gets_seat_access(self):
+    def test_seat_holder_with_no_other_access_still_gets_the_seats_permission(self):
         self._place(date.today())
-        self.person.role = None
-        self.person.save()
         self.assertTrue(has_perm(self.person, 'payroll.view'))
 
     def test_ended_future_and_inactive_seats_grant_nothing(self):
@@ -57,15 +53,6 @@ class SeatPermissionTests(TestCase):
         self._place(date.today() - timedelta(days=1))
         Position.objects.filter(pk=self.seat.pk).update(is_active=False)
         self.assertFalse(has_perm(self.person, 'payroll.view'), 'inactive seat')
-
-    def test_role_permissions_still_work_alongside_seats(self):
-        role = make_role('legacy_role_seat_test', permission_codenames=['leave.view'])
-        self.person.role = role
-        self.person.save()
-        self._place(date.today())
-        self.assertTrue(has_perm(self.person, 'leave.view'))
-        self.assertTrue(has_perm(self.person, 'payroll.view'))
-        self.assertEqual(effective_permission_codenames(self.person), ['leave.view', 'payroll.view'])
 
     def test_settings_edit_on_a_seat_is_full_access(self):
         PositionPermission.objects.create(position=self.seat, permission=_permission('settings.edit'))
@@ -120,39 +107,6 @@ class PositionPermissionsApiTests(TestCase):
         self.assertFalse(self.seat.position_permissions.exists())
 
 
-class MigrateRolesToPositionsCommandTests(TestCase):
-    def setUp(self):
-        unit = OrgUnit.objects.create(name='Command Seat Test')
-        self.seat = Position.objects.create(org_unit=unit, title='HR Partner', grade='L3')
-        role = make_role('hr_cmd_seat_test', permission_codenames=['employees.view', 'employees.edit'])
-        role.can_manage_team = True
-        role.save()
-        self.holder = make_user('holder-cmd@test.com', role=role, employee_id='CMD1')
-        Placement.objects.create(position=self.seat, employee=self.holder, effective_from=date.today() - timedelta(days=1))
-        self.unseated = make_user('unseated-cmd@test.com', role=role, employee_id='CMD2')
-
-    def _run(self, *args):
-        out = StringIO()
-        call_command('migrate_roles_to_positions', *args, stdout=out)
-        return out.getvalue()
-
-    def test_dry_run_changes_nothing_and_flags_people_without_a_seat(self):
-        output = self._run()
-        self.assertIn('DRY RUN', output)
-        self.assertIn('NO SEAT: CMD2', output)
-        self.assertFalse(self.seat.position_permissions.exists())
-
-    def test_apply_copies_role_permissions_and_flags_onto_the_seat_and_is_idempotent(self):
-        self._run('--apply')
-        self.seat.refresh_from_db()
-        self.assertEqual(
-            sorted(self.seat.position_permissions.values_list('permission__codename', flat=True)),
-            ['employees.edit', 'employees.view'],
-        )
-        self.assertTrue(self.seat.can_manage_team)
-        self.assertIn('0 seats', self._run('--apply'))
-
-
 class AccessHelperTests(TestCase):
     """core.access: baseline permissions, seat flags and the "everyone who ..." conditions."""
 
@@ -174,27 +128,16 @@ class AccessHelperTests(TestCase):
         self.assertTrue(can_manage_branch(self.lead))
         self.assertFalse(can_manage_team(self.nobody))
 
-    def test_role_flags_still_count_until_roles_are_deleted(self):
-        legacy = make_role('legacy_manager_access', permission_codenames=[])
-        legacy.can_manage_team = True
-        legacy.save()
-        self.nobody.role = legacy
-        self.nobody.save()
-        self.assertTrue(can_manage_team(self.nobody))
-
     def test_team_managers_condition_selects_seat_holders_and_works_in_exclude(self):
         self.assertEqual(list(User.objects.filter(team_managers()).values_list('employee_id', flat=True)), ['ACC1'])
         excluded = set(User.objects.exclude(team_managers()).values_list('employee_id', flat=True))
         self.assertIn('ACC3', excluded)
         self.assertNotIn('ACC1', excluded)
 
-    def test_users_with_permission_covers_seat_role_and_baseline(self):
+    def test_users_with_permission_covers_seat_and_baseline(self):
         self.assertEqual(list(User.objects.filter(users_with_permission('leave.approve')).values_list('employee_id', flat=True)), ['ACC1'])
-        role_holder = make_user('role-access@test.com', role=make_role('role_leave_access', permission_codenames=['leave.approve']), employee_id='ACC4')
-        self.assertEqual(sorted(User.objects.filter(users_with_permission('leave.approve')).values_list('employee_id', flat=True)), ['ACC1', 'ACC4'])
         BaselinePermission.objects.create(permission=_permission('leave.approve'))
         self.assertEqual(User.objects.filter(users_with_permission('leave.approve')).count(), User.objects.count())
-        self.assertTrue(role_holder.pk)
 
     def test_excluded_from_payroll_follows_the_seat(self):
         self.assertEqual(list(User.objects.filter(excluded_from_payroll()).values_list('employee_id', flat=True)), ['ACC2'])
@@ -203,52 +146,20 @@ class AccessHelperTests(TestCase):
 class BaselinePermissionTests(TestCase):
     def setUp(self):
         cache.clear()
+        BaselinePermission.objects.all().delete()  # the migrations seed it; start from an empty baseline
         self.person = make_user('baseline-person@test.com', role=None, employee_id='BASE1')
 
-    def test_everyone_gets_baseline_permissions_without_a_role_or_seat(self):
+    def test_everyone_gets_baseline_permissions_without_a_seat(self):
         self.assertFalse(has_perm(self.person, 'leave.apply'))
         BaselinePermission.objects.create(permission=_permission('leave.apply'))
         self.assertTrue(has_perm(self.person, 'leave.apply'))
         self.assertEqual(effective_permission_codenames(self.person), ['leave.apply'])
 
 
-class MigrateBaselineAndPromotionTests(TestCase):
-    def setUp(self):
-        Role.objects.filter(is_default_employee_role=True).update(is_default_employee_role=False)
-        employee_role = make_role('default_emp_cmd', permission_codenames=['leave.apply', 'attendance.view'])
-        employee_role.is_default_employee_role = True
-        employee_role.save()
-        self.unit = OrgUnit.objects.create(name='Baseline Command Test')
-        self.seat = Position.objects.create(org_unit=self.unit, title='Engineer', grade='L2')
-        self.engineer = make_user('eng-cmd@test.com', role=employee_role, employee_id='BCMD1')
-        Placement.objects.create(position=self.seat, employee=self.engineer, effective_from=date.today())
-        admin_role = make_role('admin_cmd_seat', permission_codenames=['settings.edit'])
-        admin_role.is_full_access = True
-        admin_role.save()
-        self.admin = make_user('admin-cmd@test.com', role=admin_role, employee_id='BCMD2')
-
-    def _run(self, *args):
-        out = StringIO()
-        call_command('migrate_roles_to_positions', *args, stdout=out)
-        return out.getvalue()
-
-    def test_default_employee_permissions_become_baseline_not_seat_permissions(self):
-        self._run('--apply')
-        self.assertEqual(sorted(BaselinePermission.objects.values_list('permission__codename', flat=True)), ['attendance.view', 'leave.apply'])
-        self.assertFalse(self.seat.position_permissions.exists())
-
-    def test_unseated_admin_is_only_promoted_when_asked(self):
-        self.assertIn('NO SEAT: BCMD2', self._run('--apply'))
-        self.admin.refresh_from_db()
-        self.assertFalse(self.admin.is_superuser)
-        self.assertIn('PROMOTED to super-admin: BCMD2', self._run('--apply', '--promote-unseated-admins'))
-        self.admin.refresh_from_db()
-        self.assertTrue(self.admin.is_superuser)
-
-
 class BaselinePermissionsApiTests(TestCase):
     def setUp(self):
         cache.clear()
+        BaselinePermission.objects.all().delete()  # the migrations seed it; start from an empty baseline
         admin_role = make_role('admin_baseline_api', permission_codenames=['settings.edit'])
         self.admin = make_user('admin-baseline@test.com', role=admin_role, employee_id='BAPI1')
         self.plain = make_user('plain-baseline@test.com', role=make_role('plain_baseline_api', permission_codenames=[]), employee_id='BAPI2')

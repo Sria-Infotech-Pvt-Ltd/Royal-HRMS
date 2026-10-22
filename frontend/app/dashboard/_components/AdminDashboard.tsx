@@ -21,7 +21,7 @@ interface QuickAction {
 
 const QUICK_ACTIONS: QuickAction[] = [
   { href: "/dashboard/employees",            icon: "ti-id-badge",            bg: "rgba(124,58,237,0.12)",  color: "var(--primary)", label: "Employees"     },
-  { href: "/dashboard/settings/permissions", icon: "ti-shield-check",        bg: "rgba(23,144,90,0.12)", color: "var(--success)", label: "Roles & Perms" },
+  { href: "/dashboard/settings/access", icon: "ti-shield-check",        bg: "rgba(23,144,90,0.12)", color: "var(--success)", label: "Access" },
   { href: "/dashboard/attendance",           icon: "ti-clock",               bg: "rgba(37,99,235,0.12)", color: "var(--info)",    label: "Attendance"    },
   { href: "/dashboard/payroll",              icon: "ti-report-money",        bg: "rgba(162,98,12,0.12)", color: "var(--warn)",    label: "Payroll"       },
   { href: "/dashboard/branches",             icon: "ti-building-skyscraper", bg: "rgba(124,58,237,0.12)",  color: "var(--primary)", label: "Company Codes" },

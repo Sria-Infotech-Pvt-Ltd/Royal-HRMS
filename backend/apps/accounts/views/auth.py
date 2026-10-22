@@ -80,8 +80,6 @@ from apps.accounts.models import (
     Placement,
     Position,
     PromotionRecord,
-    Role,
-    RolePermission,
     SMTPSettings,
     User,
 )
@@ -107,7 +105,6 @@ from apps.accounts.serializers import (
     PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
-    RoleSerializer,
     SMTPSettingsSerializer,
     SMTPTestSerializer,
     VerifyOTPSerializer,
@@ -159,8 +156,6 @@ class LoginView(APIView):
         try:
             user = (
                 User.objects
-                    .select_related('role')
-                    .prefetch_related('role__role_permissions__permission')
                     .get(email__iexact=email)
             )
         except User.DoesNotExist:
@@ -206,8 +201,6 @@ class LoginView(APIView):
                 'id':                  str(user.id),
                 'email':               user.email,
                 'full_name':           user.full_name,
-                'role':                user.role.name if user.role else None,
-                'role_display':        user.role.display_name if user.role else None,
                 'employee_id':         user.employee_id,
                 'department':          user.department,
                 'designation':         user.designation,

@@ -2,7 +2,7 @@
 Management command: seed_demo_personas
 
 DEMO / TEST DATA ONLY. Creates the four persona logins used to check the Employee Directory against the
-reference — one per role — if they do not exist yet:
+reference — one per kind of access — if they do not exist yet:
 
     payroll@example.com   Payroll Admin          (QA0001)
     manager@example.com   Reporting Manager      (QA0002)
@@ -22,12 +22,20 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import OrgUnit, Permission, Placement, Position, PositionPermission, User
 
 PASSWORD = 'demo@1'
 BRANCH_NAME = 'Kondapur Office'
 
-# email, role, employee_id, full_name, branch, reports_to_manager
+# What each demo persona's seat is allowed to do (an employee only gets the company baseline).
+PERSONA_ACCESS = {
+    'payroll_admin': {'permissions': ['employees.view', 'payroll.view', 'payroll.create', 'payroll.edit'], 'team': False},
+    'manager':       {'permissions': ['employees.view', 'leave.approve', 'attendance.view'], 'team': True},
+    'employee':      {'permissions': [], 'team': False},
+    'hr_admin':      {'permissions': ['employees.view', 'employees.create', 'employees.edit', 'leave.approve', 'onboarding.approve', 'payroll.view'], 'team': False},
+}
+
+# email, kind of access, employee_id, full_name, branch, reports_to_manager
 PERSONAS = [
     ('payroll@example.com',  'payroll_admin', 'QA0001', 'QA Payroll Admin',     BRANCH_NAME, False),
     # The manager's own branch stays blank on purpose: opening any employee record auto-assigns a branch's
@@ -53,27 +61,37 @@ def _ensure_branch():
     )
 
 
+def _place_in_demo_seat(user, access_kind, title):
+    """A seat in a demo org unit carrying this persona's access, held by `user` from their joining date."""
+    access = PERSONA_ACCESS[access_kind]
+    unit, _ = OrgUnit.objects.get_or_create(name='QA Demo Personas')
+    seat = Position.objects.create(org_unit=unit, title=title, grade='L2', can_manage_team=access['team'])
+    for codename in access['permissions']:
+        module, _, action = codename.partition('.')
+        permission, _ = Permission.objects.get_or_create(codename=codename, defaults={'module': module, 'action': action})
+        PositionPermission.objects.get_or_create(position=seat, permission=permission)
+    Placement.objects.create(position=seat, employee=user, effective_from=user.date_of_joining or date(2024, 4, 1))
+
+
 def create_missing_personas():
     """Create whichever of the four persona logins do not exist yet (never changes an existing user).
     Returns the emails created. Callers are responsible for the DEBUG / confirmation guard."""
     _ensure_branch()
     created = []
     manager = None
-    for email, role_name, employee_id, full_name, branch, reports_to_manager in PERSONAS:
+    for email, access_kind, employee_id, full_name, branch, reports_to_manager in PERSONAS:
         user = User.objects.filter(email=email).first()
         if user is None:
-            role = Role.objects.filter(name=role_name).first()
-            if role is None:
-                raise CommandError(f'Role "{role_name}" does not exist — run the migrations first.')
             user = User.objects.create_user(
-                email=email, password=PASSWORD, full_name=full_name, role=role, employee_id=employee_id,
+                email=email, password=PASSWORD, full_name=full_name, employee_id=employee_id,
                 branch=branch, phone='', date_of_joining=date(2024, 4, 1),
                 must_change_password=False, onboarding_status=User.ONBOARDING_COMPLETE,
                 assessment_status=User.ASSESSMENT_COMPLETE,
                 employment_status=User.EMPLOYMENT_STATUS_CONFIRMED, employee_type='Permanent',
             )
+            _place_in_demo_seat(user, access_kind, full_name)
             created.append(email)
-        if role_name == 'manager':
+        if access_kind == 'manager':
             manager = user
         if reports_to_manager and manager is not None and user.reporting_manager_id is None:
             User.objects.filter(pk=user.pk).update(reporting_manager=manager)

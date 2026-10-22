@@ -396,7 +396,7 @@ def _notify_next_approvers(req: PAR) -> None:
         candidates = [req.employee.reporting_manager]
     else:
         codename = 'employees.approve' if step['key'] == STEP_HR else 'payroll.edit'
-        candidates = [u for u in User.objects.filter(is_active=True).select_related('role')
+        candidates = [u for u in User.objects.filter(is_active=True)
                       if has_perm(u, codename) and can_decide_step(u, req, step)][:25]
     label = req.get_action_type_display()
     for approver in candidates:

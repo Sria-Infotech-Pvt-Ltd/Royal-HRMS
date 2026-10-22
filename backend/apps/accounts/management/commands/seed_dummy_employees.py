@@ -28,7 +28,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.accounts.models import EmployeeCodeSettings, OrgUnit, Placement, Position, Role, User
+from apps.accounts.models import EmployeeCodeSettings, OrgUnit, Placement, Position, User
 from apps.accounts.services_placement import assign_position
 
 FIRST_NAMES = [
@@ -63,11 +63,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         count = options["count"]
         dry_run = options["dry_run"]
-
-        employee_role = Role.objects.filter(name="employee").first()
-        if employee_role is None:
-            self.stderr.write(self.style.ERROR('No "employee" role found — run the base role/permission seed first.'))
-            return
 
         units = list(OrgUnit.objects.filter(name__in=TARGET_UNIT_NAMES, is_active=True))
         if not units:
@@ -146,7 +141,6 @@ class Command(BaseCommand):
                     email=p["email"],
                     password=temp_password,
                     full_name=f"{p['first']} {p['last']}",
-                    role=employee_role,
                     employee_id=employee_id,
                     department="",
                     designation="",

@@ -20,7 +20,6 @@ import DateInput from "@/components/shared/DateInput";
 // Edit Employee's own page already sends — no new backend capability, just
 // a more convenient place to use the one that already exists.
 
-interface ApiRole   { id: number; name: string; display_name: string; permissions: string[] }
 interface ApiBranch { id: number; branch_name: string }
 
 export interface BasicDetails {
@@ -29,8 +28,6 @@ export interface BasicDetails {
   phone:           string;
   employee_type:   string;
   date_of_joining: string;
-  role:            string; // Role.name (internal)
-  role_display:    string;
   branch:          string; // Branch name string, matches User.branch's own convention
   department:      string;
   designation:     string;
@@ -73,7 +70,6 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);
 
-  const [roles,    setRoles]    = useState<ApiRole[]>([]);
   const [branches, setBranches] = useState<ApiBranch[]>([]);
   const [orgUnitId, setOrgUnitId] = useState("");
   const [positionId, setPositionId] = useState("");
@@ -84,12 +80,8 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
   useEffect(() => {
     if (!editing) return;
     Promise.allSettled([
-      clientApi.get<{ data: { results: ApiRole[] } }>(API.roles.list, { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: ApiBranch[] } }>(API.branches.list, { params: { page_size: 100 } }),
-    ]).then(([r, b]) => {
-      if (r.status === "fulfilled") {
-        setRoles(r.value.data.data.results.filter(x => !x.permissions.includes("settings.edit")));
-      }
+    ]).then(([b]) => {
       if (b.status === "fulfilled") setBranches(b.value.data.data.results);
     });
   }, [editing]);
@@ -121,7 +113,6 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
         phone:           form.phone,
         employee_type:   form.employee_type,
         date_of_joining: form.date_of_joining,
-        role:            form.role,
         branch:          form.branch,
       };
       if (positionId) payload.position = positionId;
@@ -134,8 +125,6 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
         phone:           String(u.phone ?? form.phone),
         employee_type:   String(u.employee_type ?? form.employee_type),
         date_of_joining: String(u.date_of_joining ?? form.date_of_joining),
-        role:            String(u.role ?? form.role),
-        role_display:    String(u.role_display ?? form.role_display),
         branch:          String(u.branch ?? form.branch),
         department:      String(u.department ?? form.department),
         designation:     String(u.designation ?? form.designation),
@@ -185,7 +174,6 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
           <Row label="Phone" value={form.phone} />
           <Row label="Employee Type" value={form.employee_type} />
           <Row label="Date of Joining" value={form.date_of_joining} />
-          <Row label="Role" value={form.role_display} />
           <Row label="Company Code" value={form.branch} />
           <Row label="Org Unit" value={form.org_unit_name || form.department} />
           <Row label="Designation" value={form.designation} />
@@ -214,18 +202,6 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
             <div className="field-group">
               <label className="field-label">Date of Joining</label>
               <DateInput className="field-input" value={form.date_of_joining} onChange={isoDate => set("date_of_joining", isoDate)} />
-            </div>
-            <div className="field-group">
-              <label className="field-label">Role</label>
-              <SearchableSelect
-                inputClassName="field-input"
-                value={form.role}
-                onChange={v => set("role", v)}
-                options={[
-                  { value: form.role, label: form.role_display || "— current —" },
-                  ...roles.filter(r => r.name !== form.role).map(r => ({ value: r.name, label: r.display_name })),
-                ]}
-              />
             </div>
             <div className="field-group">
               <label className="field-label">Company Code</label>
@@ -260,10 +236,7 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
                 onChange={setPositionId}
                 disabled={!orgUnitId}
                 placeholder={orgUnitId ? "— Select position —" : "Pick an org unit first"}
-                options={positionOptions.map(p => ({
-                  value: p.id,
-                  label: `${p.title}${p.default_role_name ? ` — ${p.default_role_name}` : ""}`,
-                }))}
+                options={positionOptions.map(p => ({ value: p.id, label: p.title }))}
               />
             </div>
           </div>

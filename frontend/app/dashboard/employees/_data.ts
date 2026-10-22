@@ -172,7 +172,6 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
       { key: "department",  label: "Org Unit",    type: "readonly" },
       { key: "designation", label: "Designation", type: "readonly" },
       // ── editable employment fields (options injected at runtime from API) ──
-      { key: "ssRole",      label: "Role",        type: "select", required: true, options: [] },
       { key: "branch",            label: "Company Code",     type: "select",   options: [] },
       { key: "reportingManager",  label: "Reporting Manager",  type: "readonly" },
       { key: "reportingApprover", label: "Reporting Approver", type: "readonly" },
@@ -513,7 +512,6 @@ export interface ApiEmployee {
   first_name: string; last_name: string; full_name: string;
   email: string; phone: string;
   department: string; designation: string; branch: string;
-  role: string; role_display: string;
   date_of_joining: string; is_active: boolean; status: string;
   employment_status?: string;
   confirmation_date?: string | null;
@@ -567,7 +565,6 @@ export function apiToEmployee(u: ApiEmployee): Employee {
       country:       "India",
       loginEmail:    u.email,
       personalEmail: u.email,
-      ssRole:        u.role_display || "Employee",
       portalAccess:  "enabled",
       mobileNumber:  u.phone,
     },

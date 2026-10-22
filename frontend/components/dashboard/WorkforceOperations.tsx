@@ -39,7 +39,7 @@ interface LeaveOverview { pending: number; on_leave_today: number; upcoming: num
 interface PayrollOverview { blocked: number; cycle_label: string; cycle_status_display: string; employee_count: number }
 interface PerformanceOverview { active_cycle: string; self_reviews_pct: number; goals_at_risk: number }
 interface ReportsOverview { exports_today: number; audit_events_30d: number }
-interface SettingsOverview { admin_roles: number; audit_events_30d: number }
+interface SettingsOverview { access_seats: number; audit_events_30d: number }
 interface SystemHealth { api_status: boolean | string; database_status: boolean | string; mail_status: boolean | string; storage_status: boolean | string }
 
 const isOn = (v: boolean | string | undefined) => v === true || v === "ok" || v === "online" || v === "connected";
@@ -91,7 +91,7 @@ export default function WorkforceOperations({ overview, overviewLoading }: Props
     { key: "reports", name: "Reports", blurb: "Workforce analytics and exports.", icon: Icon.chart, tone: "info", href: "/dashboard/reports",
       loading: reports.loading, hidden: reports.status === 403, metric: reports.data?.exports_today ?? 0, metricLabel: "exports today", note: `${reports.data?.audit_events_30d ?? 0} audit events (30 days)` },
     { key: "settings", name: "Settings", blurb: "Roles, policies and configuration.", icon: Icon.gear, tone: "crit", href: "/dashboard/settings",
-      loading: settings.loading, hidden: settings.status === 403, metric: settings.data?.admin_roles ?? 0, metricLabel: "active roles", note: `${settings.data?.audit_events_30d ?? 0} audit events (30 days)` },
+      loading: settings.loading, hidden: settings.status === 403, metric: settings.data?.access_seats ?? 0, metricLabel: "positions with extra access", note: `${settings.data?.audit_events_30d ?? 0} audit events (30 days)` },
   ] as Cap[]).filter((c) => !c.hidden);
 
   // ── Operational tools: shortcuts to the working screens, with live counts ──

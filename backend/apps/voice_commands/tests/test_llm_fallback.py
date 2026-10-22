@@ -206,11 +206,9 @@ class PermissionGateStillAppliesTests(SimpleTestCase):
     """
 
     def _fake_request(self, has_attendance_view: bool):
-        role_permissions = MagicMock()
-        role_permissions.filter.return_value.exists.return_value = has_attendance_view
         # id AND pk both set — handle_transcript's clarification.get_pending
         # reads user.id, audit.py's log_no_match/_record read user.pk.
-        user = SimpleNamespace(id=1, pk=1, role=SimpleNamespace(role_permissions=role_permissions))
+        user = SimpleNamespace(id=1, pk=1, _grant=has_attendance_view)
         request = MagicMock()
         request.META = {}
         request.user = user
@@ -230,3 +228,21 @@ class PermissionGateStillAppliesTests(SimpleTestCase):
 
         self.assertFalse(result['success'])
         self.assertEqual(result['message'], _PERMISSION_DENIED_MESSAGE)
+
+
+# These tests exercise the executors with stand-in users, without a database. The permission gate is answered by the
+# stand-in itself (`_grant`); the gate's real behaviour is covered against real users in test_permissions.py.
+_gate_patch = None
+
+
+def setUpModule():
+    global _gate_patch
+    _gate_patch = patch(
+        'apps.voice_commands.executor.has_required_permission',
+        side_effect=lambda user, codename: bool(getattr(user, '_grant', False)),
+    )
+    _gate_patch.start()
+
+
+def tearDownModule():
+    _gate_patch.stop()

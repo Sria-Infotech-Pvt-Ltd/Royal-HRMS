@@ -40,7 +40,6 @@ export interface ApiEmployee {
   email: string; phone: string;
   department: string; designation: string; branch: string;
   position_id: string | null; org_unit_id: string | null;
-  role: string; role_display: string;
   date_of_joining: string; is_active: boolean; status: string;
   onboarding_status: string;
   employment_status: string;
@@ -132,7 +131,6 @@ export function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeCo
       nationality:   "Indian",
       loginEmail:    u.email,
       personalEmail: u.email,
-      ssRole:        u.role || "employee",
       portalAccess:  "enabled",
       mobileNumber:  u.phone || "",
       // Personal (from onboarding profile)

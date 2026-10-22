@@ -126,8 +126,6 @@ from apps.accounts.views import (
     ResetPasswordView,
     InviteCheckView,
     ChangePasswordView,
-    RoleListCreateView,
-    RoleDetailView,
     PermissionListView,
     PermissionDetailView,
     SMTPSettingsListCreateView,
@@ -300,8 +298,6 @@ urlpatterns = [
     path('org-structure/job-templates/<uuid:pk>/', JobTemplateDetailView.as_view(),     name='job-template-detail'),
 
     # Roles
-    path('roles/',         RoleListCreateView.as_view(), name='role-list-create'),
-    path('roles/<int:pk>/', RoleDetailView.as_view(),    name='role-detail'),
 
     # Permissions
     path('permissions/',         PermissionListView.as_view(),   name='permission-list'),

@@ -12,11 +12,9 @@ _PERMISSION_DENIED_MESSAGE = "You don't have permission to do that."
 
 
 def _fake_request(has_leave_approve: bool = True, user_id: int = 42):
-    role_permissions = MagicMock()
-    role_permissions.filter.return_value.exists.return_value = has_leave_approve
     request = MagicMock()
     request.META = {}
-    request.user = SimpleNamespace(role=SimpleNamespace(role_permissions=role_permissions), id=user_id, pk=user_id)
+    request.user = SimpleNamespace(_grant=has_leave_approve, id=user_id, pk=user_id)
     return request
 
 
@@ -382,3 +380,21 @@ class SelfApprovalStillBlockedTests(SimpleTestCase):
 
         self.assertFalse(result.success)
         self.assertEqual(result.message, 'You cannot approve or reject your own leave request.')
+
+
+# These tests exercise the executors with stand-in users, without a database. The permission gate is answered by the
+# stand-in itself (`_grant`); the gate's real behaviour is covered against real users in test_permissions.py.
+_gate_patch = None
+
+
+def setUpModule():
+    global _gate_patch
+    _gate_patch = patch(
+        'apps.voice_commands.executor.has_required_permission',
+        side_effect=lambda user, codename: bool(getattr(user, '_grant', False)),
+    )
+    _gate_patch.start()
+
+
+def tearDownModule():
+    _gate_patch.stop()

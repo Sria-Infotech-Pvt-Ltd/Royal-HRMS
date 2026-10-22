@@ -37,7 +37,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import OrgUnit, Position, Role
+from apps.accounts.models import OrgUnit, Position
 from apps.branch.models import Branch, City, State
 
 

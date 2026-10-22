@@ -35,7 +35,6 @@ from apps.accounts.models import (
     EPFNominee,
     FamilyMember,
     Position,
-    Role,
     User,
     WorkExperienceRecord,
     find_conflicting_pan_profile,
@@ -124,10 +123,6 @@ class Command(BaseCommand):
             self.stdout.write(f'Employee already exists: {existing.employee_id} — reusing.')
             return existing
 
-        employee_role = Role.objects.filter(name='employee').first()
-        if employee_role is None:
-            raise CommandError('No "employee" role found — run the base role/permission seed first.')
-
         joining = timezone.localdate() - timedelta(days=90)
         employee_id = EmployeeCodeSettings.generate_employee_id(
             first_name='Durga', last_name='Prasad', date_of_joining=joining,
@@ -136,7 +131,6 @@ class Command(BaseCommand):
             email=EMAIL,
             password='Demo@12345',
             full_name=FULL_NAME,
-            role=employee_role,
             employee_id=employee_id,
             department='',
             designation='',

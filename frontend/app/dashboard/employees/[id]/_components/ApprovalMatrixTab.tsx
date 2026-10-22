@@ -21,7 +21,7 @@ function ApproverCell({ name, label, isOverride }: {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <div style={{ fontSize: 13, color: "var(--outline)", fontStyle: "italic" }}>Not assigned</div>
-        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Role: {label}</div>
+        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Approver: {label}</div>
       </div>
     );
   }
@@ -205,7 +205,7 @@ export function ApprovalMatrixTab({
         <div style={{ marginBottom: 16 }}>
           <div className="settings-card-title" style={{ marginBottom: 2 }}>Approval Matrix</div>
           <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-            By default the global role rules apply. Override below to assign a specific person for this employee.
+            By default the global approval rules apply. Override below to assign a specific person for this employee.
           </div>
         </div>
 
@@ -239,7 +239,7 @@ export function ApprovalMatrixTab({
                     />
                   </td>
                   <td style={{ padding: "14px 12px" }}>
-                    {row.l2_approver_role ? (
+                    {row.l2_approver_kind ? (
                       <ApproverCell
                         name={row.l2_approver_name}
                         label={row.l2_approver_label}

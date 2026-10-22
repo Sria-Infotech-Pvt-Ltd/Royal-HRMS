@@ -19,7 +19,8 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.accounts.factories import make_role, make_user
+from apps.accounts.models import PositionPermission
+from apps.accounts.factories import make_permission, make_role, make_user
 from apps.accounts.models import (
     DocumentTypeConfig, EmployeeCodeSeries, HireAction, HireActionDocument, OrgUnit, Position,
 )
@@ -91,7 +92,7 @@ class HireWizardTestCase(TestCase):
             'first_name': 'Arjun', 'last_name': 'Mehta', 'email': 'arjun.mehta@test.com',
             'date_of_birth': '1990-01-01', 'gender': 'male', 'nationality': 'Indian',
             'phone': '+91 9876543210',
-            'role': str(self.plain_role.id), 'branch': 'Kondapur Office',
+            'branch': 'Kondapur Office',
             'pan_number': 'ABCDE1234F', 'aadhaar_number': '123456789012',
             'account_holder_name': 'Arjun Mehta', 'account_number': '1234567890',
             'ifsc_code': 'HDFC0001234',
@@ -436,9 +437,9 @@ class HireCompletionRequiredFieldTests(HireWizardTestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn('already exists', resp.data['message'].lower())
 
-    def test_system_admin_role_cannot_be_assigned_via_hire(self):
-        admin_role = make_role('system_admin_test', permission_codenames=['settings.edit'])
-        resp = self._complete_with({'role': str(admin_role.id)})
+    def test_full_access_position_cannot_be_filled_via_hire(self):
+        PositionPermission.objects.create(position=self.position, permission=make_permission('settings.edit'))
+        resp = self._complete_with({})
         self.assertEqual(resp.status_code, 400)
 
 
@@ -495,3 +496,24 @@ class HireActionEmailValidationTests(HireWizardTestCase):
         self.assertEqual(resp.status_code, 200, resp.data)
         self.action.refresh_from_db()
         self.assertEqual(self.action.draft_data['work_email'], 'new.hire@company.example')
+
+
+class HireCompletionOnboardingStatusTests(HireWizardTestCase):
+    """The Hire wizard collects every field onboarding would ask for
+    (personal, statutory, documents, family) directly from HR -- unlike a
+    candidate converted from the recruitment pipeline, there's nothing left
+    for this employee to self-report. They must not be routed into the
+    self-service onboarding wizard on first login."""
+
+    def test_hired_employee_has_onboarding_already_complete(self):
+        action = self._create_draft()
+        self._set_employment_type(action, 'Permanent')
+        draft = self._valid_full_draft()
+        self._patch(action, draft)
+        self._upload_all_required_docs(action)
+        resp = self._complete(action)
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+        from apps.accounts.models import User
+        employee = User.objects.get(pk=resp.data['data']['created_employee'])
+        self.assertEqual(employee.onboarding_status, User.ONBOARDING_COMPLETE)

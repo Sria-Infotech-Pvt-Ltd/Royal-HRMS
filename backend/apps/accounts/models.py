@@ -27,87 +27,7 @@ from core.storage import (
 logger = logging.getLogger(__name__)
 
 
-# ─── Role & Permission ────────────────────────────────────────────────────────
-
-class Role(models.Model):
-    name             = models.CharField(max_length=50, unique=True)
-    display_name     = models.CharField(max_length=100)
-    is_active        = models.BooleanField(default=True)
-    can_manage_team  = models.BooleanField(
-        default=False,
-        help_text='Users with this role appear in manager dropdowns and can manage a team.',
-    )
-    can_manage_branch = models.BooleanField(
-        default=False,
-        help_text=(
-            'Users with this role have unconditional access to every employee, '
-            'request, and record within their own branch — not limited to '
-            'employees specifically assigned to them (unlike HR) or their direct '
-            'reports (unlike a manager). Scoped to one branch, unlike settings.edit '
-            'which is org-wide.'
-        ),
-    )
-    is_system_role = models.BooleanField(
-        default=False,
-        help_text=(
-            'One of the roles this company was provisioned with (System Admin, '
-            'Branch Admin, HR, Manager, Employee) — cannot be deleted, regardless '
-            'of name. Permissions and the display name stay fully editable; only '
-            'deletion is blocked, so the rest of the app can always assume these '
-            'roles exist.'
-        ),
-    )
-
-    # Phase 4 Task B.3 — explicit attributes replacing hardcoded role-NAME
-    # string comparisons elsewhere in the codebase (CLAUDE.md-style: a role's
-    # NAME is just a label; behaviour should never depend on matching it).
-    # Additive only in this phase — see PHASE4_REPORT.md for which of the
-    # 4 known hardcoded usages were actually migrated to read these instead.
-    is_full_access = models.BooleanField(
-        default=False,
-        help_text=(
-            'Explicit, audited "can do everything" attribute (Task D) — replaces '
-            'the hidden settings.edit bypass in core.permissions.has_perm(). Set '
-            'automatically (once, at migration time) for every role that held '
-            'settings.edit; editable afterwards only by another full-access user, '
-            'with a mandatory reason.'
-        ),
-    )
-    is_default_employee_role = models.BooleanField(
-        default=False,
-        help_text='Exactly one role should have this set — the role new hires/self-service users get by default. Replaces hardcoded role__name="employee" checks.',
-    )
-    exclude_from_payroll = models.BooleanField(
-        default=False,
-        help_text='Users holding this role are excluded from payroll processing (e.g. a pure system/API role). Replaces hardcoded role__name="system_admin" exclusions in payroll views.',
-    )
-    exclude_from_headcount = models.BooleanField(
-        default=False,
-        help_text='Users holding this role are excluded from headcount-style dashboard counts.',
-    )
-    is_assignable = models.BooleanField(
-        default=True,
-        help_text='False hides this role from normal admins\' role-assignment UI (e.g. a system/break-glass role) without preventing it from existing.',
-    )
-
-    created_at   = models.DateTimeField(auto_now_add=True, null=True)
-    updated_at   = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'hrms_roles'
-        constraints = [
-            # "Exactly one" (Task B.3) — enforce the "at most one" half at
-            # the DB level; application code is responsible for ensuring
-            # at least one exists (seed data / admin UI).
-            models.UniqueConstraint(
-                fields=['is_default_employee_role'], condition=Q(is_default_employee_role=True),
-                name='uniq_default_employee_role',
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return self.display_name
-
+# ─── Permission ───────────────────────────────────────────────────────────────
 
 class Permission(models.Model):
     module   = models.CharField(max_length=50)
@@ -133,19 +53,6 @@ class Permission(models.Model):
         return self.codename
 
 
-class RolePermission(models.Model):
-    role       = models.ForeignKey(Role,       on_delete=models.CASCADE, related_name='role_permissions')
-    permission = models.ForeignKey(Permission, on_delete=models.CASCADE, related_name='role_permissions')
-    granted_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table      = 'hrms_role_permissions'
-        unique_together = ('role', 'permission')
-
-    def __str__(self) -> str:
-        return f'{self.role.name} → {self.permission.codename}'
-
-
 # ─── User ─────────────────────────────────────────────────────────────────────
 
 class UserManager(BaseUserManager):
@@ -166,13 +73,6 @@ class UserManager(BaseUserManager):
             raise ValueError('Superuser must have is_staff=True.')
         if not extra_fields.get('is_superuser'):
             raise ValueError('Superuser must have is_superuser=True.')
-        if 'role' not in extra_fields:
-            # Phase 4 Task B.3 — was Role.objects.get(name='system_admin');
-            # a superuser account should get a full-access role regardless
-            # of what it's named, not one hardcoded name.
-            role = Role.objects.filter(is_full_access=True, is_active=True).order_by('id').first()
-            if role is not None:
-                extra_fields['role'] = role
         return self.create_user(email, password, **extra_fields)
 
 
@@ -275,13 +175,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email       = models.EmailField(unique=True)
     full_name   = models.CharField(max_length=150)
-    role        = models.ForeignKey(
-                      Role,
-                      on_delete=models.SET_NULL,
-                      null=True,
-                      blank=True,
-                      related_name='users',
-                  )
     employee_id     = models.CharField(max_length=20, blank=True, db_index=True)
     department      = models.CharField(max_length=100, blank=True)
     designation     = models.CharField(max_length=100, blank=True)
@@ -452,7 +345,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     class Meta:
         db_table = 'hrms_users'
         indexes = [
-            models.Index(fields=['role', 'is_active'],  name='user_role_active_idx'),
             models.Index(fields=['department'],          name='user_department_idx'),
             models.Index(fields=['designation'],         name='user_designation_idx'),
             # Phase 4: `branch` is a plain CharField with no index at all today,
@@ -611,18 +503,6 @@ class Position(models.Model):
     fte           = models.DecimalField(max_digits=3, decimal_places=2, default=1, help_text='Full-time-equivalent fraction for this seat.')
     headcount_budget = models.PositiveSmallIntegerField(default=1)
     is_chief      = models.BooleanField(default=False)
-    # Optional — which Role a person placed into this seat should get.
-    # Only ever *suggested* to HR at Create Employee time (prefills the Role
-    # picker, still overridable) — deliberately NOT re-applied on every later
-    # position reassignment the way designation/department are, because
-    # Role (unlike those two) already has a live, independently-used manual
-    # override path (EmployeeDetailView.put's `role` field) that a background
-    # sync would silently clobber. See services_placement.py for the
-    # designation/department sync this intentionally does not mirror.
-    default_role  = models.ForeignKey(
-                        'Role', on_delete=models.SET_NULL, null=True, blank=True,
-                        related_name='default_for_positions',
-                    )
     # Optional — most positions live in the one shared, company-wide tree;
     # set this only when a seat is genuinely tied to one physical branch
     # (e.g. "Recruiter — Kondapur"). Lets the same tree be filtered to a
@@ -755,7 +635,7 @@ class Placement(models.Model):
 
 
 class PositionPermission(models.Model):
-    """One permission granted to whoever holds a Position (replaces RolePermission once Roles are removed).
+    """One permission granted to whoever holds a Position (access follows the seat, not a role).
 
     Effective permissions for a person = the permissions of the seat they currently hold (their Placement
     covering today) — see core.permissions. Never granted to a person directly.
@@ -2294,9 +2174,8 @@ class EmployeeProfile(models.Model):
         try:
             from apps.notifications.models import Notification
             from apps.notifications.signals import _push_live
-            hr_users = User.objects.filter(
-                role__role_permissions__permission__codename='employees.edit', is_active=True,
-            ).distinct()
+            from core.access import users_with_permission
+            hr_users = User.objects.filter(users_with_permission('employees.edit'), is_active=True).distinct()
             for hr_user in hr_users:
                 notification = Notification.objects.create(
                     user=hr_user,
@@ -2977,20 +2856,16 @@ class ApprovalWorkflowRule(models.Model):
     ]
 
     workflow_type    = models.CharField(max_length=25, choices=WORKFLOW_CHOICES, unique=True)
-    l1_approver_role = models.ForeignKey(
-                           'Role',
-                           on_delete=models.SET_NULL,
-                           null=True,
-                           blank=True,
-                           related_name='rules_as_l1',
-                       )
-    l2_approver_role = models.ForeignKey(
-                           'Role',
-                           on_delete=models.SET_NULL,
-                           null=True,
-                           blank=True,
-                           related_name='rules_as_l2',
-                       )
+    # Who approves, by relationship to the employee (replaces the old per-role approver):
+    # their reporting manager, or their assigned HR partner. Blank = no approver at that level.
+    APPROVER_REPORTING_MANAGER = 'reporting_manager'
+    APPROVER_HR                = 'hr'
+    APPROVER_CHOICES = [
+        (APPROVER_REPORTING_MANAGER, 'Reporting manager'),
+        (APPROVER_HR,                'HR partner'),
+    ]
+    l1_approver_kind = models.CharField(max_length=20, choices=APPROVER_CHOICES, blank=True, default='')
+    l2_approver_kind = models.CharField(max_length=20, choices=APPROVER_CHOICES, blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
                      User,
@@ -3004,8 +2879,7 @@ class ApprovalWorkflowRule(models.Model):
         db_table = 'hrms_approval_workflow_rules'
 
     def __str__(self) -> str:
-        l1_name = self.l1_approver_role.display_name if self.l1_approver_role else 'None'
-        return f'{self.get_workflow_type_display()} — L1: {l1_name}'
+        return f'{self.get_workflow_type_display()} — L1: {self.get_l1_approver_kind_display() or "None"}'
 
 
 # ─── Employee Approval Overrides (per-employee) ───────────────────────────────

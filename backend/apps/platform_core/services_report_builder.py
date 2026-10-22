@@ -56,7 +56,7 @@ def _field_defs_by_code(entity) -> dict:
     return {f.code: f for f in FieldDefinition.objects.filter(entity=entity)}
 
 
-def validate_definition(report: ReportDefinition, role) -> None:
+def validate_definition(report: ReportDefinition, user) -> None:
     """Task A.3 — checks every referenced field path exists and the
     AUTHOR has access to it. Server re-checks per VIEWER at run time
     regardless (run_report() below), so a report shared too broadly still
@@ -72,9 +72,9 @@ def validate_definition(report: ReportDefinition, role) -> None:
         raise ReportExpressionError(f'Unknown field code(s) on {report.base_entity.code}: {sorted(unknown)}')
 
     for field_code in all_referenced:
-        access = resolve_field_access(role, report.base_entity, field_defs[field_code])
+        access = resolve_field_access(user, report.base_entity, field_defs[field_code])
         if access == 'hidden':
-            raise ReportSecurityError(f'{role}: no access to field {field_code!r} referenced by this report.')
+            raise ReportSecurityError(f'{user}: no access to field {field_code!r} referenced by this report.')
     # Calculated-column type-checking beyond parse-at-eval-time (Task A.3's
     # "type-check calculated columns") is a documented follow-up, not
     # built this pass — _eval_calculated_column() below already rejects
@@ -107,7 +107,7 @@ def run_report(report: ReportDefinition, viewer, *, parameters: dict | None = No
         for column in report.columns:
             field_code = column['field_code']
             field_def = field_defs[field_code]
-            access = resolve_field_access(viewer.role, report.base_entity, field_def)
+            access = resolve_field_access(viewer, report.base_entity, field_def)
             if access == 'hidden':
                 continue
             raw_value = record.data.get(field_code)

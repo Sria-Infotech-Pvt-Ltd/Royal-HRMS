@@ -7,13 +7,12 @@ import Modal from "@/components/Modal";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import SearchableSelect from "@/components/SearchableSelect";
 import type { JobTemplate, OrgUnit, Position, PositionPayload } from "@/types/orgStructure";
-import type { BranchOption, RoleOption } from "./OrgStructureClient";
+import type { BranchOption } from "./OrgStructureClient";
 
 interface Props {
   unit: OrgUnit | null;
   jobs: JobTemplate[];
   branches: BranchOption[];
-  roles: RoleOption[];
   hasChief: boolean;
   onClose: () => void;
   onCreated: (position: Position) => void;
@@ -23,12 +22,11 @@ function Spin() {
   return <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />;
 }
 
-export default function AddPositionModal({ unit, jobs, branches, roles, hasChief, onClose, onCreated }: Props) {
+export default function AddPositionModal({ unit, jobs, branches, hasChief, onClose, onCreated }: Props) {
   const [title, setTitle]       = useState("");
   const [jobTemplate, setJobTemplate] = useState("");
   const [grade, setGrade]       = useState("");
   const [branch, setBranch]     = useState("");
-  const [defaultRole, setDefaultRole] = useState("");
   const [isChief, setIsChief]   = useState(!hasChief);
   const [titleError, setTitleError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -43,7 +41,6 @@ export default function AddPositionModal({ unit, jobs, branches, roles, hasChief
       org_unit: unit.id, job_template: jobTemplate || null,
       title: title.trim(), grade: grade.trim().toUpperCase(), is_chief: isChief,
       branch: branch ? Number(branch) : null,
-      default_role: defaultRole ? Number(defaultRole) : null,
     };
     try {
       const res = await clientApi.post(API.orgStructure.positions.list, payload);
@@ -108,15 +105,6 @@ export default function AddPositionModal({ unit, jobs, branches, roles, hasChief
         <SearchableSelect
           value={branch} onChange={setBranch} placeholder="Company-wide"
           options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
-          inputClassName="field-input"
-        />
-      </div>
-
-      <div className="field-group mb-16">
-        <label className="field-label">Default Role <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — suggested to HR when hiring into this seat)</span></label>
-        <SearchableSelect
-          value={defaultRole} onChange={setDefaultRole} placeholder="None"
-          options={roles.map(r => ({ value: String(r.id), label: r.display_name }))}
           inputClassName="field-input"
         />
       </div>

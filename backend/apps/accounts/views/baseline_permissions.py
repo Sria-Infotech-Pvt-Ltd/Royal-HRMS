@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.accounts.models import AuditLog, BaselinePermission, Permission
+from apps.accounts.services_sessions import active_user_ids, force_relogin
 from core.access import baseline_codenames
 from core.permissions import has_perm as _has_perm
 from core.responses import error, get_client_ip, success
@@ -44,6 +45,8 @@ class BaselinePermissionsView(APIView):
             for permission in Permission.objects.filter(codename__in=wanted - set(before)):
                 BaselinePermission.objects.create(permission=permission)
         after = sorted(baseline_codenames())
+        if after != before:
+            force_relogin(active_user_ids())
         AuditLog.objects.create(
             user=request.user, action='baseline_permissions_update', module='settings',
             changes={'before': before, 'after': after}, ip_address=get_client_ip(request),

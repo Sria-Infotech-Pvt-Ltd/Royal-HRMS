@@ -27,15 +27,12 @@ def _seat_permission_rows(user):
 
 def has_perm(user, codename: str, *, full_access_bypass: bool = True) -> bool:
     """
-    True if the user holds `codename` through their ROLE (legacy) or through the POSITION they hold today.
+    True if the user holds `codename` through the POSITION they hold today or the company baseline.
 
     Single shared implementation — this used to be copy-pasted independently
     across 36 view/serializer files and had drifted into three incompatible
     behaviors. Always use this instead of redefining _has_perm locally.
 
-    Roles are being removed in favour of position-based access: permissions
-    are the union of both sources until the role path is deleted, so
-    migrating a seat's permissions in never takes anything away.
     """
     if not user:
         return False
@@ -47,8 +44,6 @@ def has_perm(user, codename: str, *, full_access_bypass: bool = True) -> bool:
     # signal — checking it here (permission-based) instead of a hardcoded
     # role name means anything actually granted settings.edit gets the same bypass.
     wanted = {codename, 'settings.edit'} if full_access_bypass else {codename}
-    if user.role and user.role.role_permissions.filter(permission__codename__in=wanted).exists():
-        return True
     if not _is_saved_user(user):
         return False  # a stand-in object, not a saved User: there is no seat or baseline to look up
     if _seat_permission_rows(user).filter(permission__codename__in=wanted).exists():
@@ -65,7 +60,7 @@ def effective_permission_codenames(user) -> list[str]:
     with what has_perm() above would actually allow server-side.
 
     A superuser gets every real codename that exists. Everyone else gets
-    their role's codenames (legacy) plus those of the position they hold today.
+    the permissions of the position they hold today plus the company baseline.
     """
     if not user:
         return []
@@ -73,8 +68,6 @@ def effective_permission_codenames(user) -> list[str]:
         from apps.accounts.models import Permission
         return list(Permission.objects.values_list('codename', flat=True))
     codenames = set()
-    if user.role:
-        codenames.update(rp.permission.codename for rp in user.role.role_permissions.all())
     if not _is_saved_user(user):
         return sorted(codenames)
     codenames.update(_seat_permission_rows(user).values_list('permission__codename', flat=True))
