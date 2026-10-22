@@ -63,13 +63,19 @@ def _employee_out_of_scope(requesting_user, employee) -> bool:
 
 def _with_active_maintenance(qs):
     """Prefetches each asset's in-progress maintenance record (if any) as
-    `_active_maintenance`, read by AssetSerializer.get_active_maintenance —
-    avoids an N+1 query per row on the list endpoint."""
+    `_active_maintenance`, and its current (status 'assigned') assignment as
+    `_active_assignment` — read by AssetSerializer.get_active_maintenance /
+    get_active_assignment — avoiding an N+1 query per row on the list endpoint."""
     return qs.prefetch_related(
         Prefetch(
             'maintenance_records',
             queryset=AssetMaintenanceRecord.objects.filter(status=AssetMaintenanceRecord.STATUS_IN_PROGRESS),
             to_attr='_active_maintenance',
+        ),
+        Prefetch(
+            'assignments',
+            queryset=AssetAssignment.objects.filter(status=AssetAssignment.STATUS_ASSIGNED).select_related('employee'),
+            to_attr='_active_assignment',
         ),
     )
 
@@ -271,7 +277,7 @@ class AssetListCreateView(APIView):
         page_obj, paginator = paginate(qs, request, default_page_size=20)
         return success(
             'Assets retrieved successfully.',
-            data=paginated_data(paginator, page_obj, AssetSerializer(page_obj.object_list, many=True).data),
+            data=paginated_data(paginator, page_obj, AssetSerializer(page_obj.object_list, many=True, context={'request': request}).data),
         )
 
     def post(self, request):
@@ -326,7 +332,7 @@ class AssetDetailView(APIView):
         asset, err = self._get(request, pk)
         if err:
             return err
-        return success('Asset retrieved.', data=AssetSerializer(asset).data)
+        return success('Asset retrieved.', data=AssetSerializer(asset, context={'request': request}).data)
 
     def _update(self, request, pk, partial: bool):
         if not _has_perm(request.user, 'assets.edit'):
@@ -349,7 +355,7 @@ class AssetDetailView(APIView):
             object_id=str(updated.pk), changes={'asset_tag': updated.asset_tag},
             branch=updated.branch.branch_name, ip_address=get_client_ip(request),
         )
-        return success('Asset updated successfully.', data=AssetSerializer(updated).data)
+        return success('Asset updated successfully.', data=AssetSerializer(updated, context={'request': request}).data)
 
     def put(self, request, pk):
         return self._update(request, pk, partial=False)

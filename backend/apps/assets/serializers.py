@@ -74,6 +74,7 @@ class AssetSerializer(serializers.ModelSerializer):
     condition_display = serializers.CharField(source='get_condition_display', read_only=True)
     created_by_name    = serializers.CharField(source='created_by.full_name', read_only=True, default=None)
     active_maintenance = serializers.SerializerMethodField()
+    active_assignment  = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
@@ -83,11 +84,11 @@ class AssetSerializer(serializers.ModelSerializer):
             'serial_number', 'purchase_date', 'purchase_price', 'vendor',
             'warranty_start_date', 'warranty_end_date',
             'branch', 'branch_name', 'status', 'status_display', 'condition', 'condition_display',
-            'description', 'created_by_name', 'active_maintenance', 'created_at', 'updated_at',
+            'description', 'created_by_name', 'active_maintenance', 'active_assignment', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'branch_name', 'status_display', 'condition_display',
-            'created_by_name', 'active_maintenance', 'created_at', 'updated_at',
+            'created_by_name', 'active_maintenance', 'active_assignment', 'created_at', 'updated_at',
         ]
 
     def get_active_maintenance(self, obj: Asset) -> dict | None:
@@ -108,6 +109,42 @@ class AssetSerializer(serializers.ModelSerializer):
             'issue': record.issue,
             'expected_completion_date': record.expected_completion_date,
             'vendor': record.vendor,
+        }
+
+    def get_active_assignment(self, obj: Asset) -> dict | None:
+        """
+        The asset's current holder: its one AssetAssignment in status
+        'assigned' (a DB constraint allows at most one). Returned assignments
+        are history and never shown here.
+
+        The employee's name / code are included only when the requesting user
+        may see that employee — the same rule as the employee-assets endpoint
+        (admins: anyone; managers: direct reports; others: own branch).
+        Otherwise, or without a request in context, they are withheld and
+        employee_hidden is true.
+        """
+        records = getattr(obj, '_active_assignment', None)
+        if records is None:
+            records = list(obj.assignments.filter(status=AssetAssignment.STATUS_ASSIGNED)
+                           .select_related('employee')[:1])
+        if not records:
+            return None
+        assignment = records[0]
+        employee = assignment.employee
+        request = self.context.get('request')
+        visible = False
+        if request is not None and employee is not None:
+            from apps.assets.views import _employee_out_of_scope, _is_admin
+            visible = _is_admin(request.user) or not _employee_out_of_scope(request.user, employee)
+        return {
+            'id': str(assignment.pk),
+            'status': assignment.status,
+            'status_display': assignment.get_status_display(),
+            'assigned_date': assignment.assigned_date,
+            'expected_return_date': assignment.expected_return_date,
+            'employee_hidden': not visible,
+            'employee_name': (employee.full_name or None) if visible else None,
+            'employee_code': (employee.employee_id or None) if visible else None,
         }
 
     def validate_asset_tag(self, value: str) -> str:

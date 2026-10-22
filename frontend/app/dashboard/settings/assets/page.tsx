@@ -6,6 +6,7 @@ import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import Modal from "@/components/Modal";
+import AssignmentDetails from "./_components/AssignmentDetails";
 import BulkAssignAssetsModal from "./_components/BulkAssignAssetsModal";
 import BulkImportAssetsModal from "./_components/BulkImportAssetsModal";
 import {
@@ -455,6 +456,8 @@ export default function AssetsSettingsPage() {
           }
         >
           {saveError && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {saveError}</div>}
+
+          {modal === "edit" && editing && <AssignmentDetails asset={editing} />}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div className="field-group mb-16">

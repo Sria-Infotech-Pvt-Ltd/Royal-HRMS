@@ -47,6 +47,19 @@ export const MAINTENANCE_OUTCOME_OPTIONS: { value: MaintenanceOutcome; label: st
   { value: "not_repairable", label: "Not Repairable" },
 ];
 
+/** Read-only summary of an asset's current assignment (from the asset API). */
+export interface ActiveAssignment {
+  id: string;
+  status: "assigned";
+  status_display: string;
+  assigned_date: string;
+  expected_return_date: string | null;
+  /** True when the viewer may not see this employee — name and code are then null. */
+  employee_hidden: boolean;
+  employee_name: string | null;
+  employee_code: string | null;
+}
+
 export interface ActiveMaintenance {
   id: string;
   maintenance_start_date: string;
@@ -105,6 +118,8 @@ export interface Asset {
   description: string;
   created_by_name: string | null;
   active_maintenance: ActiveMaintenance | null;
+  /** Current holder (the one assignment in status "assigned"); null when not assigned. */
+  active_assignment?: ActiveAssignment | null;
   created_at: string;
   updated_at: string;
 }
