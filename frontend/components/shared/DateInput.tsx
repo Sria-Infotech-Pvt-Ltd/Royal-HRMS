@@ -24,6 +24,11 @@ interface Props {
   /** ISO bounds — dates outside them are treated as invalid. */
   min?: string;
   max?: string;
+  /** Displayed/typed separator — "/" everywhere by default (the app-wide
+   * convention). Only override to "-" where a screen's surrounding text
+   * already reads DD-MM-YYYY and a mix of the two in one place would be
+   * the actual bug (e.g. the Hire modal's summary panel). */
+  separator?: "/" | "-";
 }
 
 // Layout properties that belong on the outer wrapper (so a fixed-width or flex-sized date filter keeps its size),
@@ -47,13 +52,13 @@ function splitStyle(style: CSSProperties | undefined): { wrapper: CSSProperties;
 const MIN_YEAR = 1900;
 const MAX_YEAR = 2100;
 
-function isoToText(iso: string): string {
+function isoToText(iso: string, sep: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : "";
+  return match ? `${match[3]}${sep}${match[2]}${sep}${match[1]}` : "";
 }
 
-function textToIso(text: string): string {
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+function textToIso(text: string, sep: string): string {
+  const match = new RegExp(`^(\\d{2})\\${sep}(\\d{2})\\${sep}(\\d{4})$`).exec(text);
   if (!match) return "";
   const day = Number(match[1]);
   const month = Number(match[2]);
@@ -65,19 +70,19 @@ function textToIso(text: string): string {
   return `${match[3]}-${match[2]}-${match[1]}`;
 }
 
-/** Keeps digits only and re-inserts the slashes, so typing "30031995" or "30/03/1995" both give 30/03/1995. */
-function formatDigits(raw: string): string {
+/** Keeps digits only and re-inserts the separator, so typing "30031995" or "30/03/1995" both give 30/03/1995. */
+function formatDigits(raw: string, sep: string): string {
   const digits = raw.replace(/\D/g, "").slice(0, 8);
   let formatted = digits.slice(0, 2);
-  if (digits.length > 2) formatted += `/${digits.slice(2, 4)}`;
-  if (digits.length > 4) formatted += `/${digits.slice(4)}`;
+  if (digits.length > 2) formatted += `${sep}${digits.slice(2, 4)}`;
+  if (digits.length > 4) formatted += `${sep}${digits.slice(4)}`;
   return formatted;
 }
 
-export default function DateInput({ value, onChange, id, className, style, disabled = false, readOnly = false, required = false, title, min, max }: Props) {
+export default function DateInput({ value, onChange, id, className, style, disabled = false, readOnly = false, required = false, title, min, max, separator = "/" }: Props) {
   const { wrapper: wrapperStyle, input: inputStyle } = splitStyle(style);
   const isLocked = disabled || readOnly;
-  const [text, setText] = useState(() => isoToText(value));
+  const [text, setText] = useState(() => isoToText(value, separator));
   const lastEmitted = useRef(value);
   const calendarRef = useRef<HTMLInputElement | null>(null);
 
@@ -85,9 +90,9 @@ export default function DateInput({ value, onChange, id, className, style, disab
   useEffect(() => {
     if (value !== lastEmitted.current) {
       lastEmitted.current = value;
-      setText(isoToText(value));
+      setText(isoToText(value, separator));
     }
-  }, [value]);
+  }, [value, separator]);
 
   function emit(isoDate: string) {
     const withinBounds = isoDate !== "" && (!min || isoDate >= min) && (!max || isoDate <= max);
@@ -99,13 +104,13 @@ export default function DateInput({ value, onChange, id, className, style, disab
   }
 
   function handleTyped(raw: string) {
-    const formatted = formatDigits(raw);
+    const formatted = formatDigits(raw, separator);
     setText(formatted);
-    emit(textToIso(formatted));
+    emit(textToIso(formatted, separator));
   }
 
   function handlePicked(isoDate: string) {
-    setText(isoToText(isoDate));
+    setText(isoToText(isoDate, separator));
     emit(isoDate);
   }
 
@@ -123,7 +128,7 @@ export default function DateInput({ value, onChange, id, className, style, disab
         type="text"
         inputMode="numeric"
         autoComplete="off"
-        placeholder="DD/MM/YYYY"
+        placeholder={`DD${separator}MM${separator}YYYY`}
         maxLength={10}
         value={text}
         disabled={disabled}

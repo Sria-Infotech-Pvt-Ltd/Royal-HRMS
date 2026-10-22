@@ -2742,12 +2742,18 @@ html[data-theme="dark"] {
 }
 
 /* Drawer / Slide Panel */
-.drawer-overlay { position: fixed; inset: 0; background: rgba(28,28,25,0.4); z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; backdrop-filter: blur(2px); }
+/* z-index 1100+ — same fix as .modal-overlay above (QA report #51): the
+   floating voice button is z-index 1000 in the root stacking context, so
+   anything meant to sit above it needs to clear that, not just tie it.
+   This drawer previously tied at 1000/1001 and lost to the voice button on
+   DOM order, covering the "Edit full record" footer button in the
+   Employee Detail drawer. */
+.drawer-overlay { position: fixed; inset: 0; background: rgba(28,28,25,0.4); z-index: 1100; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; backdrop-filter: blur(2px); }
 .drawer-overlay.open { opacity: 1; pointer-events: auto; }
 /* Widened from 480px — the reference full-profile drawer's 2-column field
    grid (Personal Details/Employment & Assignment/etc.) needs real room; at
    480px those columns were cramped compared to the reference layout. */
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(860px, 92vw); max-width: 100vw; background: var(--surface); box-shadow: -4px 0 24px rgba(0,0,0,0.1); z-index: 1001; transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(860px, 92vw); max-width: 100vw; background: var(--surface); box-shadow: -4px 0 24px rgba(0,0,0,0.1); z-index: 1101; transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; }
 .drawer.open { transform: translateX(0); }
 .drawer-header { padding: 20px 24px; border-bottom: 1px solid var(--outline-v); display: flex; align-items: center; justify-content: space-between; background: var(--surface); flex-shrink: 0; }
 .drawer-title { font-size: 16px; font-weight: 600; color: var(--on-bg); }

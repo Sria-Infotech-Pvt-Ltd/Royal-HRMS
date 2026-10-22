@@ -160,7 +160,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
           </div>
           <div className="f">
             <label>Effective from <span className="req">*</span></label>
-            <DateInput min={todayStr} value={effectiveFrom} onChange={setEffectiveFrom} className="finput" />
+            <DateInput min={todayStr} value={effectiveFrom} onChange={setEffectiveFrom} className="finput" separator="-" />
             <p className="hint">This becomes the date of joining.</p>
           </div>
         </div>
