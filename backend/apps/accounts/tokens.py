@@ -26,6 +26,7 @@ def _volatile_claims(user) -> dict:
     """
     return {
         'onboarding_status':     user.onboarding_status,
+        'requires_self_service_onboarding': user.requires_self_service_onboarding,
         'assessment_status':     user.assessment_status,
         'can_manage_team':       can_manage_team(user),
         'can_manage_branch':     can_manage_branch(user),

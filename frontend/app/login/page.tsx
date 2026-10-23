@@ -22,6 +22,7 @@ interface LoginApiResponse {
       permissions: string[];
       must_change_password: boolean;
       onboarding_status: string;
+      requires_self_service_onboarding: boolean;
       assessment_status: string;
       can_manage_team: boolean;
       can_manage_branch: boolean;
@@ -80,6 +81,7 @@ export default function LoginPage() {
         branch: d.user.branch ?? "",
         permissions: d.user.permissions ?? [],
         onboarding_status: d.user.onboarding_status ?? "complete",
+        requires_self_service_onboarding: d.user.requires_self_service_onboarding ?? false,
         assessment_status: d.user.assessment_status ?? "complete",
         can_manage_team:   d.user.can_manage_team ?? false,
         can_manage_branch: d.user.can_manage_branch ?? false,
@@ -99,7 +101,7 @@ export default function LoginPage() {
       // Branch Admin is the same kind of administrative account (assigned at
       // branch-creation time, not hired through the candidate pipeline), so
       // it gets the same exemption.
-      else if (user.onboarding_status !== "complete" && !user.is_superuser && !user.can_manage_branch) dest = "/onboarding";
+      else if (user.requires_self_service_onboarding && user.onboarding_status !== "complete" && !user.is_superuser && !user.can_manage_branch) dest = "/onboarding";
       // Managers get auto-assigned default assessments the same as any new
       // employee (no role distinction on the backend), but the pre-onboarding
       // assessment portal isn't meant for them — skip it here too, matching

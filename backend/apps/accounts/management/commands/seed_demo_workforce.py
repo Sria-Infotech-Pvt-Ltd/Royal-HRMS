@@ -2,8 +2,8 @@
 Management command: seed_demo_workforce
 
 DEMO / TEST DATA ONLY — for a development or demo server that no client uses. Builds a realistic Indian workforce
-so every screen can be checked as each persona: the four demo logins (password `demo@1`), 24 employees across
-Hyderabad, Bengaluru, Pune and Chennai, about three months of backdated attendance (weekly offs, holidays, late
+so every screen can be checked as each persona: four demo logins, 100 employees across Hyderabad, Bengaluru, Pune
+and Chennai, backdated attendance (weekly offs, holidays, late
 marks, half days, work-from-home, approved leave, absences, punch corrections) and two real payroll cycles per
 office, run through the project's own payroll endpoints until they are paid.
 
@@ -25,7 +25,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection, transaction
+from django.db import close_old_connections, connection, transaction
 from django.db.models import ProtectedError
 from django.utils import timezone
 
@@ -131,15 +131,22 @@ class Command(BaseCommand):
         if options['cleanup']:
             return self._cleanup()
         actor = self._actor(options['actor_email'])
-        try:
-            with transaction.atomic():
-                self._seed(options, actor)
-                if options['rehearse']:
+        if options['rehearse']:
+            try:
+                with transaction.atomic():
+                    self._seed(options, actor)
                     raise _RehearsalDone()
-        except _RehearsalDone:
-            self.stdout.write(self.style.WARNING('Rehearsal only — everything above was rolled back; nothing was saved.'))
-            return
-        self.stdout.write(self.style.SUCCESS('Done. Log in as payroll@ / manager@ / employee@ / hr@example.com (password demo@1).'))
+            except _RehearsalDone:
+                self.stdout.write(self.style.WARNING('Rehearsal only — everything above was rolled back; nothing was saved.'))
+                return
+        else:
+            # The seed is idempotent by employee, attendance day and tagged
+            # payroll cycle. Keep those existing small transaction boundaries
+            # instead of holding one connection-wide transaction across the
+            # entire workforce: long remote Neon transactions can be closed
+            # before all employees and payroll stages finish.
+            self._seed(options, actor)
+        self.stdout.write(self.style.SUCCESS('Demo workforce seed completed.'))
 
     def _seed(self, options, actor):
         # Nothing in this run may email or notify anyone: payroll's own helpers plus the shared SMTP sender are stubbed.
@@ -180,28 +187,44 @@ class Command(BaseCommand):
         email = data.email_for(first, last)
         user = User.objects.filter(email=email).first()
         if user is not None:
+            User.objects.filter(pk=user.pk).update(
+                branch=branches[city].branch_name, branch_fk_id=branches[city].pk,
+                work_location=data.LOCATIONS[city]['address'], work_mode=User.WORK_MODE_OFFICE,
+                onboarding_status=User.ONBOARDING_COMPLETE, assessment_status=User.ASSESSMENT_COMPLETE,
+            )
+            user.branch = branches[city].branch_name
+            user.branch_fk_id = branches[city].pk
+            user.work_location = data.LOCATIONS[city]['address']
+            user.work_mode = User.WORK_MODE_OFFICE
+            user.onboarding_status = User.ONBOARDING_COMPLETE
+            user.assessment_status = User.ASSESSMENT_COMPLETE
             return user, False
         seats = _vacant_seats(unit)
         if not seats:
             self.stdout.write(self.style.WARNING(f'  no vacant seat in {unit} — skipped {first} {last}'))
             return None, False
         user = User.objects.create_user(
-            email=email, password=data.PASSWORD, full_name=f'{first} {last}',
+            email=email, full_name=f'{first} {last}',
             employee_id=EmployeeCodeSettings.generate_employee_id(first_name=first.split()[0], last_name=last, date_of_joining=joined),
-            employee_type=kind, date_of_joining=joined, branch=branches[city].branch_name, phone='',
+            employee_type=kind, date_of_joining=joined, branch=branches[city].branch_name,
+            branch_fk_id=branches[city].pk, phone='', work_location=data.LOCATIONS[city]['address'],
+            work_mode=User.WORK_MODE_OFFICE,
             must_change_password=False, onboarding_status=User.ONBOARDING_COMPLETE,
             assessment_status=User.ASSESSMENT_COMPLETE,
         )
         assign_position(user, seats[0], effective_from=joined)
         if is_lead:  # a team lead's seat manages a team
             Position.objects.filter(pk=seats[0].pk).update(can_manage_team=True)
-        User.objects.filter(pk=user.pk).update(branch=branches[city].branch_name, reporting_manager=manager)
+        User.objects.filter(pk=user.pk).update(
+            branch=branches[city].branch_name, branch_fk_id=branches[city].pk, reporting_manager=manager,
+        )
         return user, True
 
     def _create_people(self, branches, policy, with_photos) -> list:
         qa_manager = User.objects.filter(email='manager@example.com').first()
         leads, people, created = {}, [], 0
         for row in data.ROSTER:
+            close_old_connections()
             city = row[3]
             is_lead = data.team_leads().get(city) == (row[0], row[1])
             manager = qa_manager if city == 'Hyderabad' else leads.get(city)
@@ -215,9 +238,11 @@ class Command(BaseCommand):
         today = timezone.localdate()
         everyone = [u for u, _ in people] + list(User.objects.filter(email__in=PERSONA_EMAILS))
         for user in everyone:
+            close_old_connections()
             fill_user(user, today, skip_photos=not with_photos)
         self._fix_addresses(people, branches)
         for user in everyone:  # only people with no weekly-off pattern yet — an existing pattern is never replaced
+            close_old_connections()
             if not EmployeeWeeklyOffAssignment.objects.filter(employee=user).exists():
                 bulk_assign_weekly_off([user.employee_id], policy, user.date_of_joining or today)
         self.stdout.write(f'Employees created: {created} (of {len(data.ROSTER)} in the roster).')
@@ -226,6 +251,7 @@ class Command(BaseCommand):
     def _fix_addresses(self, people, branches):
         """The generic profile filler puts everyone in Hyderabad/Bengaluru/Pune; match each person's own office city."""
         for user, row in people:
+            close_old_connections()
             spec, city = data.LOCATIONS[row[3]], row[3]
             profile = getattr(user, 'profile', None)
             if profile is None:
@@ -239,6 +265,7 @@ class Command(BaseCommand):
         off_days, end = weekly_off_weekdays(policy), timezone.localdate() - timedelta(days=1)
         totals = {'records': 0, 'punches': 0, 'corrections': 0, 'leaves': 0}
         for user in people:
+            close_old_connections()
             branch = Branch.objects.filter(branch_name=user.branch).first()
             with transaction.atomic():
                 counts = generate_for_employee(user, branch, data.ATTENDANCE_START, end, off_days, holidays, actor)
@@ -250,6 +277,7 @@ class Command(BaseCommand):
         for city, branch in branches.items():
             codes = [u.employee_id for u in people if u.branch == branch.branch_name]
             for period in data.PERIODS:
+                close_old_connections()
                 try:
                     self.stdout.write('Payroll ' + run_cycle(actor, branch, period, codes, any_manager))
                 except PayrollStepError as exc:

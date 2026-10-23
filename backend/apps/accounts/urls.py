@@ -217,18 +217,14 @@ urlpatterns = [
     path('onboarding/sections/',                     OnboardingSectionPublicView.as_view(),     name='onboarding-sections-public'),
     path('onboarding/document-type-config/',         DocumentTypeConfigPublicView.as_view(), name='onboarding-document-type-config'),
 
-    # Education and Work Experience — both genuinely unbounded add/remove
-    # lists, bespoke steps not part of the generic OnboardingFieldConfig/
-    # step-N system (see views_education_experience.py).
+
     path('onboarding/education/',                    EducationListView.as_view(),      name='onboarding-education'),
     path('onboarding/education/<str:pk>/',           EducationDetailView.as_view(),    name='onboarding-education-detail'),
     path('onboarding/experience/',                   ExperienceListView.as_view(),     name='onboarding-experience'),
     path('onboarding/experience/summary/',           TotalExperienceView.as_view(),    name='onboarding-experience-summary'),
     path('onboarding/experience/<str:pk>/',          ExperienceDetailView.as_view(),   name='onboarding-experience-detail'),
 
-    # Family members, EPF nominees, and company assets — same bespoke-step
-    # shape as Education/Experience above (see views_family_nomination.py /
-    # views_assets.py).
+
     path('onboarding/family/',                       FamilyMemberListView.as_view(),   name='onboarding-family'),
     path('onboarding/family/<str:pk>/',              FamilyMemberDetailView.as_view(), name='onboarding-family-detail'),
     path('onboarding/nominees/',                     NomineeListView.as_view(),        name='onboarding-nominees'),
@@ -284,12 +280,12 @@ urlpatterns = [
 
     path('org-structure/units/',                          OrgUnitListCreateView.as_view(),        name='org-unit-list'),
     path('org-structure/units/<uuid:pk>/',                OrgUnitDetailView.as_view(),            name='org-unit-detail'),
-    path('org-structure/positions/<uuid:pk>/permissions/', PositionPermissionsView.as_view(),     name='position-permissions'),
-    path('settings/baseline-permissions/',                BaselinePermissionsView.as_view(),     name='baseline-permissions'),
     path('org-structure/units/<uuid:pk>/deactivate/',     OrgUnitDeactivateView.as_view(),        name='org-unit-deactivate'),
     path('org-structure/positions/',                      PositionListCreateView.as_view(),       name='position-list'),
     path('org-structure/positions/<uuid:pk>/',            PositionDetailView.as_view(),           name='position-detail'),
     path('org-structure/positions/<uuid:pk>/deactivate/', PositionDeactivateView.as_view(),       name='position-deactivate'),
+    path('org-structure/positions/<uuid:pk>/permissions/', PositionPermissionsView.as_view(),     name='position-permissions'),
+    path('settings/baseline-permissions/',                BaselinePermissionsView.as_view(),     name='baseline-permissions'),
     path('org-structure/positions/<uuid:pk>/activate/',   PositionActivateView.as_view(),         name='position-activate'),
     path('org-structure/positions/<uuid:pk>/placements/',     PositionPlacementListCreateView.as_view(), name='position-placement-list'),
     path('org-structure/positions/<uuid:pk>/placements/end/', PositionPlacementEndView.as_view(),      name='position-placement-end'),

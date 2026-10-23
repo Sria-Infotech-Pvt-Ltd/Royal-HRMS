@@ -9,6 +9,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
+from apps.accounts.models import User
 from apps.recruitment.models import Candidate, ReferralBonus
 
 
@@ -130,6 +131,39 @@ class HRDecisionTests(TestCase):
             log_count_after_first,
             'a rejected retry must not create any new log entries (or, by the same logic, resend any email)',
         )
+
+
+class CandidatePortalOnboardingTests(TestCase):
+    """Selected interview candidates use the self-service onboarding path."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        recruiter_role = make_role(
+            'portal_recruiter',
+            permission_codenames=['recruitment.edit'],
+        )
+        self.recruiter = make_user(
+            'portal-recruiter@test.com', role=recruiter_role,
+        )
+        self.candidate = Candidate.objects.create(
+            name='Interview Candidate', email='interview.candidate@test.com',
+            position_applied='QA Engineer', status=Candidate.STATUS_SELECTED,
+        )
+        _login(self.client, self.recruiter.email)
+
+    def test_selected_candidate_receives_self_service_onboarding_account(self):
+        response = self.client.post(
+            reverse('candidate-send-portal-login', kwargs={'pk': self.candidate.pk}),
+            {}, format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.candidate.refresh_from_db()
+        portal_user = self.candidate.portal_user
+        self.assertIsNotNone(portal_user)
+        self.assertTrue(portal_user.requires_self_service_onboarding)
+        self.assertEqual(portal_user.onboarding_status, User.ONBOARDING_PENDING)
+        self.assertTrue(portal_user.must_change_password)
 
 
 class CandidateCreateValidationTests(TestCase):

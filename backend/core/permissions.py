@@ -136,7 +136,8 @@ class HasCompletedOnboarding(BasePermission):
         from core.access import can_manage_team
         if user.is_superuser or has_perm(user, 'employees.view') or can_manage_team(user):
             return True
-        if user.onboarding_status != user.ONBOARDING_COMPLETE:
+        if (user.requires_self_service_onboarding
+                and user.onboarding_status != user.ONBOARDING_COMPLETE):
             return False
         if user.assessment_status == user.ASSESSMENT_PENDING:
             return False

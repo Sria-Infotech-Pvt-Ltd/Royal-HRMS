@@ -5,10 +5,9 @@ public holidays and the payroll periods to run. Pure data — no database access
 Every email is on @example.com (a reserved domain: nothing sent there reaches a real mailbox) and ends in
 `.wf@example.com`, which is how `seed_demo_workforce --cleanup` recognises the people it created.
 """
-from datetime import date
+from datetime import date, timedelta
 
 EMAIL_SUFFIX = '.wf@example.com'
-PASSWORD = 'demo@1'
 CYCLE_TAG = 'DEMO-WORKFORCE'          # PayrollCycle.notes — marks cycles this seed created
 HOLIDAY_TAG = 'Demo workforce seed'   # Holiday.description
 
@@ -56,34 +55,42 @@ PERIODS = [
     (date(2026, 8, 25), date(2026, 9, 24), date(2026, 9, 30)),
 ]
 
-# (first name, last name, gender, city, org unit, date of joining, employee type). The first person listed for a
-# city outside Hyderabad is that city's team lead (role "manager"); Hyderabad reports to manager@example.com.
-ROSTER = [
-    ('Venkata', 'Rao', 'male', 'Hyderabad', 'Cloud & DevOps', date(2022, 6, 13), 'Permanent'),
-    ('Lakshmi', 'Reddy', 'female', 'Hyderabad', 'Product QA', date(2023, 1, 9), 'Permanent'),
-    ('Sai Kiran', 'Goud', 'male', 'Hyderabad', 'SAP Functional', date(2021, 11, 22), 'Permanent'),
-    ('Harika', 'Chowdary', 'female', 'Hyderabad', 'Marketing', date(2024, 2, 5), 'Permanent'),
-    ('Imran', 'Qureshi', 'male', 'Hyderabad', 'IT Support / Helpdesk', date(2023, 8, 16), 'Permanent'),
-    ('Swathi', 'Nandamuri', 'female', 'Hyderabad', 'Content & Courseware', date(2025, 3, 3), 'Permanent'),
-    ('Praveen', 'Yadav', 'male', 'Hyderabad', 'Network & SysAdmin', date(2020, 9, 7), 'Permanent'),
-    ('Sravya', 'Konda', 'female', 'Hyderabad', 'Pre-Sales', date(2026, 4, 20), 'Contract'),
-    ('Suresh', 'Gowda', 'male', 'Bengaluru', 'Cloud & DevOps', date(2019, 7, 1), 'Permanent'),
-    ('Deepa', 'Hegde', 'female', 'Bengaluru', 'Product QA', date(2022, 10, 17), 'Permanent'),
-    ('Manjunath', 'Shetty', 'male', 'Bengaluru', 'Cyber Security', date(2023, 5, 29), 'Permanent'),
-    ('Kavitha', 'Murthy', 'female', 'Bengaluru', 'SAP Technical (ABAP)', date(2021, 2, 8), 'Permanent'),
-    ('Rakesh', 'Naik', 'male', 'Bengaluru', 'Administration & IT', date(2024, 9, 2), 'Permanent'),
-    ('Pallavi', 'Bhat', 'female', 'Bengaluru', 'Quality & Compliance', date(2025, 11, 10), 'Permanent'),
-    ('Omkar', 'Deshmukh', 'male', 'Pune', 'Cloud & DevOps', date(2020, 1, 20), 'Permanent'),
-    ('Snehal', 'Kulkarni', 'female', 'Pune', 'Product QA', date(2022, 3, 14), 'Permanent'),
-    ('Prathamesh', 'Joshi', 'male', 'Pune', 'SAP Functional', date(2023, 12, 4), 'Permanent'),
-    ('Rutuja', 'Patil', 'female', 'Pune', 'Marketing', date(2026, 8, 31), 'Permanent'),
-    ('Aniket', 'Pawar', 'male', 'Pune', 'IT Support / Helpdesk', date(2024, 6, 24), 'Permanent'),
-    ('Karthikeyan', 'Subramanian', 'male', 'Chennai', 'Cloud & DevOps', date(2018, 10, 8), 'Permanent'),
-    ('Meenakshi', 'Iyer', 'female', 'Chennai', 'Product QA', date(2021, 7, 19), 'Permanent'),
-    ('Arun', 'Venkatesh', 'male', 'Chennai', 'Network & SysAdmin', date(2023, 4, 3), 'Permanent'),
-    ('Nithya', 'Rajan', 'female', 'Chennai', 'Content & Courseware', date(2025, 1, 13), 'Permanent'),
-    ('Balaji', 'Srinivasan', 'male', 'Chennai', 'Pre-Sales', date(2026, 1, 12), 'Intern'),
+# (first name, last name, gender, city, org unit, date of joining, employee type).
+# 100 reserved-domain synthetic employees, spread across 20 org units (five
+# currently vacant seats each) and four offices. Type mix: 70 permanent,
+# 20 contract and 10 intern. The roster is deterministic so reruns and
+# cleanup remain safe. The first person in Bengaluru, Pune and Chennai is
+# that office's team lead; Hyderabad reports to manager@example.com.
+_FIRST_NAMES = [
+    'Aarav', 'Ananya', 'Aditya', 'Diya', 'Arjun', 'Ishita', 'Vihaan', 'Aadhya', 'Reyansh', 'Saanvi',
+    'Krishna', 'Myra', 'Dhruv', 'Kavya', 'Rohan', 'Meera', 'Ishaan', 'Tara', 'Kabir', 'Navya',
+    'Ayaan', 'Pooja', 'Neel', 'Riya', 'Dev',
 ]
+_LAST_NAMES = [
+    'Rao', 'Reddy', 'Goud', 'Chowdary', 'Qureshi', 'Nandamuri', 'Yadav', 'Konda', 'Gowda', 'Hegde',
+    'Shetty', 'Murthy', 'Naik', 'Bhat', 'Deshmukh', 'Kulkarni', 'Joshi', 'Patil', 'Pawar', 'Iyer',
+    'Venkatesh', 'Rajan', 'Srinivasan', 'Menon', 'Sharma',
+]
+_UNITS = [
+    'Admissions & Student Services', 'Automation', 'Cloud & DevOps', 'Content & Courseware',
+    'Cyber Security', 'Manual', 'Mobile', 'Network & SysAdmin', 'Pre-Sales', 'Product Engineering',
+    'Product Management', 'Product QA', 'Quality & Compliance', 'SAP Basis', 'SAP Functional',
+    'SAP Technical (ABAP)', 'SEO & SEM', 'Sales', 'Social & Content', 'Talent Acquisition',
+]
+_ROSTER_BY_CITY = {city: [] for city in LOCATIONS}
+for _unit_index, _unit in enumerate(_UNITS):
+    for _seat_index in range(5):
+        _i = _unit_index * 5 + _seat_index
+        _first_index = _i % len(_FIRST_NAMES)
+        _first = _FIRST_NAMES[_first_index]
+        _last = _LAST_NAMES[(_first_index + (_i // len(_FIRST_NAMES)) * 7) % len(_LAST_NAMES)]
+        _city = list(LOCATIONS)[(_unit_index + _seat_index) % len(LOCATIONS)]
+        _joined = date(2018, 1, 1) + timedelta(days=(_i * 29) % 2980)
+        _kind = 'Intern' if _i % 10 == 0 else ('Contract' if _i % 10 in (1, 2) else 'Permanent')
+        _ROSTER_BY_CITY[_city].append((
+            _first, _last, 'female' if _i % 2 else 'male', _city, _unit, _joined, _kind,
+        ))
+ROSTER = [row for city in LOCATIONS for row in _ROSTER_BY_CITY[city]]
 
 
 def email_for(first_name: str, last_name: str) -> str:

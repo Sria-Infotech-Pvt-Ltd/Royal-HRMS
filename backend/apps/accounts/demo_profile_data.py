@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from decimal import Decimal
 
 GENDERS      = ['female', 'male', 'female', 'male']
 BLOODS       = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-']
@@ -67,20 +68,45 @@ def personal_details(number: int, full_name: str) -> dict:
     else:
         gender = GENDERS[number % len(GENDERS)]
     return {
+        'salutation':             'Ms' if gender == 'female' else 'Mr',
+        'middle_name':            'Kumar' if number % 2 else '',
+        'display_name':           f'{first.title()} {last.title()}',
         'date_of_birth':          date(1978 + (number * 7) % 23, 1 + (number * 5) % 12, 1 + (number * 11) % 27),
         'gender':                 gender,
+        'place_of_birth':         city,
         'blood_group':            BLOODS[number % len(BLOODS)],
         'marital_status':         'married' if number % 3 == 0 else 'single',
         'nationality':            'Indian',
+        'father_name':            f'Demo Father {number:03d}',
+        'mother_name':            f'Demo Mother {number:03d}',
+        'languages_known':        'English, Hindi, Telugu',
         'personal_email':         f'{first}.{last}.demo@example.com',
         'current_address':        f'Flat {100 + number}, AIRA Demo Residency',
+        'current_address_line2':  f'Block {1 + number % 12}, Floor {1 + number % 8}',
         'current_village':        city,
         'current_district':       city,
         'current_state':          STATES[number % len(STATES)],
         'current_pin_code':       PIN_CODES[number % len(PIN_CODES)],
+        'permanent_same_as_current': number % 2 == 0,
+        'permanent_address':      f'House {200 + number}, AIRA Demo Colony',
+        'permanent_address_line2': f'Ward {1 + number % 20}',
+        'permanent_village':      city,
+        'permanent_district':     city,
+        'permanent_state':        STATES[number % len(STATES)],
+        'permanent_pin_code':     PIN_CODES[number % len(PIN_CODES)],
+        'highest_qualification':  ('Bachelor of Engineering', 'Bachelor of Commerce', 'Master of Business Administration', 'Bachelor of Science')[number % 4],
+        'institution':            'AIRA Demo University',
+        'year_of_passing':        2000 + number % 23,
+        'specialization':         ('Information Technology', 'Finance', 'Operations', 'Business Administration')[number % 4],
+        'total_experience_years': Decimal(f'{1 + number % 15}.0'),
+        'previous_employer':      'AIRA Demo Systems',
+        'previous_designation':   'Associate',
+        'leaving_reason':         'Career progression',
+        'core_skills':            'Communication, collaboration, role-specific skills',
         'emergency_name':         f'Demo Contact {number:02d}',
         'emergency_relationship': RELATIONSHIPS[number % len(RELATIONSHIPS)],
         'emergency_phone':        f'+91 91111 {str(20000 + number)[-5:]}',
+        'emergency_email':        f'emergency{number:03d}@example.com',
     }
 
 
@@ -93,6 +119,9 @@ def statutory_and_bank(number: int, full_name: str) -> dict:
     return {
         'pan_number':          f'DEMOP{number:04d}X',
         'aadhaar_number':      f'4521{88900000 + number:08d}',
+        'name_as_per_aadhar':  full_name,
+        'uan_number':          str(100000000000 + number),
+        'pf_number':           f'PF/DEMO/{number:06d}',
         'account_holder_name': full_name,
         'account_type':        'savings',
         'account_number':      f'50100234{number:04d}',

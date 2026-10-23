@@ -303,6 +303,12 @@ class User(AbstractBaseUser, PermissionsMixin):
                                   choices=ONBOARDING_CHOICES,
                                   default=ONBOARDING_PENDING,
                               )
+    # A pending status alone cannot tell us *why* a record is incomplete:
+    # interview candidates must complete the employee self-service wizard,
+    # whereas a direct Hire Action has already collected those details from
+    # HR. Keep that workflow decision separate from its current progress so
+    # a later status correction cannot route a direct hire into the wizard.
+    requires_self_service_onboarding = models.BooleanField(default=False)
     # Set alongside onboarding_status going to ONBOARDING_REJECTED (see
     # OnboardingApprovalView) — the exact text HR typed in the "Send Back for
     # Corrections" dialog, so the employee sees what to fix when they land

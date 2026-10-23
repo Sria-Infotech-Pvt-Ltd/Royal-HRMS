@@ -89,6 +89,10 @@ function getOnboardingStatus(request: NextRequest): string {
   return typeof payload.onboarding_status === "string" ? payload.onboarding_status : "complete";
 }
 
+function requiresSelfServiceOnboarding(request: NextRequest): boolean {
+  return getJwtPayload(request).requires_self_service_onboarding === true;
+}
+
 function getAssessmentStatus(request: NextRequest): string {
   const payload = getJwtPayload(request);
   return typeof payload.assessment_status === "string" ? payload.assessment_status : "complete";
@@ -166,6 +170,7 @@ export function proxy(request: NextRequest) {
 
   if (isAuthenticated && !isChangePasswordPage) {
     const onboardingStatus = getOnboardingStatus(request);
+    const requiresOnboarding = requiresSelfServiceOnboarding(request);
     const assessmentStatus = getAssessmentStatus(request);
     const canManageTeam    = getCanManageTeam(request);
     const canManageBranch  = getCanManageBranch(request);
@@ -180,7 +185,7 @@ export function proxy(request: NextRequest) {
     // for the matching exemption at login time). Branch Admin is the same
     // kind of administrative account (assigned at branch-creation time, not
     // hired through the candidate pipeline), so it gets the same exemption.
-    const needsOnboarding = onboardingStatus !== "complete" && !isSuperuser && !canManageBranch;
+    const needsOnboarding = requiresOnboarding && onboardingStatus !== "complete" && !isSuperuser && !canManageBranch;
     // Default assessments get auto-assigned to every new employee record on
     // creation — including managers — with no role distinction, so a manager
     // can end up with assessment_status "pending" despite the pre-onboarding

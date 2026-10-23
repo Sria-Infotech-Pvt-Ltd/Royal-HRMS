@@ -13,6 +13,7 @@ export interface UserInfo {
   branch:            string;
   permissions:       string[];
   onboarding_status: string;   // 'pending' | 'submitted' | 'complete'
+  requires_self_service_onboarding: boolean;
   assessment_status: string;   // 'pending' | 'complete'
   can_manage_team:   boolean;
   can_manage_branch: boolean;

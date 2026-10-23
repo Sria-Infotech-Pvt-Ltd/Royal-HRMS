@@ -207,6 +207,7 @@ class LoginView(APIView):
                 'branch':              user.branch,
                 'must_change_password': user.must_change_password,
                 'onboarding_status':   user.onboarding_status,
+                'requires_self_service_onboarding': user.requires_self_service_onboarding,
                 'assessment_status':   _login_assessment_status(user),
                 'permissions':         permissions,
                 'can_manage_team':     can_manage_team(user),

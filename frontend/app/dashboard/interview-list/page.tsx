@@ -290,7 +290,7 @@ export default function InterviewListPage() {
       {/* Info banner */}
       <div className="alert alert-info" style={{ marginBottom: 16 }}>
         <i className="ti ti-info-circle" />
-        <div>Move candidates through the pipeline stages. Send portal login to selected candidates so they can fill their onboarding wizard.</div>
+        <div>Move candidates through the pipeline stages. Selected candidates receive the nine-step self-service onboarding wizard; direct hires use the HR hiring form and skip it.</div>
       </div>
 
       {/* Table */}
@@ -318,7 +318,7 @@ export default function InterviewListPage() {
       {portalConfirm && (
         <ConfirmModal
           title="Send portal login?"
-          body={`This emails ${portalConfirm.name} (${portalConfirm.email}) their onboarding portal login credentials.`}
+          body={`This emails ${portalConfirm.name} (${portalConfirm.email}) their portal login credentials and opens the nine-step self-service onboarding wizard after they change their temporary password.`}
           confirmLabel="Send Login"
           saving={sendingPortal === portalConfirm.id}
           onConfirm={confirmSendPortalLogin}

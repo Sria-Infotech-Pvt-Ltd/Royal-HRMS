@@ -141,7 +141,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
         )}
 
         <p className="hint">
-          Start a Hire action. The hiring form opens next, pre-filled with what you enter here.
+          Start a Hire action. HR completes the hiring form here, so this employee will go directly to their dashboard after their first password change rather than receiving the self-service onboarding wizard.
         </p>
 
         <div className="section-label">Action</div>

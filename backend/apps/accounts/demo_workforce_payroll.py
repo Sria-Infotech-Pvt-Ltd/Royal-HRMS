@@ -8,6 +8,7 @@ The runner is state-driven and idempotent: it finds the cycle it tagged earlier 
 status it is in. A cycle that was not created by this seed is never advanced.
 """
 from django.test import override_settings
+from django.db import close_old_connections
 from rest_framework.test import APIClient
 
 from apps.accounts.demo_workforce_data import CYCLE_TAG
@@ -21,6 +22,7 @@ class PayrollStepError(Exception):
 
 
 def _call(client, user, method, path, payload=None):
+    close_old_connections()
     client.force_authenticate(user=user)
     response = getattr(client, method)(path, payload or {}, format='json')
     body = response.json() if response['Content-Type'].startswith('application/json') else {}

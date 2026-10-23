@@ -98,6 +98,7 @@ class SendPortalLoginView(APIView):
             full_name        = candidate.name,
             must_change_password = True,
             onboarding_status    = User.ONBOARDING_PENDING,
+            requires_self_service_onboarding = True,
         )
 
         candidate.portal_user             = portal_user

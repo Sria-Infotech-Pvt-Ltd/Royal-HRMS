@@ -528,3 +528,4 @@ class HireCompletionOnboardingStatusTests(HireWizardTestCase):
         from apps.accounts.models import User
         employee = User.objects.get(pk=resp.data['data']['created_employee'])
         self.assertEqual(employee.onboarding_status, User.ONBOARDING_COMPLETE)
+        self.assertFalse(employee.requires_self_service_onboarding)
