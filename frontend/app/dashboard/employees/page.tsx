@@ -92,10 +92,17 @@ function EmployeesPageInner() {
 
       <section className="panel">
         <div className="panel-h">
-          <h2>All <em className="hl">employees</em><span className="cnt">{emp.totalCount} of {emp.total}</span></h2>
+          <h2>
+            All <em className="hl">employees</em>
+            <span className="cnt">
+              {emp.search.trim()
+                ? `${emp.totalCount} matches for "${emp.search.trim()}"`
+                : `${emp.totalCount} of ${emp.total}`}
+            </span>
+          </h2>
         </div>
         <EmployeeToolbar
-          search={emp.search} onSearchChange={emp.setSearch}
+          search={emp.search} onSearchChange={emp.setSearch} onSearchSubmit={emp.submitSearch} searching={emp.loading}
           branch={emp.branch} branchOptions={emp.branchOptions} onBranchChange={emp.setBranch}
           isAdmin={emp.isAdmin} userBranch={emp.userBranch}
           dept={emp.dept} deptOptions={emp.deptOptions} onDeptChange={emp.setDept}

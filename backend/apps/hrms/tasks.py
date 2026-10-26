@@ -21,7 +21,7 @@ def reset_annual_leave_balances(self):
     Annual task: runs on 1st Jan at 00:01 IST.
 
     For every active employee:
-    - Checks each active LeavePolicy for eligibility (branch, dept, designation, service period).
+    - Checks each active LeavePolicy for eligibility (gender, branch, dept, designation, service period).
     - Carries forward unused days from the previous year (capped by max_carry_forward_days).
     - Creates a new LeaveBalance for the new year.
 
@@ -53,6 +53,7 @@ def reset_annual_leave_balances(self):
         skipped_total = 0
 
         from apps.accounts.services_approval import resolve_employee_department_name
+        from apps.hrms.services_leave_ledger import employee_matches_policy_gender
 
         for employee in active_employees:
             doj           = getattr(employee, 'date_of_joining', None)
@@ -62,6 +63,8 @@ def reset_annual_leave_balances(self):
             emp_dept_name = resolve_employee_department_name(employee)
 
             for policy in policies:
+                if not employee_matches_policy_gender(employee, policy):
+                    continue
                 if policy.minimum_service_period > 0 and months_served < policy.minimum_service_period:
                     continue
 
@@ -134,7 +137,7 @@ def accrue_monthly_leave_balances(self):
     dept, designation) as the annual task.
 
     Uses the same active/eligible employee set and eligibility rules
-    (service period, branch, dept, designation) as the annual task above.
+    (gender, service period, branch, dept, designation) as the annual task above.
     Does not carry forward unused balance across years — a monthly-accrual
     policy (e.g. Earned Leave credited monthly, or Compensatory Off) is
     expected to configure carry-forward, if any, the same way the annual
@@ -166,6 +169,7 @@ def accrue_monthly_leave_balances(self):
         skipped_total  = 0
 
         from apps.accounts.services_approval import resolve_employee_department_name
+        from apps.hrms.services_leave_ledger import employee_matches_policy_gender
 
         for employee in active_employees:
             doj           = getattr(employee, 'date_of_joining', None)
@@ -175,6 +179,8 @@ def accrue_monthly_leave_balances(self):
             emp_dept_name = resolve_employee_department_name(employee)
 
             for policy in policies:
+                if not employee_matches_policy_gender(employee, policy):
+                    continue
                 if policy.minimum_service_period > 0 and months_served < policy.minimum_service_period:
                     continue
 

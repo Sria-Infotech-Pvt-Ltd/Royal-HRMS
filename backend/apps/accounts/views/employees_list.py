@@ -210,13 +210,15 @@ class EmployeeListCreateView(APIView):
                 qs = qs.filter(is_active=False)
             elif status_param == 'active':
                 qs = qs.filter(
-                    is_active=True, must_change_password=False, employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
+                    is_active=True, onboarding_status=User.ONBOARDING_COMPLETE,
+                    employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
                 ).exclude(notice_period_q)
             elif status_param == 'onboarding':
-                qs = qs.filter(is_active=True, must_change_password=True)
+                qs = qs.filter(is_active=True).exclude(onboarding_status=User.ONBOARDING_COMPLETE)
             elif status_param == 'probation':
                 qs = qs.filter(
-                    is_active=True, must_change_password=False, employment_status=User.EMPLOYMENT_STATUS_PROBATION,
+                    is_active=True, onboarding_status=User.ONBOARDING_COMPLETE,
+                    employment_status=User.EMPLOYMENT_STATUS_PROBATION,
                 ).exclude(notice_period_q)
             elif status_param == 'notice_period':
                 qs = qs.filter(is_active=True).filter(notice_period_q).distinct()
@@ -611,13 +613,17 @@ class EmployeeStatsView(APIView):
             separation_requests__proposed_last_working_day__gte=today,
         )
         active_qs = qs.filter(is_active=True)
-        # "Onboarding / Probation" — either still going through the wizard
-        # (must_change_password, same signal EmployeeListCreateView.get()'s
-        # own status filter uses) or already onboarded but not yet
-        # confirmed (employment_status='probation', see the Confirmation
-        # action — apps/accounts/views.py:EmployeeConfirmView).
+        # "Onboarding / Probation" — either still completing the onboarding
+        # workflow or already onboarded but not yet confirmed. A forced
+        # first-password change is a separate login-security step and must
+        # not be mistaken for incomplete onboarding.
         onboarding_or_probation_qs = active_qs.filter(
-            Q(must_change_password=True) | Q(employment_status=User.EMPLOYMENT_STATUS_PROBATION)
+            Q(onboarding_status__in=[
+                User.ONBOARDING_PENDING,
+                User.ONBOARDING_DRAFT,
+                User.ONBOARDING_SUBMITTED,
+                User.ONBOARDING_REJECTED,
+            ]) | Q(employment_status=User.EMPLOYMENT_STATUS_PROBATION)
         )
         notice_period_count = active_qs.filter(notice_period_q).distinct().count()
         new_this_month = active_qs.filter(
@@ -639,13 +645,16 @@ class EmployeeStatsView(APIView):
         # — otherwise the two disagree (e.g. this card showing a nonzero count
         # while the table's Active filter shows none, or vice versa).
         active_count = qs.filter(
-            is_active=True, must_change_password=False, employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
+            is_active=True, onboarding_status=User.ONBOARDING_COMPLETE,
+            employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
         ).exclude(notice_period_q).count()
 
         return success('Employee statistics retrieved.', data={
             'total':             qs.count(),
             'active':            active_count,
-            'onboarding':        qs.filter(is_active=True, must_change_password=True).count(),
+            'onboarding':        qs.filter(is_active=True).exclude(
+                onboarding_status=User.ONBOARDING_COMPLETE,
+            ).count(),
             'departments':       departments_count,
             'branch_names':      branch_names,
             'department_names':  department_names,

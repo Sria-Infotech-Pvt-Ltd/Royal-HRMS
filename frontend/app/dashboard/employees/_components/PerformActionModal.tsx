@@ -51,13 +51,14 @@ const DATE_FMT = (iso: string) => {
   return formatDateSlash(iso);
 };
 
-export default function PerformActionModal({ employee, onClose, onApplied }: {
+export default function PerformActionModal({ employee, onClose, onApplied, initialActionType }: {
   employee: Employee;
   onClose: () => void;
   /** Called after a successful apply so the caller can refetch/refresh. */
   onApplied: () => void;
+  initialActionType?: ActionType;
 }) {
-  const [actionType, setActionType] = useState<ActionType | "">("");
+  const [actionType, setActionType] = useState<ActionType | "">(initialActionType ?? "");
   const [reason, setReason] = useState("");
   const [effectiveFrom, setEffectiveFrom] = useState(today());
   const [positionId, setPositionId] = useState("");

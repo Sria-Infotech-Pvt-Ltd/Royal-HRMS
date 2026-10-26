@@ -29,7 +29,7 @@ from ..models import (
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
 )
-from ..services_leave_ledger import is_unpaid_lwp
+from ..services_leave_ledger import employee_matches_policy_gender, is_unpaid_lwp
 from ..serializers import (
     CarryForwardInputSerializer,
     CarryForwardLogSerializer,
@@ -231,13 +231,6 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
     year             = joining_date.year
     remaining_months = 13 - joining_date.month  # Jan→12, Jul→6, Dec→1
 
-    try:
-        from apps.accounts.models import EmployeeProfile
-        profile    = EmployeeProfile.objects.filter(user=employee).first()
-        emp_gender = (profile.gender or 'all') if profile else 'all'
-    except Exception:
-        emp_gender = 'all'
-
     from apps.accounts.services_approval import resolve_employee_department_name
     emp_dept_name = resolve_employee_department_name(employee)
 
@@ -262,7 +255,7 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
         ):
             continue
 
-        if policy.applicable_gender not in ('', 'all') and emp_gender != policy.applicable_gender:
+        if not employee_matches_policy_gender(employee, policy):
             continue
 
         # Round to nearest 0.5 — standard HRMS display precision
@@ -430,10 +423,8 @@ def _validate_leave_policy(policy, employee, duration, total_days, start, end, d
         emp_dept = (resolve_employee_department_name(employee) or '').strip()
         if emp_dept and emp_dept not in policy.applicable_departments:
             return 'You are not eligible for this leave type (department restriction).'
-    if policy.applicable_gender != 'all':
-        emp_gender = (getattr(employee, 'gender', '') or '').lower().strip()
-        if emp_gender and emp_gender != policy.applicable_gender:
-            return 'You are not eligible for this leave type (gender restriction).'
+    if not employee_matches_policy_gender(employee, policy):
+        return 'You are not eligible for this leave type (gender restriction).'
     if policy.minimum_service_period:
         joining = getattr(employee, 'date_of_joining', None) or getattr(employee, 'joining_date', None)
         if joining:
@@ -489,6 +480,10 @@ def _leave_preview(request):
 
     from core.cache_service import LeavePolicyCacheService
     policy       = LeavePolicyCacheService.get(leave_type)
+    if not policy:
+        return error('This leave type is not currently active.')
+    if not employee_matches_policy_gender(request.user, policy):
+        return error('You are not eligible for this leave type (gender restriction).')
     actual_days  = _calc_working_days(start, end, duration, policy, request.user)
     branch_name  = (getattr(request.user, 'branch', '') or '')
     holidays     = _get_holidays_with_names(start, end, branch_name)

@@ -12,6 +12,8 @@ interface StatusFilterOption { value: "all" | EmployeeStatusFilter; label: strin
 interface Props {
   search: string;
   onSearchChange: (value: string) => void;
+  onSearchSubmit: () => void;
+  searching: boolean;
   branch: string;
   branchOptions: string[];
   onBranchChange: (value: string) => void;
@@ -30,23 +32,34 @@ interface Props {
 }
 
 export default function EmployeeToolbar({
-  search, onSearchChange, branch, branchOptions, onBranchChange, isAdmin, userBranch,
+  search, onSearchChange, onSearchSubmit, searching, branch, branchOptions, onBranchChange, isAdmin, userBranch,
   dept, deptOptions, onDeptChange, status, statusFilters, onStatusChange,
   hasActiveFilters, onClearFilters, canImport, onBulkImport,
 }: Props) {
   return (
     <div className="toolbar">
       <div className="search">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
-        </svg>
+        {searching ? (
+          <i className="ti ti-loader-2 animate-spin" aria-hidden="true" style={{ fontSize: 16 }} />
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+          </svg>
+        )}
         <input
           placeholder="Search by name, ID or email"
-          aria-label="Search employees by name, ID or email"
+          aria-label="Search employees by name, ID or email. Results update as you type; press Enter to search now."
           value={search}
           onChange={event => onSearchChange(event.target.value)}
+          onKeyDown={event => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onSearchSubmit();
+            }
+          }}
           suppressHydrationWarning
         />
+        {searching && <span className="sr-only" role="status" aria-live="polite">Searching employees</span>}
       </div>
 
       <select className="sel" value={dept} onChange={event => onDeptChange(event.target.value)} aria-label="Department" suppressHydrationWarning>

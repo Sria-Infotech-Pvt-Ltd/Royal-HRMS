@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -46,11 +46,25 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
-  const policyMap  = Object.fromEntries((policies ?? []).map(p => [p.leave_type, p]));
+  const policyMap  = useMemo(
+    () => Object.fromEntries((policies ?? []).map(p => [p.leave_type, p])),
+    [policies]
+  );
+  const availableLeaveTypes = useMemo(
+    () => policies
+      ? LEAVE_TYPES_LIST.filter(type => {
+        const leavePolicy = policyMap[type.key];
+        return leavePolicy?.is_active && leavePolicy.matches_gender_for_requester;
+      })
+      : LEAVE_TYPES_LIST,
+    [policies, policyMap]
+  );
 
   const ltConfig   = LEAVE_TYPE_CONFIG[form.leave_type];
   const balance    = balanceMap[form.leave_type];
   const policy     = policyMap[form.leave_type];
+  const isCurrentTypeAvailable = !policies
+    || Boolean(policy?.is_active && policy.matches_gender_for_requester);
   const isHalfDay       = form.duration !== "full_day";
   const sandwichEnabled = policy?.sandwich_leave_enabled ?? false;
   const workDays        = useMemo(
@@ -81,6 +95,13 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
   const insufficientBalance = !!preview && !preview.sufficient_balance && !preview.lop_enabled;
 
+  useEffect(() => {
+    if (!policies || availableLeaveTypes.length === 0) return;
+    if (availableLeaveTypes.some(type => type.key === form.leave_type)) return;
+    setForm(previous => ({ ...previous, leave_type: availableLeaveTypes[0].key }));
+    setDocFile(null);
+  }, [availableLeaveTypes, form.leave_type, policies]);
+
   function setField<K extends keyof LeaveForm>(key: K, val: LeaveForm[K]) {
     setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
     setForm(prev => ({ ...prev, [key]: val }));
@@ -88,6 +109,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
+    if (!isCurrentTypeAvailable)                    e.leave_type = "This leave type is not available for your profile.";
     if (!form.from_date)                                    e.from_date = "Start date is required.";
     if (!isHalfDay && !form.to_date)                        e.to_date   = "End date is required.";
     if (!isHalfDay && form.from_date && form.to_date && form.to_date < form.from_date)
@@ -162,8 +184,12 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
             value={form.leave_type}
             onChange={event => setField("leave_type", event.target.value as LeaveForm["leave_type"])}
           >
-            {LEAVE_TYPES_LIST.map(type => <option key={type.key} value={type.key}>{type.label}</option>)}
+            {availableLeaveTypes.map(type => <option key={type.key} value={type.key}>{type.label}</option>)}
           </select>
+          <Err msg={errors.leave_type} />
+          {policies && availableLeaveTypes.length === 0 && (
+            <p className="mt-1.5 text-xs text-[var(--on-variant)]">No active leave types are available for your profile. Contact HR.</p>
+          )}
           {policy?.policy_note && (
             <p className="mt-1.5 flex items-start gap-1.5 text-xs text-[var(--on-variant)]">
               <i className="ti ti-info-circle mt-px flex-shrink-0" /> {policy.policy_note}
@@ -227,7 +253,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
         <p className="text-xs text-[var(--on-variant)]">Submissions are routed for approval and retained in My Requests.</p>
         <div className="flex items-center gap-2.5">
         <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={submitting}>Cancel</button>
-        <button type="button" className="btn btn-filled" onClick={handleSubmit} disabled={submitting || insufficientBalance}>
+        <button type="button" className="btn btn-filled" onClick={handleSubmit} disabled={submitting || insufficientBalance || !isCurrentTypeAvailable || availableLeaveTypes.length === 0}>
           {submitting ? <><i className="ti ti-loader-2 spin" /> Submitting…</> : "Submit request"}
         </button>
         </div>

@@ -15,6 +15,13 @@ interface Props {
 
 interface PagedResponse<T> { results: T[]; count: number; }
 
+interface SalaryTransferStatus {
+  employee_side_ready: boolean;
+  reason: string;
+  batch_status: "confirmed" | "cancelled" | null;
+  item_count: number;
+}
+
 const fmt = (n: number | string) =>
   `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
@@ -22,14 +29,57 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
   const { data: payslipPage, loading, refetch } =
     useFetch<PagedResponse<EmployeePayslip>>(API.payroll.cyclePayslips(cycleId));
   const { data: cycle, refetch: refetchCycle } = useFetch<PayrollCycle>(API.payroll.cycle(cycleId));
+  const { data: transferStatus, loading: transferLoading, refetch: refetchTransfer } =
+    useFetch<SalaryTransferStatus>(API.payroll.salaryTransferStatus(cycleId));
 
   const [marking, setMarking] = useState(false);
+  const [confirmingTransfer, setConfirmingTransfer] = useState(false);
+  const [downloadingTransfer, setDownloadingTransfer] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showTransferConfirm, setShowTransferConfirm] = useState(false);
 
   const payslips = payslipPage?.results ?? [];
   const totalNet = payslips.reduce((s, p) => s + Number(p.net_pay), 0);
   const isPaid   = cycle?.status === "paid" || cycle?.status === "closed";
+  const transferConfirmed = transferStatus?.batch_status === "confirmed";
+
+  async function confirmTransfer() {
+    setShowTransferConfirm(false);
+    setConfirmingTransfer(true);
+    setErr(null);
+    try {
+      await clientApi.post(API.payroll.salaryTransferConfirm(cycleId));
+      refetchTransfer();
+    } catch (error: unknown) {
+      setErr((error as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? "Failed to confirm the salary transfer.");
+    } finally {
+      setConfirmingTransfer(false);
+    }
+  }
+
+  async function downloadTransferFile() {
+    setDownloadingTransfer(true);
+    setErr(null);
+    try {
+      const response = await clientApi.get(API.payroll.salaryTransferDownload(cycleId), { responseType: "blob" });
+      const url = URL.createObjectURL(response.data as Blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `salary-transfer-${cycle?.cycle_start ?? cycleId}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      refetchTransfer();
+    } catch (error: unknown) {
+      setErr((error as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? "Failed to download the bank transfer file.");
+    } finally {
+      setDownloadingTransfer(false);
+    }
+  }
 
   async function markPaid() {
     setShowConfirm(false);
@@ -69,6 +119,21 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
         <div className="alert alert-error" style={{ margin: "0", borderRadius: 0 }}>
           <i className="ti ti-alert-circle" />
           <span>{err}</span>
+        </div>
+      )}
+
+      {!isPaid && (
+        <div className={`alert ${transferConfirmed ? "alert-success" : "alert-info"}`} style={{ margin: 0, borderRadius: 0 }}>
+          <i className={`ti ${transferConfirmed ? "ti-lock-check" : "ti-building-bank"}`} />
+          <span>
+            {transferLoading
+              ? "Checking salary transfer readiness…"
+              : transferConfirmed
+                ? `Salary transfer locked for ${transferStatus?.item_count ?? 0} employee(s). Download the NEFT CSV and submit it to your bank before marking payroll paid.`
+                : transferStatus?.employee_side_ready
+                  ? "Employees have acknowledged their payslips. Confirm the salary transfer to lock bank details and generate the NEFT CSV."
+                  : transferStatus?.reason || "Salary transfer readiness is unavailable."}
+          </span>
         </div>
       )}
 
@@ -148,11 +213,33 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
 
       <div style={{ padding: "16px 20px", borderTop: "1px solid var(--outline-v)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", gap: 8 }}>
+          {!isPaid && !transferConfirmed && (
+            <button
+              className="btn btn-outline"
+              onClick={() => setShowTransferConfirm(true)}
+              disabled={confirmingTransfer || transferLoading || !transferStatus?.employee_side_ready}
+            >
+              {confirmingTransfer
+                ? <><i className="ti ti-loader-2 animate-spin" /> Locking Transfer…</>
+                : <><i className="ti ti-lock" /> Confirm Salary Transfer</>}
+            </button>
+          )}
+          {!isPaid && transferConfirmed && (
+            <button
+              className="btn btn-outline"
+              onClick={downloadTransferFile}
+              disabled={downloadingTransfer}
+            >
+              {downloadingTransfer
+                ? <><i className="ti ti-loader-2 animate-spin" /> Preparing CSV…</>
+                : <><i className="ti ti-download" /> Download NEFT CSV</>}
+            </button>
+          )}
           {!isPaid && (
             <button
               className="btn btn-success"
               onClick={() => setShowConfirm(true)}
-              disabled={marking || payslips.length === 0}
+              disabled={marking || payslips.length === 0 || !transferConfirmed}
             >
               {marking
                 ? <><i className="ti ti-loader-2 animate-spin" /> Marking Paid…</>
@@ -183,6 +270,17 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
           saving={marking}
           onConfirm={markPaid}
           onCancel={() => setShowConfirm(false)}
+        />
+      )}
+
+      {showTransferConfirm && (
+        <ConfirmModal
+          title="Confirm salary transfer?"
+          body={`This locks the current bank details and net pay for all ${payslips.length} employee(s) into a transfer batch. Download the NEFT CSV after confirmation and submit it through your bank before marking payroll paid.`}
+          confirmLabel="Confirm and Lock"
+          saving={confirmingTransfer}
+          onConfirm={confirmTransfer}
+          onCancel={() => setShowTransferConfirm(false)}
         />
       )}
     </div>

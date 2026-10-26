@@ -82,6 +82,22 @@ def is_unpaid_lwp(leave_type_code: str) -> bool:
     return leave_type_code == LEAVE_LWP
 
 
+def employee_matches_policy_gender(employee, policy) -> bool:
+    """Return whether an employee's recorded profile gender satisfies a policy."""
+    required_gender = (policy.applicable_gender or 'all').strip().lower()
+    if required_gender in ('', 'all'):
+        return True
+
+    cached_gender = getattr(employee, '_leave_policy_gender', None)
+    if cached_gender is None:
+        from apps.accounts.models import EmployeeProfile
+
+        profile = EmployeeProfile.objects.filter(user_id=employee.pk).only('gender').first()
+        cached_gender = (profile.gender or '').strip().lower() if profile else ''
+        employee._leave_policy_gender = cached_gender
+    return cached_gender == required_gender
+
+
 def create_transaction(employee, leave_type, *, txn_type, quantity, effective_date, leave_year=None,
                         expiry_date=None, reason='', run_id='', created_by=None, reversal_of=None) -> LeaveTransaction:
     """Creates one ledger entry and recomputes that employee/type/year's

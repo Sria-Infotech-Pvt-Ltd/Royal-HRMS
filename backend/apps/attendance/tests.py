@@ -20,6 +20,33 @@ def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
     return resp
 
 
+class EmployeeAttendanceCalendarLookupTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        make_user(
+            'attendance_calendar_hr@test.com',
+            role=make_role('attendance_calendar_hr', permission_codenames=['attendance.view']),
+            password='TestPass123!',
+        )
+        self.employee = make_user('attendance_calendar_employee@test.com')
+        _login(self.client, 'attendance_calendar_hr@test.com')
+
+    def test_calendar_resolves_employee_by_uuid_when_employee_code_is_missing(self):
+        response = self.client.get(
+            reverse('attendance-calendar'),
+            {
+                'employee_id': str(self.employee.pk),
+                'month': 10,
+                'year': 2026,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['data']['month'], 10)
+        self.assertEqual(response.data['data']['year'], 2026)
+
+
 class PolicyCrudRegressionTests(TestCase):
     """Regression tests for late_mark_lop.py and absence_alert.py.
 

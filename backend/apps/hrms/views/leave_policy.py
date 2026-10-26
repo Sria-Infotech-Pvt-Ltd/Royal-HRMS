@@ -28,6 +28,7 @@ from ..models import (
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
 )
+from ..services_leave_ledger import employee_matches_policy_gender, is_unpaid_lwp
 from ..serializers import (
     CarryForwardInputSerializer,
     CarryForwardLogSerializer,
@@ -96,8 +97,8 @@ class LeavePolicyView(APIView):
             'earned':    {'annual_days': 15, 'can_carry_forward': True,  'max_carry_forward_days': 30, 'policy_note': 'Min 3 days notice. Carry-forward up to 30 days.'},
             'sick':      {'annual_days': 12, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Medical certificate required for 3+ consecutive days.'},
             'lwp':       {'annual_days': 0,  'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Salary deducted. Requires HR approval. No carry-forward.'},
-            'maternity': {'annual_days': 90, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Up to 180 days per Maternity Benefit Act. HR approval required.'},
-            'paternity': {'annual_days': 5,  'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Within 15 days of child\'s birth. Birth certificate required.'},
+            'maternity': {'annual_days': 90, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'applicable_gender': 'female', 'policy_note': 'Set the entitlement in Leave Policy settings. HR approval required.'},
+            'paternity': {'annual_days': 5,  'can_carry_forward': False, 'max_carry_forward_days': 0, 'applicable_gender': 'male', 'policy_note': 'Within 15 days of child\'s birth. Birth certificate required.'},
             'bereavement': {'annual_days': 5, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'For the loss of an immediate family member.'},
             # Not a fixed annual allotment (earned per instance of extra worked
             # time, credited separately) — annual_days=0 here is informational
@@ -112,7 +113,10 @@ class LeavePolicyView(APIView):
         self._ensure_policies()
         from core.cache_service import LeavePolicyCacheService
         policies = LeavePolicyCacheService.get_all()
-        return success('Leave policies retrieved.', LeavePolicySerializer(policies, many=True).data)
+        return success(
+            'Leave policies retrieved.',
+            LeavePolicySerializer(policies, many=True, context={'request': request}).data,
+        )
 
     def put(self, request, leave_type: str):
         if not (_has_perm(request.user, 'settings.edit') or _has_perm(request.user, 'leave.approve')):
@@ -124,6 +128,8 @@ class LeavePolicyView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
         serializer.save()
+        from core.cache_service import LeavePolicyCacheService
+        LeavePolicyCacheService.invalidate(policy.leave_type)
         return success('Policy updated.', LeavePolicySerializer(policy).data)
 
     def patch(self, request, leave_type: str):
@@ -143,6 +149,8 @@ class LeavePolicyView(APIView):
         policy = LeavePolicy.objects.create(
             leave_type=leave_type_key, leave_type_label=label, **data
         )
+        from core.cache_service import LeavePolicyCacheService
+        LeavePolicyCacheService.invalidate(leave_type_key)
         logger.info('Created leave type "%s" by %s', leave_type_key, request.user.email)
         return success('Leave type created.', LeavePolicySerializer(policy).data, http_status=status.HTTP_201_CREATED)
 
@@ -155,6 +163,8 @@ class LeavePolicyView(APIView):
         policy = LeavePolicy.objects.filter(leave_type=leave_type).first()
         if not policy:
             return error('Leave type not found.', http_status=status.HTTP_404_NOT_FOUND)
+        from core.cache_service import LeavePolicyCacheService
+        LeavePolicyCacheService.invalidate(policy.leave_type)
         policy.delete()
         logger.info('Deleted leave type "%s" by %s', leave_type, request.user.email)
         return success('Leave type deleted.')
@@ -185,8 +195,19 @@ class LeaveBalanceView(APIView):
         else:
             employee = request.user
 
-        balances = LeaveBalance.objects.filter(employee=employee, year=year).order_by('leave_type')
-        return success('Balances retrieved.', LeaveBalanceSerializer(balances, many=True).data)
+        balances = list(
+            LeaveBalance.objects.filter(employee=employee, year=year).order_by('leave_type')
+        )
+        restricted_policies = {
+            policy.leave_type: policy
+            for policy in LeavePolicy.objects.filter(applicable_gender__in=['male', 'female'])
+        }
+        eligible_balances = [
+            balance for balance in balances
+            if balance.leave_type not in restricted_policies
+            or employee_matches_policy_gender(employee, restricted_policies[balance.leave_type])
+        ]
+        return success('Balances retrieved.', LeaveBalanceSerializer(eligible_balances, many=True).data)
 
     def post(self, request):
         """Credit annual leave balances for all active employees or a specific employee."""
@@ -209,7 +230,7 @@ class LeaveBalanceView(APIView):
 
         for emp in employees:
             for lt, policy in policies.items():
-                if is_unpaid_lwp(lt):
+                if is_unpaid_lwp(lt) or not employee_matches_policy_gender(emp, policy):
                     continue
                 balance, created = LeaveBalance.objects.get_or_create(
                     employee=emp, leave_type=lt, year=year,
@@ -287,7 +308,3 @@ class LeaveBalanceAdjustView(APIView):
             'Leave balance records cannot be deleted. Adjust total_days or used_days instead.',
             http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
         )
-
-
-
-

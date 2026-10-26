@@ -64,10 +64,24 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
               </button>
             </div>
           )}
-          <button className="btn btn-ghost btn-sm" onClick={onPrev} disabled={isLoading}>
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            onClick={onPrev}
+            disabled={isLoading}
+            aria-label="Previous month"
+            title="Previous month"
+          >
             <i className="ti ti-chevron-left" />
           </button>
-          <button className="btn btn-ghost btn-sm" onClick={onNext} disabled={isLoading}>
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            onClick={onNext}
+            disabled={isLoading}
+            aria-label="Next month"
+            title="Next month"
+          >
             <i className="ti ti-chevron-right" />
           </button>
         </div>

@@ -246,10 +246,10 @@ def _employee_dict(user: User) -> dict:
     parts = user.full_name.strip().split(' ', 1)
     first = parts[0]
     last  = parts[1] if len(parts) > 1 else ''
-    if user.is_active and user.must_change_password:
-        emp_status = 'onboarding'
-    elif not user.is_active:
+    if not user.is_active:
         emp_status = 'inactive'
+    elif user.onboarding_status != User.ONBOARDING_COMPLETE:
+        emp_status = 'onboarding'
     else:
         emp_status = 'active'
 

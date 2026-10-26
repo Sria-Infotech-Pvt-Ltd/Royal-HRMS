@@ -162,11 +162,12 @@ _POLICY_RULE_FIELDS = [
 
 class LeavePolicySerializer(serializers.ModelSerializer):
     leave_type_display = serializers.SerializerMethodField()
+    matches_gender_for_requester = serializers.SerializerMethodField()
 
     class Meta:
         model  = LeavePolicy
         fields = (
-            ['id', 'leave_type', 'leave_type_display', 'annual_days', 'accrual_frequency', 'can_carry_forward',
+            ['id', 'leave_type', 'leave_type_display', 'matches_gender_for_requester', 'annual_days', 'accrual_frequency', 'can_carry_forward',
              'max_carry_forward_days', 'carry_forward_type', 'carry_forward_mode',
              'carry_forward_expiry_days', 'policy_note', 'is_active']
             + _POLICY_RULE_FIELDS
@@ -177,6 +178,14 @@ class LeavePolicySerializer(serializers.ModelSerializer):
         if obj.leave_type_label:
             return obj.leave_type_label
         return dict(LEAVE_TYPE_CHOICES).get(obj.leave_type, obj.leave_type.replace('_', ' ').title())
+
+    def get_matches_gender_for_requester(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request:
+            return True
+        from .services_leave_ledger import employee_matches_policy_gender
+
+        return employee_matches_policy_gender(request.user, obj)
 
 
 class LeavePolicyCreateSerializer(serializers.Serializer):
@@ -553,10 +562,8 @@ class LeaveRequestCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate_leave_type(self, value):
-        valid = [k for k, _ in LEAVE_TYPE_CHOICES]
-        if value not in valid:
-            if not LeavePolicy.objects.filter(leave_type=value, is_active=True).exists():
-                raise serializers.ValidationError('Invalid leave type.')
+        if not LeavePolicy.objects.filter(leave_type=value, is_active=True).exists():
+            raise serializers.ValidationError('This leave type is not currently active.')
         return value
 
     def validate_duration(self, value):

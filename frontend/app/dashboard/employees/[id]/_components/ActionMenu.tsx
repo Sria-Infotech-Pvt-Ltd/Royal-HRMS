@@ -10,6 +10,7 @@ import { usePermission } from "@/hooks/usePermission";
 import PerformActionModal from "../../_components/PerformActionModal";
 import { useState } from "react";
 import type { Employee } from "../../_data";
+import type { ActionType } from "../../_components/PerformActionFields/types";
 
 interface Props {
   employee: Employee;
@@ -21,12 +22,33 @@ export default function ActionMenu({ employee }: Props) {
   const canConfirm = usePermission("employees.confirm");
   const canPerformAny = canEdit || canRevisePay || canConfirm;
   const [open, setOpen] = useState(false);
+  const [initialActionType, setInitialActionType] = useState<ActionType | undefined>();
 
   if (!canPerformAny) return null;
 
   return (
     <>
-      <button onClick={() => setOpen(true)} suppressHydrationWarning className="btn">
+      {canConfirm && employee.status === "active" && employee.employmentStatus === "probation" && (
+        <button
+          onClick={() => {
+            setInitialActionType("confirmation");
+            setOpen(true);
+          }}
+          suppressHydrationWarning
+          className="btn"
+        >
+          <i className="ti ti-user-check text-[14px]" />
+          Confirm probation
+        </button>
+      )}
+      <button
+        onClick={() => {
+          setInitialActionType(undefined);
+          setOpen(true);
+        }}
+        suppressHydrationWarning
+        className="btn"
+      >
         <i className="ti ti-bolt text-[14px]" />
         Perform an action
       </button>
@@ -34,7 +56,11 @@ export default function ActionMenu({ employee }: Props) {
       {open && (
         <PerformActionModal
           employee={employee}
-          onClose={() => setOpen(false)}
+          initialActionType={initialActionType}
+          onClose={() => {
+            setOpen(false);
+            setInitialActionType(undefined);
+          }}
           // The detail page's own state (position/salary/employment_status/
           // action-history, etc.) is spread across many separate hooks and
           // useState calls that this modal's real backend calls (PUT

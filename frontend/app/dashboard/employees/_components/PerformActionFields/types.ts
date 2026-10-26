@@ -113,7 +113,7 @@ export function approvalRouteFor(
     case "pay_change":
       return "Requires payroll.edit — typically an HR Business Partner or Payroll Admin; no queued approval step exists for this action yet.";
     case "confirmation":
-      return "Requires employees.confirm — typically the reporting manager; no queued approval step exists for this action yet.";
+      return "Requires employees.confirm — HR/Admin applies this directly, with the effective date and reason recorded in the audit trail.";
     case "separation":
       return isManager
         ? "HR, then Branch Admin (this employee is a manager, per the real separation approval chain)."
@@ -133,7 +133,7 @@ export function reversibilityNote(action: ActionType): { text: string; tone: "pu
     case "pay_change":
       return { tone: "purple", text: "Reversible going forward, but any payroll run already processed on this record must be corrected through arrears." };
     case "confirmation":
-      return { tone: "purple", text: "Reversible. Probation can be re-opened with a further confirmation action." };
+      return { tone: "amber", text: "This is a one-way transition from probation to confirmed/active. Verify the employee and effective date before applying." };
     case "separation":
       return { tone: "amber", text: "Not reversible. Undoing a separation requires a fresh Hire action and a new employee record — the original number is not reissued." };
   }

@@ -10,6 +10,7 @@ import PerformActionModal from "./PerformActionModal";
 import StatusPill from "@/components/employees/StatusPill";
 import { formatDateSlash } from "@/lib/formatDate";
 import { usePermission } from "@/hooks/usePermission";
+import type { ActionType } from "./PerformActionFields/types";
 
 // The Employee Directory reference shows dd/mm/yyyy, so the table (like its drawer) uses the slash style.
 function slashDate(iso: string | null | undefined): string {
@@ -39,9 +40,22 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
   const [showActionModal, setShowActionModal] = useState(false);
   // A Reporting Manager has no employees.edit but may raise an action for approval.
   const canRaiseAction = usePermission("employees.raise_action");
+  const canConfirm = usePermission("employees.confirm");
+  const [initialActionType, setInitialActionType] = useState<ActionType | undefined>();
 
   const actions: RowAction[] = [
     { label: "View", icon: "ti-eye", onClick: () => onOpen(e.id) },
+    ...(canConfirm && e.status === "active" && e.employmentStatus === "probation"
+      ? [{
+          label: "Confirm probation",
+          icon: "ti-user-check",
+          tone: "success" as const,
+          onClick: () => {
+            setInitialActionType("confirmation");
+            setShowActionModal(true);
+          },
+        }]
+      : []),
     ...(canEditOnboarding && e.status === "onboarding"
       ? [{ label: "Complete onboarding", icon: "ti-clipboard-check", tone: "warn", onClick: () => router.push(`/dashboard/employees/${e.id}/onboarding`) } satisfies RowAction]
       : []),
@@ -50,7 +64,14 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
     // reactivated/deactivated account outside that flow is still available
     // for admins directly on the Employee Detail page if ever needed.
     ...((canEdit || canRaiseAction) && !isExited
-      ? [{ label: "Perform an action", icon: "ti-bolt", onClick: () => setShowActionModal(true) } satisfies RowAction]
+      ? [{
+          label: "Perform an action",
+          icon: "ti-bolt",
+          onClick: () => {
+            setInitialActionType(undefined);
+            setShowActionModal(true);
+          },
+        } satisfies RowAction]
       : []),
     ...(canEdit && isExited
       ? [{ label: "Activate", icon: "ti-user-check", tone: "success", onClick: () => onToggleStatus(e) } satisfies RowAction]
@@ -93,7 +114,11 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
         {showActionModal && (
           <PerformActionModal
             employee={e}
-            onClose={() => setShowActionModal(false)}
+            initialActionType={initialActionType}
+            onClose={() => {
+              setShowActionModal(false);
+              setInitialActionType(undefined);
+            }}
             onApplied={onActionApplied}
           />
         )}

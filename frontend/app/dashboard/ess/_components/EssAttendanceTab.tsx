@@ -36,9 +36,15 @@ function correctionTitle(dateIso: string): string {
 
 function dayClass(status: string | undefined): string {
   const value = (status ?? "").toLowerCase();
-  if (value === "present" || value === "late") return "present";
+  if (value === "present") return "present";
+  if (value === "late") return "late";
+  if (value === "absent") return "absent";
+  if (value === "half day") return "half-day";
   if (value.includes("leave")) return "leave";
-  return "";
+  if (value === "weekly off") return "weekly-off";
+  if (value === "holiday") return "holiday";
+  if (value === "incomplete" || value === "missing clock out") return "incomplete";
+  return "unrecorded";
 }
 
 function TimesheetCard() {
@@ -81,10 +87,13 @@ function TimesheetCard() {
 }
 
 export default function EssAttendanceTab() {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
-  const { calendar, refetch } = useAttendanceDashboard({ month, year });
+  const [displayedMonth, setDisplayedMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const month = displayedMonth.getMonth() + 1;
+  const year = displayedMonth.getFullYear();
+  const { calendar, isLoading: attendanceLoading, refetch } = useAttendanceDashboard({ month, year });
   // Dedicated recent-punches endpoint (date + location + source), not the
   // calendar dashboard's generic `history` list — that one has no location/
   // source fields at all, which is why this card was always missing them.
@@ -92,6 +101,10 @@ export default function EssAttendanceTab() {
   const corrections = useFetch<PaginatedResponse<MyCorrectionRequest>>(`${API.attendance.myCorrections}?page_size=100`);
   const [showRegularize, setShowRegularize] = useState(false);
   const [detail, setDetail] = useState<MyCorrectionRequest | null>(null);
+
+  function changeMonth(offset: number) {
+    setDisplayedMonth(current => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  }
 
   const days = useMemo(() => {
     // The whole month, not just "1..today" — a monthly calendar that stops
@@ -105,7 +118,13 @@ export default function EssAttendanceTab() {
       // date string — same convention AttendanceCalendar.tsx's own `data[String(day)]`
       // lookup already relies on; building an ISO key here instead meant this
       // calendar never matched anything and every day rendered blank.
-      return { dayNumber, letter: WEEKDAY_LETTER[new Date(year, month - 1, dayNumber).getDay()], cls: dayClass(calendar[String(dayNumber)]?.status) };
+      const record = calendar[String(dayNumber)];
+      return {
+        dayNumber,
+        letter: WEEKDAY_LETTER[new Date(year, month - 1, dayNumber).getDay()],
+        cls: dayClass(record?.status),
+        status: record?.status ?? "",
+      };
     });
   }, [calendar, month, year]);
 
@@ -126,12 +145,59 @@ export default function EssAttendanceTab() {
 
       <div className="ess-grid">
         <div className="ess-card">
-          <h2>{MONTH_LONG[month - 1]} {year}</h2>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+            <h2>{MONTH_LONG[month - 1]} {year}</h2>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                className="rvbtn"
+                type="button"
+                onClick={() => changeMonth(-1)}
+                disabled={attendanceLoading}
+                aria-label="Previous month"
+              >
+                <i className="ti ti-chevron-left" /> Previous
+              </button>
+              <button
+                className="rvbtn"
+                type="button"
+                onClick={() => changeMonth(1)}
+                disabled={attendanceLoading}
+                aria-label="Next month"
+              >
+                Next <i className="ti ti-chevron-right" />
+              </button>
+            </div>
+          </div>
           <p>Daily attendance and approved leave.</p>
+          <div className="ess-calendar-legend" aria-label="Attendance status colors">
+            {[
+              ["present", "Present"],
+              ["late", "Late"],
+              ["absent", "Absent"],
+              ["half-day", "Half day"],
+              ["leave", "On leave"],
+              ["unrecorded", "Week off / Holiday"],
+              ["incomplete", "Incomplete"],
+            ].map(([className, label]) => (
+              <span key={className}>
+                <i className={`ess-status-dot ${className}`} />
+                {label}
+              </span>
+            ))}
+          </div>
           <div className="ess-calendar-wrap">
             <div className="ess-calendar">
               {days.map(day => (
-                <div key={day.dayNumber} className={`ess-day ${day.cls}`}><span>{day.letter}</span><b>{day.dayNumber}</b></div>
+                <div
+                  key={day.dayNumber}
+                  className={`ess-day ${day.cls}`}
+                  title={day.status ? `${day.dayNumber} ${MONTH_LONG[month - 1]}: ${day.status}` : undefined}
+                  aria-label={`${day.dayNumber} ${MONTH_LONG[month - 1]}${day.status ? `: ${day.status}` : ""}`}
+                >
+                  <span>{day.letter}</span>
+                  <b>{day.dayNumber}</b>
+                  {day.status && <small>{day.status}</small>}
+                </div>
               ))}
             </div>
           </div>

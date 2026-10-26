@@ -13,7 +13,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user, place_in_seat
-from apps.accounts.models import ApprovalWorkflowRule
+from apps.accounts.models import ApprovalWorkflowRule, EmployeeProfile
 from apps.hrms.models import CarryForwardLog, Expense, LeaveBalance, LeavePolicy
 from apps.hrms.tasks import expire_unused_carry_forward
 
@@ -350,6 +350,114 @@ class LeaveRequestPolicyValidationTests(TestCase):
         resp = self._apply(duration='half_morning')
         self.assertEqual(resp.status_code, 400)
         self.assertIn('half-day', resp.data['message'].lower())
+
+
+class ParentalLeaveEligibilityTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.employee = make_user(
+            'parental_leave_employee@test.com',
+            role=make_role('employee'),
+            password='TestPass123!',
+        )
+        self.profile = EmployeeProfile.objects.create(user=self.employee, gender='male')
+        self.leave_date = _future_monday()
+        LeavePolicy.objects.update_or_create(
+            leave_type='maternity',
+            defaults={
+                'annual_days': Decimal('90'),
+                'is_active': True,
+                'applicable_gender': 'female',
+            },
+        )
+        LeavePolicy.objects.update_or_create(
+            leave_type='paternity',
+            defaults={
+                'annual_days': Decimal('5'),
+                'is_active': True,
+                'applicable_gender': 'male',
+            },
+        )
+        _login(self.client, 'parental_leave_employee@test.com')
+
+    def _preview(self, leave_type):
+        return self.client.get(
+            reverse('leave-request-list'),
+            {
+                'action': 'preview',
+                'leave_type': leave_type,
+                'start_date': self.leave_date.isoformat(),
+                'end_date': self.leave_date.isoformat(),
+            },
+        )
+
+    def test_maternity_is_not_available_to_male_employee(self):
+        response = self._preview('maternity')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('gender restriction', response.data['message'])
+
+    def test_male_employee_cannot_submit_maternity_request(self):
+        response = self.client.post(
+            reverse('leave-request-list'),
+            {
+                'leave_type': 'maternity',
+                'duration': 'full_day',
+                'start_date': self.leave_date.isoformat(),
+                'end_date': self.leave_date.isoformat(),
+                'reason': 'Welcoming a new child.',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('gender restriction', response.data['message'])
+
+    def test_paternity_is_available_to_male_employee(self):
+        response = self._preview('paternity')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['data']['leave_type'], 'paternity')
+
+    def test_policy_list_marks_gender_eligible_parental_leave(self):
+        response = self.client.get(reverse('leave-policy-list'))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        policies = {item['leave_type']: item for item in response.data['data']}
+        self.assertFalse(policies['maternity']['matches_gender_for_requester'])
+        self.assertTrue(policies['paternity']['matches_gender_for_requester'])
+
+    def test_balance_list_hides_ineligible_parental_leave(self):
+        LeaveBalance.objects.create(
+            employee=self.employee,
+            leave_type='maternity',
+            year=self.leave_date.year,
+            total_days=Decimal('90'),
+        )
+        LeaveBalance.objects.create(
+            employee=self.employee,
+            leave_type='paternity',
+            year=self.leave_date.year,
+            total_days=Decimal('5'),
+        )
+
+        response = self.client.get(
+            reverse('leave-balance'),
+            {'year': self.leave_date.year},
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual([row['leave_type'] for row in response.data['data']], ['paternity'])
+
+    def test_gender_must_be_recorded_for_gender_restricted_leave(self):
+        self.profile.gender = ''
+        self.profile.save(update_fields=['gender'])
+
+        response = self._preview('paternity')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('gender restriction', response.data['message'])
 
 
 class ExpenseSelfApprovalTests(TestCase):

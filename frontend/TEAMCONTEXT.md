@@ -5945,17 +5945,29 @@ dropdowns were showing blank "Select" for every employee instead of their real v
 - Payroll LOP now includes approved unpaid leave and partial `lop_days`, including requests spanning payroll periods. Unresolved incomplete attendance blocks payroll processing instead of silently treating an incomplete punch as absence.
 - Payroll attendance sign-offs and L1 notices are restricted to the reporting managers of employees in that cycle. Transfer confirmation requires a payslip for each payroll-eligible employee.
 - Payroll still prepares the transfer file for HR-confirmed external bank payment; it does not automatically credit employee bank accounts.
+- The employee profile's Attendance tab uses the shared attendance calendar; day markers have a full date/status tooltip, and employee lookup accepts either employee code or UUID (for profiles without a code).
+- ESS attendance calendar cells now visibly label statuses and use distinct color treatments (green present, red absent, amber late/incomplete, orange half day, blue leave, neutral holiday/week off) with a matching legend.
+- ESS Attendance includes Previous/Next month navigation; the employee My Attendance calendar arrows also expose accessible labels.
+- Employee Directory onboarding status is based on onboarding progress, not a forced first-password change. Direct hires stay out of the onboarding action/filter once onboarding is complete, even while they must change their temporary password.
+- ESS Profile and Employment show "Not assigned" consistently when no reporting manager is set. Org-chart auto-assignment is only performed at hire/import/onboarding or relevant profile updates, and only when a current active chief exists in the employee's unit chain and branch; adding a chief does not retroactively assign existing employees.
 
 ## Admin navigation
 
 - My Workspace is the single top-level navigation entry for self-service profile, attendance, requests, and payslips. The standalone routes remain available for existing bookmarks and direct links.
 - My Assessments and My Referrals remain visible as distinct navigation entries; they are not tabs in My Workspace.
+- Employees with `employees.confirm` can use the explicit **Confirm probation** action from the directory row menu or employee profile. It opens the existing audited confirmation workflow, preselected for probation → confirmed/active; this transition is one-way. Other lifecycle changes remain on their existing action workflows.
 
 ## Employee audit trail and branch-scoped HR pickers
 
 - `AuditLog.user` relates to the current User model, which has no `role` relation. Do not use `select_related('user__role')` in audit queries. Both the employee audit-trail endpoint and audit-log list now select only `user`; the serializer reports the actor's designation as `actor_role`.
 - `GET /employees/hrs/` requires a non-empty `branch` query parameter. HR dropdowns must wait until a branch is known and call `/employees/hrs/?branch=<branch>`; do not send an unfiltered request. The invalid-punch assignment picker uses the punch's branch.
 - Regression coverage: `apps/accounts/tests_employee_audit.py` checks both employee self-audit and the audit-log list response.
+
+## Maternity and paternity leave eligibility
+
+- Maternity leave is configured for female employees; paternity leave is configured for male employees. Migration `0046_parental_leave_gender_eligibility` updates existing built-in policy rows, and newly created defaults use the same eligibility.
+- The employee's gender comes from `EmployeeProfile`, not `User`. Request preview/submission and balance accrual/listing must use the shared `employee_matches_policy_gender` helper so an ineligible type is neither offered nor credited.
+- The initial defaults are 90 maternity days and 5 paternity days. Higher-authority users with `settings.edit` or `leave.approve` can change the annual entitlement in Leave Policy settings; the maternity policy note points administrators to that setting rather than promising a fixed legal duration.
 
 ## Validation and follow-up
 

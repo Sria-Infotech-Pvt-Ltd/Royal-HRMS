@@ -41,6 +41,7 @@ export interface LeavePolicy {
   id:                    number;
   leave_type:            LeaveTypeKey;
   leave_type_display:    string;
+  matches_gender_for_requester: boolean;
   annual_days:           number;
   can_carry_forward:     boolean;
   max_carry_forward_days: number;

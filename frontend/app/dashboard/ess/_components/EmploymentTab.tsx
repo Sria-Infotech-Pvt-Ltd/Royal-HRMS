@@ -97,7 +97,7 @@ function CurrentAssignmentCard({ profile }: { profile: EmploymentProfileData | n
         <Tile label="EMPLOYMENT STATUS"    value={profile?.employment_status_display || "—"} />
         <Tile label="EMPLOYEE ID"          value={profile?.employee_id || "—"} />
         <Tile label="POSITION"             value={profile?.designation || "—"} />
-        <Tile label="REPORTING MANAGER"    value={profile?.reporting_manager?.name || "—"} />
+        <Tile label="REPORTING MANAGER"    value={profile?.reporting_manager?.name || "Not assigned"} />
         <Tile label="LOCATION"             value={profile?.work_location || profile?.branch || "—"} />
         <Tile label="NOTICE PERIOD"        value={profile?.notice_period_days != null ? `${profile.notice_period_days} days` : "—"} />
       </div>

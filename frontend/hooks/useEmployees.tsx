@@ -45,11 +45,16 @@ export function useEmployees() {
   const [empStats, setEmpStats] = useState<EmployeeStats>(EMPTY_STATS);
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const employeeRequestId = useRef(0);
+  useEffect(() => () => {
+    if (searchRef.current) clearTimeout(searchRef.current);
+  }, []);
 
   const fetchEmployees = useCallback(async (
     q = "", p = 1,
     overrides?: { branch?: string; dept?: string; status?: "all" | EmployeeStatusFilter },
   ) => {
+    const requestId = ++employeeRequestId.current;
     setLoading(true);
     setFetchError("");
     const effBranch = overrides?.branch ?? branch;
@@ -64,21 +69,28 @@ export function useEmployees() {
       const { data } = await clientApi.get<{
         data: { results: ApiEmployee[]; count: number; page: number; total_pages: number };
       }>(API.employees.list, { params });
-      setEmployees((data.data?.results ?? []).map(apiToEmployee));
-      setTotalPages(data.data?.total_pages ?? 1);
-      setTotalCount(data.data?.count ?? 0);
-      setPage(data.data?.page ?? p);
+      if (requestId === employeeRequestId.current) {
+        setEmployees((data.data?.results ?? []).map(apiToEmployee));
+        setTotalPages(data.data?.total_pages ?? 1);
+        setTotalCount(data.data?.count ?? 0);
+        setPage(data.data?.page ?? p);
+      }
     } catch {
-      setFetchError("Could not load employees. Please refresh.");
+      if (requestId === employeeRequestId.current) {
+        setFetchError("Could not load employees. Please refresh.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === employeeRequestId.current) setLoading(false);
     }
   }, [branch, dept, status]);
 
   // Runs on mount, and again whenever a filter changes (fetchEmployees'
   // identity changes with branch/dept/status) — always resets to page 1,
   // keeps the current search term.
-  useEffect(() => { fetchEmployees(search, 1); }, [fetchEmployees]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (searchRef.current) clearTimeout(searchRef.current);
+    fetchEmployees(search, 1);
+  }, [fetchEmployees]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Takes the SAME branch/dept/status filters the table itself uses (not
   // just branch) so the KPI cards never show a count the filtered table
@@ -109,8 +121,16 @@ export function useEmployees() {
 
   function handleSearch(val: string) {
     setSearch(val);
+    employeeRequestId.current += 1;
+    setLoading(true);
+    setFetchError("");
     if (searchRef.current) clearTimeout(searchRef.current);
-    searchRef.current = setTimeout(() => fetchEmployees(val, 1), 350);
+    searchRef.current = setTimeout(() => fetchEmployees(val.trim(), 1), 350);
+  }
+
+  function submitSearch() {
+    if (searchRef.current) clearTimeout(searchRef.current);
+    fetchEmployees(search.trim(), 1);
   }
 
   function handlePageChange(newPage: number) {
@@ -230,7 +250,7 @@ export function useEmployees() {
   return {
     isAdmin, userBranch,
     employees, loading, fetchError, total: empStats.total,
-    search, setSearch: handleSearch,
+    search, setSearch: handleSearch, submitSearch,
     branch, setBranch: handleBranchChange,
     dept, setDept,
     status, setStatus,

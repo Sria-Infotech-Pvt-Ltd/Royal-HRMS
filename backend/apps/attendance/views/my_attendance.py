@@ -66,6 +66,12 @@ def _resolve_target_user(request):
     from apps.accounts.models import User
     user = User.objects.filter(employee_id=employee_id).first()
     if not user:
+        try:
+            import uuid
+            user = User.objects.filter(pk=uuid.UUID(str(employee_id))).first()
+        except (ValueError, TypeError, AttributeError):
+            user = None
+    if not user:
         return None, error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
     # Scope who a non-system_admin can look up — managers get their direct

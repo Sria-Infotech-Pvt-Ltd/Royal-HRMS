@@ -41,12 +41,14 @@ class EmployeeStatsConsistencyTests(TestCase):
             branch='Kondapur', department='', is_active=True,
             must_change_password=False, employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
         )
-        # Still on probation — must NOT count as "active" (this used to be
-        # miscounted as active by the stats endpoint).
+        # A direct hire may still need to change their temporary password;
+        # that is not incomplete onboarding and must not hide their
+        # probation status from the directory.
         make_user(
             'probation@test.com', role=probation_role, employee_id='STC002',
             branch='Kondapur', department='', is_active=True,
-            must_change_password=False, employment_status=User.EMPLOYMENT_STATUS_PROBATION,
+            must_change_password=True, onboarding_status=User.ONBOARDING_COMPLETE,
+            employment_status=User.EMPLOYMENT_STATUS_PROBATION,
         )
 
     def _stats(self, **params):
@@ -75,3 +77,23 @@ class EmployeeStatsConsistencyTests(TestCase):
         self.assertEqual(stats_resp.status_code, 200, stats_resp.data)
         self.assertEqual(stats_resp.data['data']['total'], 0)
         self.assertEqual(stats_resp.data['data']['active'], 0)
+
+    def test_password_change_is_not_reported_as_onboarding(self):
+        probation_resp = self.client.get(reverse('employee-list-create'), {'status': 'probation'})
+        self.assertEqual(probation_resp.status_code, 200, probation_resp.data)
+        self.assertEqual(probation_resp.data['data']['count'], 1)
+
+        onboarding_resp = self.client.get(reverse('employee-list-create'), {'status': 'onboarding'})
+        self.assertEqual(onboarding_resp.status_code, 200, onboarding_resp.data)
+        self.assertEqual(onboarding_resp.data['data']['count'], 0)
+
+        employee = next(
+            row for row in probation_resp.data['data']['results']
+            if row['employee_id'] == 'STC002'
+        )
+        self.assertEqual(employee['status'], 'active')
+        self.assertEqual(employee['onboarding_status'], User.ONBOARDING_COMPLETE)
+
+        stats_resp = self._stats()
+        self.assertEqual(stats_resp.status_code, 200, stats_resp.data)
+        self.assertEqual(stats_resp.data['data']['onboarding'], 0)

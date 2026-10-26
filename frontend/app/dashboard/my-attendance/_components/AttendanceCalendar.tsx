@@ -71,10 +71,13 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
           const bg      = record?.color ? record.color + '26' : 'transparent';
           const isToday = isCurrentMonth && day === today;
           const col     = idx % 7;
+          const attendanceDate = day ? dateStr(day) : "";
 
           return (
             <div
               key={idx}
+              title={record?.status ? `${attendanceDate}: ${record.status}` : undefined}
+              aria-label={record?.status ? `${attendanceDate}: ${record.status}` : undefined}
               style={{
                 minHeight: 48,
                 padding: "5px 5px",
@@ -98,7 +101,11 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                       {day}
                     </div>
                     {label && (
-                      <span style={{ fontSize: 7.5, fontWeight: 700, color: fg, letterSpacing: "0.04em" }}>
+                      <span
+                        title={status}
+                        aria-label={status}
+                        style={{ fontSize: 8.5, fontWeight: 800, color: fg, letterSpacing: "0.04em" }}
+                      >
                         {label}
                       </span>
                     )}
