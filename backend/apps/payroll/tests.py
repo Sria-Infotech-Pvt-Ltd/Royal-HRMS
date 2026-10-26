@@ -105,10 +105,22 @@ class PayrollCycleCreationNotifiesManagersTests(TestCase):
         self.manager = make_user(
             'manager2@test.com', role=manager_role, password='TestPass123!', branch=branch.branch_name,
         )
+        self.unrelated_manager = make_user(
+            'unrelated-manager@test.com', role=manager_role, password='TestPass123!',
+            branch=branch.branch_name,
+        )
+        make_user(
+            'report-to-manager@test.com',
+            role=make_role('cycle_reporting_employee'),
+            password='TestPass123!',
+            branch=branch.branch_name,
+            employee_id='REPORT001',
+            reporting_manager=self.manager,
+        )
 
         _login(self.client, 'hr@test.com')
 
-    def test_cycle_creation_notifies_active_managers(self):
+    def test_cycle_creation_notifies_only_managers_with_cycle_employees(self):
         resp = self.client.post(
             reverse('payroll-cycle-list'),
             {
@@ -121,7 +133,11 @@ class PayrollCycleCreationNotifiesManagersTests(TestCase):
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertTrue(
             Notification.objects.filter(user=self.manager, module='payroll').exists(),
-            'Manager was not notified of the new payroll cycle awaiting attendance sign-off.',
+            'The reporting manager was not notified of the payroll cycle.',
+        )
+        self.assertFalse(
+            Notification.objects.filter(user=self.unrelated_manager, module='payroll').exists(),
+            'A manager without payroll-eligible direct reports should not be asked to approve.',
         )
 
 

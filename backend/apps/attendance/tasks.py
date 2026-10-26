@@ -6,6 +6,7 @@ Registered in CELERY_BEAT_SCHEDULE (config/settings.py) for periodic execution.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from celery import shared_task
 from django.utils import timezone
@@ -92,6 +93,21 @@ def check_absence_alerts(self):
         return result
     except Exception as exc:
         logger.error('check_absence_alerts failed: %s', exc, exc_info=True)
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def finalize_daily_attendance(self):
+    """Finalize yesterday's missing attendance records after the workday closes."""
+    from apps.attendance.services_absence import finalize_missing_attendance
+
+    try:
+        target_date = timezone.localdate() - timedelta(days=1)
+        result = finalize_missing_attendance(target_date)
+        logger.info('finalize_daily_attendance: %s', result)
+        return result
+    except Exception as exc:
+        logger.error('finalize_daily_attendance failed: %s', exc, exc_info=True)
         raise self.retry(exc=exc)
 
 

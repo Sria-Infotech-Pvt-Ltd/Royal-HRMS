@@ -1,4 +1,3 @@
-from core.access import team_managers
 import logging
 from collections import defaultdict
 from datetime import date
@@ -33,7 +32,7 @@ from apps.payroll.serializers import (
     ManagerAttendanceApprovalSerializer,
 )
 from apps.payroll.services_income_tax import estimate_monthly_tds
-from apps.accounts.models import AuditLog, User
+from apps.accounts.models import AuditLog
 from apps.attendance.models import AttendanceRecord, AttendanceSettings, AttendanceLateMarkRules
 from apps.branch.models import Branch
 
@@ -171,14 +170,10 @@ class PayrollCycleListView(APIView):
             ip_address=get_client_ip(request),
         )
 
-        # Seed one approval row per active manager in this branch (or all if global)
+        # Only managers who actually have payroll-eligible direct reports need
+        # to attest to this cycle's attendance.
         try:
-            manager_qs = User.objects.filter(team_managers(), is_active=True).exclude(pk=request.user.pk)
-
-            if branch_obj is not None:
-                manager_qs = manager_qs.filter(branch=branch_obj.branch_name)
-
-            managers = list(manager_qs)
+            managers = list(_cycle_attendance_managers(cycle))
 
             ManagerAttendanceApproval.objects.bulk_create([
                 ManagerAttendanceApproval(cycle=cycle, manager=m)

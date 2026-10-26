@@ -28,9 +28,9 @@ export default function OverrideEditor({ row, employeeCode, branch, defaultManag
   const branchParam = branch ? `?branch=${encodeURIComponent(branch)}` : "";
 
   const { data: managersRaw, loading: loadingManagers } =
-    useFetch<PickerEmployee[]>(`${API.employees.managerList}${branchParam}`);
+    useFetch<PickerEmployee[]>(branchParam ? `${API.employees.managerList}${branchParam}` : null);
   const { data: hrsRaw, loading: loadingHrs } =
-    useFetch<PickerEmployee[]>(`${API.employees.hrList}${branchParam}`);
+    useFetch<PickerEmployee[]>(branchParam ? `${API.employees.hrList}${branchParam}` : null);
 
   const managers = managersRaw ?? [];
   const hrs      = hrsRaw      ?? [];

@@ -5,7 +5,7 @@ gate transitions: cycle creation (notify L1 managers) and all-L1-complete
 """
 from __future__ import annotations
 
-from core.access import team_managers, users_with_permission
+from core.access import users_with_permission
 import logging
 import threading
 
@@ -62,20 +62,19 @@ def _send_email(user, template_name: str, context: dict) -> None:
 
 def notify_l1_approval_required(cycle) -> None:
     """
-    Notify all branch managers that their attendance sign-off is needed.
+    Notify only the managers assigned to this cycle's attendance sign-off.
     Called immediately when a payroll cycle is created.
     """
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
-
-    manager_qs = User.objects.filter(team_managers(), is_active=True)
-    if cycle.branch:
-        manager_qs = manager_qs.filter(branch=cycle.branch.branch_name)
+    from apps.payroll.models import ManagerAttendanceApproval
+    manager_rows = ManagerAttendanceApproval.objects.filter(
+        cycle=cycle, manager__is_active=True,
+    ).select_related('manager')
 
     month_label = cycle.cycle_start.strftime('%B %Y')
     ref_id = str(cycle.id)
 
-    for manager in manager_qs:
+    for approval in manager_rows:
+        manager = approval.manager
         _notify(
             manager,
             'Payroll Approval Required',

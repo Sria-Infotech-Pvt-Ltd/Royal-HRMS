@@ -77,6 +77,19 @@ def _resolve_user_branch(user):
     return Branch.objects.filter(branch_name=user.branch, status=Branch.STATUS_ACTIVE).first()
 
 
+def _cycle_attendance_managers(cycle):
+    """Active reporting managers for payroll-eligible employees in this cycle."""
+    from apps.accounts.models import User
+
+    manager_ids = (
+        _eligible_employees_qs(cycle)
+        .exclude(reporting_manager_id__isnull=True)
+        .values_list('reporting_manager_id', flat=True)
+        .distinct()
+    )
+    return User.objects.filter(pk__in=manager_ids, is_active=True)
+
+
 __all__ = [
     'PayrollAlreadyProcessing',
     '_esi_contribution_period',
@@ -89,6 +102,7 @@ __all__ = [
     '_can_l2_approve',
     '_is_admin',
     '_resolve_user_branch',
+    '_cycle_attendance_managers',
     '_PF_DEFAULT_RATE',
     '_PF_DEFAULT_CEILING',
     '_PAYSLIP_FIELDS',

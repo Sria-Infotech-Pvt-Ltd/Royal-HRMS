@@ -329,7 +329,11 @@ def _eligible_employees_qs(cycle: PayrollCycle):
     what actually gets processed."""
     # Phase 4 Task B.3 — was .exclude(role__name__in=['system_admin']);
     # payroll-exclusion is now an explicit role attribute.
-    active_qs = User.objects.filter(is_active=True).exclude(excluded_from_payroll())
+    active_qs = (
+        User.objects.filter(is_active=True)
+        .exclude(employee_id='')
+        .exclude(excluded_from_payroll())
+    )
 
     # Mid-cycle leavers: an employee deactivated before this cycle is
     # processed was previously excluded outright by is_active=True above —
@@ -342,6 +346,7 @@ def _eligible_employees_qs(cycle: PayrollCycle):
     leaver_ids = (
         AttendanceRecord.objects
         .filter(employee__is_active=False, date__range=(cycle.cycle_start, cycle.cycle_end))
+        .exclude(employee__employee_id='')
         .exclude(excluded_from_payroll('employee__'))
         .values_list('employee_id', flat=True)
         .distinct()
@@ -354,6 +359,80 @@ def _eligible_employees_qs(cycle: PayrollCycle):
         employees_qs = employees_qs.filter(branch=cycle.branch.branch_name)
 
     return employees_qs
+
+
+def _leave_workdays_in_range(employee, leave_request, start: date, end: date, policy) -> Decimal:
+    """Count the leave's chargeable days inside a date window."""
+    from core.cache_service import HolidayCacheService, WeeklyOffCacheService
+
+    if start > end:
+        return Decimal('0')
+    if leave_request.duration != 'full_day':
+        return Decimal('0.5') if start <= leave_request.start_date <= end else Decimal('0')
+
+    off_days = WeeklyOffCacheService.get_effective_range(employee, start, end)
+    holidays = HolidayCacheService.get_holiday_dates(
+        start, end, getattr(employee, 'branch', '') or '',
+    )
+    count_weekoffs = getattr(policy, 'count_weekoffs_as_leave', False)
+    sandwich = getattr(policy, 'sandwich_leave_enabled', False)
+    count_holidays = getattr(policy, 'count_holidays_as_leave', False)
+    count = 0
+    current = start
+    from datetime import timedelta
+
+    while current <= end:
+        is_off = current.strftime('%A').lower() in off_days[current]
+        is_holiday = current in holidays
+        if is_holiday and not count_holidays:
+            pass
+        elif sandwich or not is_off or count_weekoffs:
+            count += 1
+        current += timedelta(days=1)
+    return Decimal(count)
+
+
+def _approved_leave_lop_by_employee(employee_ids, cycle: PayrollCycle) -> dict:
+    """Aggregate approved LWP and approved partial LOP within the cycle."""
+    from core.cache_service import LeavePolicyCacheService
+    from apps.hrms.models import LeaveRequest, REQ_APPROVED
+
+    requests = LeaveRequest.objects.filter(
+        employee_id__in=employee_ids,
+        status=REQ_APPROVED,
+        start_date__lte=cycle.cycle_end,
+        end_date__gte=cycle.cycle_start,
+    ).select_related('employee')
+    lop_by_employee = defaultdict(Decimal)
+
+    for leave_request in requests:
+        requested_lop = (
+            Decimal(leave_request.total_days)
+            if leave_request.is_lwp
+            else Decimal(leave_request.lop_days)
+        )
+        if requested_lop <= 0:
+            continue
+        overlap_start = max(leave_request.start_date, cycle.cycle_start)
+        overlap_end = min(leave_request.end_date, cycle.cycle_end)
+        if overlap_start == leave_request.start_date and overlap_end == leave_request.end_date:
+            cycle_lop = requested_lop
+        else:
+            policy = LeavePolicyCacheService.get(leave_request.leave_type)
+            total_days = _leave_workdays_in_range(
+                leave_request.employee, leave_request,
+                leave_request.start_date, leave_request.end_date, policy,
+            )
+            overlap_days = _leave_workdays_in_range(
+                leave_request.employee, leave_request, overlap_start, overlap_end, policy,
+            )
+            cycle_lop = (
+                requested_lop * overlap_days / total_days
+                if total_days > 0 else Decimal('0')
+            )
+        lop_by_employee[leave_request.employee_id] += cycle_lop
+
+    return lop_by_employee
 
 
 def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -> dict:
@@ -472,6 +551,7 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
         date__range=(cycle.cycle_start, cycle.cycle_end),
     ).only('employee_id', 'status', 'date'):
         records_by_emp[rec.employee_id].append((rec.date, rec.status))
+    leave_lop_by_emp = _approved_leave_lop_by_employee(employee_ids, cycle)
 
     # ── Join/leave-date proration ──────────────────────────────────────────
     # Previously: a mid-cycle joiner's date_of_joining was never consulted at
@@ -580,7 +660,10 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
         late_count   = late_count_by_emp.get(employee.id, 0)
         # Late marks → LOP per the configured policy threshold (0 if late-mark LOP is disabled)
         late_lop     = (Decimal(late_count // late_per_lop) * late_lop_unit) if late_per_lop else Decimal('0')
-        emp_lop      = absent_days + (half_days * Decimal('0.5')) + late_lop
+        emp_lop      = (
+            absent_days + (half_days * Decimal('0.5')) + late_lop
+            + leave_lop_by_emp.get(employee.id, Decimal('0'))
+        )
         # Use actual working days from attendance records; fall back to settings default if no records
         emp_working_days = working_days_by_emp.get(employee.id) or 26
         tax_declaration = tax_declaration_by_employee.get(employee.id)

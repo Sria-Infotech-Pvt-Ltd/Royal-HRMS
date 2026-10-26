@@ -345,7 +345,7 @@ class EmployeeAuditTrailView(APIView):
         rows = (
             AuditLog.objects
             .filter(module='employees', object_id=str(employee.id))
-            .select_related('user', 'user__role')
+            .select_related('user')
             .order_by('-created_at')[:5]
         )
         return success('Audit trail retrieved.', data=AuditLogSerializer(rows, many=True).data)
@@ -408,7 +408,7 @@ class AuditLogListView(APIView):
     def get(self, request):
         if not _has_perm(request.user, 'audit.view'):
             return error('You do not have permission to view audit logs.', http_status=status.HTTP_403_FORBIDDEN)
-        qs = AuditLog.objects.select_related('user', 'user__role').order_by('-created_at')
+        qs = AuditLog.objects.select_related('user').order_by('-created_at')
 
         # HR/Branch Admin (no settings.edit) only sees events regarding their
         # own branch — filtered on the event's target branch (AuditLog.branch),

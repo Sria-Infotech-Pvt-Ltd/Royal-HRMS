@@ -1,4 +1,3 @@
-from core.access import team_managers
 import logging
 from collections import defaultdict
 from datetime import date
@@ -33,7 +32,7 @@ from apps.payroll.serializers import (
     ManagerAttendanceApprovalSerializer,
 )
 from apps.payroll.services_income_tax import estimate_monthly_tds
-from apps.accounts.models import AuditLog, User
+from apps.accounts.models import AuditLog
 from apps.attendance.models import AttendanceRecord, AttendanceSettings, AttendanceLateMarkRules
 from apps.branch.models import Branch
 
@@ -203,12 +202,7 @@ class ManagerAttendanceApprovalListView(APIView):
             cycle.status == PayrollCycle.STATUS_ATTENDANCE_PENDING
             and not ManagerAttendanceApproval.objects.filter(cycle=cycle).exists()
         ):
-            manager_qs = User.objects.filter(team_managers(), is_active=True)
-
-            if cycle.branch:
-                manager_qs = manager_qs.filter(branch=cycle.branch.branch_name)
-
-            managers = list(manager_qs)
+            managers = list(_cycle_attendance_managers(cycle))
             if managers:
                 ManagerAttendanceApproval.objects.bulk_create([
                     ManagerAttendanceApproval(cycle=cycle, manager=m)

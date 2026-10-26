@@ -283,7 +283,7 @@ export function ApprovalMatrixTab({
       {editingManager && (
         <RelationshipEditorModal
           title="Edit Reporting Manager"
-          listEndpoint={`${API.employees.managerList}${branchParam}`}
+          listEndpoint={branchParam ? `${API.employees.managerList}${branchParam}` : null}
           currentId={managerId}
           saveEndpoint={API.employees.reportingManager(employeeCode)}
           bodyKey="reporting_manager_id"
@@ -304,7 +304,7 @@ export function ApprovalMatrixTab({
       {editingHr && (
         <RelationshipEditorModal
           title="Edit Company Code HR"
-          listEndpoint={`${API.employees.hrList}${branchParam}`}
+          listEndpoint={branchParam ? `${API.employees.hrList}${branchParam}` : null}
           currentId={hrId}
           saveEndpoint={API.employees.hr(employeeCode)}
           bodyKey="hr_id"

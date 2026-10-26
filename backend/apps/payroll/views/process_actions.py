@@ -77,6 +77,18 @@ class ProcessPayrollView(APIView):
         ):
             return error('Attendance must be approved before processing payroll.')
 
+        incomplete_attendance_count = AttendanceRecord.objects.filter(
+            employee_id__in=_eligible_employees_qs(cycle).values('id'),
+            date__range=(cycle.cycle_start, cycle.cycle_end),
+            status=AttendanceRecord.STATUS_INCOMPLETE,
+        ).count()
+        if incomplete_attendance_count:
+            return error(
+                f'Payroll is blocked because {incomplete_attendance_count} attendance record(s) '
+                'still have an unresolved missing clock-out. Resolve or regularize them before processing.',
+                http_status=409,
+            )
+
         # Optional employee selection — omitted/null preserves the original
         # behavior exactly (every eligible employee). An explicit empty list
         # is rejected rather than silently treated as "everyone", since that

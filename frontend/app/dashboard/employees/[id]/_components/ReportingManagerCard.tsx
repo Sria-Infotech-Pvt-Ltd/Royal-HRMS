@@ -16,7 +16,7 @@ interface Props {
   value:        string;   // display name
   selectedId:   string;   // current UUID
   disabled:     boolean;  // true = view mode
-  listEndpoint: string;
+  listEndpoint: string | null;
   onSelect:     (uuid: string | null, name: string | null) => void;
 }
 

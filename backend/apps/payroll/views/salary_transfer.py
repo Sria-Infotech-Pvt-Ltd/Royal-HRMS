@@ -28,7 +28,11 @@ from core.responses import error, get_client_ip, success
 
 from apps.accounts.models import AuditLog
 from apps.payroll.models import EmployeePayslip, PayrollCycle, SalaryTransferBatch, SalaryTransferItem
-from apps.payroll.views.shared import _is_admin, _resolve_user_branch
+from apps.payroll.views.shared import (
+    _eligible_employees_qs,
+    _is_admin,
+    _resolve_user_branch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +48,16 @@ def _cycle_ready_for_transfer_confirmation(cycle) -> tuple:
     payslips = cycle.payslips.all()
     if not payslips.exists():
         return False, 'This cycle has no payslips generated yet.'
+    eligible_employee_ids = set(
+        _eligible_employees_qs(cycle).values_list('id', flat=True)
+    )
+    payslip_employee_ids = set(payslips.values_list('employee_id', flat=True))
+    missing_payslips = eligible_employee_ids - payslip_employee_ids
+    if missing_payslips:
+        return False, (
+            f'{len(missing_payslips)} payroll-eligible employee(s) do not have a payslip yet. '
+            'Complete payroll processing for the remaining employees before confirming transfer.'
+        )
     not_ready = payslips.exclude(status__in=_EMPLOYEE_CONFIRMED_STATUSES)
     if not_ready.exists():
         return False, (

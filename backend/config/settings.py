@@ -305,6 +305,12 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.attendance.tasks.check_absence_alerts',
         'schedule': crontab(hour=9, minute=0),
     },
+    # Runs after midnight, when yesterday's workday is closed. Existing
+    # punches, leave, corrections, and reviewed records are not overwritten.
+    'finalize-daily-attendance': {
+        'task':     'apps.attendance.tasks.finalize_daily_attendance',
+        'schedule': crontab(hour=0, minute=30),
+    },
     # Runs daily at 00:05 IST — sends birthday wishes (email + in-app
     # notifications) to employees. Offset 5 min past midnight rather than
     # exactly 00:00 so it doesn't collide with other midnight-triggered jobs.

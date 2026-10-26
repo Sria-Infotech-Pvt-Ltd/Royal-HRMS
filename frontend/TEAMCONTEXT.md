@@ -5932,3 +5932,33 @@ dropdowns were showing blank "Select" for every employee instead of their real v
   fallback) so either calling convention works without the frontend needing to convert back before
   saving. New tests: `apps/accounts/tests_employee_detail_patch_partial_update.py` ::
   `EmployeeDetailPatchRoleLookupTests`.
+
+---
+
+# Team Context — Attendance, Payroll, Navigation, and HR Pickers
+
+**Date:** 26 October 2026
+
+## Employee attendance and payroll safeguards
+
+- A Celery task finalizes the previous day's attendance for eligible employees. Existing records are preserved, approved leave is represented as leave, and other missing days use the existing processor for absence/holiday/weekly-off classification. `finalize-daily-attendance` is scheduled for 00:30; deployment still needs a live Celery Beat process for the schedule to run.
+- Payroll LOP now includes approved unpaid leave and partial `lop_days`, including requests spanning payroll periods. Unresolved incomplete attendance blocks payroll processing instead of silently treating an incomplete punch as absence.
+- Payroll attendance sign-offs and L1 notices are restricted to the reporting managers of employees in that cycle. Transfer confirmation requires a payslip for each payroll-eligible employee.
+- Payroll still prepares the transfer file for HR-confirmed external bank payment; it does not automatically credit employee bank accounts.
+
+## Admin navigation
+
+- My Workspace is the single top-level navigation entry for self-service profile, attendance, requests, and payslips. The standalone routes remain available for existing bookmarks and direct links.
+- My Assessments and My Referrals remain visible as distinct navigation entries; they are not tabs in My Workspace.
+
+## Employee audit trail and branch-scoped HR pickers
+
+- `AuditLog.user` relates to the current User model, which has no `role` relation. Do not use `select_related('user__role')` in audit queries. Both the employee audit-trail endpoint and audit-log list now select only `user`; the serializer reports the actor's designation as `actor_role`.
+- `GET /employees/hrs/` requires a non-empty `branch` query parameter. HR dropdowns must wait until a branch is known and call `/employees/hrs/?branch=<branch>`; do not send an unfiltered request. The invalid-punch assignment picker uses the punch's branch.
+- Regression coverage: `apps/accounts/tests_employee_audit.py` checks both employee self-audit and the audit-log list response.
+
+## Validation and follow-up
+
+- Focused employee audit tests passed (2 tests); Django system checks and Python compilation passed. Frontend ESLint for the modified HR pickers, `npx tsc --noEmit`, and `git diff --check` passed.
+- Attendance/payroll focused tests passed earlier in the workflow; the broader backend test run was interrupted by a PostgreSQL test-database connection failure. Re-run the full relevant suite when the test database is stable.
+- The logs also showed a canceled, slow employee-list request (`page_size=500`). The endpoint currently caps normal employee listing at 50 records, so callers needing large lists should paginate and search rather than rely on one oversized request. Profile further if the timeout persists.

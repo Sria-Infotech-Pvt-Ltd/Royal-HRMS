@@ -209,3 +209,75 @@ def detect_absence_alerts() -> dict:
         checked, threshold, alerts_sent,
     )
     return {'checked': checked, 'threshold': threshold, 'alerts_sent': alerts_sent}
+
+
+def finalize_missing_attendance(target_date: date) -> dict:
+    """Create a daily attendance result for eligible employees with no record.
+
+    Existing records are left untouched so incomplete punches, corrections,
+    and manually reviewed attendance are not overwritten. Approved leave is
+    excluded; the attendance processor handles holidays and weekly offs.
+    """
+    from apps.accounts.models import User
+    from apps.attendance.models import AttendanceRecord
+    from apps.attendance.services_attendance import AttendanceProcessorService
+    from apps.hrms.models import LeaveRequest, REQ_APPROVED
+
+    today = timezone.localdate()
+    if target_date >= today:
+        return {'created': 0, 'skipped': 0, 'reason': 'target_date_not_closed'}
+
+    employees = list(
+        User.objects.filter(
+            is_active=True,
+            onboarding_status=User.ONBOARDING_COMPLETE,
+            date_of_joining__lte=target_date,
+        )
+        .exclude(employee_id='')
+        .only('id', 'branch', 'employee_id', 'date_of_joining')
+    )
+    if not employees:
+        return {'created': 0, 'skipped': 0, 'reason': 'no_eligible_employees'}
+
+    employee_ids = [employee.pk for employee in employees]
+    existing_ids = set(
+        AttendanceRecord.objects.filter(
+            employee_id__in=employee_ids, date=target_date,
+        ).values_list('employee_id', flat=True)
+    )
+    approved_leave_ids = set(
+        LeaveRequest.objects.filter(
+            employee_id__in=employee_ids,
+            status=REQ_APPROVED,
+            start_date__lte=target_date,
+            end_date__gte=target_date,
+        ).values_list('employee_id', flat=True)
+    )
+
+    created = skipped = 0
+    for employee in employees:
+        if employee.pk in existing_ids:
+            skipped += 1
+            continue
+        if employee.pk in approved_leave_ids:
+            _, was_created = AttendanceRecord.objects.get_or_create(
+                employee=employee,
+                date=target_date,
+                defaults={
+                    'status': AttendanceRecord.STATUS_ON_LEAVE,
+                    'first_punch_in': None,
+                    'last_punch_out': None,
+                    'total_working_minutes': 0,
+                },
+            )
+            if was_created:
+                created += 1
+            else:
+                skipped += 1
+            continue
+        AttendanceProcessorService.process_day(employee, target_date)
+        created += 1
+
+    result = {'created': created, 'skipped': skipped, 'reason': 'ok'}
+    logger.info('Daily attendance closeout for %s: %s', target_date, result)
+    return result

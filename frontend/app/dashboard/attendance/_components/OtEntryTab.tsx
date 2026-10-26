@@ -46,7 +46,10 @@ export default function OtEntryTab() {
   const branch = unrestricted ? branchInput : effectiveBranch;
 
   const { data: employeeData } = useFetch<{ results: PickerEmployee[] }>(`${API.employees.list}?page_size=200`);
-  const { data: approvers }    = useFetch<PickerEmployee[]>(API.employees.hrList);
+  const approverUrl = branch
+    ? `${API.employees.hrList}?branch=${encodeURIComponent(branch)}`
+    : null;
+  const { data: approvers }    = useFetch<PickerEmployee[]>(approverUrl);
   const employees = employeeData?.results ?? [];
 
   const { data: branchData } = useFetch<BranchOption[] | { results: BranchOption[] }>(

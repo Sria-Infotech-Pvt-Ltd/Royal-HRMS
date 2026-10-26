@@ -9,7 +9,7 @@ import { type PickerEmployee, SELECT_CLS } from "./approvalMatrixShared";
 
 interface RelationshipEditorProps {
   title:        string;
-  listEndpoint: string;
+  listEndpoint: string | null;
   currentId:    string;
   saveEndpoint: string;
   bodyKey:      string;

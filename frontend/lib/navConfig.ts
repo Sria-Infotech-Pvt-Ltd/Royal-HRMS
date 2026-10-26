@@ -56,27 +56,19 @@ const ALL_NAV: NavEntry[] = [
   { id: "documents", icon: "ti-folder", label: "Document Center", path: "/dashboard/documents", permission: "documents.view" },
 
   { section: "My" },
-  // Consolidates Profile/My Attendance/Leave/My Payslips/Document Center/
-  // Separation/My Requests into one tabbed shell — those entries below stay
-  // as-is (bookmarks/deep links keep working), this is an additional entry
-  // point, not a replacement.
+  // My Workspace is the single navigation entry for self-service modules
+  // that also have legacy standalone routes. Those routes remain available
+  // for bookmarks and deep links; distinct modules stay in the nav below.
   { id: "ess", icon: "ti-apps", label: "My Workspace", path: "/dashboard/ess", permission: null },
-  { id: "my-attendance", icon: "ti-clock-check", label: "My Attendance", path: "/dashboard/my-attendance", permission: null },
-  { id: "my-requests", icon: "ti-list-check", label: "My Requests", path: "/dashboard/my-requests", permission: null },
-  // permission: null, matching my-attendance above — the backend's MyPayslipsView
-  // is IsAuthenticated-only today. Switch this to "payroll.view_own" once the
-  // backend actually adds that codename (see the payroll-permissions request
-  // sent to the backend team) — until then, null is what's actually correct.
-  { id: "my-payslip", icon: "ti-receipt", label: "My Payslips", path: "/dashboard/my-payslip", permission: null },
+  // My Assessments is the employee entry point to the shared assessments page;
+  // it is not a tab in My Workspace.
   // Same path as the admin "Assessments" entry above (Recruitment section) —
   // the page itself picks admin management vs. EmployeeMyAssessments based on
   // permission (see app/dashboard/assessments/page.tsx's isAdminView check),
   // but without this separate entry an employee with no assessments.* grant
-  // (i.e. everyone assigned an onboarding assessment) had no sidebar link to
-  // it at all, matching the my-attendance/my-payslip self-service pattern.
+  // (i.e. everyone assigned an onboarding assessment) had no sidebar link.
   { id: "my-assessments", icon: "ti-clipboard-check", label: "My Assessments", path: "/dashboard/assessments", permission: null },
   { id: "referrals", icon: "ti-user-plus", label: "My Referrals", path: "/dashboard/referrals", permission: null },
-  { id: "profile", icon: "ti-user-circle", label: "My Profile", path: "/dashboard/profile", permission: null },
 
   { section: "System" },
   { id: "reports", icon: "ti-chart-bar", label: "Reports", path: "/dashboard/reports", permission: null },

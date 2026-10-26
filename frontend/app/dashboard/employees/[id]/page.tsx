@@ -506,7 +506,7 @@ export default function EmployeeProfilePage({
                       value={values.hr ?? ""}
                       selectedId={values.hrId ?? ""}
                       disabled={false}
-                      listEndpoint={values.branch ? `${API.employees.hrList}?branch=${encodeURIComponent(values.branch)}` : API.employees.hrList}
+                      listEndpoint={values.branch ? `${API.employees.hrList}?branch=${encodeURIComponent(values.branch)}` : null}
                       onSelect={(uuid, name) =>
                         setValues(v => ({ ...v, hr: name ?? "", hrId: uuid ?? "" }))
                       }

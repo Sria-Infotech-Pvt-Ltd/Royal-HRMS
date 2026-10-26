@@ -23,7 +23,10 @@ interface Props {
 
 export default function AssignPunchModal({ punch, onClose, onAssigned }: Props) {
   const { showToast } = useToast();
-  const { data: hrUsers } = useFetch<HrUser[]>(API.employees.hrList);
+  const hrListUrl = punch.branch && punch.branch !== "—"
+    ? `${API.employees.hrList}?branch=${encodeURIComponent(punch.branch)}`
+    : null;
+  const { data: hrUsers } = useFetch<HrUser[]>(hrListUrl);
   const [assignedTo, setAssignedTo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState<string | null>(null);

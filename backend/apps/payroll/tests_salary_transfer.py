@@ -73,6 +73,21 @@ class SalaryTransferConfirmationTests(TestCase):
         self.assertEqual(resp.status_code, 400, resp.data)
         self.assertFalse(SalaryTransferBatch.objects.filter(cycle=self.cycle).exists())
 
+    def test_confirmation_blocked_when_an_eligible_employee_has_no_payslip(self):
+        make_user(
+            'missing-payslip@test.com',
+            role=make_role('missing_payslip_employee'),
+            password='TestPass123!',
+            employee_id='MISSING001',
+        )
+        self._acknowledge_payslip()
+
+        resp = self.client.post(self._confirm_url())
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn('do not have a payslip', resp.data['message'])
+        self.assertFalse(SalaryTransferBatch.objects.filter(cycle=self.cycle).exists())
+
     def test_confirmation_succeeds_once_acknowledged_and_locks_snapshot(self):
         self._acknowledge_payslip()
         resp = self.client.post(self._confirm_url())
