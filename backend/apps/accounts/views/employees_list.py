@@ -209,9 +209,10 @@ class EmployeeListCreateView(APIView):
             if status_param == 'inactive':
                 qs = qs.filter(is_active=False)
             elif status_param == 'active':
+                # Hired and onboarded means Active; probation is a separate
+                # employment label (the 'probation' filter below is a subset).
                 qs = qs.filter(
                     is_active=True, onboarding_status=User.ONBOARDING_COMPLETE,
-                    employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
                 ).exclude(notice_period_q)
             elif status_param == 'onboarding':
                 qs = qs.filter(is_active=True).exclude(onboarding_status=User.ONBOARDING_COMPLETE)
@@ -641,12 +642,11 @@ class EmployeeStatsView(APIView):
 
         # "Active" here must mean exactly what the table's own Active status
         # filter means (EmployeeListCreateView.get()'s status_param == 'active')
-        # — confirmed, not still onboarding/probation, and not on notice period
+        # — onboarded and not on notice period (probation still counts as Active)
         # — otherwise the two disagree (e.g. this card showing a nonzero count
         # while the table's Active filter shows none, or vice versa).
         active_count = qs.filter(
             is_active=True, onboarding_status=User.ONBOARDING_COMPLETE,
-            employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
         ).exclude(notice_period_q).count()
 
         return success('Employee statistics retrieved.', data={

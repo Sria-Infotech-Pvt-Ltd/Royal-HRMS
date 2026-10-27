@@ -10,7 +10,11 @@ from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
-from apps.payroll.models import EmployeeSalaryConfig
+from apps.payroll.models import (
+    BranchPayrollConfig,
+    EmployeeSalaryConfig,
+    SalaryStructure,
+)
 from apps.payroll.serializers import EmployeeSalaryConfigSerializer
 from apps.payroll.views.shared import _is_admin
 
@@ -26,6 +30,16 @@ def _resolve_employee(identifier):
         return User.objects.filter(employee_id=identifier, is_active=True).first()
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_structure_for_employee(employee):
+    branch_structure = BranchPayrollConfig.objects.filter(
+        branch__branch_name=employee.branch,
+        salary_structure__is_active=True,
+    ).values_list('salary_structure_id', flat=True).first()
+    if branch_structure:
+        return branch_structure
+    return SalaryStructure.objects.filter(is_default=True, is_active=True).values_list('id', flat=True).first()
 
 
 class EmployeeSalaryConfigListView(APIView):
@@ -80,6 +94,10 @@ class EmployeeSalaryConfigListView(APIView):
 
         data = request.data.copy()
         data['employee'] = str(employee.id)
+        if not data.get('salary_structure'):
+            default_structure_id = _resolve_structure_for_employee(employee)
+            if default_structure_id:
+                data['salary_structure'] = str(default_structure_id)
 
         serializer = EmployeeSalaryConfigSerializer(data=data)
         if not serializer.is_valid():

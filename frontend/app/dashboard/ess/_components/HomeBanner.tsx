@@ -44,9 +44,11 @@ function initials(name: string): string {
 interface Props {
   status: AttendanceStatus | null;
   onPunchSuccess: () => void;
+  /** Someone else is looking at this workspace: no Punch in / out. */
+  isReadOnly?: boolean;
 }
 
-export default function HomeBanner({ status, onPunchSuccess }: Props) {
+export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false }: Props) {
   const { data: profile, refetch: refetchProfile } = useFetch<HomeProfile>(API.employees.me);
   const { data: shift } = useFetch<Shift | null>(API.attendance.myShift);
 
@@ -96,7 +98,7 @@ export default function HomeBanner({ status, onPunchSuccess }: Props) {
           <b>{now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</b>
           <span>{shiftLabel}</span>
         </div>
-        <ClockInButton variant="ess" onPunchSuccess={onPunchSuccess} />
+        {!isReadOnly && <ClockInButton variant="ess" onPunchSuccess={onPunchSuccess} />}
       </div>
     </section>
   );

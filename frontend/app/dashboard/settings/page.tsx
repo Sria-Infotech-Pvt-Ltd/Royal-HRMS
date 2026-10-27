@@ -10,7 +10,7 @@ interface OverviewData { access_seats: number; audit_events_30d: number }
 
 const SETTINGS_ITEMS = [
   { id: "company",            cat: "company", icon: "ti-building",        iconClass: "sc-company", label: "Company Info",          desc: "Name, GST, address, registration details" },
-  { id: "access",             cat: "company", icon: "ti-key",             iconClass: "sc-company", label: "Access",                desc: "Permissions every employee has; positions carry the rest" },
+  { id: "access",             cat: "company", icon: "ti-key",             iconClass: "sc-company", label: "Permissions",           desc: "What everyone can do, what each position can do, and extra permissions for one person" },
   { id: "leave-policy",       cat: "modules", icon: "ti-beach",           iconClass: "sc-modules", label: "Leave Policy",          desc: "Configure leave types, accruals and limits" },
   { id: "approval-rules",     cat: "modules", icon: "ti-sitemap",         iconClass: "sc-modules", label: "Approval Rules",        desc: "Who approves leave, expenses, resignation and loans" },
   { id: "holiday-calendar",   cat: "modules", icon: "ti-calendar-event",  iconClass: "sc-modules", label: "Holiday Calendar",      desc: "Manage national, regional and company holidays" },

@@ -18,7 +18,7 @@ function slashDate(iso: string | null | undefined): string {
 }
 
 const STATUS_TONE: Record<DirectoryStatusLabel, StatusPillTone> = {
-  Active: "success", Onboarding: "warn", Probation: "brand", "Notice Period": "error", Exited: "neutral",
+  Active: "success", Onboarding: "warn", "Notice Period": "error", Exited: "neutral",
 };
 
 interface Props {
@@ -99,6 +99,9 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
       </div>
       <div>
         <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
+        {rowStatus === "Active" && e.employmentStatus === "probation" && (
+          <div className="text-[11px]" style={{ color: "var(--muted)", marginTop: 2 }}>On probation</div>
+        )}
       </div>
       <div className="text-[13px] whitespace-nowrap" style={{ color: "var(--muted)" }}>{slashDate(e.dateOfJoining)}</div>
       <div className="text-[13px] whitespace-nowrap">

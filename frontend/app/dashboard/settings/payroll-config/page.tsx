@@ -3,18 +3,22 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
+import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollSettings } from "@/types/payroll";
+import { DEFAULT_VISIBLE_PAY_LINE_CODES, PAY_BREAKUP_LINE_GROUPS } from "@/lib/payBreakup";
 import SalaryStructuresTab from "./_components/SalaryStructuresTab";
 import StatutoryConfigTab from "./_components/StatutoryConfigTab";
 import BranchConfigTab from "./_components/BranchConfigTab";
+import AllowanceCatalogueTab from "./_components/AllowanceCatalogueTab";
 
-type TabId = "run" | "structures" | "statutory" | "branch";
+type TabId = "run" | "structures" | "allowances" | "statutory" | "branch";
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: "run",       icon: "ti-settings",     label: "Payroll Run Settings"  },
   { id: "structures",icon: "ti-stack",         label: "Salary Structures"     },
+  { id: "allowances",icon: "ti-coin",          label: "Allowances"             },
   { id: "statutory", icon: "ti-building-bank", label: "Statutory Config"      },
   { id: "branch",    icon: "ti-building",      label: "Company Code Config"   },
 ];
@@ -24,6 +28,7 @@ export default function PayrollConfigPage() {
   const [tab,   setTab]   = useState<TabId>("run");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ text: string; isError: boolean } | null>(null);
+  const canEditPayroll = usePermission("payroll.edit");
 
   const { data: settings, loading, refetch } = useFetch<PayrollSettings>(API.payroll.settings);
 
@@ -32,6 +37,14 @@ export default function PayrollConfigPage() {
 
   function set<K extends keyof PayrollSettings>(key: K, value: PayrollSettings[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
+  }
+
+  function togglePayLineVisibility(code: string, isVisible: boolean) {
+    const visibleLines = draft.basic_pay_visible_lines ?? [...DEFAULT_VISIBLE_PAY_LINE_CODES];
+    set(
+      "basic_pay_visible_lines",
+      isVisible ? visibleLines.filter(lineCode => lineCode !== code) : [...visibleLines, code],
+    );
   }
 
   async function saveSettings() {
@@ -247,6 +260,44 @@ export default function PayrollConfigPage() {
                 </div>
               </div>
 
+              {/* Basic Pay editor visibility */}
+              <div className="px-5 py-5 border-b border-[var(--outline-v)]">
+                <div className="text-[12px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--on-variant)" }}>
+                  Basic Pay Editor Fields
+                </div>
+                <p className="text-[11px] mb-4" style={{ color: "var(--outline)" }}>
+                  Choose which rows appear in the employee Basic Pay editor. Hiding a row changes visibility only; it remains included in calculations and existing pay records.
+                </p>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  {PAY_BREAKUP_LINE_GROUPS.map(group => (
+                    <fieldset key={group.label} className="rounded-xl border border-[var(--outline-v)] p-4">
+                      <legend className="px-1 text-[11px] font-semibold" style={{ color: "var(--on-bg)" }}>{group.label}</legend>
+                      <div className="flex flex-col gap-3">
+                        {group.lines.map(line => {
+                          const visibleLines = draft.basic_pay_visible_lines ?? DEFAULT_VISIBLE_PAY_LINE_CODES;
+                          return (
+                            <label key={line.code} className="flex items-center gap-2 text-[12px] cursor-pointer" style={{ color: "var(--on-bg)" }}>
+                              <input
+                                type="checkbox"
+                                checked={visibleLines.includes(line.code)}
+                                disabled={!canEditPayroll}
+                                onChange={event => togglePayLineVisibility(line.code, event.target.checked)}
+                              />
+                              <span>{line.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  ))}
+                </div>
+                {!canEditPayroll && (
+                  <p className="text-[11px] mt-3" style={{ color: "var(--outline)" }}>
+                    You need payroll edit permission to change which fields are visible.
+                  </p>
+                )}
+              </div>
+
               {/* Optional components */}
               <div className="px-5 py-5">
                 <div className="text-[12px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--on-variant)" }}>Optional Payroll Components</div>
@@ -292,7 +343,8 @@ export default function PayrollConfigPage() {
       )}
 
       {tab === "structures" && <SalaryStructuresTab />}
-      {tab === "statutory"  && <StatutoryConfigTab />}
+      {tab === "allowances" && <AllowanceCatalogueTab />}
+      {tab === "statutory" && <StatutoryConfigTab />}
       {tab === "branch"     && <BranchConfigTab />}
     </>
   );

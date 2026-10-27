@@ -27,7 +27,8 @@ def _seat_permission_rows(user):
 
 def has_perm(user, codename: str, *, full_access_bypass: bool = True) -> bool:
     """
-    True if the user holds `codename` through the POSITION they hold today or the company baseline.
+    True if the user holds `codename` through the POSITION they hold today, a permission granted to them
+    personally, or the company baseline.
 
     Single shared implementation — this used to be copy-pasted independently
     across 36 view/serializer files and had drifted into three incompatible
@@ -40,13 +41,14 @@ def has_perm(user, codename: str, *, full_access_bypass: bool = True) -> bool:
     # with no Role and no position must still pass.
     if getattr(user, 'is_superuser', False) and full_access_bypass:
         return True
-    # settings.edit is this codebase's universal "sees/does everything"
-    # signal — checking it here (permission-based) instead of a hardcoded
-    # role name means anything actually granted settings.edit gets the same bypass.
-    wanted = {codename, 'settings.edit'} if full_access_bypass else {codename}
+    # Only a superuser has every permission. Holding settings.edit (through a seat) lets someone manage Settings,
+    # nothing more: it no longer stands in for every other permission.
+    wanted = {codename}
     if not _is_saved_user(user):
         return False  # a stand-in object, not a saved User: there is no seat or baseline to look up
     if _seat_permission_rows(user).filter(permission__codename__in=wanted).exists():
+        return True
+    if user.extra_permissions.filter(permission__codename__in=wanted).exists():
         return True
     from core.access import baseline_codenames
     return bool(baseline_codenames() & wanted)
@@ -71,6 +73,7 @@ def effective_permission_codenames(user) -> list[str]:
     if not _is_saved_user(user):
         return sorted(codenames)
     codenames.update(_seat_permission_rows(user).values_list('permission__codename', flat=True))
+    codenames.update(user.extra_permissions.values_list('permission__codename', flat=True))
     from core.access import baseline_codenames
     codenames.update(baseline_codenames())
     return sorted(codenames)

@@ -230,6 +230,9 @@ def _earnings_deductions(ctx: _Ctx, y: float) -> float:
     deductions = [('Provident fund', slip.pf_employee), ('Professional tax', slip.pt_deduction)]
     if slip.income_tax:
         deductions.append(('Income tax (TDS)', slip.income_tax))
+    for name, amount in (slip.other_deductions or {}).items():
+        if Decimal(str(amount or 0)):
+            deductions.append((name, amount))
     other_ded = Decimal(slip.lwf_employee or 0) + Decimal(slip.adjustments_deduction or 0)
     if other_ded:
         deductions.append(('Other deductions', other_ded))

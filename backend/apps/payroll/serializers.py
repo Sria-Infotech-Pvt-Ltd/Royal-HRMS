@@ -17,6 +17,8 @@ from .models import (
     PayslipQuery,
     PayrollAdjustment,
     EmployeeTaxDeclaration,
+    PayComponent,
+    BASIC_PAY_EDITOR_LINE_CODES,
 )
 
 
@@ -32,6 +34,7 @@ class PayrollSettingsSerializer(serializers.ModelSerializer):
             'employee_query_window_hours',
             'enable_reimbursements',
             'enable_bonuses',
+            'basic_pay_visible_lines',
             'eps_rate',
             'edli_rate',
             'edli_wage_ceiling',
@@ -47,6 +50,15 @@ class PayrollSettingsSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_basic_pay_visible_lines(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError('Visible pay breakup rows must be a list of line codes.')
+        if any(not isinstance(code, str) or code not in BASIC_PAY_EDITOR_LINE_CODES for code in value):
+            raise serializers.ValidationError('The list contains an unknown pay breakup line.')
+        if len(set(value)) != len(value):
+            raise serializers.ValidationError('Visible pay breakup rows must not contain duplicates.')
+        return value
 
     def validate_eps_rate(self, value):
         if value is not None and not (0 < value <= 100):
@@ -176,10 +188,15 @@ class StatutoryConfigSerializer(serializers.ModelSerializer):
 
 
 class SalaryComponentSerializer(serializers.ModelSerializer):
+    effective_from = serializers.DateField(read_only=True)
+    reset_override = serializers.BooleanField(read_only=True)
+    affected_employee_count = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = SalaryComponent
         fields = [
             'id',
+            'code',
             'name',
             'component_type',
             'calculation_type',
@@ -187,10 +204,13 @@ class SalaryComponentSerializer(serializers.ModelSerializer):
             'is_taxable',
             'is_active',
             'order',
+            'effective_from',
+            'reset_override',
+            'affected_employee_count',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'code', 'effective_from', 'reset_override', 'created_at', 'updated_at']
 
     def validate(self, data):
         value = data.get('value', getattr(self.instance, 'value', None))
@@ -198,13 +218,65 @@ class SalaryComponentSerializer(serializers.ModelSerializer):
         if value is not None:
             if value < 0:
                 raise serializers.ValidationError({'value': 'Value cannot be negative.'})
-            if calc_type in ('percentage_of_ctc', 'percentage_of_basic') and value > 100:
+            if calc_type in (
+                'percentage_of_ctc',
+                'percentage_of_basic',
+                'percentage_of_basic_plus_da',
+            ) and value > 100:
                 raise serializers.ValidationError({'value': 'Percentage cannot exceed 100.'})
         return data
 
 
+class CompanyAllowanceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PayComponent
+        fields = [
+            'id',
+            'code',
+            'name',
+            'payslip_label',
+            'is_taxable',
+            'is_active',
+            'display_order',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'code', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Allowance name is required.')
+        duplicate = PayComponent.objects.filter(
+            is_company_allowance=True, name__iexact=value,
+        )
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError('An allowance with this name already exists.')
+        return value
+
+
 class SalaryStructureSerializer(serializers.ModelSerializer):
-    components = SalaryComponentSerializer(many=True, read_only=True)
+    components = serializers.SerializerMethodField()
+
+    def get_components(self, obj):
+        from apps.payroll.services_salary_structure import (
+            affected_employee_count,
+            structure_component_configurations,
+        )
+
+        as_of = self.context.get('effective_as_of')
+        include_future = self.context.get('include_future', as_of is None)
+        configurations = structure_component_configurations(
+            obj,
+            as_of=as_of,
+            include_future=include_future,
+        )
+        employee_count = affected_employee_count(obj)
+        for config in configurations:
+            config['affected_employee_count'] = employee_count
+        return SalaryComponentSerializer(configurations, many=True).data
 
     class Meta:
         model = SalaryStructure
@@ -278,6 +350,7 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.full_name', read_only=True)
     employee_id_code = serializers.CharField(source='employee.employee_id', read_only=True)
     structure_name = serializers.CharField(source='salary_structure.name', read_only=True)
+    resolved_salary_structure = serializers.SerializerMethodField()
     monthly_ctc = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     reason_display = serializers.CharField(source='get_reason_display', read_only=True)
     # The employee's own tax-regime election (their most recent declaration) — shown, never edited, in the
@@ -305,6 +378,7 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
             'monthly_ctc',
             'salary_structure',
             'structure_name',
+            'resolved_salary_structure',
             'effective_from',
             'reason',
             'reason_display',
@@ -324,6 +398,7 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'employee_name', 'employee_id_code', 'employee_tax_regime',
             'structure_name', 'monthly_ctc', 'reason_display',
+            'resolved_salary_structure',
             'linked_promotion_designation', 'linked_promotion_effective_date',
             'created_at', 'updated_at',
         ]
@@ -331,6 +406,18 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
     def get_employee_tax_regime(self, obj):
         declaration = obj.employee.tax_declarations.order_by('-financial_year_start').first()
         return declaration.tax_regime if declaration else ''
+
+    def get_resolved_salary_structure(self, obj):
+        if obj.salary_structure_id:
+            return str(obj.salary_structure_id)
+        branch_structure_id = BranchPayrollConfig.objects.filter(
+            branch__branch_name=obj.employee.branch,
+            salary_structure__is_active=True,
+        ).values_list('salary_structure_id', flat=True).first()
+        if branch_structure_id:
+            return str(branch_structure_id)
+        default_id = SalaryStructure.objects.filter(is_default=True, is_active=True).values_list('id', flat=True).first()
+        return str(default_id) if default_id else None
 
     def validate_annual_ctc(self, value):
         if value is not None and value <= 0:
@@ -356,6 +443,13 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
         if not isinstance(value, dict):
             raise serializers.ValidationError('Overrides must be an object of monthly amounts.')
         allowed = set(EmployeeSalaryConfig.OVERRIDABLE_EARNINGS)
+        structure = self.initial_data.get('salary_structure')
+        if not structure and self.instance:
+            structure = self.instance.salary_structure_id
+        if structure:
+            allowed.update(
+                SalaryComponent.objects.filter(structure_id=structure).values_list('code', flat=True)
+            )
         cleaned = {}
         for key, amount in value.items():
             if key not in allowed:
@@ -496,6 +590,7 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
             'hra',
             'special_allowance',
             'other_earnings',
+            'other_deductions',
             'reimbursements',
             'bonus',
             'bonus_breakdown',

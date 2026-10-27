@@ -44,47 +44,56 @@ def _can_view_approvals(user):
 class AttendancePendingCyclesView(APIView):
     """Cycles awaiting attendance approval for the current user.
 
-    Managers see cycles where their own ManagerAttendanceApproval row is still
-    pending (approved_at=null). HR sees all attendance_pending cycles.
+    Managers additionally see cycles where their own ManagerAttendanceApproval
+    row is still pending (approved_at=null). HR (anyone with payroll.edit,
+    including a superuser via has_perm's bypass) always sees every
+    attendance_pending cycle in their scope — this is what lets HR/Admin
+    approve a cycle directly when no manager has team-lead rights configured
+    at all (ManagerAttendanceApproval has zero rows for it), since nobody
+    would otherwise ever have a row assigning them as its approver. Before
+    this fix, a superuser/Admin who ALSO satisfied _is_manager (every
+    superuser does) was routed into the manager-only branch below and saw
+    nothing, even though they were the only person who could ever act on it.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _can_view_approvals(request.user):
+        user = request.user
+        if not _can_view_approvals(user):
             return error('Access denied.', http_status=403)
 
-        if _is_hr(request.user) and not _is_manager(request.user):
-            # Pure HR: show pending cycles they may need to do L2 on — company-
-            # wide only for an org-wide user (settings.edit); otherwise scoped
-            # to their own branch, same as every other payroll list.
-            cycles = PayrollCycle.objects.filter(
+        cycle_ids: set = set()
+
+        if _is_manager(user):
+            cycle_ids |= set(ManagerAttendanceApproval.objects.filter(
+                manager=user,
+                approved_at__isnull=True,
+            ).values_list('cycle_id', flat=True))
+
+        if _is_hr(user):
+            hr_cycles = PayrollCycle.objects.filter(
                 status=PayrollCycle.STATUS_ATTENDANCE_PENDING,
             )
-            if not _has_perm(request.user, 'settings.edit'):
-                branch_obj = _resolve_user_branch(request.user)
+            if not _has_perm(user, 'settings.edit'):
+                branch_obj = _resolve_user_branch(user)
                 if branch_obj is None:
-                    return error(
-                        'Your account is not assigned to a branch. Contact an administrator.',
-                        http_status=400,
-                    )
-                cycles = cycles.filter(branch=branch_obj)
-            cycles = cycles.select_related(
-                'created_by', 'attendance_approved_by_l1', 'attendance_approved_by_l2',
-            ).order_by('-cycle_start')
-        else:
-            # Manager: show cycles where this user's row is still pending
-            pending_cycle_ids = ManagerAttendanceApproval.objects.filter(
-                manager=request.user,
-                approved_at__isnull=True,
-            ).values_list('cycle_id', flat=True)
+                    if not cycle_ids:
+                        return error(
+                            'Your account is not assigned to a branch. Contact an administrator.',
+                            http_status=400,
+                        )
+                    hr_cycles = hr_cycles.none()
+                else:
+                    hr_cycles = hr_cycles.filter(branch=branch_obj)
+            cycle_ids |= set(hr_cycles.values_list('id', flat=True))
 
-            cycles = PayrollCycle.objects.filter(
-                id__in=pending_cycle_ids,
-                status=PayrollCycle.STATUS_ATTENDANCE_PENDING,
-            ).select_related(
-                'created_by', 'attendance_approved_by_l1', 'attendance_approved_by_l2',
-            ).order_by('-cycle_start')
+        cycles = PayrollCycle.objects.filter(
+            id__in=cycle_ids,
+            status=PayrollCycle.STATUS_ATTENDANCE_PENDING,
+        ).select_related(
+            'created_by', 'attendance_approved_by_l1', 'attendance_approved_by_l2',
+        ).order_by('-cycle_start')
 
         serializer = PayrollCycleSerializer(cycles, many=True)
         return success('Pending attendance approval cycles.', serializer.data)

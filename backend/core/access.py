@@ -1,8 +1,9 @@
 """Who may do / see what — resolved from the ORG CHART (the position a person holds today), not from a Role.
 
-Two sources:
+Three sources:
   * the seat the person holds today (Placement covering today on an active Position),
-  * the company-wide BASELINE permissions every employee gets (self-service).
+  * the company-wide BASELINE permissions every employee gets (self-service),
+  * EXTRA permissions granted to that one person (EmployeePermission).
 Plus the `is_superuser` flag on the person for full access.
 
 Use these helpers for every access decision.
@@ -66,12 +67,8 @@ def can_manage_branch(user) -> bool:
 
 
 def is_full_access(user) -> bool:
-    """Superuser, or holds settings.edit (the codebase's "can do everything" permission)."""
-    from core.permissions import has_perm
-
-    if not user:
-        return False
-    return bool(getattr(user, 'is_superuser', False) or has_perm(user, 'settings.edit'))
+    """Only a superuser has full access. settings.edit gives Settings, not everything."""
+    return bool(user and getattr(user, 'is_superuser', False))
 
 
 # ── Permissions ────────────────────────────────────────────────────────────────
@@ -93,7 +90,7 @@ def _pk_in(prefix: str, ids) -> Q:
 
 
 def users_with_permission(codename: str, prefix: str = '') -> Q:
-    """Users holding `codename` through their seat or the company baseline."""
+    """Users holding `codename` through their seat, a personal grant, or the company baseline."""
     from apps.accounts.models import User
 
     if codename in baseline_codenames():
@@ -102,7 +99,8 @@ def users_with_permission(codename: str, prefix: str = '') -> Q:
         _covers_today('placements__'),
         placements__position__position_permissions__permission__codename=codename,
     ).values('pk')
-    return _pk_in(prefix, through_seat)
+    granted_personally = User.objects.filter(extra_permissions__permission__codename=codename).values('pk')
+    return _pk_in(prefix, through_seat) | _pk_in(prefix, granted_personally)
 
 
 def _users_with_flag(flag: str, prefix: str) -> Q:

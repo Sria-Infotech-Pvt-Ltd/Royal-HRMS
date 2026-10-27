@@ -5969,6 +5969,27 @@ dropdowns were showing blank "Select" for every employee instead of their real v
 - The employee's gender comes from `EmployeeProfile`, not `User`. Request preview/submission and balance accrual/listing must use the shared `employee_matches_policy_gender` helper so an ineligible type is neither offered nor credited.
 - The initial defaults are 90 maternity days and 5 paternity days. Higher-authority users with `settings.edit` or `leave.approve` can change the annual entitlement in Leave Policy settings; the maternity policy note points administrators to that setting rather than promising a fixed legal duration.
 
+## Payroll allowance catalogue
+
+- Settings → Payroll Configuration → Allowances is the company-wide allowance catalogue. Admins with `payroll.create` can add an option; users with `payroll.edit` can activate/deactivate it.
+- Add a catalogue allowance before adding it as an Allowance component to a salary structure. The structure controls its calculation basis and value.
+- Deactivation prevents future selection only. It does not change existing salary structures, employee pay records, or issued payslips. To stop an allowance in an active structure, deactivate that structure component separately.
+
+## Basic Pay editor row visibility
+
+- Payroll Configuration includes a permission-gated Basic Pay Editor Fields section for Earnings, Employer Contributions, and Statutory Deductions.
+- `payroll.edit` users can choose which known breakup rows appear in each employee's Basic Pay editor; all rows are visible by default.
+- Hiding a row affects presentation only. The row remains part of breakup totals and payroll calculations, and existing overrides and records are preserved.
+
+## Access management and Org Chart permissions
+
+- Settings → Permissions controls the company-wide baseline (Everyone tab) and extra access for one person (One person tab). Baseline grants apply to all employees and are additive to seat permissions.
+- To configure different access for Employee, Team Lead, HR, Unit Head, or another seat, open Organization, select the position, then choose **Permissions**. Requires `settings.edit`.
+- A position's current holder receives its permissions; future holders receive the same permissions. One person can also be given extra permissions on top (One person tab); they follow the person, not the seat. Only a superuser has every permission.
+- Reporting lines and org-unit heads do not automatically inherit permissions from positions beneath them. Create distinct positions when holders need distinct access; per-person exceptions and automatic hierarchy inheritance are not supported.
+- Team and branch scope switches are independent flags; they do not automatically grant module permission codenames.
+- The Position Access modal shows the seat and current holder, supports searching permissions, and keeps its header/footer visible while permission groups scroll.
+
 ## Validation and follow-up
 
 - Focused employee audit tests passed (2 tests); Django system checks and Python compilation passed. Frontend ESLint for the modified HR pickers, `npx tsc --noEmit`, and `git diff --check` passed.

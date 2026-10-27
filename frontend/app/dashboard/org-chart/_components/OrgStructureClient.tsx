@@ -170,6 +170,10 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
           A unit&apos;s head is a <strong>position</strong>, not a person. You mark one position in each unit as <strong>chief</strong>;
           whoever holds it is the head. The seat can stay <strong>vacant</strong> until you hire, so you never have to invent an
           employee just to create a unit.
+          <span style={{ display: "block", marginTop: 6 }}>
+            To set access, select a position and choose <strong>Permissions</strong>. Access belongs to that seat—not the reporting chain;
+            employees sharing a seat share its permissions. Use separate positions when employees need different access.
+          </span>
         </div>
       </div>
 

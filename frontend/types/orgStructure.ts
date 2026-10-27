@@ -135,6 +135,30 @@ export interface PositionPermissions {
   can_manage_branch: boolean;
 }
 
+/** What one employee can do: the company baseline, the seat they hold, and extras granted to them personally. */
+export interface EmployeeAccess {
+  employee: string;
+  employee_id: string;
+  full_name: string;
+  baseline: string[];
+  seat: { title: string; codenames: string[] } | null;
+  extra: string[];
+}
+
+/** One row of the Settings > Permissions employee list. */
+export interface EmployeeAccessRow {
+  uuid: string;
+  employee_id: string;
+  full_name: string;
+  branch: string;
+  position: string;
+  is_superuser: boolean;
+  total: number;
+  from_baseline: number;
+  from_seat: number;
+  extra: number;
+}
+
 export interface PermissionCatalogueItem {
   codename: string;
   action: string;

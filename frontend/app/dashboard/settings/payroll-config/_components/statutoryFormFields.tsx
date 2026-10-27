@@ -12,10 +12,25 @@ export function ToggleRow({ label, value, onChange }: { label: string; value: bo
     <div className="flex items-center justify-between">
       <span className="text-[13px] font-medium text-[var(--on-bg)]">{label}</span>
       <button
+        type="button"
         onClick={() => onChange(!value)}
-        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value ? "bg-[var(--info)]" : "bg-[var(--bg-mid)]"}`}
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
+        className={`inline-flex min-w-[142px] items-center justify-between gap-3 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+          value
+            ? "bg-[var(--success-c)] text-[var(--success)]"
+            : "bg-[var(--bg-mid)] text-[var(--on-variant)] border border-[var(--outline-v)]"
+        }`}
       >
-        <span className={`inline-block h-3.5 w-3.5 rounded-full bg-[var(--surface)] shadow transition-transform ${value ? "translate-x-4" : "translate-x-0.5"}`} />
+        <span>{value ? "Applicable" : "Not applicable"}</span>
+        <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+          value ? "bg-[var(--success)]" : "bg-[var(--outline)]"
+        }`}>
+          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+            value ? "translate-x-4" : "translate-x-0.5"
+          }`} />
+        </span>
       </button>
     </div>
   );

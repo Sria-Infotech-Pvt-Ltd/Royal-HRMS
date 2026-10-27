@@ -251,7 +251,9 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
               ) : !isL1Done ? (
                 <div style={{ fontSize: 13, color: "var(--on-variant)" }}>
                   <i className="ti ti-lock" style={{ marginRight: 6 }} />
-                  Waiting for all managers (L1) to approve first
+                  {noManagersSeeded
+                    ? "Waiting for HR/Admin to complete the L1 step directly — no managers are configured for this cycle."
+                    : "Waiting for all managers (L1) to approve first"}
                 </div>
               ) : (
                 <>

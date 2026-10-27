@@ -15,6 +15,8 @@ function Group({ title, badge, badgeClass, lines, editable, onChange }: {
   editable: boolean;
   onChange: (key: OverrideKey, value: string) => void;
 }) {
+  if (lines.length === 0) return null;
+
   return (
     <>
       <div className="sechead" style={{ marginTop: 10 }}>{title} <span className={`own ${badgeClass}`}>{badge}</span></div>
@@ -42,20 +44,24 @@ function Group({ title, badge, badgeClass, lines, editable, onChange }: {
   );
 }
 
-export default function PayBreakupTables({ breakup, annualCostToCompany, editable, variance, hasRecord, onChange }: {
+export default function PayBreakupTables({ breakup, annualCostToCompany, editable, variance, hasRecord, visibleLineCodes, onChange }: {
   breakup: PayBreakup;
   annualCostToCompany: number;
   editable: boolean;
   /** Annual cost to company minus the CTC on record. */
   variance: number;
   hasRecord: boolean;
+  visibleLineCodes: readonly string[];
   onChange: (key: OverrideKey, value: string) => void;
 }) {
+  const visibleLines = (lines: PayLine[]) =>
+    lines.filter(line => line.structureComponent || visibleLineCodes.includes(line.code));
+
   return (
     <>
-      <Group title="EARNINGS" badge="HR" badgeClass="hr" lines={breakup.earnings} editable={editable} onChange={onChange} />
-      <Group title="EMPLOYER CONTRIBUTIONS" badge="STATUTORY" badgeClass="adm" lines={breakup.employer} editable={editable} onChange={onChange} />
-      <Group title="STATUTORY DEDUCTIONS" badge="STATUTORY" badgeClass="adm" lines={breakup.deductions} editable={editable} onChange={onChange} />
+      <Group title="EARNINGS" badge="HR" badgeClass="hr" lines={visibleLines(breakup.earnings)} editable={editable} onChange={onChange} />
+      <Group title="EMPLOYER CONTRIBUTIONS" badge="STATUTORY" badgeClass="adm" lines={visibleLines(breakup.employer)} editable={editable} onChange={onChange} />
+      <Group title="STATUTORY DEDUCTIONS" badge="STATUTORY" badgeClass="adm" lines={visibleLines(breakup.deductions)} editable={editable} onChange={onChange} />
       <div className="divider" style={{ margin: "10px 0" }} />
       <div className="paytot"><span>Monthly gross — paid to the employee</span><b>{inr(breakup.gross)}</b></div>
       <div className="paytot"><span>Employer contributions — on top of gross</span><b>{inr(breakup.employerTotal)}</b></div>

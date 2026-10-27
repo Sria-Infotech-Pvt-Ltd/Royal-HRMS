@@ -3,10 +3,13 @@ from django.urls import path
 from apps.payroll.views.settings import PayrollSettingsView
 from apps.payroll.views.salary_preview import SalaryPreviewView
 from apps.payroll.views.structures import (
+    CompanyAllowanceListCreateView,
+    CompanyAllowanceDetailView,
     SalaryStructureListView,
     SalaryStructureDetailView,
     SalaryComponentListView,
     SalaryComponentDetailView,
+    SalaryComponentReorderView,
 )
 from apps.payroll.views.statutory import (
     StatutoryConfigListView,
@@ -85,9 +88,12 @@ urlpatterns = [
     path('settings/', PayrollSettingsView.as_view(), name='payroll-settings'),
 
     # ── Salary structures ────────────────────────────────────────────────────
+    path('allowances/', CompanyAllowanceListCreateView.as_view(), name='payroll-allowance-list'),
+    path('allowances/<uuid:pk>/', CompanyAllowanceDetailView.as_view(), name='payroll-allowance-detail'),
     path('structures/', SalaryStructureListView.as_view(), name='salary-structure-list'),
     path('structures/<uuid:pk>/', SalaryStructureDetailView.as_view(), name='salary-structure-detail'),
     path('structures/<uuid:structure_pk>/components/', SalaryComponentListView.as_view(), name='salary-component-list'),
+    path('structures/<uuid:structure_pk>/components/reorder/', SalaryComponentReorderView.as_view(), name='salary-component-reorder'),
     path('structures/<uuid:structure_pk>/components/<uuid:pk>/', SalaryComponentDetailView.as_view(), name='salary-component-detail'),
 
     # ── Statutory configs (per state) ────────────────────────────────────────

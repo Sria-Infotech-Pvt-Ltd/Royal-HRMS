@@ -80,11 +80,8 @@ class ScopeQuerysetTests(TestCase):
         qs = authz.scope_queryset(self.owner, self.entity, 'view', custom_objects.list_records(self.entity), as_of=datetime.date(2026, 1, 1))
         self.assertEqual(qs.count(), 0)
 
-    def test_full_access_role_sees_everything_without_any_assignment(self):
-        full_access_role = make_role('authz_full_access_role', permission_codenames=['settings.edit'])
-        full_access_role.is_full_access = True
-        full_access_role.save()
-        admin_user = make_user('authz-admin@test.com', role=full_access_role)
+    def test_superuser_sees_everything_without_any_assignment(self):
+        admin_user = make_user('authz-admin@test.com', is_superuser=True)
         qs = authz.scope_queryset(admin_user, self.entity, 'view', custom_objects.list_records(self.entity))
         self.assertEqual(qs.count(), 2)
 
@@ -257,10 +254,15 @@ class AdminToolsTests(TestCase):
 
 
 class IsFullAccessTests(TestCase):
-    def test_a_seat_with_full_access_grants_everything(self):
-        user = make_user('full-access-user@test.com', role=make_role('full_access_test_role', permission_codenames=['settings.edit']))
-        self.assertTrue(authz.is_full_access(user))
-        self.assertTrue(authz.has_perm_v2(user, 'anything.at.all'))
+    def test_only_a_superuser_has_full_access(self):
+        superuser = make_user('full-access-user@test.com', is_superuser=True)
+        self.assertTrue(authz.is_full_access(superuser))
+        self.assertTrue(authz.has_perm_v2(superuser, 'anything.at.all'))
+
+    def test_a_seat_with_settings_edit_is_not_full_access(self):
+        user = make_user('settings-seat-user@test.com', role=make_role('settings_seat_role', permission_codenames=['settings.edit']))
+        self.assertFalse(authz.is_full_access(user))
+        self.assertFalse(authz.has_perm_v2(user, 'anything.at.all'))
 
     def test_a_seat_without_full_access_does_not_grant_everything(self):
         user = make_user('limited-user@test.com', role=make_role('limited_test_role', permission_codenames=['leave.view']))

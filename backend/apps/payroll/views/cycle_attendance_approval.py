@@ -106,11 +106,18 @@ class AttendanceApprovalView(APIView):
                     return error('L1 approval already recorded.')
                 cycle.attendance_approved_by_l1 = request.user
                 cycle.attendance_l1_approved_at = timezone.now()
+                # This branch only runs when no ManagerAttendanceApproval row
+                # exists at all -- there is no manager to defer to, so HR/Admin
+                # standing in for L1 here IS the hr_self_approved_at scenario
+                # (same field the L2 self_approve path already uses), not
+                # conditioned on the checkbox like the per-manager row is.
+                cycle.hr_self_approved_at = timezone.now()
                 requires_l2 = settings_obj and settings_obj.approval_levels == PayrollSettings.APPROVAL_L1_L2
                 if not requires_l2:
                     cycle.status = PayrollCycle.STATUS_ATTENDANCE_APPROVED
                 cycle.save(update_fields=[
-                    'attendance_approved_by_l1', 'attendance_l1_approved_at', 'status', 'updated_at',
+                    'attendance_approved_by_l1', 'attendance_l1_approved_at',
+                    'hr_self_approved_at', 'status', 'updated_at',
                 ])
                 logger.info(
                     'Cycle %s: HR direct L1 approval by %s (no managers configured)',

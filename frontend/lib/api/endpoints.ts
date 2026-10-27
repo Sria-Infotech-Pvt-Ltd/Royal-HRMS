@@ -103,6 +103,8 @@ export const API = {
 
   access: {
     baselinePermissions: "/settings/baseline-permissions/",
+    employeeList: "/settings/employee-access/",
+    employeePermissions: (employeeUuid: string) => `/employees/${employeeUuid}/permissions/`,
   },
 
   settings: {
@@ -453,12 +455,15 @@ export const API = {
     // Settings
     settings: "/payroll/settings/",
     salaryPreview: "/payroll/salary-preview/",
+    allowances: "/payroll/allowances/",
+    allowance: (id: string) => `/payroll/allowances/${id}/`,
 
     // Salary structures
     structures: "/payroll/structures/",
-    structure: (id: string) => `/payroll/structures/${id}/`,
+    structure: (id: string, asOf?: string) => `/payroll/structures/${id}/${asOf ? `?as_of=${asOf}` : ""}`,
     components: (structureId: string) => `/payroll/structures/${structureId}/components/`,
     component: (structureId: string, id: string) => `/payroll/structures/${structureId}/components/${id}/`,
+    reorderComponents: (structureId: string) => `/payroll/structures/${structureId}/components/reorder/`,
 
     // Statutory config (per state)
     statutory: "/payroll/statutory/",
