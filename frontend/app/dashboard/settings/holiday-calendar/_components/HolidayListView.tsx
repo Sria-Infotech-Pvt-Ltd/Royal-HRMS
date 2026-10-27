@@ -91,15 +91,15 @@ export default function HolidayListView({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <button onClick={() => onView(h)}
+                        <button onClick={() => onView(h)} aria-label={`View ${h.name}`} title="View"
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] hover:border-[var(--info)] hover:text-[var(--info)] transition-colors">
                           <i className="ti ti-eye text-xs" />
                         </button>
-                        <button onClick={() => onEdit(h)}
+                        <button onClick={() => onEdit(h)} aria-label={`Edit ${h.name}`} title="Edit"
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] hover:border-[var(--info)] hover:text-[var(--info)] transition-colors">
                           <i className="ti ti-edit text-xs" />
                         </button>
-                        <button onClick={() => onDelete(h)}
+                        <button onClick={() => onDelete(h)} aria-label={`Delete ${h.name}`} title="Delete"
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] hover:border-[var(--error)] hover:text-[var(--error)] transition-colors">
                           <i className="ti ti-trash text-xs" />
                         </button>

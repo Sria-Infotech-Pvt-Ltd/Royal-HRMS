@@ -5995,3 +5995,86 @@ dropdowns were showing blank "Select" for every employee instead of their real v
 - Focused employee audit tests passed (2 tests); Django system checks and Python compilation passed. Frontend ESLint for the modified HR pickers, `npx tsc --noEmit`, and `git diff --check` passed.
 - Attendance/payroll focused tests passed earlier in the workflow; the broader backend test run was interrupted by a PostgreSQL test-database connection failure. Re-run the full relevant suite when the test database is stable.
 - The logs also showed a canceled, slow employee-list request (`page_size=500`). The endpoint currently caps normal employee listing at 50 records, so callers needing large lists should paginate and search rather than rely on one oversized request. Profile further if the timeout persists.
+
+---
+
+# Team Context — ESS (Employee Self-Service) Bug Fixes
+
+**Author:** Safura Samreen
+**Date:** 26 October 2026
+
+## 5 bugs fixed on `/dashboard/ess`
+
+1. **Attendance miscounted pre-joining and in-progress days as Absent/LOP.** `get_calendar`, `get_stats`, and `get_monthly_summary` in `AttendanceDashboardService` (`backend/apps/attendance/services_attendance.py`) all walked a date range and fell through to `STATUS_ABSENT` for any day with no record — including days before the employee's `date_of_joining` and "today" before the shift had even ended, which also fed straight into payroll LOP. Added two shared helpers, `effective_attendance_window()` (clamps a range to `[date_of_joining, approved-separation last working day]`) and `shift_end_has_passed()`, and two synthetic, non-DB statuses, `STATUS_NOT_JOINED` / `STATUS_PENDING`, threaded through the single `_classify_day()`/`_build_day()` pair already shared by all three endpoints — so there is exactly one definition of "does this day count," not four. Pre-joining days render as a neutral grey "Not joined" cell (`canRegularize: false`, excluded from `working_days`/`days_absent`/`lop_pending`); "today" shows "Pending" (same exclusions) until the org's configured shift-end time passes. New tests: `backend/apps/attendance/tests_not_joined_pending.py` (mid-month joiner, today before/after shift end, full-month employee unchanged).
+2. **Leave/Home KPI cards flashed `0.0` while loading, and could disagree with each other.** `LeaveBalanceStats` (`frontend/app/dashboard/leave/_components/LeaveDashboard.tsx`) computed `available`/`usedThisYear` as `0` whenever `balances` was still `null`. Added `useLeaveBalances()` — a shared `useFetch(..., { cache: true })` wrapper around `GET /leave/balance/` — so the Leave tab and the Home "Leave balance" tile (`HomeTab.tsx`) read the exact same cached response instead of two independent round trips, and render `"—"` instead of a fabricated `0.0` while loading.
+3. **Growth tab rendered "undefined cycle opened" with no active review cycle.** `MyReviewView.get()` (`backend/apps/performance/views/reviews.py`) returned `data: null` via the shared `success()` helper, which silently coerces `None` into `{}` — so the frontend's `review && review.cycle_name` truthiness check treated the empty object as a real review. Backend now returns a literal JSON `null` directly for this one case (documented why `success()` isn't used here). `GrowthTab.tsx` now checks `hasCycle = !!review && Object.keys(review).length > 0` instead of truthiness, and renders a proper "No active review cycle" empty-state panel for the Review timeline when there isn't one. `GrowthGoalsCard.tsx`'s "Add a goal" form is now hidden entirely when `cycleName` is unset (judgment call — flagged as an assumption below). `AppraisalsTab.tsx`'s empty state now has the "My appraisal" page header above it, matching the other tabs.
+4. **Assigned asset showed an ASSIGNED badge with a blank tag/date.** Root cause: `_apply_wizard_records()` in `backend/apps/accounts/views_hire_complete.py` never set `issued_at` on `CompanyAsset` at hire time, even when the hire wizard's "Issue now" option was chosen — so every asset looked unissued at the DB level. Fixed to stamp `issued_at` when `issue_when == 'now'`. `PoliciesAssetsTab.tsx` now derives the badge from actual data: `returned_at` set → "RETURNED", no `issued_at` → amber "PENDING ISSUE" with "Awaiting issue from IT" (tag/date line hidden), otherwise "ASSIGNED" with the real tag/date.
+5. **Form 16 was offered for the current, still-open financial year with no file behind it.** `TaxTab.tsx` and `HomePayslipsPanel.tsx` always showed "Form 16 · FY `{current}`" with a Download link built from `current_financial_year`. Both now compute the previous (closed) FY instead, and only render the row/Download link (`TaxTab.tsx`) or the Form 16 quick-link (`HomePayslipsPanel.tsx`, via a new `showForm16` prop from `HomeTab.tsx`) when a payslip actually exists for that employee in that FY; otherwise it shows "Form 16 will be available after the financial year closes." with no button.
+
+## Assumptions made (flag if wrong)
+
+- Bug 1's "the employee's assigned shift" is implemented as the org's single configured `working_hours.shift_end` (`AttendanceSettings`) — there is no per-employee shift-assignment model in this codebase to read from instead.
+- Bug 3: chose to hide the "Add a goal" form outright with no active cycle, rather than keep it visible with changed copy — the bug report flagged this as ambiguous and left it as a judgment call.
+
+## Process note
+
+- These fixes were implemented and committed by an autonomous background agent run; the commit landed as `5ec4b7c5` with the message `"c"` — not a descriptive message, and committing wasn't something it was asked to do. Nothing in the commit's contents looked wrong on review, but the commit itself (not just its message) may need attention — reword, squash, or split per your usual workflow.
+- Independently re-ran `apps.attendance`, `apps.performance`, and the touched `apps.accounts` test module (`--keepdb`): **174 tests, all passing** (`OK`), including the new `tests_not_joined_pending.py` cases.
+
+---
+
+# Team Context — New-AI Merge, UAT-011 through UAT-015
+
+**Author:** Safura Samreen
+**Date:** 27 October 2026
+
+## Merging `origin/New-AI` into `26-oct-safura`
+
+Stashed the day's uncommitted work (a navbar redesign and a Salary-Structure→Basic-Pay-dialog wiring effort), pulled `origin/New-AI`, and popped the stash. `New-AI` turned out to already contain its own complete, independently-built implementations of both the same two things — 43 conflict blocks across 11 files. Resolved every conflict in favor of `New-AI`'s version (it had its own test coverage for both: `navConfig.test.ts`, `payBreakup.test.ts`, `tests_salary_structure_effective.py`, `tests_basic_pay_visibility.py`) and deleted our now-redundant files (`TopNavBar.tsx`, `NavMenu.tsx`, `navGroups.ts`, a duplicate `0037` migration, a duplicate test file).
+
+Two real issues survived the auto-merge (files neither side's diff touched, so git merged them silently without conflict markers) and needed manual cleanup:
+- `backend/apps/payroll/models.py` ended up with two `SalaryComponent` calculation-type constants (`CALC_BALANCE_CTC` from New-AI, our own unconflicted `CALC_BALANCE_TO_CTC`) both mapping to the literal string `'balance_to_ctc'` with the identical display label — would have shown as a confusing duplicate entry in the admin dropdown. Removed ours, repointed `services_estimate.py` at New-AI's constant (same underlying value, so no behavior change).
+- `frontend/app/aira-theme.css` kept our now-orphaned `.navlinks-bar`/`.navmenu-item` rules after the components using them were deleted — removed; New-AI's nav uses its own `nav-desktop`/`nm-*` class names.
+- A genuinely missing migration (`0040_alter_employeesalaryconfig_earnings_override.py`) for a `help_text` wording change that survived the merge unconflicted — generated and applied.
+
+## Stale test-database pollution (process note, not a code bug)
+
+Heavy reuse of `--keepdb` across today's many test runs left two kinds of orphaned rows behind in the shared Postgres test database, both traced to the same cause: a `TransactionTestCase` commits real rows and relies on its own teardown to truncate them, and that teardown doesn't run if the test process is interrupted (killed/backgrounded/timed out) before it completes — which happened repeatedly today given how many long test suites were run in the background.
+- `apps/accounts/tests_roles_removal_migration.py`'s `RolesRemovalMigrationTests` left 5 `MIG1`–`MIG5` (`*@mig.test`) users behind, inflating payroll's "eligible employee" counts and accounts' "onboarding-incomplete" counts in unrelated test suites. Reappeared twice — the first cleanup attempt used a plain `TestCase` for the delete, which Django auto-rolls-back, so it silently didn't persist. Fixed for real using `TransactionTestCase` for the cleanup itself.
+- Recommend: if this keeps recurring, consider wrapping that test's fixture teardown so a subsequent run can detect and self-heal, or avoid backgrounding/killing test runs that include it.
+
+## UAT-011 — Professional Tax always ₹0 regardless of employee location
+
+Root cause: `BasicPayStep.tsx` (Hire wizard) received the employee's branch name as a prop and used it in a `useEffect` dependency array (so the preview *did* refetch on location change) but never actually included it in the POST body sent to `/api/payroll/salary-preview/`. With no `branch_name`, the backend had nothing to resolve a `StatutoryConfig` from, so PT silently computed as ₹0 everywhere, for everyone. One-line fix: include `branch_name: branchName` in the request payload when present. Telangana's PT slabs were already correctly seeded (migration `0024`) — this was purely a frontend wiring gap. Verified against the ticket's exact numbers (₹6,00,000 CTC, Kondapur branch → gross ₹47,290, PT now ₹200/month, matching the ticket precisely).
+
+## UAT-012 — "Reporting manager" showed differently on every screen
+
+Investigated as 5 apparently-inconsistent screens; turned out to be 1 real bug plus 4 screens that were each independently correct:
+- **Real bug (fixed):** Employee Directory showed the literal string "CEO Office" for ordinary employees with no resolved manager. `_employee_dict()` (`backend/apps/accounts/views/shared.py`) deliberately *omits* the `reporting_manager` key for an actual top-of-hierarchy manager (correct — they have none) but *includes* it as `{name: null}` for an unresolved ordinary employee. The frontend's `u.reporting_manager?.name ?? null` collapsed both cases to the same fallback string, mislabeling every unresolved employee as reporting to "CEO Office." Fixed via a shared `reportingManagerDisplay()` helper (`frontend/app/dashboard/employees/_data.ts`) used consistently by `EmployeeTableRow.tsx`, `EmployeeFullRecordBody.tsx`, and `PerformActionModal.tsx`.
+- **Not bugs:** Edit form's "Assign later" is the intentional clear-unassigned state. Separation list showing "Not assigned" while the detail page resolves a real approver name is intentional — hire-time assignment requires an exact branch match before persisting `reporting_manager`, while separation approval routing deliberately uses a looser, branch-independent org-chart lookup because an exit request must always have someone to route to. Added a small clarifying note on the Separation detail page instead of touching the resolver (changing it would risk breaking approval routing for every employee with no recorded manager). Leave and feedback flows read `reporting_manager` directly with no separate resolver — already consistent.
+- New tests: `apps/accounts/tests_employee_reporting_manager_display.py`, `apps/hrms/tests_separation_chain_org_chart.py` — 5/5 pass.
+- Not backfilled: ~50 employees with no reporting manager at all is a data/HR-process matter flagged for HR, not something this fix invented new bulk-assignment logic for.
+
+## UAT-013 — Directory KPI "ACTIVE" showed 0 while employees were active
+
+Already fixed — arrived via the New-AI merge. `EmployeeStatsView`'s `active_count` (`backend/apps/accounts/views/employees_list.py`) now matches exactly what the table's own Active status filter means (onboarded + active + not on notice period; probation still counts as Active), and a dedicated `needs_reporting_manager` KPI already exists. Verified via `apps/accounts/tests_employee_stats_consistency.py` — 3/3 pass (once the `@mig.test` pollution above was cleaned up; it was the direct cause of this test showing a stray `5` instead of `0`).
+
+## UAT-014 — 2026 holiday calendar empty for every branch
+
+Root cause was exactly what QA suspected: no 2026 holiday data existed for most of the calendar. 6 holidays already existed (added ad hoc through the UI, not via a migration) but Republic Day — a mandatory national holiday — was missing outright, along with every branch-specific regional festival. Added `backend/apps/hrms/migrations/0047_seed_2026_holiday_calendar.py` (idempotent `get_or_create`, safe to re-run) seeding Republic Day, Holi, Pongal (Chennai/TN), Ugadi (Bengaluru/KA and Kondapur/TG), and Gudi Padwa (Pune/MH) — dates verified against published 2026 Indian holiday calendars via web search, not guessed. 12 holidays total now exist for 2026. Also fixed the ticket's secondary complaint: the row-level View/Edit/Delete icon buttons in `HolidayListView.tsx` had no `aria-label`/`title` — added. The "empty Save shows no validation" complaint was already fixed (the form has solid inline validation).
+
+## UAT-015 — Failed Full & Final save gave no error message
+
+Already fixed, verified end-to-end rather than assumed. Reproduced the exact scenario (`PATCH .../settlement/` with `gratuity_amount: -100`) against a real test server — backend correctly returns `{status: 'error', message: 'gratuity_amount: Gratuity cannot be negative.'}` at HTTP 400. Traced the frontend's handling: `SettlementSection.tsx`'s `extractError()` reads `err.response.data.message`, and `clientApi.ts`'s shared `normaliseError()` explicitly re-attaches that shape on every error — with a comment stating this was done specifically because "every existing catch block across the app reads that shape," i.e. this is the documented root-cause fix for the exact bug class the ticket (and its sibling UAT-008) describes. No code change needed; recommend QA retest live to close the ticket (their own evidence noted it wasn't re-run — the only F&F left was already finalized/read-only).
+
+## Smaller items
+
+- Fixed a spacing bug in the "Add Weekly Off Pattern" modal (`WeeklyOffPatternsCard.tsx`): the "Pattern Name" and "Day Schedule" field groups were flush against each other with no gap between them (the shared `.field-group` class only spaces label→input, not sibling field groups). Added `marginTop: 16` to the second group.
+- Confirmed (did not need to change): assessments are no longer ever auto-assigned to new employees. Frontend hardcodes `is_default: false` on save; backend's three former auto-assign call sites (`onboarding_approval.py`, `employees_list.py`, `candidate_status.py`) each now carry a comment documenting that the old "assign every `is_default=True` assessment to every new hire" logic was removed, and none of them still do it.
+
+## Status as of end of day (27 Oct) — one open item outside the 5 tickets above
+
+All 5 UAT tickets (011–015) are resolved — fixed or verified-already-fixed, as detailed above. Two things were still in flight when this entry was last updated:
+
+- **UAT-012's full `apps.accounts` regression run** — the fix itself and its own 5 new tests are solid; this was the broader "did this touch anything else nearby" safety check, still running in the background (long suite, ~15–60 min depending on contention with other concurrent test runs today). Re-run `apps.accounts --keepdb` and check for a clean pass if this entry predates that confirmation.
+- **A separate, unrelated test failure found during merge verification** (not from any UAT ticket): `apps.payroll.tests_allowance_catalogue.test_default_allowances_are_listed_for_payroll_configuration` fails — `GET /api/payroll/allowances/` returns an empty set instead of the 6 default allowances (Dearness Allowance, HRA, Conveyance, Medical, LTA, Special Allowance). The seed migration (`0037_company_allowance_catalogue.py`, from the New-AI merge) and the view's filter (`PayComponent.objects.filter(is_company_allowance=True)`) both look correct on inspection — the seed data exists and is confirmed applied on the real dev database (`showmigrations` shows `0037` as `[X]`). Not yet confirmed whether the *test* database specifically has it seeded, or whether this is another instance of the same `--keepdb` staleness pattern documented above (the test DB's migration history could differ from the dev DB's). Needs a direct query against `test_neondb` to settle — was blocked by Postgres lock contention with the concurrent `apps.accounts` regression run at the time of writing. Pick up by checking `PayComponent.objects.filter(is_company_allowance=True).count()` inside a test against the kept test database.

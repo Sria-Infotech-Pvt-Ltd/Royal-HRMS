@@ -378,7 +378,11 @@ class EmployeeSalaryConfig(models.Model):
         (REASON_CORRECTION,        'Correction'),
         (REASON_OTHER,             'Other'),
     ]
-    # Keys HR may override in the Basic pay breakup (the rest is derived from CTC).
+    # Legacy fixed-breakup override keys, kept valid for records saved before
+    # the Basic pay dialog became structure-aware. New overrides are keyed by
+    # SalaryComponent.id (a structure's components are admin-defined and vary
+    # per structure, so there is no fixed key list any more) — see
+    # EmployeeSalaryConfigSerializer.validate_earnings_override.
     OVERRIDABLE_EARNINGS = ('basic', 'da', 'hra', 'conv', 'med', 'lta')
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -419,7 +423,7 @@ class EmployeeSalaryConfig(models.Model):
     pay_scale_group = models.CharField(max_length=5, blank=True)
     pay_scale_level = models.CharField(max_length=3, blank=True)
     basic_percent = models.PositiveSmallIntegerField(default=40, help_text='Basic as a percentage of monthly CTC')
-    earnings_override = models.JSONField(default=dict, blank=True, help_text='Monthly overrides keyed by earning code (basic, da, hra, conv, med, lta)')
+    earnings_override = models.JSONField(default=dict, blank=True, help_text='Monthly overrides keyed by SalaryComponent id (or a legacy earning code: basic, da, hra, conv, med, lta)')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

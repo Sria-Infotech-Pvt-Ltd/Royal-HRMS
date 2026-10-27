@@ -1,7 +1,12 @@
 import type { ApprovalStage, SeparationRequest } from "@/types/separation";
 import { fmtDateTime, statusBadgeClass } from "../../_workflow";
 
-function StageRow({ stage, onDecide }: { stage: ApprovalStage; onDecide: (action: "approve" | "reject") => void }) {
+// Matches apps/hrms/models.py's SEP_STAGE_MANAGER.
+const STAGE_MANAGER = "manager";
+
+function StageRow({ stage, onDecide, showOrgChartNote }: {
+  stage: ApprovalStage; onDecide: (action: "approve" | "reject") => void; showOrgChartNote: boolean;
+}) {
   const dotClass = stage.status.toLowerCase().includes("reject") ? "tl-error"
     : stage.status.toLowerCase().includes("approve") ? "tl-success" : "tl-neutral";
   const icon = stage.status.toLowerCase().includes("reject") ? "ti-x"
@@ -31,6 +36,19 @@ function StageRow({ stage, onDecide }: { stage: ApprovalStage; onDecide: (action
         </div>
         <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
           {stage.approver_name || "Not yet assigned"}{stage.actioned_at ? ` · ${fmtDateTime(stage.actioned_at)}` : ""}
+          {/* UAT-012: the Manager stage's approver is resolved from the org
+              chart (apps/hrms/views/separation.py's _resolve_separation_chain),
+              which — unlike hire-time auto-assign — has no same-branch
+              requirement, so it can find and lock in someone even when the
+              employee's own recorded Reporting Manager (shown elsewhere on
+              this page, and in the Directory/Edit record) is blank. Without
+              this note the two looked like contradictory data for the same
+              fact; they're actually two different, both-correct things —
+              "who approves this" vs "who is officially this employee's
+              manager". */}
+          {showOrgChartNote && stage.approver_name && (
+            <span style={{ fontStyle: "italic" }}> (resolved via org chart — not this employee&apos;s recorded reporting manager)</span>
+          )}
         </div>
         {stage.remarks && (
           <div style={{ fontSize: 12, color: "var(--on-variant)", background: "var(--bg-low)", borderRadius: 8, padding: "6px 10px", marginTop: 6 }}>
@@ -60,7 +78,12 @@ export default function ApprovalSection({ r, onDecide }: Props) {
           <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>No approval stages configured.</p>
         ) : (
           stages.map(stage => (
-            <StageRow key={stage.id} stage={stage} onDecide={action => onDecide(stage.id, action)} />
+            <StageRow
+              key={stage.id}
+              stage={stage}
+              onDecide={action => onDecide(stage.id, action)}
+              showOrgChartNote={stage.stage === STAGE_MANAGER && !r.reporting_manager}
+            />
           ))
         )}
       </div>

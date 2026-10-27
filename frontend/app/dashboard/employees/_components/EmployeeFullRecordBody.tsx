@@ -11,7 +11,7 @@ import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import { formatDateSlash } from "@/lib/formatDate";
-import { directoryStatusLabel, fullName, type Employee } from "../_data";
+import { directoryStatusLabel, fullName, reportingManagerDisplay, type Employee } from "../_data";
 import type { EmployeeSalaryConfig } from "@/types/payroll";
 import { SectionCard, Row, ageYears, titleCase, STATUS_CHIP } from "./EmployeeDrawerParts";
 import EmployeeDrawerLeaveCard from "./EmployeeDrawerLeaveCard";
@@ -176,7 +176,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
           <Row label="Department" value={departmentValue} />
           <Row label="Work location" value={detail?.work_location || employee.location} />
           <Row label="Date of joining" value={formatDateSlash(employee.dateOfJoining)} />
-          <Row label="Reporting manager" value={employee.reportingManagerName || detail?.reporting_manager?.name || "CEO Office"} />
+          <Row label="Reporting manager" value={reportingManagerDisplay(employee.reportingManagerName || detail?.reporting_manager?.name, employee.noManagerByDesign)} />
           <Row
             label="Status"
             valueNode={<><span className={`chip ${STATUS_CHIP[directoryStatus] ?? ""}`}>{directoryStatus}</span>{directoryStatus === "Active" && employee.employmentStatus === "probation" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--muted)" }}>On probation</span>}</>}

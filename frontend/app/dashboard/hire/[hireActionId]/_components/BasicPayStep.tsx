@@ -48,6 +48,11 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
     clientApi.post<{ data: Breakdown }>(API.payroll.salaryPreview, {
       annual_ctc: annualCtc,
       ...(salaryStructureId ? { salary_structure: salaryStructureId } : {}),
+      // Without this, the backend has no branch to resolve a state/
+      // StatutoryConfig from, so Professional Tax (and metro-HRA) silently
+      // computed as if there were none — always ₹0 PT regardless of the
+      // employee's actual work location (UAT-011).
+      ...(branchName ? { branch_name: branchName } : {}),
     })
       .then(r => setBreakdown(r.data?.data ?? null))
       .catch(() => setBreakdown(null))

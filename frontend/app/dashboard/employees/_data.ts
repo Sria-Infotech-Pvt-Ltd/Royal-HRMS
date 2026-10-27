@@ -47,8 +47,19 @@ export interface Employee {
   /** "probation" | "confirmed" — flipped exactly once by the Confirmation action. */
   employmentStatus: string;
   confirmationDate: string | null;
-  /** Reporting manager's name, or null for a top-level role (shown as "CEO Office"). */
+  /** Reporting manager's name, or null when there isn't one (see noManagerByDesign for why). */
   reportingManagerName?: string | null;
+  /**
+   * True only for a manager/chief role (User.can_manage_team) — they
+   * genuinely have no reporting manager by design, shown as "CEO Office".
+   * False (or unset) means an ordinary employee whose manager simply
+   * hasn't been resolved yet — show "Not assigned", never "CEO Office"
+   * (UAT-012: 53 such employees were all wrongly shown as "CEO Office").
+   * Backend signal: EmployeeListCreateView/_employee_dict() OMITS the
+   * `reporting_manager` key entirely for managers, but always includes it
+   * (with name: null if unset) for everyone else — see apiToEmployee below.
+   */
+  noManagerByDesign?: boolean;
   /** Set only while a separation is in progress — drives the "Notice Period" pill/column. */
   lastWorkingDay?: string | null;
   /** Current OrgUnit name (e.g. "AI & ML") — the real hierarchy node, distinct from the legacy `department` string. */
@@ -542,6 +553,8 @@ export function apiToEmployee(u: ApiEmployee): Employee {
     employmentStatus: u.employment_status || "probation",
     confirmationDate: u.confirmation_date ?? null,
     reportingManagerName: u.reporting_manager?.name ?? null,
+    // Key absent (not just null) is the backend's "this is a manager, N/A" signal.
+    noManagerByDesign: !('reporting_manager' in u),
     lastWorkingDay: u.last_working_day ?? null,
     orgUnitName: u.org_unit_name ?? null,
     orgUnitParentName: u.org_unit_parent_name ?? null,
@@ -570,6 +583,18 @@ export function apiToEmployee(u: ApiEmployee): Employee {
     },
     tables: {},
   };
+}
+
+/**
+ * One definition of what to show for a reporting manager, reused by the
+ * Directory table row, the full-record drawer, and the Perform Action
+ * modal (UAT-012 — these three used to independently fall back to "CEO
+ * Office" for ANY null manager, including ordinary employees with none
+ * resolved, not just actual top-of-hierarchy managers).
+ */
+export function reportingManagerDisplay(name: string | null | undefined, noManagerByDesign: boolean | undefined): string {
+  if (name) return name;
+  return noManagerByDesign ? "CEO Office" : "Not assigned";
 }
 
 /** The word the Employee Directory shows for someone's status — one definition for the table pill, the

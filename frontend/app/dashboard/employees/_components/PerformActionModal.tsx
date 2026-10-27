@@ -19,7 +19,7 @@ import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import { getStoredUser } from "@/lib/auth";
 import { usePermission } from "@/hooks/usePermission";
 import { useToast } from "@/components/ToastProvider";
-import { directoryStatusLabel, fullName, type Employee, type FieldOption } from "../_data";
+import { directoryStatusLabel, fullName, reportingManagerDisplay, type Employee, type FieldOption } from "../_data";
 import {
   ACTION_LABELS, approvalRouteFor, reversibilityNote,
   CONFIRMATION_REASONS, ORG_ASSIGNMENT_REASONS, PAY_CHANGE_REASONS, PROMOTION_REASONS,
@@ -146,7 +146,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
     }
     if (actionType === "org_assignment") {
       const selectedMgr = managerOptions.find(m => m.value === managerId);
-      rows.push({ key: "reporting_manager", label: "Reporting manager", before: currentManagerName || "CEO Office", after: selectedMgr ? selectedMgr.label : null });
+      rows.push({ key: "reporting_manager", label: "Reporting manager", before: reportingManagerDisplay(currentManagerName, employee.noManagerByDesign), after: selectedMgr ? selectedMgr.label : null });
       rows.push({ key: "work_location", label: "Work location", before: detail?.work_location || "—", after: workLocation ? workLocation : null });
     }
     if (actionType === "pay_change") {
@@ -172,7 +172,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
     { key: "position", label: "Position", value: employee.designation || "—" },
     { key: "org_unit", label: "Org unit", value: orgUnitLabel },
     { key: "work_location", label: "Work location", value: detail?.work_location || employee.location || "—" },
-    { key: "reporting_manager", label: "Reporting manager", value: currentManagerName || "CEO Office" },
+    { key: "reporting_manager", label: "Reporting manager", value: reportingManagerDisplay(currentManagerName, employee.noManagerByDesign) },
     { key: "employment_status", label: "Status", value: directoryStatus },
     { key: "record_range", label: "Current record", value: currentRecord ? `${DATE_FMT(currentRecord.effective_from)} → ${DATE_FMT(currentRecord.effective_to)}` : "—" },
   ].filter(r => r.key === "record_range" || r.key === "position" || !changedFieldKeys.includes(r.key)).map(r => ({ label: r.label, value: r.value }));
