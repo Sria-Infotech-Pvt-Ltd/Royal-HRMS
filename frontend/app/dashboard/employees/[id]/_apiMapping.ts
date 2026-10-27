@@ -37,6 +37,8 @@ export interface ApiProfile {
 export interface ApiEmployee {
   id: string; uuid: string; employee_id: string;
   first_name: string; last_name: string; full_name: string;
+  /** Uploaded profile photo (CDN URL), or null when there is none. */
+  profile_photo_url?: string | null;
   email: string; phone: string;
   department: string; designation: string; branch: string;
   position_id: string | null; org_unit_id: string | null;
@@ -88,6 +90,7 @@ export function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeCo
     lastName:      u.last_name,
     email:         u.email,
     phone:         u.phone || "",
+    photoUrl:      u.profile_photo_url ?? null,
     department:    u.department || "",
     designation:   u.designation || "",
     dateOfJoining: u.date_of_joining || "",
