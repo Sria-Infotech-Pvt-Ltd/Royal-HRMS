@@ -20,6 +20,7 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
   const [term, setTerm] = useState("");
   const [person, setPerson] = useState<PersonSearchResult | null>(null);
   const [extra, setExtra] = useState<string[]>([]);
+  const [filter, setFilter] = useState("");
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const search = usePersonSearch(person ? "" : term);
   const { access: fetchedAccess, loading, error, isSaving, saveError, saveExtra } = usePersonAccess(person?.uuid ?? null);
@@ -28,9 +29,23 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
 
   useEffect(() => { if (access) setExtra(access.extra); }, [access]);
 
-  const nameOf = new Map(Object.values(catalogue).flat().map(item => [item.codename, item] as const));
-  const alreadyHas = new Set([...(access?.baseline ?? []), ...(access?.seat?.codenames ?? []), ...extra]);
+  // Where a permission the person already has comes from, so it can be shown ticked and locked.
+  const sourceOf = (codename: string): string | null => {
+    if (access?.baseline.includes(codename)) return "everyone";
+    if (access?.seat?.codenames.includes(codename)) return "their seat";
+    return null;
+  };
+  const searchTerm = filter.trim().toLowerCase();
+  const visibleModules = Object.entries(catalogue)
+    .sort(([first], [second]) => first.localeCompare(second))
+    .map(([module, items]) => [module, items.filter(item => item.codename !== NOT_GRANTABLE
+      && (!searchTerm || `${module} ${item.action} ${item.codename}`.toLowerCase().includes(searchTerm)))] as const)
+    .filter(([, items]) => items.length > 0);
   const isChanged = !!access && [...extra].sort().join() !== [...access.extra].sort().join();
+
+  function toggleExtra(codename: string) {
+    setExtra(current => (current.includes(codename) ? current.filter(value => value !== codename) : [...current, codename]));
+  }
 
   function choose(result: PersonSearchResult) {
     setPerson(result);
@@ -90,43 +105,48 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
               </dl>
 
               <div>
-                <h3 className="mb-2 text-sm font-bold text-[var(--on-bg)]">Extra access for {person.full_name.split(" ")[0]}</h3>
-                {extra.length === 0 && <p className="text-sm text-[var(--on-variant)]">None yet.</p>}
-                <ul className="flex flex-wrap gap-2">
-                  {extra.map(codename => {
-                    const item = nameOf.get(codename);
-                    return (
-                      <li key={codename} className="flex items-center gap-1.5 rounded-full bg-[var(--sec-c)] py-1 pl-3 pr-1.5 text-xs font-semibold text-[var(--primary)]">
-                        <span className="capitalize">{labelOf(codename.split(".")[0])} · {labelOf(item?.action ?? codename.split(".")[1] ?? codename)}</span>
-                        {canEdit && (
-                          <button type="button" className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-[var(--surface)]" aria-label={`Remove ${codename}`} onClick={() => setExtra(extra.filter(value => value !== codename))}>
-                            <i className="ti ti-x" />
-                          </button>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+                <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-[var(--on-bg)]">Extra access for {person.full_name.split(" ")[0]}</h3>
+                    <p className="text-xs text-[var(--on-variant)]">
+                      {extra.length === 0 ? "None yet." : `${extra.length} extra permission${extra.length === 1 ? "" : "s"} selected.`} Tick what they should also be able to do.
+                    </p>
+                  </div>
+                  <input className="finput w-64" type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="Search e.g. payroll, leave" aria-label="Search permissions" />
+                </div>
 
-              {canEdit && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <select className="finput w-72" value="" onChange={event => { if (event.target.value) setExtra([...extra, event.target.value]); }} aria-label="Add a permission">
-                    <option value="">+ Add a permission…</option>
-                    {Object.entries(catalogue).sort(([a], [b]) => a.localeCompare(b)).map(([module, items]) => {
-                      const available = items.filter(item => item.codename !== NOT_GRANTABLE && !alreadyHas.has(item.codename));
-                      return available.length === 0 ? null : (
-                        <optgroup key={module} label={labelOf(module)}>
-                          {available.map(item => <option key={item.codename} value={item.codename}>{labelOf(item.action)}</option>)}
-                        </optgroup>
-                      );
-                    })}
-                  </select>
-                  <button type="button" className="btn btn-filled" onClick={save} disabled={!isChanged || isSaving}>
+                <div className="max-h-[26rem] overflow-y-auto rounded-xl border border-[var(--outline-v)]">
+                  {visibleModules.length === 0 && <p className="p-4 text-sm text-[var(--on-variant)]">No permission matches that search.</p>}
+                  {visibleModules.map(([module, items]) => (
+                    <div key={module} className="flex flex-col gap-1.5 border-b border-[var(--outline-v)] px-4 py-3 last:border-b-0 sm:flex-row sm:items-start sm:gap-4">
+                      <h4 className="w-36 shrink-0 pt-0.5 text-sm font-semibold capitalize text-[var(--on-bg)]">{labelOf(module)}</h4>
+                      <div className="flex flex-1 flex-wrap gap-x-5 gap-y-1.5">
+                        {items.map(item => {
+                          const source = sourceOf(item.codename);
+                          return (
+                            <label key={item.codename} className={`flex items-center gap-1.5 text-sm capitalize ${source ? "text-[var(--on-variant)]" : "cursor-pointer text-[var(--on-bg)]"}`} title={item.description || item.codename}>
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-[var(--primary)]"
+                                checked={!!source || extra.includes(item.codename)}
+                                disabled={!canEdit || !!source}
+                                onChange={() => toggleExtra(item.codename)}
+                              />
+                              {labelOf(item.action)}
+                              {source && <span className="text-[11px] normal-case text-[var(--outline)]">({source})</span>}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {canEdit && (
+                  <button type="button" className="btn btn-filled mt-3" onClick={save} disabled={!isChanged || isSaving}>
                     {isSaving ? "Saving…" : "Save access"}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
               {!canEdit && <p className="text-xs text-[var(--on-variant)]">You can view access but only a full-access user can change it.</p>}
             </>
           )}
