@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import type { PayrollCycle, PayrollSettings, EmployeeSalaryConfig } from "@/types/payroll";
+import type { PayrollCycle, PayrollSettings } from "@/types/payroll";
+import type { SalarySetupSummary } from "@/types/salarySetup";
 import CancelCycleModal from "./CancelCycleModal";
 import PayrollCalendarCard from "./PayrollCalendarCard";
 import RecentPayrollRunsCard from "./RecentPayrollRunsCard";
@@ -24,13 +25,13 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
   const { data: cyclesPage, loading: cyclesLoading, refetch } =
     useFetch<PagedResponse<PayrollCycle>>(API.payroll.cycles);
   const { data: settings } = useFetch<PayrollSettings>(API.payroll.settings);
-  const { data: salaryPage } =
-    useFetch<PagedResponse<EmployeeSalaryConfig>>(API.payroll.employeeSalary);
+  // The same summary Salary Setup shows, so the two screens always agree.
+  const { data: salarySummary } = useFetch<SalarySetupSummary>(API.payroll.salarySetupSummary);
 
   const [cancelTarget, setCancelTarget] = useState<PayrollCycle | null>(null);
 
   const cycles   = cyclesPage?.results ?? [];
-  const empCount = salaryPage?.count ?? 0;
+  const empCount = salarySummary?.configured ?? 0;
   const pending  = cycles.filter(c => !["paid","closed","cancelled"].includes(c.status));
   const paid     = cycles.filter(c =>  ["paid","closed"].includes(c.status));
 
@@ -83,7 +84,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
 
   const STATS = [
     {
-      label: "Employees w/ Salary", value: empCount > 0 ? String(empCount) : "—", sub: "CTC configured", icon: "ti-users", cls: "si-primary",
+      label: "Employees w/ Salary", value: empCount > 0 ? String(empCount) : "—", sub: salarySummary ? `of ${salarySummary.total} · ${salarySummary.payroll_ready} payroll ready` : "CTC configured", icon: "ti-users", cls: "si-primary",
       onClick: onGoToSalarySetup, title: "Go to Salary Setup",
     },
     {

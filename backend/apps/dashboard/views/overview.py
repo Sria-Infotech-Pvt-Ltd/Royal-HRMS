@@ -540,10 +540,10 @@ class HRDashboardOverviewView(APIView):
       them joined this calendar month.
     - present_today / attendance_pct: today's AttendanceRecord rows (same
       counting convention as HRAttendanceSummaryView above).
-    - payroll_ready / payroll_total / payroll_blocked: an active employee
-      counts as payroll-ready only with both an active EmployeeSalaryConfig
-      and a complete bank profile (account_number + ifsc_code) — the two
-      concrete things that actually block a payslip from being produced.
+    - payroll_ready / payroll_total / payroll_blocked: the single shared
+      definition in apps.payroll.services_payroll_readiness (an active,
+      effective salary record, a resolvable salary structure, and complete
+      bank details) — the same one Salary Setup and the Payroll dashboard use.
     - onboarding_in_progress / joining_this_week: onboarding_status not yet
       'complete', and active employees whose date_of_joining falls in the
       next 7 days.
@@ -570,7 +570,6 @@ class HRDashboardOverviewView(APIView):
         from apps.accounts.models import DocumentTypeConfig, EmployeeDocument, User
         from apps.attendance.models import AttendanceRecord
         from apps.hrms.models import Expense, LeaveRequest, REQ_L2_PENDING, REQ_PENDING
-        from apps.payroll.models import EmployeeSalaryConfig
 
         today = timezone.localdate()
         branch = _hr_dashboard_branch(request.user)
@@ -591,16 +590,10 @@ class HRDashboardOverviewView(APIView):
         attendance_pct = round((present_today / total_headcount) * 100) if total_headcount else 0
         attendance_exceptions_today = att_counts.get(AttendanceRecord.STATUS_LATE, 0) + att_counts.get(AttendanceRecord.STATUS_INCOMPLETE, 0)
 
-        payroll_ready_ids = set(
-            EmployeeSalaryConfig.objects.filter(employee__in=employees, is_active=True)
-            .values_list('employee_id', flat=True)
-        )
-        bank_complete_ids = set(
-            employees.filter(profile__account_number__isnull=False)
-            .exclude(profile__account_number='').exclude(profile__ifsc_code='')
-            .values_list('id', flat=True)
-        )
-        payroll_ready = len(payroll_ready_ids & bank_complete_ids)
+        # The one shared "payroll ready" definition, also used by Salary Setup and the Payroll dashboard.
+        from apps.payroll.services_payroll_readiness import payroll_readiness
+
+        payroll_ready = len(payroll_readiness(employees).ready_ids)
         payroll_blocked = total_headcount - payroll_ready
 
         onboarding_in_progress = employees.exclude(onboarding_status=User.ONBOARDING_COMPLETE).count()

@@ -479,6 +479,8 @@ export const API = {
     branchConfigByBranch: (branchId: string) => `/payroll/branch-config/by-branch/${branchId}/`,
 
     // Employee salary config (CTC)
+    salarySetup: "/payroll/salary-setup/",
+    salarySetupSummary: "/payroll/salary-setup/summary/",
     employeeSalary: "/payroll/employee-salary/",
     employeeSalaryDetail: (id: string) => `/payroll/employee-salary/${id}/`,
     employeeSalaryHistory: (employeeId: string) => `/payroll/employee-salary/history/${employeeId}/`,

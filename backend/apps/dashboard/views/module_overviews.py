@@ -142,20 +142,14 @@ class PayrollOverviewView(APIView):
         employees = User.objects.filter(is_active=True).exclude(employee_id='')
         total_headcount = employees.count()
 
-        # Same "payroll ready" definition as HRDashboardOverviewView — an
-        # active EmployeeSalaryConfig plus complete bank details.
-        payroll_ready_ids = set(
-            EmployeeSalaryConfig.objects.filter(employee__in=employees, is_active=True)
-            .values_list('employee_id', flat=True)
-        )
-        bank_ids = set(
-            employees.filter(profile__account_number__isnull=False)
-            .exclude(profile__account_number='').exclude(profile__ifsc_code='')
-            .values_list('id', flat=True)
-        )
-        payroll_ready = len(payroll_ready_ids & bank_ids)
+        # The one shared "payroll ready" definition (services_payroll_readiness): an active, effective salary record, a
+        # resolvable salary structure and complete bank details. Salary Setup and the HR dashboard read the same rule.
+        from apps.payroll.services_payroll_readiness import payroll_readiness
+
+        snapshot = payroll_readiness(employees)
+        payroll_ready = len(snapshot.ready_ids)
         blocked = total_headcount - payroll_ready
-        bank_missing = total_headcount - len(bank_ids)
+        bank_missing = total_headcount - len(snapshot.bank_ok_ids)
 
         gross = deductions = net = 0
         if cycle:
@@ -172,7 +166,7 @@ class PayrollOverviewView(APIView):
         new_joiners = employees.filter(date_of_joining__year=today.year, date_of_joining__month=today.month).count()
         new_joiners_no_ctc = employees.filter(
             date_of_joining__year=today.year, date_of_joining__month=today.month,
-        ).exclude(id__in=payroll_ready_ids).count()
+        ).filter(id__in=snapshot.missing_ids).count()
         exit_settlements = SeparationRequest.objects.filter(status=SEP_APPROVED).count()
 
         attendance_status = 'Not started'

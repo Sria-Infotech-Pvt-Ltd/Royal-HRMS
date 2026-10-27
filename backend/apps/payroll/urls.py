@@ -21,6 +21,7 @@ from apps.payroll.views.branch_config import (
     BranchPayrollConfigDetailView,
     BranchPayrollConfigByBranchView,
 )
+from apps.payroll.views.salary_setup import SalarySetupListView, SalarySetupSummaryView
 from apps.payroll.views.employee_salary import (
     EmployeeSalaryConfigListView,
     EmployeeSalaryConfigDetailView,
@@ -107,6 +108,8 @@ urlpatterns = [
     path('branch-config/by-branch/<uuid:branch_pk>/', BranchPayrollConfigByBranchView.as_view(), name='branch-config-by-branch'),
 
     # ── Employee salary config (CTC assignment) ──────────────────────────────
+    path('salary-setup/', SalarySetupListView.as_view(), name='salary-setup-list'),
+    path('salary-setup/summary/', SalarySetupSummaryView.as_view(), name='salary-setup-summary'),
     path('employee-salary/', EmployeeSalaryConfigListView.as_view(), name='employee-salary-list'),
     path('employee-salary/<uuid:pk>/', EmployeeSalaryConfigDetailView.as_view(), name='employee-salary-detail'),
     path('employee-salary/history/<str:employee_pk>/', EmployeeSalaryHistoryView.as_view(), name='employee-salary-history'),
