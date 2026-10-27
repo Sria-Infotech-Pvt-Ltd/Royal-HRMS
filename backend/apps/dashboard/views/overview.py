@@ -496,9 +496,13 @@ class SharedAnnouncementView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from apps.announcements.models import Announcement
+        # Same audience rules as the Announcements list/detail endpoints: a
+        # branch- or department-targeted post is only the "latest" for people
+        # in that branch/department (editors see all). Previously this took
+        # the newest post company-wide, showing targeted posts to everyone.
+        from apps.announcements.views import _visible_qs
 
-        ann = Announcement.objects.select_related('posted_by').first()
+        ann = _visible_qs(request).first()
         if ann is None:
             return success('No announcements found.', data=None)
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import AnnouncementViewModal from "@/components/announcements/AnnouncementViewModal";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { AnnouncementData } from "@/types/dashboard";
@@ -19,6 +21,7 @@ function resolveAuthor(data: AnnouncementData): string {
 
 export default function AnnouncementCard() {
   const { data, loading } = useFetch<AnnouncementData>(API.dashboard.announcement);
+  const [viewing, setViewing] = useState(false);
 
   const isValidAnnouncement =
     data !== null &&
@@ -35,9 +38,14 @@ export default function AnnouncementCard() {
       <div className="card-header">
         <div className="card-title"><i className="ti ti-speakerphone" /> Latest Announcement</div>
         {!loading && announcement && (
-          <a href="/dashboard/announcements" className="btn btn-ghost btn-sm">
-            All <i className="ti ti-arrow-right" style={{ fontSize: 11, marginLeft: 3 }} />
-          </a>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setViewing(true)} aria-haspopup="dialog">
+              <i className="ti ti-eye" /> View
+            </button>
+            <a href="/dashboard/announcements" className="btn btn-ghost btn-sm">
+              All <i className="ti ti-arrow-right" style={{ fontSize: 11, marginLeft: 3 }} />
+            </a>
+          </div>
         )}
       </div>
 
@@ -85,6 +93,7 @@ export default function AnnouncementCard() {
           )}
         </div>
       )}
+      {viewing && announcement && <AnnouncementViewModal announcementId={announcement.id} onClose={() => setViewing(false)} />}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import AnnouncementViewModal from "@/components/announcements/AnnouncementViewModal";
 import { useSharedAnnouncement, useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
 
 function fmtDate(iso: string): string {
@@ -18,18 +18,25 @@ function namesList(names: string[]): string {
 // instead of two separately-boxed, differently-colored strips stacked on top
 // of each other — same information, one consistent container.
 export default function EmpUpdatesCard() {
-  const { data: announcement, loading: loadingAnnouncement } = useSharedAnnouncement();
+  const { data: sharedAnnouncement, loading: loadingAnnouncement } = useSharedAnnouncement();
+  // "No announcement" comes back as an empty object ({}), not null — only a
+  // payload with an id is a real announcement.
+  const announcement = sharedAnnouncement && "id" in sharedAnnouncement ? sharedAnnouncement : null;
   const { data: birthdayData, loading: loadingBirthdays }    = useBirthdaysToday();
 
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const [birthdayDismissed,     setBirthdayDismissed]      = useState(false);
+  // Full announcement opens in a modal on the dashboard (fetched fresh by id).
+  const [viewingId,             setViewingId]              = useState<number | null>(null);
 
   const birthdaysToday = birthdayData?.birthdays ?? [];
 
   const showAnnouncement = !loadingAnnouncement && !!announcement && !announcementDismissed;
   const showBirthdays    = !loadingBirthdays && birthdaysToday.length > 0 && !birthdayDismissed;
 
-  if (!showAnnouncement && !showBirthdays) return null;
+  if (!showAnnouncement && !showBirthdays) {
+    return viewingId != null ? <AnnouncementViewModal announcementId={viewingId} onClose={() => setViewingId(null)} /> : null;
+  }
 
   return (
     <div className="card mb-20">
@@ -68,9 +75,14 @@ export default function EmpUpdatesCard() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <Link href="/dashboard/announcements" style={{ fontSize: 12, color: "var(--primary)", fontWeight: 500, textDecoration: "none", whiteSpace: "nowrap" }}>
+            <button
+              type="button"
+              onClick={() => setViewingId(announcement.id)}
+              aria-haspopup="dialog"
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--primary)", fontWeight: 500, whiteSpace: "nowrap" }}
+            >
               View <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
-            </Link>
+            </button>
             <button
               onClick={() => setAnnouncementDismissed(true)}
               style={{ background: "none", border: "none", cursor: "pointer", color: "var(--on-variant)", fontSize: 14, padding: "2px 4px", lineHeight: 1 }}
@@ -107,6 +119,7 @@ export default function EmpUpdatesCard() {
           </button>
         </div>
       )}
+      {viewingId != null && <AnnouncementViewModal announcementId={viewingId} onClose={() => setViewingId(null)} />}
     </div>
   );
 }

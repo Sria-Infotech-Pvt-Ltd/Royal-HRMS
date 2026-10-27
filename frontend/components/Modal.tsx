@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type CSSProperties, type ReactNode } from "react";
+import { useId, useRef, type CSSProperties, type ReactNode } from "react";
 
 interface ModalProps {
   title: ReactNode;
@@ -44,6 +44,7 @@ export default function Modal({
   // otherwise land on the overlay and close it mid-input. Only close when
   // the gesture both started AND ended on the backdrop itself.
   const mouseDownOnOverlay = useRef(false);
+  const titleId = useId();
 
   return (
     <div
@@ -56,13 +57,16 @@ export default function Modal({
     >
       <div
         className={`modal${size === "lg" ? " modal-lg" : size === "xl" ? " modal-xl" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         style={{
           ...(maxWidth ? { maxWidth } : undefined),
           ...(scrollBody ? { display: "flex", flexDirection: "column", maxHeight: "90vh" } : undefined),
         }}
       >
         <div className="modal-header" style={scrollBody ? { flexShrink: 0 } : undefined}>
-          <div className="modal-title">{title}</div>
+          <div className="modal-title" id={titleId}>{title}</div>
           <button
             className="modal-close"
             aria-label="Close"
