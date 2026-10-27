@@ -21,6 +21,7 @@ import FamilyNominationStep, { type FamilyEntry, type NomineeEntry } from "./_co
 import AssetsList, { type AssetEntry } from "./_components/AssetsList";
 import ReviewSummary from "./_components/ReviewSummary";
 import { EMPTY, PAN_RE, BUILTIN_STEPS, DOCUMENTS_STEP, FACE_STEP, REVIEW_STEP, type WizardStep } from "./_wizardSteps";
+import { todayDateString } from "@/lib/candidateValidation";
 
 // ── Component ───────────────────────────────────────────────────────────────
 
@@ -421,8 +422,15 @@ export default function OnboardingPage() {
 
       const saved: AssetEntry[] = [];
       for (const entry of assetEntries) {
-        const payload = { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition };
         const isNew = entry.id.startsWith("temp-");
+        // This step has no "issue later" toggle (see AssetsList.tsx) —
+        // adding an entry here means the asset is handed over now, so the
+        // new row must be stamped issued_at immediately. Without this the
+        // backend left issued_at blank forever and the ESS asset card
+        // showed a tag/date-less row under an ASSIGNED badge.
+        const payload = isNew
+          ? { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition, issued_at: todayDateString() }
+          : { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition };
         const res = isNew
           ? await clientApi.post<{ data: AssetEntry }>(API.onboarding.assets, payload)
           : await clientApi.patch<{ data: AssetEntry }>(API.onboarding.assetDetail(entry.id), payload);

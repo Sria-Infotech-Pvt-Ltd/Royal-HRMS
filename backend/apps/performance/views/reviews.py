@@ -2,6 +2,7 @@ import logging
 
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.permissions import has_perm as _has_perm
@@ -38,7 +39,13 @@ class MyReviewView(APIView):
     def get(self, request):
         cycle = _active_cycle()
         if not cycle:
-            return success('No active review cycle.', None)
+            # success() coerces data=None into {} (its genuine-"nothing
+            # configured" convention elsewhere), but the frontend needs to
+            # tell "no active cycle" apart from "a real, empty-ish review" —
+            # built directly here so `data` is a real JSON null, not {}.
+            return Response({
+                'status': 'success', 'message': 'No active review cycle.', 'data': None,
+            })
         review = self._get_or_create(request.user, cycle)
         return success('Review retrieved.', PerformanceReviewSerializer(review, context={'request': request}).data)
 

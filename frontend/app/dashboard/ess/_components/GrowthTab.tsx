@@ -44,12 +44,17 @@ export default function GrowthTab({ onNavigateToAppraisals }: Props) {
   const [feedbackKey, setFeedbackKey] = useState(0);
 
   const list = goals ?? [];
-  const cycleName = review?.cycle_name ?? null;
+  // `review` is {} (not null) when there's no active cycle — see MyReviewView.
+  // Checked by key count, not truthiness, so an empty object is never
+  // mistaken for a real review (that's what rendered "undefined cycle
+  // opened" below before this fix).
+  const hasCycle = !!review && Object.keys(review).length > 0;
+  const cycleName = hasCycle ? review!.cycle_name : null;
 
   return (
     <div>
-      {review && review.cycle_name && (
-        <GrowthAppraisalBanner cycleName={review.cycle_name} onNavigateToAppraisals={onNavigateToAppraisals} />
+      {hasCycle && (
+        <GrowthAppraisalBanner cycleName={review!.cycle_name} onNavigateToAppraisals={onNavigateToAppraisals} />
       )}
 
       <div className="card mb-16">
@@ -70,17 +75,28 @@ export default function GrowthTab({ onNavigateToAppraisals }: Props) {
 
       <div className="grid-2" style={{ alignItems: "stretch", marginBottom: 16 }}>
         <GrowthGoalsCard cycleName={cycleName} goals={list} loading={loading} error={error} refetch={refetch} />
-        {review && (
+        {hasCycle ? (
           <GrowthReviewTimeline
             input={{
-              cycleName: review.cycle_name,
+              cycleName: review!.cycle_name,
               cycleOpenedAt: cycleOpenedDate(review),
-              selfReviewDue: review.cycle_self_review_due,
-              managerReviewDue: review.cycle_manager_review_due,
-              selfSubmittedAt: review.self_submitted_at,
-              managerSubmittedAt: review.manager_submitted_at,
+              selfReviewDue: review!.cycle_self_review_due,
+              managerReviewDue: review!.cycle_manager_review_due,
+              selfSubmittedAt: review!.self_submitted_at,
+              managerSubmittedAt: review!.manager_submitted_at,
             }}
           />
+        ) : (
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title"><i className="ti ti-timeline" /> Review timeline</div>
+            </div>
+            <div className="empty-state">
+              <i className="ti ti-timeline" />
+              <h3>No active review cycle</h3>
+              <p>Your timeline will appear when HR opens a cycle.</p>
+            </div>
+          </div>
         )}
       </div>
 

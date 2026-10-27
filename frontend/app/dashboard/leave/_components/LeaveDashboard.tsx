@@ -38,25 +38,43 @@ const BALANCE_DISPLAY = [
 // Four plain stat tiles — Casual/Sick/Earned available + Used This Year —
 // matching the reference layout's bare label/value/sub tiles (no icon badge,
 // no progress bar, no used/total line).
-export function LeaveBalanceStats() {
+// Shared by the Leave tab and the Home "Leave balance" card (useFetch's
+// `cache: true` means both reads of this same URL resolve from one shared
+// in-memory entry instead of two separate round trips) so the two can never
+// show different numbers, and the second mount never re-pays the 6-10s cold
+// load the first one already paid.
+export function useLeaveBalances() {
   const currentYear = getLeaveYear();
-  const { data: balances } = useFetch<LeaveBalance[]>(
-    API.leave.balance + `?year=${currentYear}`
+  return useFetch<LeaveBalance[]>(
+    API.leave.balance + `?year=${currentYear}`,
+    { cache: true },
   );
+}
+
+function fmtDays(value: number | null): string {
+  return value === null ? "—" : value.toFixed(1);
+}
+
+// Four plain stat tiles — Casual/Sick/Earned available + Used This Year —
+// matching the reference layout's bare label/value/sub tiles (no icon badge,
+// no progress bar, no used/total line).
+export function LeaveBalanceStats() {
+  const { data: balances, loading } = useLeaveBalances();
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
-  const usedThisYear = (balances ?? []).reduce((sum, b) => sum + Number(b.used_days), 0);
+  // null while loading/missing — never a fabricated 0.0 (see fmtDays below).
+  const usedThisYear = loading || !balances
+    ? null
+    : balances.reduce((sum, b) => sum + Number(b.used_days), 0);
 
   return (
     <div className="stats-grid" style={{ marginBottom: 0 }}>
       {BALANCE_DISPLAY.map(({ key, label }) => {
-        const b         = balanceMap[key];
-        const total     = b ? Number(b.total_days) : 0;
-        const used      = b ? Number(b.used_days)  : 0;
-        const available = total - used;
+        const b = balanceMap[key];
+        const available = loading || !balances ? null : (b ? Number(b.total_days) - Number(b.used_days) : 0);
         return (
           <div key={key} className="stat-card">
             <div className="stat-label">{label.toUpperCase()}</div>
-            <div className="stat-value">{available.toFixed(1)}</div>
+            <div className="stat-value">{fmtDays(available)}</div>
             <div className="stat-sub">days available</div>
           </div>
         );
@@ -68,7 +86,7 @@ export function LeaveBalanceStats() {
           count). */}
       <div className="stat-card">
         <div className="stat-label">USED THIS YEAR</div>
-        <div className="stat-value">{usedThisYear.toFixed(1)}</div>
+        <div className="stat-value">{fmtDays(usedThisYear)}</div>
         <div className="stat-sub">days approved</div>
       </div>
     </div>

@@ -88,7 +88,7 @@
 .ess-day.half-day small{color:#ea580c}
 .ess-day.leave{background:color-mix(in srgb,#3b82f6 10%,var(--surface));border-color:color-mix(in srgb,#3b82f6 30%,var(--line))}
 .ess-day.leave small{color:#2563eb}
-.ess-day.weekly-off,.ess-day.holiday,.ess-day.unrecorded{background:var(--surface-2)}
+.ess-day.weekly-off,.ess-day.holiday,.ess-day.unrecorded,.ess-day.not-joined{background:var(--surface-2)}
 .ess-calendar-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin:0 0 10px}
 .ess-calendar-legend span{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:9px;font-weight:600}
 .ess-status-dot{width:8px;height:8px;border-radius:50%;background:var(--line)}
@@ -97,7 +97,7 @@
 .ess-status-dot.absent{background:#ef4444}
 .ess-status-dot.half-day{background:#f97316}
 .ess-status-dot.leave{background:#3b82f6}
-.ess-status-dot.unrecorded,.ess-status-dot.weekly-off,.ess-status-dot.holiday{background:var(--muted)}
+.ess-status-dot.unrecorded,.ess-status-dot.weekly-off,.ess-status-dot.holiday,.ess-status-dot.not-joined{background:var(--muted)}
 @media(max-width:650px){.ess-form{grid-template-columns:1fr}.ess-pagehead{align-items:flex-start;flex-direction:column}.ess-calendar{min-width:560px}.ess-calendar-wrap{overflow-x:auto}}
 .pay-hero{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;padding:20px;border-radius:16px;background:linear-gradient(135deg,#111827,#312e81);color:#fff;box-shadow:0 12px 28px rgba(17,24,39,.18)}
 .pay-hero small{display:block;color:#c7d2fe;font-size:10px}

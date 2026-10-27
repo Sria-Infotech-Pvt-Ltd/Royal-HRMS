@@ -163,27 +163,32 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
         />
       )}
 
-      <div style={{ padding: "16px 20px 20px", borderTop: "1px solid var(--outline-v)", marginTop: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--on-variant)", marginBottom: 10 }}>ADD A GOAL</div>
-        {addErr && <div className="alert alert-error mb-16">{addErr}</div>}
-        <div className="form-row cols-2" style={{ marginBottom: 12 }}>
-          <div className="field-group">
-            <label className="field-label">Title</label>
-            <input className="field-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Improve platform reliability" />
+      {/* No point offering to add a goal against a cycle that doesn't exist
+          — cycleName is only ever set from the active cycle's own name (see
+          GrowthTab), so its absence here means there's nothing to add one to. */}
+      {cycleName && (
+        <div style={{ padding: "16px 20px 20px", borderTop: "1px solid var(--outline-v)", marginTop: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--on-variant)", marginBottom: 10 }}>ADD A GOAL</div>
+          {addErr && <div className="alert alert-error mb-16">{addErr}</div>}
+          <div className="form-row cols-2" style={{ marginBottom: 12 }}>
+            <div className="field-group">
+              <label className="field-label">Title</label>
+              <input className="field-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Improve platform reliability" />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Target</label>
+              <input className="field-input" value={targetMetric} onChange={e => setTargetMetric(e.target.value)} placeholder="e.g. Reduce incidents by 20%" />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Due date</label>
+              <DateInput className="field-input" value={dueDate} onChange={isoDate => setDueDate(isoDate)} />
+            </div>
           </div>
-          <div className="field-group">
-            <label className="field-label">Target</label>
-            <input className="field-input" value={targetMetric} onChange={e => setTargetMetric(e.target.value)} placeholder="e.g. Reduce incidents by 20%" />
-          </div>
-          <div className="field-group">
-            <label className="field-label">Due date</label>
-            <DateInput className="field-input" value={dueDate} onChange={isoDate => setDueDate(isoDate)} />
-          </div>
+          <button className="btn btn-filled" onClick={handleAdd} disabled={adding || !title.trim()}>
+            {adding ? "Adding…" : "Add goal"}
+          </button>
         </div>
-        <button className="btn btn-filled" onClick={handleAdd} disabled={adding || !title.trim()}>
-          {adding ? "Adding…" : "Add goal"}
-        </button>
-      </div>
+      )}
     </div>
   );
 }

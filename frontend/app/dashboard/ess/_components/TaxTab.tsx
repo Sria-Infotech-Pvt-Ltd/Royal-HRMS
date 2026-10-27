@@ -67,16 +67,27 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
 
   const [showNewDeclaration, setShowNewDeclaration] = useState(false);
 
-  const fyStartYear = currentFinancialYearStart(fyConfig?.financial_year_start_month ?? "April").getFullYear();
+  const fyStart = currentFinancialYearStart(fyConfig?.financial_year_start_month ?? "April");
 
   const ytdTds = (() => {
     const payslips = payslipPage?.results ?? [];
     if (payslips.length === 0) return null;
-    const fyStart = currentFinancialYearStart(fyConfig?.financial_year_start_month ?? "April");
     return payslips
       .filter(p => new Date(p.cycle_start) >= fyStart)
       .reduce((sum, p) => sum + Number(p.income_tax), 0);
   })();
+
+  // Form 16 is only ever for a FY that has actually closed — the current,
+  // still-running FY has no payslips to certify yet, so this always means
+  // the previous one, and only when payslips for it genuinely exist (never
+  // a Download pointed at a FY with nothing behind it).
+  const prevFyStart = new Date(fyStart.getFullYear() - 1, fyStart.getMonth(), 1);
+  const prevFyStartYear = prevFyStart.getFullYear();
+  const prevFyLabel = `${prevFyStartYear}-${String(prevFyStartYear + 1).slice(-2)}`;
+  const hasPrevFyPayslip = (payslipPage?.results ?? []).some(p => {
+    const cycleStart = new Date(p.cycle_start);
+    return cycleStart >= prevFyStart && cycleStart < fyStart;
+  });
 
   const isLocked = mine?.status === "approved";
   const hasStarted = !!mine && (mine.status !== "draft" || Object.keys(mine.declared_investments).length > 0);
@@ -139,15 +150,19 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
         <div style={{ padding: "4px 24px 8px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-v)", gap: 12 }}>
             <div>
-              <div style={{ fontWeight: 600 }}>Form 16 · FY {mine?.financial_year ?? "—"}</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Annual tax certificate · PDF</div>
+              <div style={{ fontWeight: 600 }}>Form 16 · FY {prevFyLabel}</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                {hasPrevFyPayslip ? "Annual tax certificate · PDF" : "Form 16 will be available after the financial year closes."}
+              </div>
             </div>
-            <a
-              href={`${API_BASE}${API.payroll.form16Pdf(fyStartYear)}`}
-              className="btn btn-ghost btn-sm"
-            >
-              <i className="ti ti-download" /> Download
-            </a>
+            {hasPrevFyPayslip && (
+              <a
+                href={`${API_BASE}${API.payroll.form16Pdf(prevFyStartYear)}`}
+                className="btn btn-ghost btn-sm"
+              >
+                <i className="ti ti-download" /> Download
+              </a>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", gap: 12 }}>
             <div>

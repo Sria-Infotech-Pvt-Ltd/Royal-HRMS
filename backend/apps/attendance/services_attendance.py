@@ -33,11 +33,73 @@ from apps.attendance.models import (
 
 logger = logging.getLogger(__name__)
 
+# ─── Synthetic day states ──────────────────────────────────────────────────────
+# Not real AttendanceRecord.status values (no row is ever created for a date
+# before an employee joined, or for "today" before their shift has ended) —
+# purely computed, in-memory classifications shared by every place that walks
+# a date range day-by-day (calendar, stats, summary, payroll LOP).
+STATUS_NOT_JOINED = 'not_joined'
+STATUS_PENDING    = 'pending'
+
+_SYNTHETIC_DISPLAY = {
+    STATUS_NOT_JOINED: 'Not joined',
+    STATUS_PENDING:    'Pending',
+}
+_SYNTHETIC_COLOR = {
+    STATUS_NOT_JOINED: '#cbd5e1',   # slate-300 — neutral grey, distinct from weekly-off/holiday
+    STATUS_PENDING:    '#cbd5e1',
+}
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _get_settings() -> Optional[AttendanceSettings]:
     from core.cache_service import AttendanceSettingsCacheService
     return AttendanceSettingsCacheService.get()
+
+
+def effective_attendance_window(employee, range_start: date, range_end: date) -> tuple[date, date]:
+    """
+    Clamp [range_start, range_end] to the employee's real employment window:
+    their date_of_joining on the early side, and their approved separation's
+    last working day (if any) on the late side.
+
+    Shared by every place that classifies/aggregates attendance day-by-day
+    (calendar, stats, summary, payroll LOP) so a day before someone joined —
+    or after they left — is never counted as worked, absent, or LOP against
+    them, through one definition instead of four slightly different ones.
+    """
+    eff_start = range_start
+    doj = getattr(employee, 'date_of_joining', None)
+    if doj and doj > eff_start:
+        eff_start = min(doj, range_end)
+
+    eff_end = range_end
+    from apps.hrms.models import SeparationRequest, SEP_APPROVED
+    last_working_day = (
+        SeparationRequest.objects
+        .filter(employee=employee, status=SEP_APPROVED)
+        .order_by('-proposed_last_working_day')
+        .values_list('proposed_last_working_day', flat=True)
+        .first()
+    )
+    if last_working_day and last_working_day < eff_end:
+        eff_end = last_working_day
+
+    return eff_start, eff_end
+
+
+def shift_end_has_passed(cfg, now: Optional[datetime] = None) -> bool:
+    """
+    True once the organisation's configured shift-end time has passed for
+    "right now" in IST. There is no per-employee shift assignment today
+    (see MyShiftView's own docstring) so the org's default working-hours
+    policy stands in for "the employee's assigned shift", same as it does
+    everywhere else in this module.
+    """
+    wh = getattr(cfg, 'working_hours', None) if cfg else None
+    shift_end = wh.shift_end if wh else time(18, 0)
+    now = now or timezone.now()
+    return _ist_time(now) >= shift_end
 
 
 def _minutes_to_display(minutes: int) -> str:
@@ -616,6 +678,8 @@ class AttendanceDashboardService:
         leave_dates   = cls._leave_dates(employee, month_start, month_end)
         holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
         off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
+        eff_start, eff_end = effective_attendance_window(employee, month_start, month_end)
+        shift_ended   = shift_end_has_passed(_get_settings())
 
         working_days = days_present = lop_pending = missing_punch = 0
         late_dates: list[date] = []
@@ -624,7 +688,12 @@ class AttendanceDashboardService:
             if cur > today:
                 continue
             rec = records.get(cur)
-            key = cls._classify_day(cur, rec, holiday_dates, off_dates, leave_dates, today)
+            key = cls._classify_day(
+                cur, rec, holiday_dates, off_dates, leave_dates, today,
+                eff_start=eff_start, eff_end=eff_end, shift_ended_today=shift_ended,
+            )
+            if key in (None, STATUS_NOT_JOINED, STATUS_PENDING):
+                continue
             if key not in (AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY):
                 working_days += 1
             if key in (AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE):
@@ -731,6 +800,8 @@ class AttendanceDashboardService:
         leave_dates   = cls._leave_dates(employee, month_start, month_end)
         holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
         off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
+        eff_start, eff_end = effective_attendance_window(employee, month_start, month_end)
+        shift_ended   = shift_end_has_passed(_get_settings())
 
         working_days = days_present = days_absent = leave_days = half_days = 0
         ot_minutes = 0
@@ -739,7 +810,12 @@ class AttendanceDashboardService:
             if cur > today:
                 continue
             rec = records.get(cur)
-            key = cls._classify_day(cur, rec, holiday_dates, off_dates, leave_dates, today)
+            key = cls._classify_day(
+                cur, rec, holiday_dates, off_dates, leave_dates, today,
+                eff_start=eff_start, eff_end=eff_end, shift_ended_today=shift_ended,
+            )
+            if key in (None, STATUS_NOT_JOINED, STATUS_PENDING):
+                continue
             if key not in (AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY):
                 working_days += 1
             if key in (AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE):
@@ -782,12 +858,15 @@ class AttendanceDashboardService:
         holiday_dates = set(holiday_names.keys())
         off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
         pending_dates = cls._pending_correction_dates(employee, year, month)
+        eff_start, eff_end = effective_attendance_window(employee, month_start, month_end)
+        shift_ended   = shift_end_has_passed(_get_settings())
 
         days: dict[int, dict] = {}
         for day_num in range(1, days_in_month + 1):
             entry = cls._build_day(
                 day_num, year, month, records, leave_dates, off_dates,
                 pending_dates, today, holiday_dates, holiday_names,
+                eff_start=eff_start, eff_end=eff_end, shift_ended_today=shift_ended,
             )
             if entry is not None:
                 days[day_num] = entry
@@ -946,12 +1025,25 @@ class AttendanceDashboardService:
     @staticmethod
     def _classify_day(
         cur: date, rec, holiday_dates: set, off_dates: set, leave_dates: set, today: date,
+        eff_start: Optional[date] = None, eff_end: Optional[date] = None,
+        shift_ended_today: bool = True,
     ):
-        """Status key for one calendar date, or None for a blank future day
-        with no record. Shared by _build_day (get_calendar) and
-        get_monthly_summary so the two can never classify the same day
-        differently — a day with no AttendanceRecord row is 'absent' here
-        exactly as it is on the calendar, not silently skipped."""
+        """Status key for one calendar date, or None for a blank future/
+        post-exit day with no record. Shared by _build_day (get_calendar),
+        get_stats and get_monthly_summary so none of the three can ever
+        classify the same day differently.
+
+        eff_start/eff_end (from effective_attendance_window) clamp this to
+        the employee's real employment window: a day before they joined is
+        STATUS_NOT_JOINED (never 'absent'), and a day after an approved exit
+        is treated like a blank future day. shift_ended_today gates 'today'
+        specifically — with no record yet and the shift not over, it's
+        STATUS_PENDING, not 'absent', since the day isn't over yet.
+        """
+        if eff_start and cur < eff_start:
+            return STATUS_NOT_JOINED
+        if eff_end and cur > eff_end:
+            return None
         if cur in holiday_dates or (rec and rec.status == AttendanceRecord.STATUS_HOLIDAY):
             return AttendanceRecord.STATUS_HOLIDAY
         if cur in off_dates or (rec and rec.status == AttendanceRecord.STATUS_WEEKLY_OFF):
@@ -962,6 +1054,8 @@ class AttendanceDashboardService:
             return rec.status
         if cur > today:
             return None
+        if cur == today and not shift_ended_today:
+            return STATUS_PENDING
         return AttendanceRecord.STATUS_ABSENT
 
     @staticmethod
@@ -971,16 +1065,35 @@ class AttendanceDashboardService:
         pending_dates: set, today: date,
         holiday_dates: set = None,
         holiday_names: dict = None,
+        eff_start: Optional[date] = None, eff_end: Optional[date] = None,
+        shift_ended_today: bool = True,
     ) -> dict | None:
-        """Builds the response dict for one calendar day; returns None for blank future days."""
+        """Builds the response dict for one calendar day; returns None for blank future/post-exit days."""
         cur           = date(year, month, day_num)
         rec           = records.get(cur)
         holiday_dates = holiday_dates or set()
         holiday_names = holiday_names or {}
 
-        key = AttendanceDashboardService._classify_day(cur, rec, holiday_dates, off_dates, leave_dates, today)
+        key = AttendanceDashboardService._classify_day(
+            cur, rec, holiday_dates, off_dates, leave_dates, today,
+            eff_start=eff_start, eff_end=eff_end, shift_ended_today=shift_ended_today,
+        )
         if key is None:
             return None
+
+        if key in (STATUS_NOT_JOINED, STATUS_PENDING):
+            return {
+                'date':                    cur.strftime('%Y-%m-%d'),
+                'status':                  _SYNTHETIC_DISPLAY[key],
+                'color':                   _SYNTHETIC_COLOR[key],
+                'clockIn':                 None,
+                'clockOut':                None,
+                'hours':                   None,
+                'note':                    None,
+                'holiday_name':            None,
+                'canRegularize':           False,
+                'regularization_required': False,
+            }
 
         reg_required = key == AttendanceRecord.STATUS_INCOMPLETE
         can_reg = (

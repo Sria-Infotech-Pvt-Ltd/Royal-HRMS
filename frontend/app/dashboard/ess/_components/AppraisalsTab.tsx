@@ -193,10 +193,13 @@ export default function AppraisalsTab() {
 
   if (!review || !review.id) {
     return (
-      <div className="empty-state">
-        <i className="ti ti-file-text" />
-        <h3>No active review cycle</h3>
-        <p>Your appraisal form will appear here once HR opens a review cycle.</p>
+      <div>
+        <h2 style={{ margin: "0 0 16px", fontSize: "1.3rem" }}>My appraisal</h2>
+        <div className="empty-state">
+          <i className="ti ti-file-text" />
+          <h3>No active review cycle</h3>
+          <p>Your appraisal form will appear here once HR opens a review cycle.</p>
+        </div>
       </div>
     );
   }

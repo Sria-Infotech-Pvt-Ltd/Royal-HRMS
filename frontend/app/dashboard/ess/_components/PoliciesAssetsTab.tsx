@@ -180,26 +180,35 @@ function AssignedAssetsCard({ assets, loading, error, onReportIssue }: {
         </div>
       ) : (
         <div style={{ padding: "4px 24px 0" }}>
-          {assets.map((a, idx) => (
-            <div
-              key={a.id}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "12px 0", gap: 12,
-                borderBottom: idx === assets.length - 1 ? "none" : "1px solid var(--outline-v)",
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{a.asset_type_display}</div>
-                <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                  Asset tag {a.tag_number || "—"} · Assigned {formatDate(a.issued_at) || "—"}
+          {assets.map((a, idx) => {
+            // Not yet issued (no issued_at) means tag_number is unset too —
+            // "ASSIGNED" with a blank tag/date was misleading the employee
+            // into thinking IT had already handed over equipment that
+            // hasn't shipped yet.
+            const pendingIssue = !a.returned_at && !a.issued_at;
+            const badgeClass = a.returned_at ? "badge-neutral" : pendingIssue ? "badge-warn" : "badge-success";
+            const badgeLabel = a.returned_at ? "RETURNED" : pendingIssue ? "PENDING ISSUE" : "ASSIGNED";
+            return (
+              <div
+                key={a.id}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "12px 0", gap: 12,
+                  borderBottom: idx === assets.length - 1 ? "none" : "1px solid var(--outline-v)",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{a.asset_type_display}</div>
+                  <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                    {pendingIssue
+                      ? "Awaiting issue from IT"
+                      : <>Asset tag {a.tag_number || "—"} · Assigned {formatDate(a.issued_at) || "—"}</>}
+                  </div>
                 </div>
+                <span className={`badge ${badgeClass}`}>{badgeLabel}</span>
               </div>
-              <span className={`badge ${a.returned_at ? "badge-neutral" : "badge-success"}`}>
-                {a.returned_at ? "RETURNED" : "ASSIGNED"}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       <div style={{ padding: "12px 24px 20px" }}>

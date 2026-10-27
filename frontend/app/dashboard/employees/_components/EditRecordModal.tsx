@@ -76,6 +76,7 @@ import { type FamilyEntry, type NomineeEntry } from "@/app/onboarding/_component
 import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/AssetsList";
 import EducationChecklist, { type EducationEntry } from "@/app/onboarding/_components/EducationChecklist";
 import ExperienceList, { type ExperienceEntry } from "@/app/onboarding/_components/ExperienceList";
+import { todayDateString } from "@/lib/candidateValidation";
 import type { EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
 import type { EmployeeSalaryConfig } from "@/types/payroll";
 
@@ -432,8 +433,15 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       deletedAssetIds.current.clear();
       const saved: AssetEntry[] = [];
       for (const entry of assetEntries) {
-        const payload = { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition };
         const isNew = entry.id.startsWith("temp-");
+        // No "issue later" toggle here (see AssetsList.tsx) — adding an
+        // entry means it's issued now, so the new row must be stamped
+        // issued_at immediately. Without this issued_at stayed blank
+        // forever and the ESS asset card showed a tag/date-less row under
+        // an ASSIGNED badge.
+        const payload = isNew
+          ? { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition, issued_at: todayDateString() }
+          : { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition };
         const res = isNew
           ? await clientApi.post<{ data: AssetEntry }>(API.onboarding.employees.assets(uuid), payload)
           : await clientApi.patch<{ data: AssetEntry }>(API.onboarding.employees.assetDetail(uuid, entry.id), payload);
