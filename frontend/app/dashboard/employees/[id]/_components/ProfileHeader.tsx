@@ -12,10 +12,8 @@ import {
   experienceFrom,
   fullName,
   initials,
-  avatarColor,
   type Employee,
 } from "../../_data";
-import Avatar from "../../_components/Avatar";
 import StatusBadge from "../../_components/StatusBadge";
 import ActionMenu from "./ActionMenu";
 
@@ -180,115 +178,64 @@ export default function ProfileHeader({
         </div>
       )}
 
-      {/* identity card */}
-      <div
-        className="rounded-xl border p-5 sm:p-6"
-        style={{ background: "var(--surface)", borderColor: "var(--outline-v)" }}
-      >
-        <div className="flex flex-col sm:flex-row gap-5">
-          {/* avatar — no camera badge here: the profile photo endpoint is
-              deliberately self-service only (see views_profile_photo.py),
-              so there's nothing for HR to change on someone else's photo
-              from this page. */}
-          <div className="relative flex-shrink-0">
-            <Avatar
-              text={initials(employee.firstName, employee.lastName)}
-              size={80}
-              color={avatarColor(employee.department)}
-              photoUrl={employee.photoUrl}
-            />
+      {/* identity banner — the same purple hero the workspace page uses, with the employee's photo (the photo
+          endpoint is self-service only, so there is nothing for HR to change here). */}
+      <section className="ess-hero" style={{ gridTemplateColumns: "1.1fr .9fr" }}>
+        <div className="ess-person">
+          <div
+            className="ess-photo"
+            role="img"
+            aria-label={`${fullName(employee)} profile photo`}
+            style={{
+              backgroundImage: employee.photoUrl ? `url(${employee.photoUrl})` : "none",
+              backgroundSize: "cover", backgroundPosition: "center", backgroundColor: "rgba(255,255,255,.18)",
+              display: "grid", placeItems: "center", color: "#fff", fontWeight: 800, fontSize: 20, flexShrink: 0,
+            }}
+          >
+            {!employee.photoUrl && initials(employee.firstName, employee.lastName)}
           </div>
-
-          {/* identity + meta */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap mb-0.5">
-              <span className="text-[13px] font-semibold" style={{ color: "var(--on-variant)" }}>
-                {employee.code}
-              </span>
-              <h2 className="text-[20px] font-bold" style={{ color: "var(--on-bg)" }}>
-                {fullName(employee)}
-              </h2>
+          <div className="min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1>{fullName(employee)}</h1>
               <StatusBadge status={employee.status} />
               {invite?.invite_status && INVITE_BADGE[invite.invite_status] && (
                 <span
                   className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
-                  style={{
-                    background: INVITE_BADGE[invite.invite_status].bg,
-                    color: INVITE_BADGE[invite.invite_status].color,
-                  }}
-                  title={
-                    invite.invite_expires_at
-                      ? `Expires ${formatDate(invite.invite_expires_at)}`
-                      : undefined
-                  }
+                  style={{ background: INVITE_BADGE[invite.invite_status].bg, color: INVITE_BADGE[invite.invite_status].color }}
+                  title={invite.invite_expires_at ? `Expires ${formatDate(invite.invite_expires_at)}` : undefined}
                 >
                   {INVITE_BADGE[invite.invite_status].label}
                 </span>
               )}
             </div>
-
-            <p className="text-[13px] mb-4" style={{ color: "var(--on-variant)" }}>
-              {/* orgUnitName first (the real OrgUnit, e.g. "AI & ML") — the
-                  legacy `department` string is blank for anyone hired onto a
-                  real Position (see _data.ts's own apiToEmployee comment).
-                  Only joins with " · " when BOTH sides are non-empty, so a
-                  blank department/org-unit doesn't leave a trailing
-                  separator with nothing after it. */}
-              {[employee.designation, employee.orgUnitName || employee.department].filter(Boolean).join(" · ")}
-            </p>
-
-            {/* 2-col meta grid: left column DOB/Phone/Location, right column DOJ/Current Exp/Total Exp */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-10">
-              {/* Left */}
-              <div className="flex flex-col gap-2">
-                <MetaItem icon="ti-cake" label="DOB" value={formatDate(employee.dateOfBirth)} />
-                <MetaItem icon="ti-phone" label="Phone" value={employee.phone || "—"} link={`tel:${employee.phone}`} highlight />
-                <MetaItem icon="ti-map-pin" label="Location" value={employee.location || "—"} />
-              </div>
-              {/* Right */}
-              <div className="flex flex-col gap-2">
-                <MetaItem icon="ti-calendar" label="DOJ" value={formatDate(employee.dateOfJoining)} />
-                <MetaItem icon="ti-clock" label="Current Experience" value={exp} highlight />
-                <MetaItem icon="ti-clock-hour-4" label="Total Experience" value={exp} />
-              </div>
-            </div>
+            {/* orgUnitName first (the real OrgUnit); the legacy `department` string is blank for anyone hired onto
+                a real Position. Only joins with " · " when both sides are non-empty. */}
+            <p>{[employee.designation, employee.code, employee.orgUnitName || employee.department].filter(Boolean).join(" · ")}</p>
           </div>
         </div>
-      </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-8 content-center">
+          <MetaItem icon="ti-cake" label="DOB" value={formatDate(employee.dateOfBirth)} />
+          <MetaItem icon="ti-calendar" label="DOJ" value={formatDate(employee.dateOfJoining)} />
+          <MetaItem icon="ti-phone" label="Phone" value={employee.phone || "—"} link={employee.phone ? `tel:${employee.phone}` : undefined} />
+          <MetaItem icon="ti-clock" label="Experience" value={exp} />
+          <MetaItem icon="ti-map-pin" label="Location" value={employee.location || "—"} />
+        </div>
+      </section>
     </div>
   );
 }
 
-function MetaItem({
-  icon,
-  label,
-  value,
-  link,
-  highlight,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  link?: string;
-  highlight?: boolean;
-}) {
+function MetaItem({ icon, label, value, link }: { icon: string; label: string; value: string; link?: string }) {
   const val = link ? (
-    <a href={link} className="font-medium hover:underline" style={{ color: "var(--primary)" }}>
-      {value}
-    </a>
+    <a href={link} className="font-semibold hover:underline" style={{ color: "#fff" }}>{value}</a>
   ) : (
-    <span
-      className="font-medium"
-      style={{ color: highlight ? "var(--primary)" : "var(--on-bg)" }}
-    >
-      {value}
-    </span>
+    <span className="font-semibold" style={{ color: "#fff" }}>{value}</span>
   );
 
   return (
     <div className="flex items-center gap-2 text-[13px]">
-      <i className={`ti ${icon} text-[14px]`} style={{ color: "var(--primary)" }} />
-      <span style={{ color: "var(--on-variant)" }}>{label}:</span>
+      <i className={`ti ${icon} text-[14px]`} style={{ color: "#ddd6fe" }} />
+      <span style={{ color: "#ddd6fe" }}>{label}:</span>
       {val}
     </div>
   );
