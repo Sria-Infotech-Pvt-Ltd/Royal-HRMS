@@ -2096,10 +2096,14 @@ Docker Postgres test DB on `localhost:15432` (never production).
 | ID card reference PDF served through the API | `beff2f1` | None | Yes | Not confirmed — run the Cloudinary read-only check |
 | Monthly Leave Management (import + manual entry) | `d2f7a5c`, `574f0a6` | hrms `0029` | Yes | Not confirmed — confirm `0029` applied |
 | Monthly Leave Assignments list + edit, collapsible | `f6fc23e`, `3f77c87` | None | Yes | Not confirmed |
-| Monthly Leave multi-select + all sections collapsible | uncommitted | None | No | No |
-| Phase A — monthly policy settings + dashboard breakdown | uncommitted | hrms `0030` | No | No |
-| Phase B — monthly expiry, validation, approval, statement | uncommitted | hrms `0031` | No | No |
-| Custom leave types can be applied for (bug fix) | uncommitted | None | No | No |
+| Monthly Leave multi-select + all sections collapsible | `7205661` | None | Yes | Yes (see §31) |
+| Phase A — monthly policy settings + dashboard breakdown | `7205661` | hrms `0030` | Yes | Yes (see §31) |
+| Phase B — monthly expiry, validation, approval, statement | `7205661` | hrms `0031` | Yes | Yes (see §31) |
+| Custom leave types can be applied for (bug fix) | `7205661` | None | Yes | Yes (see §31) |
+| Employee Profile → Leave: monthly statement; Annual / Monthly views | `658ca25`, `77579fe` | None | Yes | Yes (see §31) |
+
+_Status column updated 2026-10-27 — these items were "uncommitted" when this
+section was first written._
 
 ## ID card reference PDF (`beff2f1`)
 Cloudinary refused CDN delivery of the authenticated PDF (`401`,
@@ -2226,3 +2230,161 @@ supplied, so no usable database backup existed until **2026-10-16 07:53 UTC**
 the `DATABASE_URL` form above and check the size + `pg_restore --list` before
 migrating. No automatic database backup is scheduled on the server; Hostinger
 VPS snapshots are the only other recovery point — verify their date.
+
+# 31. Application change log (production support, 2026-10-16 → 2026-10-27)
+
+Same rules as before: built and tested locally against the isolated Docker
+Postgres test DB on `localhost:15432`, never production. Production was only
+read through read-only `tenant_command shell` checks run by the owner.
+
+"Deployed" = confirmed from server output or a production screenshot. A
+screenshot on 2026-10-27 showed the employee dashboard **View all** link, so
+everything up to `9a4734d` is live (each deploy pulls all earlier commits).
+
+| Item | Commit(s) | Migration | Pushed | Deployed |
+|---|---|---|---|---|
+| Profile → Leave: monthly statement; Annual / Monthly views by policy schedule | `658ca25`, `77579fe` | None | Yes | Yes |
+| Assets: bulk import (CSV/XLSX) + bulk assign, sample templates | `25eab4e` | None | Yes | Yes |
+| Payroll: employee-wise salary components, effective-dated revisions | `35cf87e` | payroll `0019`, `0020` | Yes | Yes (migrations applied) |
+| Payroll: Assign/Update CTC modal layout | `ddc82ec` | None | Yes | Yes |
+| Assets: current holder (Assignment Details) in Edit Asset | `148ddfd` | None | Yes | Yes |
+| Payroll: block ₹0 payslips, server totals, HR payslip view + print, branch-scoped payslip detail | `9712b51` | None | Yes | Yes |
+| Payslip layout + employee Raise Query; System Console clock-in | `c8e1194` | None | Yes | Yes |
+| Announcement email sent as HTML (+ plain text) | `3ec5b3c` | None | Yes | Yes — Gmail rendering not yet checked |
+| Announcements page: collapsible cards | `26f5c71` | None | Yes | Yes |
+| Dashboard announcement View modal; banner respects branch/department | `44d95f2` | None | Yes | Yes |
+| Employee banner "View all" link; no-branch users never match targeted posts | `9a4734d` | None | Yes | Yes |
+| Announcements page open to every signed-in user (route guard + menu) | `eb0ac93` | None | Yes | Not confirmed |
+| My Profile: Manager's own Reporting Manager; Work Info reporting fields | `2cbd7cb` | None | Yes | Not confirmed |
+
+## Assets (`25eab4e`, `148ddfd`)
+-   **Bulk Import** (Settings → Assets): CSV/XLSX, preview then confirm, 5 MB /
+    1,000 rows, every row validated by the normal Add Asset rules, saved one row
+    at a time, duplicates reported (re-upload safe). Needs `assets.create`.
+-   **Bulk Assign**: Asset Tag + Employee ID, preview then confirm, needs
+    `assets.edit`. Rejects unknown/ambiguous Employee IDs, unavailable assets,
+    repeated tags, inactive or not-yet-onboarded employees, other branches.
+    Already-assigned assets are reported, **never reassigned**. Single and bulk
+    assignment share `services_assignment.assign_asset` (row lock, history, audit).
+-   **Edit Asset → Assignment Details** (read-only): current holder, dates,
+    status. Holder's name/ID shown only to users allowed to see that employee.
+
+## Payroll — employee-wise salary components (`35cf87e`, `ddc82ec`, `9712b51`)
+-   Each salary revision now stores its **own copy** of its components
+    (`EmployeeSalaryComponent`); editing the shared structure no longer changes
+    saved revisions. Older revisions without a copy still use the live structure
+    until backfilled.
+-   Component **role** (Basic / HRA / Special Allowance / Other) replaces
+    exact-name matching; Basic is calculated first; **deduction-type components
+    are now subtracted** (they used to be added to gross).
+-   Revisions are effective-dated: a future revision no longer skips the
+    employee before it starts; **back-dating before the current revision, or
+    into finalised payroll, is refused** (no arrears yet). Every revision records
+    who saved it and writes an audit entry (`salary_revision_created`).
+-   Onboarding approval and employee bulk import create the same component copy.
+-   Payslips with ₹0 gross **and** ₹0 net while a CTC is set: shown as a warning
+    after processing; **salary transfer confirmation and Mark Paid are refused**.
+-   HR payslip view: `/dashboard/payroll/payslips/<id>` (print / Save as PDF).
+    `GET /api/payroll/payslips/<id>/` is now branch-scoped (was company-wide).
+-   LOP still applies to gross only; deduction components are not prorated.
+
+**Migrations (tenant schemas):** payroll `0019` adds `EmployeeSalaryComponent`,
+`SalaryComponent.role`, `EmployeeSalaryConfig.template_structure` /
+`created_by`, `EmployeePayslip.other_deductions`; `0020` fills `role` from the
+old exact-name rule. Rollback tested locally (drops only the new table/columns;
+salary history kept): `migrate_schemas payroll 0018`.
+
+**Backfill (not yet run on production):**
+```
+# report only — run per tenant, review "skipped" lines before applying
+.venv/bin/python manage.py tenant_command backfill_salary_components --schema=<schema>
+# then, after review:
+.venv/bin/python manage.py tenant_command backfill_salary_components --schema=<schema> --apply
+```
+
+**Demo Corp data findings (2026-10-22/23):**
+-   "Standard Employee Structure" has one component, `Basic Salary`, role
+    Other, **% of Basic 40** → every amount is ₹0. Fix in Settings → Payroll
+    Config (add `Basic` % of CTC, deactivate the old one).
+-   Anjali sharma's revision (from 2026-10-21) copied that component → next run ₹0.
+-   Ravindra malladi's revision (from 2026-10-21) totals **110 % of CTC**.
+-   August 2026 cycle is **paid with ₹0** for DEM00026 — unchanged; any arrear
+    is a business decision (Payroll → Adjustments).
+
+## Payslips (`c8e1194`)
+-   My Payslips: centred layout (≈1180 px, 240 px sidebar, payslip ≤ 820 px),
+    months scroll horizontally on mobile, **Print / Save PDF** (A4, payslip only).
+-   Employees can **Raise Query** on a sent/acknowledged payslip inside the
+    query window; history and HR's reply are shown under the payslip.
+-   HR query list and resolve are **branch-scoped** (were company-wide).
+    Notifications: HR (branch `payroll.edit` holders + org admins) on raise;
+    the employee on resolve.
+
+## Branch Admin — System Console (`c8e1194`)
+Cause: Ris `branch_admin` role has **`settings.edit`**; login marks any role
+with it as `is_superuser`, so it gets the System Console (which had no clock-in).
+Fix: Clock In/Out + "My Attendance Today" added to the System Console. The
+permission itself was **not** changed — see open items.
+
+## Announcements (`3ec5b3c`, `26f5c71`, `44d95f2`, `9a4734d`, `eb0ac93`)
+-   Email: branded HTML attached as `text/html` with a readable plain-text part;
+    the body (typed as plain text) is escaped and keeps its line breaks.
+    Deploy needs the **Celery worker** restarted. Emails sent before the fix
+    cannot change.
+-   Announcements page: cards collapsed to 3 lines, expand/collapse per card,
+    ⤢ opens the full view.
+-   Dashboard **View** opens the full post in a modal
+    (`GET /api/announcements/<id>/`). **View all** opens the Announcements page.
+-   Dashboard banner shows the latest eligible pinned post, else the latest
+    eligible post. It **used to show the newest post company-wide**, including
+    other branches' targeted posts; now same audience rules as the list.
+-   Announcements page is self-service: `frontend/proxy.ts` no longer requires
+    `announcements.view` (employees were silently redirected to `/dashboard`);
+    the menu item is visible to everyone. The backend still shows each user only
+    company-wide posts and their own branch/department's; creating, editing and
+    deleting still need `announcements.create/edit/delete`.
+
+## My Profile reporting details (`2cbd7cb`)
+`MyProfileSerializer` hid the Reporting Manager for every role with
+`can_manage_team` (missed when Manager → COO reporting was added in `54c9478`).
+Now returned for all roles; Work Info shows Reporting Manager, Reporting
+Approver and HR ("Not assigned" when empty). Assignment rules unchanged.
+
+## Test results for this batch (local, isolated DB)
+-   assets 86, payroll 86, announcements 22, accounts profile/hierarchy 43 —
+    all pass (each batch's final report has the details).
+-   Full `apps.accounts` suite (2026-10-27 run): _result pending — add here_.
+    Known pre-existing failures there: 6 (profile photo × 5, forgot password × 1),
+    same on the previous commit.
+-   Frontend: `tsc` and ESLint clean; Vitest 29 files / 206 tests pass.
+-   Local tip: the local `.env` sets `REDIS_URL`; run tests with
+    `REDIS_URL=""` or every cache call times out (1 h instead of 2 min).
+
+## Deploy notes
+-   Only `35cf87e` had migrations (payroll `0019`, `0020`) — already applied.
+-   Remaining deploys (`eb0ac93`, `2cbd7cb`): pull, `npm ci && npm run build`,
+    restart `royalhrms_backend royalhrms_frontend`. Users must sign in again for
+    the new Announcements menu item.
+
+## Open items carried forward
+-   **Security — Ris `branch_admin` has `settings.edit`**: company-wide access
+    (bypasses branch restrictions everywhere, can open Roles & Permissions).
+    Needs an authorization review.
+-   **Role permission changes are not audit-logged** (role save logs only name
+    and display name) — cannot tell when `settings.edit` was granted.
+-   Salary components: run the backfill dry run per tenant; older revisions can
+    still be edited in place via `PUT /api/payroll/employee-salary/<id>/`;
+    audit entries contain salary amounts (confirm acceptable).
+-   Client decisions: does CTC include employer PF/ESI; back-dated revisions and
+    arrears; approval workflow for salary changes; LOP on deduction components.
+-   Manager reporting hierarchy: Admin Head is company-wide today (confirm);
+    no separate "Administrator" role is eligible (confirm role name if needed).
+-   `announcements.view` in Roles & Permissions no longer hides the page/menu.
+-   Announcement email: verify one real Gmail inbox; optionally re-post Diwali.
+-   **`backend/.env.example` was deleted and the deletion was committed in
+    `eb0ac93`** (it was removed from the working tree outside the code changes
+    and got included when committing). It is only a template (no secrets). To
+    restore: `git checkout 9a4734d -- backend/.env.example`, then commit and push.
+-   From §30: annual pending-request validation, ID card PDF / logo checks,
+    Approval Matrix stage-1 display, geocoder, face liveness, photo delete
+    order, server reboot, **no automatic database backup scheduled**.

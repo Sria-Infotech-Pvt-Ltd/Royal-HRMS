@@ -1,26 +1,36 @@
-// Manager-role employees may only have the COO, Admin Head, or HR / HR Admin /
-// Branch Admin of their own branch as Reporting Manager or Reporting Approver
-// (or nobody) — the backend enforces this; these helpers keep the profile form
-// from offering anything else. Other roles keep the existing lists.
+// Manager-role employees may only have the COO / CMD, Admin Head, or the HR
+// Manager / HR Admin / Branch Admin of their own branch as Reporting Manager or
+// Reporting Approver (or nobody) — by role or approved designation; the backend
+// enforces this; these helpers keep the profile form from offering anything
+// else. Other roles keep the existing lists.
 
 export const MANAGER_REPORTING_NOTE =
-  "Managers can only have the COO, Admin Head, or HR / HR Admin / Branch Admin of their branch.";
+  "Managers can only have the COO / CMD, Admin Head, or the HR Manager / HR Admin / Branch Admin of their branch.";
 
 export function isManagerRole(roleName: string | null | undefined, managerRoleNames: readonly string[]): boolean {
   return !!roleName && managerRoleNames.includes(roleName);
 }
 
-function managerEligibleEndpoint(base: string, branch: string | null | undefined): string {
-  return branch ? `${base}?manager_approvers=1&branch=${encodeURIComponent(branch)}` : `${base}?manager_approvers=1`;
+// `designation` is the Manager's own — a COO / CMD is not offered their
+// branch's designation-based HR candidates (the backend decides which).
+function managerEligibleEndpoint(base: string, branch: string | null | undefined, designation?: string | null): string {
+  let url = `${base}?manager_approvers=1`;
+  if (branch) url += `&branch=${encodeURIComponent(branch)}`;
+  if (designation) url += `&designation=${encodeURIComponent(designation)}`;
+  return url;
 }
 
-export function reportingManagerListEndpoint(base: string, branch: string | null | undefined, managerRole: boolean): string {
-  if (managerRole) return managerEligibleEndpoint(base, branch);
+export function reportingManagerListEndpoint(
+  base: string, branch: string | null | undefined, managerRole: boolean, designation?: string | null,
+): string {
+  if (managerRole) return managerEligibleEndpoint(base, branch, designation);
   return branch ? `${base}?branch=${encodeURIComponent(branch)}` : base;
 }
 
-export function reportingApproverListEndpoint(base: string, branch: string | null | undefined, managerRole: boolean): string {
-  if (managerRole) return managerEligibleEndpoint(base, branch);
+export function reportingApproverListEndpoint(
+  base: string, branch: string | null | undefined, managerRole: boolean, designation?: string | null,
+): string {
+  if (managerRole) return managerEligibleEndpoint(base, branch, designation);
   return branch ? `${base}?branch=${encodeURIComponent(branch)}` : base;
 }
 

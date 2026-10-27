@@ -352,7 +352,7 @@ export default function EmployeeProfilePage({
   // The COO(s) — the only valid reporting manager for a manager-role employee.
   // People a Manager may report to — used to clear an ineligible pick on promotion in the form.
   const { data: managerEligibleList } = useFetch<{ id: string }[]>(
-    isEditing ? reportingManagerListEndpoint(API.employees.managerList, values.branch, true) : null,
+    isEditing ? reportingManagerListEndpoint(API.employees.managerList, values.branch, true, values.designation) : null,
   );
   const managerRole = isManagerRole(values.ssRole, managerRoleNames);
 
@@ -703,7 +703,7 @@ export default function EmployeeProfilePage({
                         value={values.reportingManager ?? ""}
                         selectedId={values.reportingManagerId ?? ""}
                         disabled={false}
-                        listEndpoint={reportingManagerListEndpoint(API.employees.managerList, values.branch, managerRole)}
+                        listEndpoint={reportingManagerListEndpoint(API.employees.managerList, values.branch, managerRole, values.designation)}
                         allowClear={managerRole}
                         excludeId={managerRole ? employeeUuid : undefined}
                         onSelect={(uuid, name) =>
@@ -726,7 +726,7 @@ export default function EmployeeProfilePage({
                         value={values.reportingApprover ?? ""}
                         selectedId={values.reportingApproverId ?? ""}
                         disabled={false}
-                        listEndpoint={reportingApproverListEndpoint(API.employees.managerList, values.branch, managerRole)}
+                        listEndpoint={reportingApproverListEndpoint(API.employees.managerList, values.branch, managerRole, values.designation)}
                         allowClear={managerRole}
                         excludeId={managerRole ? employeeUuid : undefined}
                         onSelect={(uuid, name) =>

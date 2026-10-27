@@ -38,6 +38,18 @@ describe("reportingApproverListEndpoint", () => {
   });
 });
 
+describe("Manager designation in the eligible-list endpoint", () => {
+  it("passes the Manager's own designation so a COO / CMD is not offered branch HR by designation", () => {
+    expect(reportingManagerListEndpoint(BASE, "Surat", true, "COO")).toBe(`${BASE}?manager_approvers=1&branch=Surat&designation=COO`);
+    expect(reportingApproverListEndpoint(BASE, "", true, "Hr. Manager")).toBe(`${BASE}?manager_approvers=1&designation=Hr.%20Manager`);
+  });
+
+  it("omits an empty designation and ignores it for other roles", () => {
+    expect(reportingManagerListEndpoint(BASE, "Surat", true, "")).toBe(`${BASE}?manager_approvers=1&branch=Surat`);
+    expect(reportingApproverListEndpoint(BASE, "Surat", false, "COO")).toBe(`${BASE}?branch=Surat`);
+  });
+});
+
 describe("shouldClearReportingManager", () => {
   const base = { managerRoleNames: MANAGER_ROLES, eligibleIds: ["coo-1"] };
 

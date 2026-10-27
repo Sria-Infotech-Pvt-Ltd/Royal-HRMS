@@ -53,22 +53,82 @@ def _is_coo(user) -> bool:
 _MANAGER_REPORTING_COMPANY_ROLES = ('admin_head', COO_ROLE_NAME)
 _MANAGER_REPORTING_BRANCH_ROLES = ('hr_admin', 'hr', 'branch_admin')
 _MANAGER_REPORTING_EXCLUDED_ROLES = ('system_admin',)
+# Designations that qualify someone whatever their role, compared after
+# _normalize_designation() and matched exactly (never a partial match).
+# A designation-only candidate must also hold _MANAGER_REPORTING_DESIGNATION_PERM,
+# since a Manager's reporting manager becomes their L1 approver.
+_MANAGER_REPORTING_COMPANY_DESIGNATIONS = frozenset({
+    'coo', 'chief operating officer',
+    'cmd', 'chairman & managing director (cmd)', 'chairman and managing director',
+})
+_MANAGER_REPORTING_BRANCH_DESIGNATIONS = frozenset({'hr manager', 'hr admin manager', 'hr head'})
+_MANAGER_REPORTING_DESIGNATION_PERM = 'leave.approve'
 _MANAGER_RM_ERROR = (
-    "A Manager's Reporting Manager must be the COO, Admin Head, or HR / HR Admin / Branch Admin of their branch."
+    "A Manager's Reporting Manager must be the COO / CMD, Admin Head, or the HR Manager / HR Admin / "
+    "Branch Admin of their branch."
 )
 _MANAGER_APPROVER_ERROR = (
-    "A Manager's Reporting Approver must be the COO, Admin Head, or HR / HR Admin / Branch Admin of their branch."
+    "A Manager's Reporting Approver must be the COO / CMD, Admin Head, or the HR Manager / HR Admin / "
+    "Branch Admin of their branch."
 )
 
 
-def _manager_reporting_candidates(branch: str):
+def _normalize_designation(value: str) -> str:
+    """'Hr. Manager' / ' HR  manager ' -> 'hr manager': lowercase, dots dropped, spaces collapsed."""
+    return ' '.join((value or '').replace('.', ' ').split()).lower()
+
+
+def _has_company_reporting_designation(designation: str) -> bool:
+    return _normalize_designation(designation) in _MANAGER_REPORTING_COMPANY_DESIGNATIONS
+
+
+def _has_reporting_designation(user) -> bool:
+    """True if `user` qualifies by designation alone (any scope) — used where
+    branch scope was already enforced on assignment, e.g. the Approval Matrix."""
+    if not user or not user.is_active:
+        return False
+    norm = _normalize_designation(user.designation)
+    if norm not in _MANAGER_REPORTING_COMPANY_DESIGNATIONS | _MANAGER_REPORTING_BRANCH_DESIGNATIONS:
+        return False
+    if user.role and user.role.name in _MANAGER_REPORTING_EXCLUDED_ROLES:
+        return False
+    return _has_perm(user, _MANAGER_REPORTING_DESIGNATION_PERM)
+
+
+def _manager_reporting_candidates(branch: str, designation: str = ''):
+    """People a Manager in `branch` may have as Reporting Manager / Approver.
+
+    `designation` is the Manager's own designation: a company-wide one
+    (COO / CMD) hides the own-branch designation candidates, so a COO is not
+    offered their branch's HR Manager. Role-based candidates are unaffected.
+    """
     from django.db.models import Q as _Q
 
     q = _Q(role__name__in=_MANAGER_REPORTING_COMPANY_ROLES)
     branch = (branch or '').strip()
+    in_branch = _Q(branch__iexact=branch) | _Q(managed_branches__branch_name__iexact=branch)
     if branch:
-        in_branch = _Q(branch__iexact=branch) | _Q(managed_branches__branch_name__iexact=branch)
         q |= _Q(role__name__in=_MANAGER_REPORTING_BRANCH_ROLES) & in_branch
+
+    # Designation-only candidates: same approve-permission rule as has_perm()
+    # (the permission itself, settings.edit, or superuser). Designations are
+    # free text, so the exact normalized match is done in Python.
+    perm_q = (
+        _Q(role__role_permissions__permission__codename__in=(_MANAGER_REPORTING_DESIGNATION_PERM, 'settings.edit'))
+        | _Q(is_superuser=True)
+    )
+    pool = User.objects.filter(perm_q, is_active=True).exclude(designation='')
+    designation_pks = [
+        pk for pk, d in pool.values_list('pk', 'designation').distinct()
+        if _normalize_designation(d) in _MANAGER_REPORTING_COMPANY_DESIGNATIONS
+    ]
+    if branch and not _has_company_reporting_designation(designation):
+        designation_pks += [
+            pk for pk, d in pool.filter(in_branch).values_list('pk', 'designation').distinct()
+            if _normalize_designation(d) in _MANAGER_REPORTING_BRANCH_DESIGNATIONS
+        ]
+    if designation_pks:
+        q |= _Q(pk__in=designation_pks)
     return (
         User.objects.filter(q, is_active=True)
         .exclude(role__name__in=_MANAGER_REPORTING_EXCLUDED_ROLES)
@@ -3159,7 +3219,7 @@ class EmployeeListCreateView(APIView):
                     'Reporting manager not found or is inactive.',
                     data={'reporting_manager_id': 'Invalid manager selected.'},
                 )
-            if role.can_manage_team and not _manager_reporting_candidates(branch).filter(pk=selected_manager.pk).exists():
+            if role.can_manage_team and not _manager_reporting_candidates(branch, designation).filter(pk=selected_manager.pk).exists():
                 return error(
                     _MANAGER_RM_ERROR,
                     data={'reporting_manager_id': 'Not eligible for a Manager.'},
@@ -3677,7 +3737,7 @@ class EmployeeDetailView(APIView):
                 if (
                     employee.role and employee.role.can_manage_team
                     and not unchanged_for_existing_manager
-                    and not _manager_reporting_candidates(employee.branch).filter(pk=rm_user.pk).exists()
+                    and not _manager_reporting_candidates(employee.branch, employee.designation).filter(pk=rm_user.pk).exists()
                 ):
                     return error(_MANAGER_RM_ERROR)
                 if rm_user.pk == employee.pk:
@@ -3705,7 +3765,7 @@ class EmployeeDetailView(APIView):
                 if (
                     employee.role and employee.role.can_manage_team
                     and not (was_manager and ra_user.pk == stored_reporting_approver_id)
-                    and not _manager_reporting_candidates(employee.branch).filter(pk=ra_user.pk).exists()
+                    and not _manager_reporting_candidates(employee.branch, employee.designation).filter(pk=ra_user.pk).exists()
                 ):
                     return error(_MANAGER_APPROVER_ERROR)
                 employee.reporting_approver = ra_user
@@ -6083,6 +6143,8 @@ class ManagerListView(APIView):
     required. e.g. ?department=Engineering or ?branch=Mumbai HQ or both.
     ?coo_only=1 instead returns only the active COO(s) — the one valid
     reporting manager for a Manager-role employee — and needs no other filter.
+    ?manager_approvers=1&branch=…&designation=… returns who a Manager may have
+    as Reporting Manager / Approver (designation = the Manager's own).
     """
     permission_classes = [IsAuthenticated]
 
@@ -6090,7 +6152,9 @@ class ManagerListView(APIView):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         if (request.query_params.get('manager_approvers') or '').strip().lower() in ('1', 'true', 'yes'):
-            approvers = _manager_reporting_candidates(request.query_params.get('branch') or '').order_by('full_name')
+            approvers = _manager_reporting_candidates(
+                request.query_params.get('branch') or '', request.query_params.get('designation') or '',
+            ).order_by('full_name')
             return success('Managers retrieved.', data=[
                 {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
                  'department': u.department, 'branch': u.branch,
@@ -6165,7 +6229,7 @@ class EmployeeReportingManagerView(APIView):
 
             if (
                 employee.role and employee.role.can_manage_team
-                and not _manager_reporting_candidates(employee.branch).filter(pk=manager.pk).exists()
+                and not _manager_reporting_candidates(employee.branch, employee.designation).filter(pk=manager.pk).exists()
             ):
                 return error(_MANAGER_RM_ERROR)
 
@@ -6271,7 +6335,8 @@ def _resolve_rule_approver(role, employee):
     still holds the expected capability — except the one narrow exception
     for the COO (e.g. a Manager's own reporting_manager = COO), who is
     accepted by role name specifically rather than by can_manage_team, since
-    the COO role deliberately does not carry that flag. This mirrors the
+    the COO role deliberately does not carry that flag (likewise anyone eligible
+    by an approved designation, see _has_reporting_designation). This mirrors the
     same exception already applied to the write-side checks; it does not
     change the real approval-routing resolver (services_approval.py), which
     never had this extra validation and needs no change.
@@ -6280,7 +6345,7 @@ def _resolve_rule_approver(role, employee):
         return None
     if role.can_manage_team:
         rm = getattr(employee, 'reporting_manager', None)
-        if rm and rm.role and (rm.role.can_manage_team or _is_coo(rm)):
+        if rm and rm.role and (rm.role.can_manage_team or _is_coo(rm) or _has_reporting_designation(rm)):
             return rm
         return None
     else:
