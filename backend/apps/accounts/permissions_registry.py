@@ -45,5 +45,31 @@ def generate_entity_permissions() -> dict:
     return {'created': created, 'unchanged': unchanged}
 
 
+# Permissions defined in code (no migration needed): (codename, module, action, description, is_sensitive).
+CODE_DEFINED_PERMISSIONS = [
+    (
+        'employees.view_workspace', 'employees', 'view_workspace',
+        "Open an employee's workspace (attendance, leave, payslips, tax, requests...) read-only, exactly as they see it.",
+        True,
+    ),
+]
+
+
+def sync_code_defined_permissions() -> dict:
+    from apps.accounts.models import Permission
+
+    created = unchanged = 0
+    for codename, module, action, description, is_sensitive in CODE_DEFINED_PERMISSIONS:
+        _, was_created = Permission.objects.get_or_create(
+            codename=codename,
+            defaults={'module': module, 'action': action, 'description': description, 'is_sensitive': is_sensitive},
+        )
+        created += was_created
+        unchanged += not was_created
+    return {'created': created, 'unchanged': unchanged}
+
+
 def sync() -> dict:
-    return generate_entity_permissions()
+    entity = generate_entity_permissions()
+    code = sync_code_defined_permissions()
+    return {'created': entity['created'] + code['created'], 'unchanged': entity['unchanged'] + code['unchanged']}

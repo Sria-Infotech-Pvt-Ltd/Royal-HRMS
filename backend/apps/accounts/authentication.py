@@ -1,4 +1,17 @@
+import logging
+import uuid
+
+from django.core.cache import cache
+from rest_framework import exceptions
 from rest_framework_simplejwt.authentication import JWTAuthentication as _JWTAuthentication
+
+logger = logging.getLogger(__name__)
+
+VIEW_AS_HEADER = 'HTTP_X_VIEW_AS_EMPLOYEE'
+VIEW_AS_PERMISSION = 'employees.view_workspace'
+_SAFE_METHODS = ('GET', 'HEAD', 'OPTIONS')
+# One audit entry per (viewer, employee) in this window, not one per request.
+_VIEW_AS_AUDIT_WINDOW_SECONDS = 30 * 60
 
 
 class CookieJWTAuthentication(_JWTAuthentication):
@@ -6,6 +19,11 @@ class CookieJWTAuthentication(_JWTAuthentication):
     Authenticates via two sources in priority order:
     1. httpOnly cookie 'royal_access_token' — web browsers
     2. Authorization: Bearer <token> header — Flutter mobile
+
+    A request may also carry `X-View-As-Employee: <employee uuid>`. For a signed-in person who holds
+    `employees.view_workspace` (a superuser always does) the request then runs as that employee, READ-ONLY, so the
+    workspace shows exactly what the employee sees. Any write is refused, and each (viewer, employee) pair is
+    audit-logged.
     """
 
     def authenticate(self, request):
@@ -23,6 +41,49 @@ class CookieJWTAuthentication(_JWTAuthentication):
 
         try:
             validated = self.get_validated_token(raw_token.encode())
-            return self.get_user(validated), validated
+            user = self.get_user(validated)
         except Exception:
             return None
+
+        target_id = request.META.get(VIEW_AS_HEADER, '').strip()
+        if target_id:
+            user = self._view_as(request, user, target_id)
+        return user, validated
+
+    def _view_as(self, request, viewer, target_id):
+        """The employee `viewer` is allowed to look at, or a refusal. Never widens a write."""
+        from core.permissions import has_perm
+
+        if request.method not in _SAFE_METHODS:
+            raise exceptions.PermissionDenied('Viewing as another employee is read-only.')
+        if not has_perm(viewer, VIEW_AS_PERMISSION):
+            raise exceptions.PermissionDenied('You do not have permission to view another employee\'s workspace.')
+        try:
+            target_uuid = uuid.UUID(target_id)
+        except ValueError:
+            raise exceptions.PermissionDenied('Unknown employee.')
+        if target_uuid == viewer.pk:
+            return viewer
+
+        from apps.accounts.models import User
+        target = User.objects.filter(pk=target_uuid, is_active=True).first()
+        if target is None:
+            raise exceptions.PermissionDenied('Unknown employee.')
+
+        self._audit_view_as(request, viewer, target)
+        target.viewed_by = viewer  # lets views tell "the employee" from the person looking
+        return target
+
+    @staticmethod
+    def _audit_view_as(request, viewer, target):
+        from apps.accounts.models import AuditLog
+        from core.responses import get_client_ip
+
+        if not cache.add(f'view-as:{viewer.pk}:{target.pk}', 1, _VIEW_AS_AUDIT_WINDOW_SECONDS):
+            return
+        AuditLog.objects.create(
+            user=viewer, action='view_employee_workspace', module='employees', object_id=str(target.pk),
+            branch=target.branch, ip_address=get_client_ip(request),
+            changes={'employee_id': target.employee_id, 'viewed_by': viewer.employee_id},
+        )
+        logger.info('%s opened the workspace of %s (read-only)', viewer.employee_id, target.employee_id)

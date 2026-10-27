@@ -7,6 +7,8 @@
 // server component that renders this shell but is no longer used directly.
 
 import { useState, useEffect } from "react";
+import { setViewAsEmployee } from "@/lib/viewAs";
+import ViewAsStrip from "./_components/ViewAsStrip";
 import type { SessionPayload } from "@/lib/session";
 import { useAttendanceStatus } from "@/hooks/useEmployeeDashboard";
 import HomeBanner from "./_components/HomeBanner";
@@ -47,8 +49,17 @@ const TABS: { id: TabId; label: string }[] = [
 
 const TAB_IDS = new Set<string>(TABS.map(t => t.id));
 
-export default function EssShellClient({ session: _session }: { session: SessionPayload }) {
+export default function EssShellClient({ session: _session, viewAsEmployee }: { session: SessionPayload; viewAsEmployee?: string }) {
   const [tab, setTab] = useState<TabId>("home");
+  // Set while rendering, before any child fetches: effects run children-first, so an effect here would be too late.
+  // Only in the browser — module state on the server would be shared between requests.
+  if (typeof window !== "undefined") setViewAsEmployee(viewAsEmployee ?? null);
+  // Re-set in an effect too (development runs effects twice, which would otherwise clear it), and cleared on leaving
+  // so no other page keeps asking as this employee.
+  useEffect(() => {
+    setViewAsEmployee(viewAsEmployee ?? null);
+    return () => setViewAsEmployee(null);
+  }, [viewAsEmployee]);
   const { data: status, refetch: refetchStatus } = useAttendanceStatus();
 
   // Deep links (e.g. the top-nav avatar chip's "?tab=profile") land straight
@@ -61,7 +72,8 @@ export default function EssShellClient({ session: _session }: { session: Session
   return (
     <div className="ess-shell">
       <div className="ess-sticky">
-        <HomeBanner status={status} onPunchSuccess={refetchStatus} />
+        {viewAsEmployee && <ViewAsStrip />}
+        <HomeBanner status={status} onPunchSuccess={refetchStatus} isReadOnly={!!viewAsEmployee} />
         <nav className="ess-tabs" aria-label="Employee Self Service">
           {TABS.map(t => (
             <button
@@ -93,7 +105,9 @@ export default function EssShellClient({ session: _session }: { session: Session
       {tab === "hrHelp"     && <HrHelpTab />}
 
       <div className="ess-footer-note">
-        Requests are recorded against your employee record and routed to the approver shown on each one.
+        {viewAsEmployee
+          ? "You are viewing this workspace read-only. Nothing you do here is saved."
+          : "Requests are recorded against your employee record and routed to the approver shown on each one."}
       </div>
     </div>
   );

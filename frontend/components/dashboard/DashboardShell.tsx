@@ -41,7 +41,7 @@ export default function DashboardShell({
   // PROFILE_PHOTO_UPDATED_EVENT listener below still calls refetch(), which
   // always bypasses the cache — so an actual photo change still shows up
   // immediately, this just stops the redundant refetch on ordinary navigation.
-  const { data: myProfile, refetch: refetchMyProfile } = useFetch<{ profile_photo_url: string | null }>(API.employees.me, { cache: true });
+  const { data: myProfile, refetch: refetchMyProfile } = useFetch<{ profile_photo_url: string | null }>(API.employees.me, { cache: true, asSignedInUser: true });
 
   useEffect(() => {
     function onPhotoUpdated() { refetchMyProfile(); }

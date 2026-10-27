@@ -28,6 +28,9 @@ export interface UseFetchOptions {
   // between wizard steps, short enough that stale lookup data (e.g. a
   // newly added Role) doesn't linger for an entire session.
   cacheTtlMs?: number;
+  // Answer as the signed-in person even while an admin is viewing another employee's workspace — for the
+  // page chrome (top bar photo), which must not switch to the viewed employee.
+  asSignedInUser?: boolean;
 }
 
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -40,6 +43,7 @@ const responseCache = new Map<string, { data: unknown; expiresAt: number }>();
 export function useFetch<T>(url: string | null, options?: UseFetchOptions): FetchState<T> {
   const useCache = options?.cache ?? false;
   const cacheTtlMs = options?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+  const asSignedInUser = options?.asSignedInUser ?? false;
 
   // Date.now() is impure, so this freshness check must run inside a
   // useState lazy initializer (evaluated once, at mount) rather than as a
@@ -76,7 +80,7 @@ export function useFetch<T>(url: string | null, options?: UseFetchOptions): Fetc
     setError(null);
     setStatus(null);
     clientApi
-      .get<{ data: T }>(url)
+      .get<{ data: T }>(url, asSignedInUser ? { headers: { "X-View-As-Employee": "" } } : undefined)
       .then(r => {
         if (ticket !== counter.current) return;
         // Unwrap the {success, message, data} envelope by checking for the
@@ -104,7 +108,7 @@ export function useFetch<T>(url: string | null, options?: UseFetchOptions): Fetc
       .finally(() => {
         if (ticket === counter.current) setLoading(false);
       });
-  }, [url, useCache, cacheTtlMs]);
+  }, [url, useCache, cacheTtlMs, asSignedInUser]);
 
   useEffect(() => { run(); }, [run]);
 

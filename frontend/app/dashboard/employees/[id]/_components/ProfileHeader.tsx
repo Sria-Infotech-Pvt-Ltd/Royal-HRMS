@@ -16,6 +16,7 @@ import {
 } from "../../_data";
 import StatusBadge from "../../_components/StatusBadge";
 import ActionMenu from "./ActionMenu";
+import ViewWorkspaceButton from "@/components/employees/ViewWorkspaceButton";
 
 export default function ProfileHeader({
   employee,
@@ -116,6 +117,11 @@ export default function ProfileHeader({
         </div>
 
         <div className="flex items-center gap-2">
+          <ViewWorkspaceButton
+            employeeUuid={employeeUuid}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors"
+            style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "var(--surface)" }}
+          />
           <ActionMenu employee={employee} />
           {canResetPassword && invite?.invite_status && invite.invite_status !== "activated" && (
             <button

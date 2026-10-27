@@ -3,6 +3,7 @@ import axios from "axios";
 import type { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { API_BASE } from "./config";
 import { clearAuth } from "./auth";
+import { viewAsHeaderFor } from "./viewAs";
 
 // Endpoints that must never trigger a silent refresh on 401
 const AUTH_URLS = [
@@ -40,6 +41,10 @@ clientApi.interceptors.request.use((config) => {
   if (config.data instanceof FormData) {
     delete config.headers["Content-Type"];
   }
+  // While an admin views an employee's workspace, ask the server to answer as that employee (read-only). A request
+  // that already sets the header (even empty, to stay as the signed-in person) is left alone.
+  const viewAs = viewAsHeaderFor(config.url);
+  if (viewAs && config.headers[viewAs.name] === undefined) config.headers[viewAs.name] = viewAs.value;
   return config;
 });
 
