@@ -95,7 +95,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
     hasEmployeeId && isAdmin ? API.employees.actionRequests(employee.id) : null,
   );
   const openRequests = (requestsPage?.results ?? []).filter(r => r.status === "pending" || r.status === "failed" || r.status === "rejected").slice(0, 5);
-  const { data: auditTrail, status: auditStatus, loading: auditLoading } = useFetch<AuditTrailRow[]>(hasEmployeeId ? API.employees.auditTrail(employee.id) : null);
+  const { data: auditTrail, status: auditStatus, loading: auditLoading, refetch: refetchAuditTrail } = useFetch<AuditTrailRow[]>(hasEmployeeId ? API.employees.auditTrail(employee.id) : null);
   const p = detail?.profile;
   const directoryStatus = directoryStatusLabel(employee);
 
@@ -127,6 +127,10 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
         { fields: ["pan_number", "account_number", "ifsc_code", "name_as_per_aadhar"] },
       );
       setRevealed(data.data ?? {});
+      // The server logs a sensitive_reveal AuditLog row on every successful
+      // reveal -- without this, that entry never shows up in the drawer's
+      // Audit Trail until the whole page/drawer is reloaded.
+      refetchAuditTrail();
     } catch (err: unknown) {
       setRevealErr((err as { message?: string })?.message ?? "Could not reveal these fields.");
     } finally {
