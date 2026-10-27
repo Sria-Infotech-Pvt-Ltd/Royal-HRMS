@@ -3,11 +3,11 @@ Regression tests for the Employee Directory KPI cards (EmployeeStatsView)
 — QA report issues #5 and #6:
 
 - #6: the "Active" stat used to count anyone `is_active=True,
-  must_change_password=False` regardless of employment_status or notice
-  period, while the table's own "Active" status filter
-  (EmployeeListCreateView.get()) requires `employment_status=confirmed`
-  and excludes anyone on an approved notice period. The two definitions
-  must agree.
+  must_change_password=False` regardless of notice period, while the
+  table's own "Active" status filter (EmployeeListCreateView.get())
+  excludes anyone on an approved notice period. The two definitions must
+  agree. A hired, onboarded employee is Active even while on probation —
+  probation is a separate employment label, not a different status.
 - #5: EmployeeStatsView only accepted a `branch` filter, so narrowing the
   table further by Org Unit (department) left the cards showing a stale,
   branch-only count instead of reflecting the narrower result set.
@@ -39,7 +39,8 @@ class EmployeeStatsConsistencyTests(TestCase):
         make_user(
             'confirmed@test.com', role=confirmed_role, employee_id='STC001',
             branch='Kondapur', department='', is_active=True,
-            must_change_password=False, employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
+            must_change_password=False, onboarding_status=User.ONBOARDING_COMPLETE,
+            employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
         )
         # A direct hire may still need to change their temporary password;
         # that is not incomplete onboarding and must not hide their
@@ -55,14 +56,17 @@ class EmployeeStatsConsistencyTests(TestCase):
         url = reverse('employee-stats')
         return self.client.get(url, params)
 
-    def test_active_count_excludes_probation_like_the_table_filter(self):
+    def test_active_count_includes_probation_like_the_table_filter(self):
+        # A hired, onboarded employee is Active even while on probation; the
+        # card and the table's Active filter must agree.
         stats_resp = self._stats()
         self.assertEqual(stats_resp.status_code, 200, stats_resp.data)
-        self.assertEqual(stats_resp.data['data']['active'], 1)
 
         list_resp = self.client.get(reverse('employee-list-create'), {'status': 'active'})
         self.assertEqual(list_resp.status_code, 200, list_resp.data)
-        self.assertEqual(list_resp.data['data']['count'], 1)
+        codes = {row['employee_id'] for row in list_resp.data['data']['results']}
+        self.assertTrue({'STC001', 'STC002'} <= codes)
+        self.assertEqual(list_resp.data['data']['count'], stats_resp.data['data']['active'])
 
     def test_department_filter_narrows_stats_like_the_table(self):
         # No employee is placed in "Nonexistent Unit" — both the table and

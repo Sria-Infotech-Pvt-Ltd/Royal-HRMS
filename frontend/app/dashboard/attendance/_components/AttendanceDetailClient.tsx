@@ -5,15 +5,16 @@ import { useFetch } from "@/hooks/useFetch";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { API } from "@/lib/api/endpoints";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
-import type { DashboardData } from "@/types/attendance";
+import type { DashboardData, PaginatedCorrections } from "@/types/attendance";
 import AttendanceTab     from "./AttendanceTab";
 import OtEntryTab        from "./OtEntryTab";
 import InvalidPunchesTab from "./InvalidPunchesTab";
 import UnpunchesTab      from "./UnpunchesTab";
+import CorrectionsTab    from "./CorrectionsTab";
 import EmployeeMonthView from "./EmployeeMonthView";
 import WeeklyOffAssignmentTab from "./WeeklyOffAssignmentTab";
 
-type TabId = "attendance" | "ot" | "invalid" | "unpunches" | "weekly-off";
+type TabId = "attendance" | "ot" | "invalid" | "unpunches" | "corrections" | "weekly-off";
 
 interface Tab {
   id: TabId;
@@ -58,6 +59,13 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
     : null;
   const { data: dashboard, refetch: refetchDashboard } = useFetch<DashboardData>(dashboardUrl);
 
+  // Pending counts come from the caller's own review queue (the dashboard stats are cached per branch, not per user).
+  const pendingUrl = user ? `${API.attendance.corrections}?status=pending&page_size=1` : null;
+  const hrPendingUrl = user ? `${API.attendance.corrections}?status=l2_pending&page_size=1` : null;
+  const { data: pendingData } = useFetch<PaginatedCorrections>(pendingUrl);
+  const { data: hrPendingData } = useFetch<PaginatedCorrections>(hrPendingUrl);
+  const pendingCorrections = (pendingData?.count ?? 0) + (hrPendingData?.count ?? 0);
+
   const cards    = dashboard?.stat_cards;
   const total    = cards?.total_employees ?? 0;
   const pct = (value: number | undefined) => (total > 0 && value !== undefined ? Math.round((value / total) * 100) : 0);
@@ -67,6 +75,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
     { id: "ot",         label: "OT Entry"        },
     { id: "invalid",    label: "Invalid Punches", badge: dashboard?.tab_badges.invalid_punches },
     { id: "unpunches",  label: "Un-punches",      badge: dashboard?.tab_badges.un_punches },
+    { id: "corrections", label: "Corrections", badge: pendingCorrections },
     { id: "weekly-off", label: "Weekly Off Assignment" },
   ];
 
@@ -216,6 +225,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
         {active === "ot"         && <OtEntryTab />}
         {active === "invalid"    && <InvalidPunchesTab onMutated={refetchDashboard} />}
         {active === "unpunches"  && <UnpunchesTab />}
+        {active === "corrections" && <CorrectionsTab />}
         {active === "weekly-off" && <WeeklyOffAssignmentTab />}
       </div>
     </div>

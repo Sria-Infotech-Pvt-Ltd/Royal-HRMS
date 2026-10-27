@@ -179,7 +179,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
           <Row label="Reporting manager" value={employee.reportingManagerName || detail?.reporting_manager?.name || "CEO Office"} />
           <Row
             label="Status"
-            valueNode={<span className={`chip ${STATUS_CHIP[directoryStatus] ?? ""}`}>{directoryStatus}</span>}
+            valueNode={<><span className={`chip ${STATUS_CHIP[directoryStatus] ?? ""}`}>{directoryStatus}</span>{directoryStatus === "Active" && employee.employmentStatus === "probation" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--muted)" }}>On probation</span>}</>}
           />
         </SectionCard>
 
