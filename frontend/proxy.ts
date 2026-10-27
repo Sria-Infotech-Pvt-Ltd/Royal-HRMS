@@ -4,7 +4,11 @@ const AUTH_COOKIE = "royal_hrms_auth";
 const ACCESS_COOKIE = "royal_access_token";
 
 const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
-  "/dashboard/announcements": "announcements.view",
+  // /dashboard/announcements intentionally absent — every signed-in employee
+  // can read the announcements meant for them (company-wide, or targeted at
+  // their own branch / department). The backend list/detail APIs already
+  // filter by audience (apps/announcements/views.py _visible_qs); posting,
+  // editing and deleting stay gated by announcements.create/edit/delete.
   "/dashboard/interview-list": "recruitment.view",
   "/dashboard/candidate-review": "recruitment.view",
   // /dashboard/assessments intentionally absent — every employee can view

@@ -19,7 +19,9 @@ export function isSection(e: NavEntry): e is NavSection {
 const ALL_NAV: NavEntry[] = [
   { section: "Main" },
   { id: "dashboard", icon: "ti-layout-dashboard", label: "Dashboard", path: "/dashboard", permission: null },
-  { id: "announcements", icon: "ti-speakerphone", label: "Announcements", path: "/dashboard/announcements", permission: "announcements.view" },
+  // permission: null — self-service read for every signed-in user, matching
+  // proxy.ts (the backend shows each user only the posts meant for them).
+  { id: "announcements", icon: "ti-speakerphone", label: "Announcements", path: "/dashboard/announcements", permission: null },
 
   { section: "Recruitment" },
   { id: "interview-list", icon: "ti-users", label: "Interview List", path: "/dashboard/interview-list", permission: "recruitment.view" },
