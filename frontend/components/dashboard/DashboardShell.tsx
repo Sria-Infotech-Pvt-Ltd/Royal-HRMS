@@ -97,7 +97,6 @@ export default function DashboardShell({
           </span>
           <div className="brandcopy">
             <strong>AIRA</strong>
-            <small>Artificial Intelligence Resources Assistance</small>
           </div>
         </div>
 

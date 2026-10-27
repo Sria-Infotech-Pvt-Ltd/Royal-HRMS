@@ -17,13 +17,15 @@ interface Props {
 const MOBILE_MENU_KEY = "mobile-menu";
 // With more pages than this a dropdown uses two columns instead of a tall list.
 const TWO_COLUMN_THRESHOLD = 4;
-const PANEL_CLASS = "absolute top-full z-50 mt-1 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-[0_18px_50px_rgba(24,20,48,.16)]";
+const PANEL_CLASS = "absolute top-full z-50 mt-1 rounded-2xl border p-2";
+// Colours and shadow as inline styles: the project's Tailwind (v2) does not resolve var() inside arbitrary values reliably.
+const PANEL_STYLE = { background: "var(--surface)", borderColor: "var(--line)", boxShadow: "0 18px 50px rgba(24,20,48,.16)" } as const;
 
 function PanelHeader({ title, count }: { title: string; count: number }) {
   return (
-    <div className="flex items-center justify-between px-3 pb-1.5 pt-1">
-      <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--muted)]">{title}</span>
-      <span className="rounded-full bg-[var(--bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)]">{count} {count === 1 ? "page" : "pages"}</span>
+    <div className="nm-head">
+      <span className="nm-title">{title}</span>
+      <span className="nm-pill">{count} {count === 1 ? "page" : "pages"}</span>
     </div>
   );
 }
@@ -36,7 +38,7 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
 
   return (
     <>
-      <nav className="hidden h-full min-w-0 flex-1 items-center gap-0.5 min-[940px]:flex" aria-label="Main">
+      <nav className="nav-desktop h-full min-w-0 flex-1 items-center gap-0.5" aria-label="Main">
         {bar.map(entry => {
           if (entry.kind === "link") {
             const { item } = entry;
@@ -63,7 +65,7 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
                 <i className={`ti ${isOpen ? "ti-chevron-up" : "ti-chevron-down"}`} style={{ fontSize: 12 }} />
               </button>
               {isOpen && (
-                <div className={`${PANEL_CLASS} left-0 ${isTwoColumn ? "w-[520px]" : "w-[300px]"}`} role="menu" aria-label={entry.title}>
+                <div className={`${PANEL_CLASS} left-0 ${isTwoColumn ? "w-[520px]" : "w-[300px]"}`} role="menu" aria-label={entry.title} style={PANEL_STYLE}>
                   <PanelHeader title={entry.title} count={entry.items.length} />
                   <NavMenuItems items={entry.items} activeNavId={activeNavId} onSelect={select} isTwoColumn={isTwoColumn} />
                 </div>
@@ -73,7 +75,7 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
         })}
       </nav>
 
-      <div className="relative min-[940px]:hidden" {...{ [MENU_ATTRIBUTE]: "" }}>
+      <div className="nav-mobile relative" {...{ [MENU_ATTRIBUTE]: "" }}>
         <button
           type="button"
           className="who-chip"
@@ -85,7 +87,7 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
           <i className="ti ti-menu-2" style={{ fontSize: 16 }} /> Menu
         </button>
         {menu.openKey === MOBILE_MENU_KEY && (
-          <div className={`${PANEL_CLASS} left-0 max-h-[70vh] w-[min(92vw,360px)] overflow-y-auto`} role="menu" aria-label="Menu">
+          <div className={`${PANEL_CLASS} left-0 max-h-[70vh] w-[min(92vw,360px)] overflow-y-auto`} role="menu" aria-label="Menu" style={PANEL_STYLE}>
             {bar.map(entry => (
               <div key={entry.kind === "link" ? entry.item.id : entry.id} className="mb-1">
                 {entry.kind === "menu" && <PanelHeader title={entry.title} count={entry.items.length} />}

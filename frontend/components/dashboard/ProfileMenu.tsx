@@ -37,27 +37,28 @@ export default function ProfileMenu({ name, subtitle, photoUrl, items, activeNav
       </button>
       {isOpen && (
         <div
-          className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,440px)] rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-[0_18px_50px_rgba(24,20,48,.16)]"
+          className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,500px)] rounded-2xl border p-2"
+          style={{ background: "var(--surface)", borderColor: "var(--line)", boxShadow: "0 18px 50px rgba(24,20,48,.16)" }}
           role="menu"
           aria-label="My account"
         >
-          <div className="flex items-center gap-3 border-b border-[var(--line)] px-3 pb-3 pt-2">
+          <div className="nm-who">
             <Avatar text={initials(name)} size={36} photoUrl={photoUrl} />
             <div className="min-w-0">
-              <div className="truncate text-[14px] font-bold text-[var(--ink)]">{name}</div>
-              <div className="truncate text-[11.5px] text-[var(--muted)]">{subtitle}</div>
+              <div className="nm-who-name">{name}</div>
+              <div className="nm-who-sub">{subtitle}</div>
             </div>
           </div>
           {items.length > 0 && (
             <>
-              <div className="px-3 pb-1 pt-3 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--muted)]">My</div>
+              <div className="nm-section">My</div>
               <NavMenuItems items={items} activeNavId={activeNavId} isTwoColumn onSelect={item => { menu.close(); onNavigate(item.path); }} />
             </>
           )}
           <button
             type="button"
             role="menuitem"
-            className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-[var(--crit,#c0392b)] transition-colors hover:bg-[var(--bg)]"
+            className="nm-signout"
             onClick={() => { menu.close(); onLogout(); }}
           >
             <i className="ti ti-logout" style={{ fontSize: 16 }} /> Sign out

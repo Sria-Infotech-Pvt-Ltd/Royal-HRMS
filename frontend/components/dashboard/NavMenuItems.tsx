@@ -19,24 +19,11 @@ export default function NavMenuItems({ items, activeNavId, onSelect, isTwoColumn
       {items.map(item => {
         const isActive = item.id === activeNavId;
         return (
-          <button
-            key={item.id}
-            type="button"
-            role="menuitem"
-            aria-current={isActive ? "page" : undefined}
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-[var(--bg)]"
-            style={isActive ? { background: "color-mix(in srgb, var(--brand) 10%, var(--surface))" } : undefined}
-            onClick={() => onSelect(item)}
-          >
-            <span
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)]"
-              style={{ background: isActive ? "color-mix(in srgb, var(--brand) 14%, var(--surface))" : "var(--bg)" }}
-            >
-              <i className={`ti ${item.icon}`} style={{ fontSize: 16, color: isActive ? "var(--brand)" : undefined }} />
-            </span>
+          <button key={item.id} type="button" role="menuitem" aria-current={isActive ? "page" : undefined} className={`nm-item${isActive ? " on" : ""}`} onClick={() => onSelect(item)}>
+            <span className="nm-tile"><i className={`ti ${item.icon}`} style={{ fontSize: 16 }} /></span>
             <span className="min-w-0">
-              <span className="block truncate text-[13px] font-semibold" style={{ color: isActive ? "var(--brand)" : "var(--ink)" }}>{item.label}</span>
-              <span className="block truncate text-[11px] text-[var(--faint)]">{item.path}</span>
+              <span className="nm-label">{item.label}</span>
+              <span className="nm-path">{item.path}</span>
             </span>
           </button>
         );
