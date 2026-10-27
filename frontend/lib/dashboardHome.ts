@@ -23,3 +23,8 @@ export function resolveDashboard(session: DashboardSession): DashboardKey {
 export function canOpenTeamDashboard(session: DashboardSession): boolean {
   return !!session.can_manage_team;
 }
+
+/** True when the person may open another employee's workspace (superusers always may). */
+export function canViewEmployeeWorkspace(session: DashboardSession): boolean {
+  return !!session.is_superuser || (session.permissions ?? []).includes("employees.view_workspace");
+}

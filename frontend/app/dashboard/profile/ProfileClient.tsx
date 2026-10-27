@@ -11,7 +11,6 @@
 // concept, so those stay as directly-actionable cards below.
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -34,17 +33,9 @@ import {
 } from "./_profileClientData";
 
 export default function ProfileClient({ session }: { session: SessionPayload }) {
-  const router = useRouter();
-  // An admin/HR user editing their OWN record has no one else to approve a
-  // correction — they hold employees.edit already, so they get a direct
-  // edit link (the same Employee > edit page HR uses for anyone else)
-  // instead of the HR-ticket "Request profile correction" flow, which is
-  // for employees who genuinely need someone else's approval.
-  const canEditDirectly = (session.permissions ?? []).includes("employees.edit");
-  // Gates the camera button below and "Edit my details" — an admin-revocable
-  // toggle (default granted) separate from canEditDirectly, so HR can lock
-  // down self-service editing for a role without touching the employees.edit
-  // permission that governs editing OTHER people's records.
+  // Gates the camera button below and "Edit my details" — an admin-revocable toggle (default granted), so HR can
+  // lock down self-service editing for a role without touching the employees.edit permission that governs editing
+  // OTHER people's records.
   const canEditOwnProfile = (session.permissions ?? []).includes("employees.edit_own_profile");
   const { data: profile, loading, error: profileError, refetch: refetchProfile } = useFetch<ProfileData>(API.employees.me);
   const { data: docs, refetch: refetchDocs } = useFetch<DocumentItem[]>(API.onboarding.documents);
@@ -181,17 +172,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>View employee record</div>
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Personal, employment, pay, statutory, leave and audit details</div>
           </button>
-          {canEditDirectly ? (
-            <button
-              type="button"
-              onClick={() => router.push(`/dashboard/employees/${profile?.employee_id}`)}
-              disabled={!profile?.employee_id}
-              style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Edit my record</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Update contact, address or personal information directly</div>
-            </button>
-          ) : canEditOwnProfile ? (
+          {canEditOwnProfile ? (
             <button
               type="button"
               onClick={() => setShowEdit(true)}
@@ -274,15 +255,14 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           onClose={() => setShowRecord(false)}
           onRequestCorrection={() => {
             setShowRecord(false);
-            if (canEditDirectly) router.push(`/dashboard/employees/${profile.employee_id}`);
-            // Direct-edit is only offered when the account actually holds
+            // Self-editing is only offered when the account actually holds
             // employees.edit_own_profile — otherwise this must go through
             // the real HR-approved request flow (ProfileCorrectionModal),
             // never a silent bypass straight to the editable form.
-            else if (canEditOwnProfile) setShowEdit(true);
+            if (canEditOwnProfile) setShowEdit(true);
             else setShowCorrection(true);
           }}
-          correctionLabel={canEditDirectly ? "Edit my record" : canEditOwnProfile ? "Edit my details" : "Request profile correction"}
+          correctionLabel={canEditOwnProfile ? "Edit my details" : "Request profile correction"}
         />
       )}
 

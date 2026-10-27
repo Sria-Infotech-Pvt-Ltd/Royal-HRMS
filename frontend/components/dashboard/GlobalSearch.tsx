@@ -6,9 +6,12 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { NavItem } from "@/lib/navConfig";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
+import { usePermission } from "@/hooks/usePermission";
+import { viewWorkspacePath } from "@/lib/viewAs";
 
 interface EmployeeResult {
   id:          string;
+  uuid?:       string;
   employee_id: string;
   full_name:   string;
   department:  string;
@@ -32,6 +35,7 @@ interface Props {
  *  from a 403. */
 export default function GlobalSearch({ navItems, canSearchEmployees }: Props) {
   const router = useRouter();
+  const canViewWorkspace = usePermission("employees.view_workspace");
   const [query,     setQuery]     = useState("");
   const [open,       setOpen]      = useState(false);
   const [employees, setEmployees] = useState<EmployeeResult[]>([]);
@@ -120,7 +124,7 @@ export default function GlobalSearch({ navItems, canSearchEmployees }: Props) {
                   </div>
                   {employees.map(emp => (
                     <button
-                      key={emp.id} type="button" onClick={() => goTo(`/dashboard/employees/${emp.id}`)}
+                      key={emp.id} type="button" onClick={() => goTo(canViewWorkspace && emp.uuid ? viewWorkspacePath(emp.uuid) : `/dashboard/employees/${emp.id}`)}
                       style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer" }}
                     >
                       <Avatar text={searchInitials(emp.full_name)} size={32} photoUrl={emp.profile_photo_url} />
