@@ -680,6 +680,30 @@ class BaselinePermission(models.Model):
         return f'baseline → {self.permission.codename}'
 
 
+class EmployeePermission(models.Model):
+    """An extra permission granted to ONE employee, on top of the company baseline and the permissions of the seat
+    they hold. Lets a single person get access without inventing a separate position for them.
+
+    Additive only: it never removes anything the baseline or the seat gives. It follows the person, not the seat,
+    so it stays if they move to another seat. Edited by full-access users in Settings > Access.
+    """
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee   = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='extra_permissions')
+    permission = models.ForeignKey(Permission, on_delete=models.CASCADE, related_name='employee_grants')
+    granted_by = models.ForeignKey('accounts.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_employee_permissions'
+        constraints = [
+            models.UniqueConstraint(fields=['employee', 'permission'], name='employee_permission_uniq'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.employee_id} → {self.permission.codename}'
+
+
 class HireAction(models.Model):
     """Stage 1 of the two-stage Hire flow — a reservation record created by
     the "Hire an employee" modal (action type, reason, effective date,

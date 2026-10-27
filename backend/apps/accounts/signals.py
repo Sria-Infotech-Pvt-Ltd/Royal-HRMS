@@ -50,6 +50,8 @@ def on_onboarding_section_change(sender, instance, **kwargs):
 @receiver(post_delete, sender='accounts.PositionPermission')
 @receiver(post_save, sender='accounts.BaselinePermission')
 @receiver(post_delete, sender='accounts.BaselinePermission')
+@receiver(post_save, sender='accounts.EmployeePermission')
+@receiver(post_delete, sender='accounts.EmployeePermission')
 def on_access_permission_change(sender, instance, **kwargs):
     from apps.platform_core import cache as metadata_cache
     metadata_cache.bump_version('authz')

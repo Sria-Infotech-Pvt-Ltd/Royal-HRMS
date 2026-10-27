@@ -116,6 +116,7 @@ from apps.accounts.views import (
     PositionDeactivateView,
     PositionPermissionsView,
     BaselinePermissionsView,
+    EmployeePermissionsView,
     PositionDetailView,
     PositionListCreateView,
     PositionPlacementEndView,
@@ -192,6 +193,7 @@ urlpatterns = [
     path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
     path('employees/<uuid:pk>/reset-password/',                   EmployeePasswordResetView.as_view(),    name='employee-reset-password'),
     path('employees/<uuid:pk>/resend-invite/',                    ResendInviteView.as_view(),             name='employee-resend-invite'),
+    path('employees/<uuid:pk>/permissions/',                      EmployeePermissionsView.as_view(),      name='employee-permissions'),
     path('employees/<uuid:pk>/invite-status/',                    EmployeeInviteStatusView.as_view(),     name='employee-invite-status'),
     path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
 
