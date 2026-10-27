@@ -29,10 +29,6 @@ export function viewWorkspacePath(employee: string): string {
   return `/dashboard/ess?as=${encodeURIComponent(employee)}`;
 }
 
-/** The admin profile page of an employee (tabs, salary, actions) — bypasses the redirect to their workspace. */
-export function adminProfilePath(employeeCode: string): string {
-  return `/dashboard/employees/${encodeURIComponent(employeeCode)}?view=profile`;
-}
 
 // An employee's id (uuid) or their employee code (EMP00081, UAT26-050, ...): what the profile page address carries.
 const VIEW_AS_TARGET_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/;

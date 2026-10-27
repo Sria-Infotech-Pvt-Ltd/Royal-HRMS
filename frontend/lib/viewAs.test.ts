@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { adminProfilePath, isViewAsTarget, setViewAsEmployee, viewAsHeaderFor, viewWorkspacePath } from "./viewAs";
+import { isViewAsTarget, setViewAsEmployee, viewAsHeaderFor, viewWorkspacePath } from "./viewAs";
 
 const EMPLOYEE = "7f9c1d2e-3a4b-4c5d-8e6f-0123456789ab";
 
@@ -35,8 +35,7 @@ describe("view as employee", () => {
     expect(isViewAsTarget(undefined)).toBe(false);
   });
 
-  it("builds the workspace address from an employee code and the admin profile address", () => {
+  it("builds the workspace address from an employee code", () => {
     expect(viewWorkspacePath("EMP00081")).toBe("/dashboard/ess?as=EMP00081");
-    expect(adminProfilePath("EMP00081")).toBe("/dashboard/employees/EMP00081?view=profile");
   });
 });

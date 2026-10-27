@@ -5,7 +5,6 @@
 import Link from "next/link";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import { adminProfilePath } from "@/lib/viewAs";
 
 interface ViewedEmployee {
   full_name: string;
@@ -28,11 +27,9 @@ export default function ViewAsStrip() {
         <i className="ti ti-eye" style={{ marginRight: 6 }} />
         Viewing {employee ? `${employee.full_name}'s` : "this employee's"} workspace — read-only. Nothing you do here is saved.
       </span>
-      {employee && (
-        <Link href={adminProfilePath(employee.employee_id)} style={{ color: "inherit", textDecoration: "underline" }}>
-          Admin profile (edit, salary, actions)
-        </Link>
-      )}
+      <Link href="/dashboard/employees" style={{ color: "inherit", textDecoration: "underline" }}>
+        Back to Employees
+      </Link>
     </div>
   );
 }
