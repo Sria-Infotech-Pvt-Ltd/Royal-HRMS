@@ -27,9 +27,11 @@ export default function ViewAsStrip() {
         <i className="ti ti-eye" style={{ marginRight: 6 }} />
         Viewing {employee ? `${employee.full_name}'s` : "this employee's"} workspace — read-only. Nothing you do here is saved.
       </span>
-      <Link href="/dashboard/employees" style={{ color: "inherit", textDecoration: "underline" }}>
-        Back to Employees
-      </Link>
+      {employee && (
+        <Link href={`/dashboard/employees/${employee.employee_id}`} style={{ color: "inherit", textDecoration: "underline" }}>
+          Back to employee profile
+        </Link>
+      )}
     </div>
   );
 }
