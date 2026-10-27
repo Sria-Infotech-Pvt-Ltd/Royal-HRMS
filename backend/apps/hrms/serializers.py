@@ -676,6 +676,16 @@ class HolidayCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'name': f'A holiday named "{name}" already exists for {hdate.year}.'}
                 )
+
+        if hdate:
+            date_qs = Holiday.objects.filter(date=hdate, branch=branch)
+            if self.instance:
+                date_qs = date_qs.exclude(pk=self.instance.pk)
+            if date_qs.exists():
+                branch_label = branch.branch_name if branch else 'All Branches'
+                raise serializers.ValidationError(
+                    {'date': f'A holiday already exists on {hdate} for {branch_label}.'}
+                )
         return data
 
 

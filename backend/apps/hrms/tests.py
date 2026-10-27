@@ -289,9 +289,19 @@ class LeaveRequestPolicyValidationTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn('work-from-home', resp.data['message'])
 
+    def _recent_past_weekday(self, max_days_back=4):
+        """A date within the last `max_days_back` days that isn't a Sat/Sun —
+        a fixed `today - 2` can land on a weekly off depending on when the
+        suite runs, which these backdated-leave tests aren't testing for."""
+        for offset in range(2, max_days_back + 1):
+            candidate = datetime.date.today() - datetime.timedelta(days=offset)
+            if candidate.weekday() < 5:
+                return candidate
+        raise AssertionError('No weekday found in range — widen max_days_back.')
+
     def test_backdated_leave_rejected_when_policy_disallows(self):
         LeavePolicy.objects.filter(leave_type='casual').update(allow_backdated_leave=False)
-        past_date = datetime.date.today() - datetime.timedelta(days=2)
+        past_date = self._recent_past_weekday()
         resp = self._apply(start_date=past_date.isoformat(), end_date=past_date.isoformat())
         self.assertEqual(resp.status_code, 400)
         self.assertIn('backdated', resp.data['message'].lower())
@@ -300,7 +310,7 @@ class LeaveRequestPolicyValidationTests(TestCase):
         LeavePolicy.objects.filter(leave_type='casual').update(
             allow_backdated_leave=True, maximum_backdated_days=5,
         )
-        past_date = datetime.date.today() - datetime.timedelta(days=2)
+        past_date = self._recent_past_weekday()
         resp = self._apply(start_date=past_date.isoformat(), end_date=past_date.isoformat())
         self.assertEqual(resp.status_code, 201, resp.data)
 

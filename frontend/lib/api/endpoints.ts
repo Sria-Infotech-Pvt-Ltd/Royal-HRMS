@@ -342,6 +342,8 @@ export const API = {
     calendar: "/leave/calendar/",
     holidays: "/leave/holidays/",
     holidayDetail: (id: string) => `/leave/holidays/${id}/`,
+    holidayBulkImport: "/leave/holidays/bulk-import/",
+    holidayBulkImportSample: "/leave/holidays/bulk-import/sample/",
     carryForward: {
       years:   "/leave/carry-forward/years/",
       preview: "/leave/carry-forward/preview/",

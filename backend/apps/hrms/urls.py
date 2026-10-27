@@ -14,6 +14,8 @@ from .views import (
     ExpenseStatusListView,
     EmployeeDocumentSubmissionDetailView,
     EmployeeDocumentSubmissionListCreateView,
+    HolidayBulkImportSampleView,
+    HolidayBulkImportView,
     HolidayDetailView,
     HolidayListCreateView,
     HRHelpRequestDetailView,
@@ -100,6 +102,8 @@ urlpatterns = [
 
     # Holiday Calendar
     path('leave/holidays/',              HolidayListCreateView.as_view(), name='holiday-list'),
+    path('leave/holidays/bulk-import/',  HolidayBulkImportView.as_view(), name='holiday-bulk-import'),
+    path('leave/holidays/bulk-import/sample/', HolidayBulkImportSampleView.as_view(), name='holiday-bulk-import-sample'),
     path('leave/holidays/<str:holiday_id>/', HolidayDetailView.as_view(), name='holiday-detail'),
 
     # Separation — field choices

@@ -66,6 +66,8 @@ export default function WorkforceOperations({ overview, overviewLoading }: Props
   const settings = useFetch<SettingsOverview>(API.dashboard.settingsOverview);
   // Admin-only endpoint — HR users get a 403, in which case the health pills are omitted.
   const health = useFetch<SystemHealth>(API.dashboard.kpis);
+  const currentYear = new Date().getFullYear();
+  const holidaysThisYear = useFetch<{ holidays: unknown[]; total: number }>(`${API.leave.holidays}?year=${currentYear}`);
 
   // "Last synced" stamp for the banner badge; set client-side after the first overview load.
   const [syncedAt, setSyncedAt] = useState<Date | null>(null);
@@ -128,6 +130,13 @@ export default function WorkforceOperations({ overview, overviewLoading }: Props
   }
   if (overview) {
     pills.push({ label: `${overview.compliance_pct}% document compliance`, ok: overview.compliance_pct >= 90 });
+  }
+  if (holidaysThisYear.status !== 403 && holidaysThisYear.data) {
+    const holidayCount = holidaysThisYear.data.total ?? 0;
+    pills.push({
+      label: holidayCount > 0 ? `${holidayCount} holidays configured for ${currentYear}` : `No holidays configured for ${currentYear} — import required`,
+      ok: holidayCount > 0,
+    });
   }
   const pillsLoading = health.loading || reports.loading || overviewLoading;
 

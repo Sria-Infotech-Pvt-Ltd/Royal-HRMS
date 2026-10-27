@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
@@ -29,6 +29,7 @@ const PAGE_SIZE   = 10;
 
 export default function HolidayCalendarPage() {
   const router = useRouter();
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const [year,      setYear]      = useState(new Date().getFullYear());
   const [view,      setView]      = useState<ViewMode>("list");
@@ -43,6 +44,8 @@ export default function HolidayCalendarPage() {
   const [modal,        setModal]        = useState<"add" | "edit" | "view" | null>(null);
   const [editing,       setEditing]      = useState<Holiday | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Holiday | null>(null);
+  const [importing,    setImporting]    = useState(false);
+  const [importMsg,    setImportMsg]    = useState<string | null>(null);
 
   // Calendar view needs the full year in one shot — fetched once per year and
   // filtered by month client-side, so navigating months never re-calls the API.
@@ -124,6 +127,41 @@ export default function HolidayCalendarPage() {
     } catch { /* list stays as-is; user can retry */ }
   }
 
+  async function downloadTemplate() {
+    const res = await clientApi.get(API.leave.holidayBulkImportSample, { responseType: "blob" });
+    const url = window.URL.createObjectURL(new Blob([res.data as BlobPart]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "holiday_import_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  }
+
+  async function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await clientApi.post<{ data: { created: number; skipped: number; failed: number; total_rows: number } }>(
+        API.leave.holidayBulkImport, form, { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      const d = res.data.data;
+      setImportMsg(`Imported ${d.created} of ${d.total_rows} holidays (${d.skipped} skipped, ${d.failed} failed).`);
+      refetch();
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Import failed.";
+      setImportMsg(msg);
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const filterTabs: Array<{ id: FilterTab; label: string; count: number }> = [
     { id: "all",      label: "All",      count: stats.total    },
     { id: "national", label: "National", count: stats.national },
@@ -144,11 +182,34 @@ export default function HolidayCalendarPage() {
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
             <i className="ti ti-arrow-left" /> Back
           </button>
+          <button className="btn btn-ghost" onClick={downloadTemplate}>
+            <i className="ti ti-download" /> Download Template
+          </button>
+          <button className="btn btn-ghost" onClick={() => importInputRef.current?.click()} disabled={importing}>
+            <i className="ti ti-upload" /> {importing ? "Importing…" : "Import CSV"}
+          </button>
+          <input ref={importInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} aria-label="Import holiday CSV" />
           <button className="btn btn-filled" onClick={openAdd}>
             <i className="ti ti-plus" /> Add Holiday
           </button>
         </div>
       </div>
+
+      {importMsg && (
+        <div className="mb-4 px-4 py-2.5 rounded-xl border border-[var(--outline-v)] bg-[var(--bg-mid)] text-sm text-[var(--on-bg)] flex items-center justify-between">
+          <span>{importMsg}</span>
+          <button onClick={() => setImportMsg(null)} className="text-[var(--on-variant)] hover:text-[var(--on-bg)]" aria-label="Dismiss">
+            <i className="ti ti-x text-xs" />
+          </button>
+        </div>
+      )}
+
+      {!yearData ? null : stats.total === 0 && (
+        <div className="mb-4 px-4 py-2.5 rounded-xl border border-[var(--warn)] bg-[var(--warn-c)] text-sm text-[var(--warn)] flex items-center gap-2">
+          <i className="ti ti-alert-triangle" />
+          <span>No holidays configured for {year}. Public holidays will not be reflected in attendance or LOP calculations until holidays are added or imported.</span>
+        </div>
+      )}
 
       {/* ── Year navigator + quick filters ───────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">

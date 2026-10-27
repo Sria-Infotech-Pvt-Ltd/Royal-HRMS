@@ -1,6 +1,11 @@
 from .birthdays import BirthdaySettingsView, BirthdayView
 from .expenses import ExpenseCategoryListView, ExpenseDetailView, ExpenseListCreateView, ExpenseStatsView, ExpenseStatusListView
-from .holidays import HolidayDetailView, HolidayListCreateView
+from .holidays import (
+    HolidayBulkImportSampleView,
+    HolidayBulkImportView,
+    HolidayDetailView,
+    HolidayListCreateView,
+)
 from .separation import (
     SeparationReasonListView,
     SeparationRequestDetailView,
