@@ -1169,6 +1169,15 @@ class AttendanceRecord(models.Model):
     STATUS_HOLIDAY    = 'holiday'
     STATUS_ON_LEAVE   = 'on_leave'
     STATUS_INCOMPLETE = 'incomplete'   # clocked in, shift ended, no clock-out yet
+    # A dashboard-only classification for a day before the employee's
+    # date_of_joining (or after their last working day) -- never actually
+    # stored on a real AttendanceRecord row (no punch/process_day ever runs
+    # for a day outside employment), so deliberately NOT in STATUS_CHOICES
+    # below. Exists only so AttendanceDashboardService._classify_day() has
+    # a real status key to return instead of silently falling through to
+    # STATUS_ABSENT for days the employee was never actually expected to
+    # work at all.
+    STATUS_NOT_EMPLOYED = 'not_employed'
     STATUS_CHOICES    = [
         (STATUS_PRESENT,    'Present'),
         (STATUS_LATE,       'Late'),
@@ -1190,6 +1199,7 @@ class AttendanceRecord(models.Model):
         STATUS_HOLIDAY:    'Holiday',
         STATUS_ON_LEAVE:   'On Leave',
         STATUS_INCOMPLETE: 'Incomplete',
+        STATUS_NOT_EMPLOYED: 'Not Employed',
     }
 
     WORK_MODE_OFFICE = 'office'

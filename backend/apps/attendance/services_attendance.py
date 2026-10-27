@@ -577,6 +577,7 @@ _STATUS_COLOR: dict[str, str] = {
     AttendanceRecord.STATUS_HOLIDAY:    '#a855f7',   # purple-500
     AttendanceRecord.STATUS_ON_LEAVE:   '#3b82f6',   # blue-500
     AttendanceRecord.STATUS_INCOMPLETE: '#f59e0b',   # amber-500 (same as late)
+    AttendanceRecord.STATUS_NOT_EMPLOYED: '#cbd5e1', # slate-300 -- deliberately lighter/more neutral than Weekly Off's slate-400
 }
 
 
@@ -616,6 +617,8 @@ class AttendanceDashboardService:
         leave_dates   = cls._leave_dates(employee, month_start, month_end)
         holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
         off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
+        date_of_joining, last_working_day = cls._employment_window(employee)
+        shift_end     = cls._today_shift_end()
 
         working_days = days_present = lop_pending = missing_punch = 0
         late_dates: list[date] = []
@@ -624,8 +627,14 @@ class AttendanceDashboardService:
             if cur > today:
                 continue
             rec = records.get(cur)
-            key = cls._classify_day(cur, rec, holiday_dates, off_dates, leave_dates, today)
-            if key not in (AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY):
+            key = cls._classify_day(
+                cur, rec, holiday_dates, off_dates, leave_dates, today,
+                date_of_joining, last_working_day, shift_end,
+            )
+            if key not in (
+                AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY,
+                AttendanceRecord.STATUS_NOT_EMPLOYED, None,
+            ):
                 working_days += 1
             if key in (AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE):
                 days_present += 1
@@ -731,6 +740,8 @@ class AttendanceDashboardService:
         leave_dates   = cls._leave_dates(employee, month_start, month_end)
         holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
         off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
+        date_of_joining, last_working_day = cls._employment_window(employee)
+        shift_end     = cls._today_shift_end()
 
         working_days = days_present = days_absent = leave_days = half_days = 0
         ot_minutes = 0
@@ -739,8 +750,14 @@ class AttendanceDashboardService:
             if cur > today:
                 continue
             rec = records.get(cur)
-            key = cls._classify_day(cur, rec, holiday_dates, off_dates, leave_dates, today)
-            if key not in (AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY):
+            key = cls._classify_day(
+                cur, rec, holiday_dates, off_dates, leave_dates, today,
+                date_of_joining, last_working_day, shift_end,
+            )
+            if key not in (
+                AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY,
+                AttendanceRecord.STATUS_NOT_EMPLOYED, None,
+            ):
                 working_days += 1
             if key in (AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE):
                 days_present += 1
@@ -782,12 +799,15 @@ class AttendanceDashboardService:
         holiday_dates = set(holiday_names.keys())
         off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
         pending_dates = cls._pending_correction_dates(employee, year, month)
+        date_of_joining, last_working_day = cls._employment_window(employee)
+        shift_end     = cls._today_shift_end()
 
         days: dict[int, dict] = {}
         for day_num in range(1, days_in_month + 1):
             entry = cls._build_day(
                 day_num, year, month, records, leave_dates, off_dates,
                 pending_dates, today, holiday_dates, holiday_names,
+                date_of_joining, last_working_day, shift_end,
             )
             if entry is not None:
                 days[day_num] = entry
@@ -944,14 +964,61 @@ class AttendanceDashboardService:
         return {h['date']: h['name'] for h in holidays}
 
     @staticmethod
+    def _employment_window(employee) -> tuple:
+        """(date_of_joining, last_working_day) for clipping the attendance
+        window to when `employee` was actually employed. last_working_day
+        comes from AlumniRecord (created once a separation is fully
+        approved and the account deactivated — see
+        apps.hrms.services_separation_v2.create_alumni_record); there is no
+        shortcut field for it directly on User. None for either side means
+        "no clipping needed" on that end."""
+        date_of_joining = getattr(employee, 'date_of_joining', None)
+        alumni_record = getattr(employee, 'alumni_record', None)
+        last_working_day = alumni_record.last_working_day if alumni_record else None
+        return date_of_joining, last_working_day
+
+    @staticmethod
+    def _today_shift_end() -> Optional[time]:
+        """The configured shift end time, used only to decide whether
+        *today* can reasonably be marked Absent yet (a day with a punch
+        missing when the shift hasn't ended yet is not evidence of
+        anything). None if no AttendanceWorkingHours is configured —
+        callers must treat that as "no gate" the same as before this
+        existed, not as "always gate"."""
+        settings_obj  = _get_settings()
+        working_hours = getattr(settings_obj, 'working_hours', None)
+        return working_hours.shift_end if working_hours else None
+
+    @staticmethod
     def _classify_day(
         cur: date, rec, holiday_dates: set, off_dates: set, leave_dates: set, today: date,
+        date_of_joining: date = None, last_working_day: date = None, shift_end: time = None,
     ):
         """Status key for one calendar date, or None for a blank future day
         with no record. Shared by _build_day (get_calendar) and
         get_monthly_summary so the two can never classify the same day
         differently — a day with no AttendanceRecord row is 'absent' here
-        exactly as it is on the calendar, not silently skipped."""
+        exactly as it is on the calendar, not silently skipped.
+
+        date_of_joining/last_working_day clip the window to when the
+        employee was actually employed -- a day outside that window was
+        never one they could have been expected to work, so it's reported
+        as "Not Employed" rather than falling through to Absent (and,
+        critically, is excluded from every caller's working_days/
+        lop_pending counts the same way a future day already was).
+        Checked first/unconditionally, ahead of holiday/weekly-off/leave,
+        since none of those are meaningful before someone has even joined.
+
+        shift_end gates ONLY `cur == today` with no record yet: if the
+        configured shift hasn't ended, there's no reasonable way a punch
+        could be missing yet, so it's treated like a blank future day
+        instead of Absent (the reported "flags new joiners as Absent at
+        midday" symptom, which actually affects every employee's *today*,
+        not just new joiners)."""
+        if date_of_joining and cur < date_of_joining:
+            return AttendanceRecord.STATUS_NOT_EMPLOYED
+        if last_working_day and cur > last_working_day:
+            return AttendanceRecord.STATUS_NOT_EMPLOYED
         if cur in holiday_dates or (rec and rec.status == AttendanceRecord.STATUS_HOLIDAY):
             return AttendanceRecord.STATUS_HOLIDAY
         if cur in off_dates or (rec and rec.status == AttendanceRecord.STATUS_WEEKLY_OFF):
@@ -962,6 +1029,8 @@ class AttendanceDashboardService:
             return rec.status
         if cur > today:
             return None
+        if cur == today and shift_end and timezone.localtime().time() < shift_end:
+            return None
         return AttendanceRecord.STATUS_ABSENT
 
     @staticmethod
@@ -971,6 +1040,9 @@ class AttendanceDashboardService:
         pending_dates: set, today: date,
         holiday_dates: set = None,
         holiday_names: dict = None,
+        date_of_joining: date = None,
+        last_working_day: date = None,
+        shift_end: time = None,
     ) -> dict | None:
         """Builds the response dict for one calendar day; returns None for blank future days."""
         cur           = date(year, month, day_num)
@@ -978,7 +1050,10 @@ class AttendanceDashboardService:
         holiday_dates = holiday_dates or set()
         holiday_names = holiday_names or {}
 
-        key = AttendanceDashboardService._classify_day(cur, rec, holiday_dates, off_dates, leave_dates, today)
+        key = AttendanceDashboardService._classify_day(
+            cur, rec, holiday_dates, off_dates, leave_dates, today,
+            date_of_joining, last_working_day, shift_end,
+        )
         if key is None:
             return None
 
