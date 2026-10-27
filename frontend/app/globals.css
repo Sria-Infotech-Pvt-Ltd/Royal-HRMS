@@ -2159,7 +2159,6 @@ body.dark-mode {
   background: var(--surface, #fff);
   border: 1px solid var(--outline-v);
   border-radius: var(--radius-lg);
-  cursor: pointer;
   transition: box-shadow 0.15s;
 }
 
@@ -2179,11 +2178,64 @@ body.dark-mode {
   white-space: pre-wrap;
 }
 
+/* Collapsed card: first 3 lines only (the stored text is not changed). */
+.ann-body-preview.collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ann-title,
+.ann-title-toggle {
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 8px;
+  color: var(--on-bg);
+  overflow-wrap: anywhere;
+}
+
+/* Title doubles as the expand / collapse control on long posts. */
+.ann-title-toggle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ann-title-toggle i {
+  flex-shrink: 0;
+  font-size: 18px;
+  color: var(--on-variant);
+  margin-top: 2px;
+}
+
+.ann-title-toggle:focus-visible,
+.ann-read-more:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .ann-read-more {
   display: inline-block;
   font-size: 12px;
   color: var(--primary);
   margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 /* Announcement detail modal */

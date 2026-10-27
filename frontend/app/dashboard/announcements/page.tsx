@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { isLongBody, toggleExpanded } from "@/lib/announcementPreview";
 import { getStoredUser } from "@/lib/auth";
 import { useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
 import type { BirthdayEmployee } from "@/types/employeeDashboard";
@@ -196,6 +197,10 @@ export default function AnnouncementsPage() {
 
   // ── Detail view modal ───────────────────────────────────────────────────────
   const [viewTarget, setViewTarget] = useState<Announcement | null>(null);
+
+  // ── Collapsible cards: ids of expanded cards (each card independent) ──────
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set());
+  const toggleCard = (id: number) => setExpandedIds(prev => toggleExpanded(prev, id));
 
   // ── Birthday celebration (Celebration tab) ─────────────────────────────────
   const { data: birthdayData } = useBirthdaysToday();
@@ -445,8 +450,6 @@ export default function AnnouncementsPage() {
     { label: "Total Views",     value: meta?.total_views     ?? 0, icon: "ti-eye",          cls: "si-info"    },
   ];
 
-  const BODY_PREVIEW = 220;
-
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -531,12 +534,14 @@ export default function AnnouncementsPage() {
         <div className="ann-cards-list">
           {meta.results.map(ann => {
             const av = avatarColor(ann.posted_by_name);
+            const long = isLongBody(ann.body);
+            const expanded = long && expandedIds.has(ann.id);
+            const bodyId = `ann-body-${ann.id}`;
 
             return (
               <div
                 key={ann.id}
                 className={`ann-card${ann.is_pinned ? " pinned" : ""}`}
-                onClick={() => setViewTarget(ann)}
               >
                 <div className="ann-card-body">
                   {/* ── Author row ─────────────────────────────────────── */}
@@ -577,41 +582,73 @@ export default function AnnouncementsPage() {
                       </div>
                     </div>
 
-                    {ann.can_edit && (
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                        <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => openEdit(ann)} suppressHydrationWarning>
-                          <i className="ti ti-pencil" />
-                        </button>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          title="Delete"
-                          style={{ color: "var(--error)" }}
-                          onClick={() => { setDeleteErr(null); setDeleteId(ann.id); }}
-                          suppressHydrationWarning
-                        >
-                          <i className="ti ti-trash" />
-                        </button>
-                      </div>
-                    )}
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      <button className="btn btn-ghost btn-sm" title="Open full view" aria-label={`Open ${ann.title}`}
+                        onClick={() => setViewTarget(ann)} suppressHydrationWarning>
+                        <i className="ti ti-arrows-maximize" />
+                      </button>
+                      {ann.can_edit && (
+                        <>
+                          <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => openEdit(ann)} suppressHydrationWarning>
+                            <i className="ti ti-pencil" />
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            title="Delete"
+                            style={{ color: "var(--error)" }}
+                            onClick={() => { setDeleteErr(null); setDeleteId(ann.id); }}
+                            suppressHydrationWarning
+                          >
+                            <i className="ti ti-trash" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
-                  {/* ── Title ─────────────────────────────────────────── */}
-                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>
-                    {ann.title}
-                  </div>
+                  {/* ── Title (expand / collapse control for long posts) ─ */}
+                  {long ? (
+                    <button
+                      type="button"
+                      className="ann-title-toggle"
+                      aria-expanded={expanded}
+                      aria-controls={bodyId}
+                      onClick={() => toggleCard(ann.id)}
+                      suppressHydrationWarning
+                    >
+                      <span>{ann.title}</span>
+                      <i className={`ti ${expanded ? "ti-chevron-up" : "ti-chevron-down"}`} aria-hidden="true" />
+                    </button>
+                  ) : (
+                    <div className="ann-title">{ann.title}</div>
+                  )}
 
-                  {/* ── Body preview ─────────────────────────────────── */}
-                  <div className="ann-body-preview">
-                    {ann.body.length <= BODY_PREVIEW ? ann.body : ann.body.slice(0, BODY_PREVIEW) + "…"}
+                  {/* ── Body: 3-line preview while collapsed, full text when expanded ── */}
+                  <div
+                    id={bodyId}
+                    className={`ann-body-preview${long && !expanded ? " collapsed" : ""}`}
+                    onClick={long ? () => toggleCard(ann.id) : undefined}
+                    style={long ? { cursor: "pointer" } : undefined}
+                  >
+                    {ann.body}
                   </div>
-                  {ann.body.length > BODY_PREVIEW && (
-                    <span className="ann-read-more">Read more</span>
+                  {long && (
+                    <button
+                      type="button"
+                      className="ann-read-more"
+                      aria-expanded={expanded}
+                      aria-controls={bodyId}
+                      onClick={() => toggleCard(ann.id)}
+                      suppressHydrationWarning
+                    >
+                      {expanded ? "Show less" : "Show more"}
+                    </button>
                   )}
 
                   {/* ── Footer ────────────────────────────────────────── */}
                   <div className="ann-card-footer">
                     <button
-                      onClick={e => { e.stopPropagation(); toggleReact(ann); }}
+                      onClick={() => toggleReact(ann)}
                       className={`ann-view-react-btn${ann.has_reacted ? " reacted" : ""}`}
                       suppressHydrationWarning
                     >
