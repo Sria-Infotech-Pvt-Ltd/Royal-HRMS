@@ -432,6 +432,11 @@ class PayrollAdjustmentSerializer(serializers.ModelSerializer):
 class PayslipQuerySerializer(serializers.ModelSerializer):
     raised_by_name = serializers.CharField(source='raised_by.full_name', read_only=True)
     resolved_by_name = serializers.CharField(source='resolved_by.full_name', read_only=True)
+    # Context for list screens (read-only additions; existing fields unchanged).
+    employee_id_code = serializers.CharField(source='payslip.employee.employee_id', read_only=True, default=None)
+    cycle_start = serializers.DateField(source='payslip.cycle.cycle_start', read_only=True, default=None)
+    # Resolution is the query's last change (no separate column), so updated_at once resolved.
+    resolved_at = serializers.SerializerMethodField()
 
     class Meta:
         model = PayslipQuery
@@ -440,14 +445,20 @@ class PayslipQuerySerializer(serializers.ModelSerializer):
             'payslip',
             'raised_by',
             'raised_by_name',
+            'employee_id_code',
+            'cycle_start',
             'description',
             'status',
             'resolved_by',
             'resolved_by_name',
             'resolution_note',
+            'resolved_at',
             'created_at',
             'updated_at',
         ]
+
+    def get_resolved_at(self, obj):
+        return obj.updated_at if obj.status == PayslipQuery.STATUS_RESOLVED else None
         read_only_fields = [
             'id', 'raised_by', 'raised_by_name', 'status',
             'resolved_by', 'resolved_by_name', 'created_at', 'updated_at',

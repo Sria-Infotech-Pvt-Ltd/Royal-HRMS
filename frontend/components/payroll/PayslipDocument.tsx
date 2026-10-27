@@ -52,9 +52,9 @@ function EarningRow({ label, value }: { label: string; value: string | number })
   const n = Number(value);
   if (n === 0) return null;
   return (
-    <div className="flex justify-between items-center py-2 border-b border-[var(--outline-v)] last:border-0">
-      <span className="text-sm" style={{ color: "var(--on-variant)" }}>{label}</span>
-      <span className="text-sm font-semibold" style={{ color: "var(--on-bg)" }}>{INR(n)}</span>
+    <div className="flex justify-between items-start gap-3 py-2 border-b border-[var(--outline-v)] last:border-0">
+      <span className="text-sm min-w-0 break-words" style={{ color: "var(--on-variant)" }}>{label}</span>
+      <span className="text-sm font-semibold shrink-0 whitespace-nowrap text-right" style={{ color: "var(--on-bg)", fontVariantNumeric: "tabular-nums" }}>{INR(n)}</span>
     </div>
   );
 }
@@ -63,9 +63,9 @@ function DeductionRow({ label, value, highlight }: { label: string; value: strin
   const n = Number(value);
   if (n === 0) return null;
   return (
-    <div className="flex justify-between items-center py-2 border-b border-[var(--outline-v)] last:border-0">
-      <span className="text-sm" style={{ color: "var(--on-variant)" }}>{label}</span>
-      <span className="text-sm font-semibold" style={{ color: "var(--error)", opacity: highlight ? 1 : 0.85 }}>{INR(n)}</span>
+    <div className="flex justify-between items-start gap-3 py-2 border-b border-[var(--outline-v)] last:border-0">
+      <span className="text-sm min-w-0 break-words" style={{ color: "var(--on-variant)" }}>{label}</span>
+      <span className="text-sm font-semibold shrink-0 whitespace-nowrap text-right" style={{ color: "var(--error)", opacity: highlight ? 1 : 0.85, fontVariantNumeric: "tabular-nums" }}>{INR(n)}</span>
     </div>
   );
 }
@@ -93,11 +93,12 @@ export default function PayslipDocument({
     : "";
 
   return (
-    <div className={`payslip-doc card flex-1 min-w-0 ${className}`} style={{ boxShadow: "var(--shadow)" }}>
+    <div className={`payslip-doc card min-w-0 ${className}`}
+      style={{ boxShadow: "var(--shadow)", width: "100%", maxWidth: 820, marginInline: "auto", overflow: "hidden" }}>
 
       {/* Company letterhead */}
-      <div className="px-7 py-6" style={{ background: "linear-gradient(to right, var(--primary), var(--primary), var(--primary-c))" }}>
-        <div className="flex items-start justify-between">
+      <div className="payslip-head px-7 py-6" style={{ background: "linear-gradient(to right, var(--primary), var(--primary), var(--primary-c))" }}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             {(company?.logo_url || company?.logo) && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -128,7 +129,7 @@ export default function PayslipDocument({
         {strip.map(([label, value], idx) => (
           <div key={label} className="px-5 py-3 border-[var(--outline-v)]" style={{ borderLeftWidth: idx > 0 ? 1 : 0, borderLeftStyle: "solid" }}>
             <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "var(--outline)" }}>{label}</div>
-            <div className="text-xs font-semibold font-mono" style={{ color: "var(--on-bg)" }}>{value}</div>
+            <div className="text-xs font-semibold font-mono break-words" style={{ color: "var(--on-bg)" }}>{value}</div>
           </div>
         ))}
       </div>
@@ -171,7 +172,7 @@ export default function PayslipDocument({
           </div>
           <div className="flex justify-between items-center px-4 py-3 border-t mt-1" style={{ background: "var(--success-c)", borderColor: "var(--success-c)" }}>
             <span className="text-sm font-bold" style={{ color: "var(--success)" }}>Gross Earnings</span>
-            <span className="text-base font-extrabold" style={{ color: "var(--success)" }}>{INR(gross)}</span>
+            <span className="text-base font-extrabold whitespace-nowrap" style={{ color: "var(--success)", fontVariantNumeric: "tabular-nums" }}>{INR(gross)}</span>
           </div>
         </div>
 
@@ -192,7 +193,7 @@ export default function PayslipDocument({
           </div>
           <div className="flex justify-between items-center px-4 py-3 border-t mt-1" style={{ background: "var(--error-c)", borderColor: "var(--error-c)" }}>
             <span className="text-sm font-bold" style={{ color: "var(--error)" }}>Total Deductions</span>
-            <span className="text-base font-extrabold" style={{ color: "var(--error)" }}>{INR(ded)}</span>
+            <span className="text-base font-extrabold whitespace-nowrap" style={{ color: "var(--error)", fontVariantNumeric: "tabular-nums" }}>{INR(ded)}</span>
           </div>
         </div>
       </div>
@@ -209,12 +210,12 @@ export default function PayslipDocument({
       )}
 
       {/* Net salary banner */}
-      <div className="mx-6 mb-6 rounded-xl overflow-hidden" style={{ background: "var(--success)" }}>
-        <div className="flex items-center justify-between px-6 py-4">
+      <div className="payslip-net mx-6 mb-6 rounded-xl overflow-hidden" style={{ background: "var(--success)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
           <div>
             <div className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>{netLabel}</div>
             <div className="text-white text-xs mt-1 opacity-80">{netSubline}</div>
-            <div className="flex items-center gap-3 mt-3 text-xs" style={{ color: "rgba(255,255,255,0.75)" }}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-xs" style={{ color: "rgba(255,255,255,0.75)", fontVariantNumeric: "tabular-nums" }}>
               <span>Gross {INR(gross)}</span>
               <span style={{ color: "rgba(255,255,255,0.5)" }}>−</span>
               <span>Ded. {INR(ded)}</span>
@@ -227,7 +228,7 @@ export default function PayslipDocument({
             </div>
           </div>
           <div className="text-right">
-            <div className="text-4xl font-extrabold text-white tracking-tight">{INR(net)}</div>
+            <div className="font-extrabold text-white tracking-tight whitespace-nowrap" style={{ fontSize: "clamp(1.75rem, 5vw, 2.25rem)", lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>{INR(net)}</div>
             <div className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.75)" }}>In Hand</div>
           </div>
         </div>
@@ -246,9 +247,15 @@ export default function PayslipDocument({
       </div>
 
       <style jsx>{`
-        @media (max-width: 560px) {
+        @media (max-width: 640px) {
           .payslip-detail-strip { grid-template-columns: 1fr 1fr; }
           .payslip-earn-ded { grid-template-columns: 1fr; }
+          .payslip-earn-ded > div:first-child { border-right: 0; border-bottom: 1px solid var(--outline-v); }
+          .payslip-head { padding: 18px 16px; }
+        }
+        @media print {
+          .payslip-earn-ded { grid-template-columns: 1fr 1fr; }
+          .payslip-detail-strip { grid-template-columns: repeat(4, 1fr); }
         }
       `}</style>
     </div>

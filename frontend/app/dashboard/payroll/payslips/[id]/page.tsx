@@ -5,40 +5,17 @@
 // an employee only their own). Amounts are the saved payslip values — nothing
 // is recalculated. Print uses the browser's print dialog ("Save as PDF").
 
-import { use, useEffect, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { use } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import PayslipDocument, { fmtDate, type PayslipCompany } from "@/components/payroll/PayslipDocument";
+import PrintCopy from "@/components/payroll/PayslipPrint";
 import type { EmployeePayslip } from "@/types/payroll";
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draft", sent: "Sent", acknowledged: "Acknowledged", queried: "Queried", resolved: "Resolved", paid: "Paid",
 };
-
-const PRINT_CSS = `
-  @media screen { .payslip-print-root { display: none; } }
-  @media print {
-    @page { size: A4; margin: 10mm; }
-    body > *:not(.payslip-print-root) { display: none !important; }
-    .payslip-print-root { display: block !important; }
-    .payslip-print-root, .payslip-print-root * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .payslip-print-root .payslip-doc { box-shadow: none !important; }
-  }
-`;
-
-/** Print-only copy of the payslip, placed directly under <body> so the print
- *  stylesheet can hide the rest of the app (same approach as the ID card). */
-function PrintCopy({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return null;
-  return createPortal(
-    <div className="payslip-print-root"><style>{PRINT_CSS}</style>{children}</div>,
-    document.body,
-  );
-}
 
 export default function PayslipViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);

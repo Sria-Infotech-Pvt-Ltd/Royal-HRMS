@@ -39,6 +39,7 @@ export default function PayslipQueriesTab() {
             <thead>
               <tr>
                 <th>Employee</th>
+                <th>Payslip</th>
                 <th>Query</th>
                 <th>Raised</th>
                 <th>Status</th>
@@ -48,8 +49,14 @@ export default function PayslipQueriesTab() {
             <tbody>
               {rows.map(q => (
                 <tr key={q.id}>
-                  <td>{q.raised_by_name}</td>
-                  <td style={{ maxWidth: 420 }}>{q.description}</td>
+                  <td>
+                    {q.raised_by_name}
+                    {q.employee_id_code && <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{q.employee_id_code}</div>}
+                  </td>
+                  <td style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                    {q.cycle_start ? new Date(q.cycle_start).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "—"}
+                  </td>
+                  <td style={{ maxWidth: 420, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{q.description}</td>
                   <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtDate(q.created_at)}</td>
                   <td><span className="badge badge-warn">Open</span></td>
                   {canEdit && (

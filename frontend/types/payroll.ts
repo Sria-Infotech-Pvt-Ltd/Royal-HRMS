@@ -302,6 +302,10 @@ export interface PayslipQuery {
   resolved_by: string | null;
   resolved_by_name: string | null;
   resolution_note: string;
+  /** Read-only context added for list screens. */
+  employee_id_code?: string | null;
+  cycle_start?: string | null;
+  resolved_at?: string | null;
   created_at: string;
   updated_at: string;
 }

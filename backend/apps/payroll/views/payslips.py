@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
-from django.db import models as django_models
+from django.db import models as django_models, transaction
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -19,6 +19,7 @@ from apps.payroll.models import (
     PayslipQuery,
     PayrollSettings,
 )
+from apps.payroll.notifications import notify_query_raised, notify_query_resolved
 from apps.payroll.serializers import EmployeePayslipSerializer, PayslipQuerySerializer
 from apps.payroll.views.cycles import _is_admin
 from apps.payroll.views.employee_salary import _resolve_employee
@@ -427,20 +428,37 @@ class AcknowledgePayslipView(APIView):
         return success('Payslip acknowledged.')
 
 
+def _queries_in_scope(user, qs):
+    """
+    Branch scoping for HR, same rule as CyclePayslipListView / PayslipDetailView:
+    without settings.edit, only queries on payslips of your own branch's cycles.
+    """
+    if _has_perm(user, 'settings.edit'):
+        return qs
+    branch_obj = _resolve_user_branch(user)
+    if branch_obj is None:
+        return qs.none()
+    return qs.filter(payslip__cycle__branch=branch_obj)
+
+
 class PayslipQueryListView(APIView):
-    """Employee raises a query / HR lists all open queries."""
+    """
+    GET  — HR (payroll.view): open queries in their scope. Everyone else, or
+           ?mine=1: the user's own queries in any status (their history).
+    POST — employee raises a query on their own payslip.
+    """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if _has_perm(request.user, 'payroll.view'):
-            queries = PayslipQuery.objects.filter(
-                status=PayslipQuery.STATUS_OPEN,
-            ).select_related('payslip', 'payslip__employee', 'raised_by').order_by('-created_at')
+        base = PayslipQuery.objects.select_related(
+            'payslip', 'payslip__cycle', 'payslip__employee', 'raised_by', 'resolved_by',
+        ).order_by('-created_at')
+        mine = str(request.query_params.get('mine', '')).lower() in ('1', 'true', 'yes')
+        if _has_perm(request.user, 'payroll.view') and not mine:
+            queries = _queries_in_scope(request.user, base.filter(status=PayslipQuery.STATUS_OPEN))
         else:
-            queries = PayslipQuery.objects.filter(
-                raised_by=request.user,
-            ).select_related('payslip').order_by('-created_at')
+            queries = base.filter(raised_by=request.user)
 
         serializer = PayslipQuerySerializer(queries, many=True)
         return success('Queries retrieved.', serializer.data)
@@ -450,33 +468,41 @@ class PayslipQueryListView(APIView):
             return error('You do not have permission to view payslips.', http_status=403)
 
         payslip_id = request.data.get('payslip')
-        description = request.data.get('description', '').strip()
+        description = str(request.data.get('description') or '').strip()
 
         if not payslip_id or not description:
             return error('payslip and description are required.')
+        if len(description) > 2000:
+            return error('Please keep the query under 2000 characters.')
 
-        payslip = get_object_or_404(EmployeePayslip, pk=payslip_id, employee=request.user)
+        with transaction.atomic():
+            # Row lock: two quick submissions can't both pass the status check
+            # and create two queries (or two rounds of notifications).
+            payslip = get_object_or_404(
+                EmployeePayslip.objects.select_for_update(), pk=payslip_id, employee=request.user,
+            )
 
-        if payslip.status not in [EmployeePayslip.STATUS_SENT, EmployeePayslip.STATUS_ACKNOWLEDGED]:
-            return error('Queries can only be raised on sent payslips.')
+            if payslip.status not in [EmployeePayslip.STATUS_SENT, EmployeePayslip.STATUS_ACKNOWLEDGED]:
+                return error('Queries can only be raised on sent payslips.')
 
-        if payslip.query_deadline and timezone.now() > payslip.query_deadline:
-            return error('The query window for this payslip has closed.')
+            if payslip.query_deadline and timezone.now() > payslip.query_deadline:
+                return error('The query window for this payslip has closed.')
 
-        query = PayslipQuery.objects.create(
-            payslip=payslip,
-            raised_by=request.user,
-            description=description,
-        )
-        payslip.status = EmployeePayslip.STATUS_QUERIED
-        payslip.save(update_fields=['status', 'updated_at'])
+            query = PayslipQuery.objects.create(
+                payslip=payslip,
+                raised_by=request.user,
+                description=description,
+            )
+            payslip.status = EmployeePayslip.STATUS_QUERIED
+            payslip.save(update_fields=['status', 'updated_at'])
+            transaction.on_commit(lambda: notify_query_raised(query))
 
         logger.info('Payslip query raised by %s on payslip %s', request.user.email, payslip_id)
         return success('Query raised.', PayslipQuerySerializer(query).data, http_status=201)
 
 
 class PayslipQueryResolveView(APIView):
-    """HR resolves an open payslip query."""
+    """HR resolves an open payslip query (within their branch scope)."""
 
     permission_classes = [IsAuthenticated]
 
@@ -484,18 +510,27 @@ class PayslipQueryResolveView(APIView):
         if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can resolve queries.', http_status=403)
 
-        query = get_object_or_404(PayslipQuery, pk=pk, status=PayslipQuery.STATUS_OPEN)
-        resolution_note = request.data.get('resolution_note', '').strip()
+        in_scope = _queries_in_scope(
+            request.user,
+            PayslipQuery.objects.select_related('payslip', 'payslip__cycle', 'raised_by'),
+        )
+        resolution_note = str(request.data.get('resolution_note') or '').strip()
         if not resolution_note:
+            # Checked before the lookup only for a clean message; scope is still enforced below.
+            if not in_scope.filter(pk=pk, status=PayslipQuery.STATUS_OPEN).exists():
+                return error('Query not found.', http_status=404)
             return error('resolution_note is required.')
 
-        query.status = PayslipQuery.STATUS_RESOLVED
-        query.resolved_by = request.user
-        query.resolution_note = resolution_note
-        query.save(update_fields=['status', 'resolved_by', 'resolution_note', 'updated_at'])
+        with transaction.atomic():
+            query = get_object_or_404(in_scope.select_for_update(of=('self',)), pk=pk, status=PayslipQuery.STATUS_OPEN)
+            query.status = PayslipQuery.STATUS_RESOLVED
+            query.resolved_by = request.user
+            query.resolution_note = resolution_note
+            query.save(update_fields=['status', 'resolved_by', 'resolution_note', 'updated_at'])
 
-        query.payslip.status = EmployeePayslip.STATUS_RESOLVED
-        query.payslip.save(update_fields=['status', 'updated_at'])
+            query.payslip.status = EmployeePayslip.STATUS_RESOLVED
+            query.payslip.save(update_fields=['status', 'updated_at'])
+            transaction.on_commit(lambda: notify_query_resolved(query))
 
         logger.info('Query %s resolved by %s', pk, request.user.email)
         return success('Query resolved.', PayslipQuerySerializer(query).data)

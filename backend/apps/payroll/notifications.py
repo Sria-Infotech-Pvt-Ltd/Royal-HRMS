@@ -131,3 +131,55 @@ def notify_l2_approval_required(cycle) -> None:
             'cycle_end':   cycle.cycle_end.strftime('%d %b %Y'),
             'pay_date':    cycle.pay_date.strftime('%d %b %Y'),
         })
+
+
+# ── Payslip queries ──────────────────────────────────────────────────────────
+
+def query_recipients(payslip):
+    """
+    Who is told about a new payslip query: active payroll.edit holders who can
+    resolve it — the cycle's branch staff, plus org-wide admins (settings.edit);
+    every payroll.edit holder when the cycle has no branch. Same scope as the
+    query list / resolve endpoints. Never the employee who raised it.
+    """
+    from django.contrib.auth import get_user_model
+    from django.db.models import Q
+    User = get_user_model()
+
+    qs = User.objects.filter(
+        is_active=True,
+        role__role_permissions__permission__codename='payroll.edit',
+    ).exclude(pk=payslip.employee_id)
+    branch = payslip.cycle.branch
+    if branch is not None:
+        admins = User.objects.filter(role__role_permissions__permission__codename='settings.edit')
+        qs = qs.filter(Q(branch=branch.branch_name) | Q(pk__in=admins.values('pk')))
+    return qs.distinct()
+
+
+def notify_query_raised(query) -> None:
+    """Bell notification to the HR recipients above. Never raises."""
+    from apps.notifications.signals import _notify as _notify_user
+    try:
+        payslip = query.payslip
+        employee = payslip.employee
+        month = payslip.cycle.cycle_start.strftime('%B %Y')
+        who = f'{employee.full_name} ({employee.employee_id})' if employee.employee_id else employee.full_name
+        for hr_user in query_recipients(payslip):
+            _notify_user(hr_user, 'Payslip Query Raised',
+                         f'{who} raised a query on their {month} payslip. Review it in Payroll → Payslip Queries.',
+                         'payslip_query_raised', 'payroll', str(query.id))
+    except Exception:
+        logger.exception('Failed to notify HR about payslip query %s', getattr(query, 'id', None))
+
+
+def notify_query_resolved(query) -> None:
+    """Bell notification to the employee who raised the query. Never raises."""
+    from apps.notifications.signals import _notify as _notify_user
+    try:
+        month = query.payslip.cycle.cycle_start.strftime('%B %Y')
+        _notify_user(query.raised_by, 'Payslip Query Resolved',
+                     f'HR has responded to your query on the {month} payslip. See My Payslips for the resolution.',
+                     'payslip_query_resolved', 'payroll', str(query.id))
+    except Exception:
+        logger.exception('Failed to notify employee about resolved payslip query %s', getattr(query, 'id', None))

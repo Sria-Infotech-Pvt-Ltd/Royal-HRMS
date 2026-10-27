@@ -1,14 +1,15 @@
 "use client";
 
+// "My Attendance Today" — the signed-in user's own day (GET /attendance/today/,
+// which only ever reads request.user). Used on the HR dashboard and the
+// System Console. Refreshes after a dashboard punch (refreshKey) and after any
+// other punch the app announces with the "attendance:updated" event.
+
+import { useEffect, useRef } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { todayView } from "@/lib/attendanceToday";
 import type { AttendanceToday, AttendancePunch } from "@/types/dashboard";
-
-function formatSeconds(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  return `${h}h ${m}m`;
-}
 
 function modeLabel(mode: string): string {
   if (mode === "office") return "Office";
@@ -16,35 +17,61 @@ function modeLabel(mode: string): string {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
-export default function HrAttendanceCard() {
-  const { data, loading } = useFetch<AttendanceToday>(API.attendance.today);
+export default function HrAttendanceCard({ refreshKey }: { refreshKey?: number } = {}) {
+  const { data, loading, error, refetch } = useFetch<AttendanceToday>(API.attendance.today);
+  const view = todayView(data, loading, error);
 
-  const firstIn  = data?.punches.find((p: AttendancePunch) => p.type === "IN");
-  const lastOut  = [...(data?.punches ?? [])].reverse().find((p: AttendancePunch) => p.type === "OUT");
-  const isClockedIn = data?.is_clocked_in ?? false;
+  // Re-read after a punch made from the dashboard's own Clock In/Out button.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    refetch();
+  }, [refreshKey, refetch]);
+
+  // …and after punches made elsewhere (voice command, live notification).
+  useEffect(() => {
+    window.addEventListener("attendance:updated", refetch);
+    return () => window.removeEventListener("attendance:updated", refetch);
+  }, [refetch]);
+
+  const isClockedIn = view.kind === "present" && view.isClockedIn;
 
   return (
     <div className="card">
       <div className="card-header">
         <div className="card-title"><i className="ti ti-clock-hour-4" /> My Attendance Today</div>
-        {!loading && data && (
-          <span style={{
-            display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700,
-            padding: "3px 10px", borderRadius: 20,
-            background: isClockedIn ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.10)",
-            color:      isClockedIn ? "#16a34a"               : "#dc2626",
-          }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: isClockedIn ? "#16a34a" : "#dc2626", flexShrink: 0 }} />
-            {isClockedIn ? "Clocked In" : "Clocked Out"}
-          </span>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {loading && data && (
+            <i className="ti ti-loader-2 spin" style={{ color: "var(--on-variant)", fontSize: 13 }} aria-label="Refreshing" />
+          )}
+          {(view.kind === "present" || view.kind === "empty") && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700,
+              padding: "3px 10px", borderRadius: 20,
+              background: isClockedIn ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.10)",
+              color:      isClockedIn ? "#16a34a"               : "#dc2626",
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: isClockedIn ? "#16a34a" : "#dc2626", flexShrink: 0 }} />
+              {isClockedIn ? "Clocked In" : "Clocked Out"}
+            </span>
+          )}
+        </div>
       </div>
 
-      {loading ? (
+      {view.kind === "loading" ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
         </div>
-      ) : !data || data.punches.length === 0 ? (
+      ) : view.kind === "error" ? (
+        <div style={{ padding: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, color: "var(--error)" }}>
+            <i className="ti ti-alert-circle" /> {view.message}
+          </span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={refetch}>
+            <i className="ti ti-refresh" /> Retry
+          </button>
+        </div>
+      ) : view.kind === "empty" ? (
         <div style={{ padding: "24px 20px", textAlign: "center" }}>
           <i className="ti ti-clock-off" style={{ fontSize: 28, color: "var(--on-variant)", opacity: 0.4, display: "block", marginBottom: 8 }} />
           <div style={{ fontSize: 13, color: "var(--on-variant)" }}>Not clocked in yet</div>
@@ -52,11 +79,11 @@ export default function HrAttendanceCard() {
       ) : (
         <div style={{ padding: "12px 20px 16px" }}>
           {/* Stat tiles */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 14 }}>
             {[
-              { icon: "ti-login",  label: "First Punch In",  val: firstIn?.time  ?? "—" },
-              { icon: "ti-logout", label: "Last Punch Out",  val: lastOut?.time  ?? "—" },
-              { icon: "ti-clock",  label: "Total Time",      val: data.total_seconds > 0 ? formatSeconds(data.total_seconds) : "—" },
+              { icon: "ti-login",  label: "First Punch In",  val: view.firstIn },
+              { icon: "ti-logout", label: "Last Punch Out",  val: view.lastOut },
+              { icon: "ti-clock",  label: "Total Time",      val: view.total },
             ].map(item => (
               <div key={item.label} style={{ padding: "10px 12px", borderRadius: 8, background: "var(--bg-high)", textAlign: "center" }}>
                 <i className={`ti ${item.icon}`} style={{ fontSize: 18, color: "var(--primary)", display: "block", marginBottom: 4 }} />
@@ -71,7 +98,7 @@ export default function HrAttendanceCard() {
             Punch Log
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {data.punches.map((punch: AttendancePunch, index: number) => (
+            {view.punches.map((punch: AttendancePunch, index: number) => (
               <div key={index} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 7, background: "var(--bg-high)" }}>
                 <span style={{
                   width: 28, height: 28, borderRadius: 6, flexShrink: 0,

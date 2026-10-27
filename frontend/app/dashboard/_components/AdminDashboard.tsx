@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import ClockInButton         from "@/components/ClockInButton";
 import KpiConsole            from "@/components/dashboard/KpiConsole";
+import HrAttendanceCard      from "@/components/dashboard/hr/HrAttendanceCard";
 import AnnouncementCard      from "@/components/dashboard/AnnouncementCard";
 import PendingApprovalsWidget from "@/components/dashboard/PendingApprovalsWidget";
 import DeptHeadcountChart    from "@/components/dashboard/DeptHeadcountChart";
@@ -30,11 +33,17 @@ const QUICK_ACTIONS: QuickAction[] = [
 
 export default function AdminDashboard({ session }: Props) {
   const firstName = session.name.split(" ")[0];
+  // Bumped after the user's own Clock In/Out so "My Attendance Today" re-reads.
+  const [attendanceKey, setAttendanceKey] = useState(0);
 
   return (
     <>
-      {/* KPI Console — welcome + health pills + live stats */}
-      <KpiConsole firstName={firstName} />
+      {/* KPI Console — welcome + health pills + live stats, plus the signed-in
+          user's own Clock In/Out (the same control the HR / manager consoles use). */}
+      <KpiConsole
+        firstName={firstName}
+        actions={<ClockInButton onPunchSuccess={() => setAttendanceKey(k => k + 1)} />}
+      />
 
       {/* Announcement */}
       <AnnouncementCard />
@@ -70,7 +79,8 @@ export default function AdminDashboard({ session }: Props) {
           <PendingApprovalsWidget />
           <DeptHeadcountChart />
         </div>
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <HrAttendanceCard refreshKey={attendanceKey} />
           <EmployeeLifecycleTabs />
         </div>
       </div>
