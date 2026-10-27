@@ -71,8 +71,16 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
     }
   }
 
+  // Modal renders its footer through a React portal straight to
+  // document.body, so a <form> wrapping <Modal> never actually contains
+  // the footer in the real DOM -- a type="submit" button there has no
+  // form owner (button.form === null) and native submission silently does
+  // nothing. The id/form attribute pair associates them by id instead of
+  // DOM nesting, which works regardless of the portal.
+  const formId = "regularization-form";
+
   return (
-    <form onSubmit={handleSubmit}>
+    <form id={formId} onSubmit={handleSubmit}>
       <Modal
         title={
           <>
@@ -87,7 +95,7 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
             <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-filled" disabled={submitting}>
+            <button type="submit" form={formId} className="btn btn-filled" disabled={submitting}>
               {submitting
                 ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Submitting…</>
                 : <><i className="ti ti-send" /> Submit Request</>
