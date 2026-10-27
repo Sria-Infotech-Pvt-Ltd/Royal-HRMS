@@ -25,12 +25,18 @@ export function viewAsHeaderFor(url: string | undefined): { name: string; value:
 }
 
 /** The workspace page for an employee, read-only. */
-export function viewWorkspacePath(employeeUuid: string): string {
-  return `/dashboard/ess?as=${employeeUuid}`;
+export function viewWorkspacePath(employee: string): string {
+  return `/dashboard/ess?as=${encodeURIComponent(employee)}`;
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The admin profile page of an employee (tabs, salary, actions) — bypasses the redirect to their workspace. */
+export function adminProfilePath(employeeCode: string): string {
+  return `/dashboard/employees/${encodeURIComponent(employeeCode)}?view=profile`;
+}
 
-export function isEmployeeUuid(value: string | null | undefined): value is string {
-  return !!value && UUID_PATTERN.test(value);
+// An employee's id (uuid) or their employee code (EMP00081, UAT26-050, ...): what the profile page address carries.
+const VIEW_AS_TARGET_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/;
+
+export function isViewAsTarget(value: string | null | undefined): value is string {
+  return !!value && VIEW_AS_TARGET_PATTERN.test(value);
 }

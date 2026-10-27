@@ -58,17 +58,18 @@ class CookieJWTAuthentication(_JWTAuthentication):
             raise exceptions.PermissionDenied('Viewing as another employee is read-only.')
         if not has_perm(viewer, VIEW_AS_PERMISSION):
             raise exceptions.PermissionDenied('You do not have permission to view another employee\'s workspace.')
-        try:
-            target_uuid = uuid.UUID(target_id)
-        except ValueError:
-            raise exceptions.PermissionDenied('Unknown employee.')
-        if target_uuid == viewer.pk:
-            return viewer
-
         from apps.accounts.models import User
-        target = User.objects.filter(pk=target_uuid, is_active=True).first()
+
+        # The employee's id, or their employee code (what the profile page address carries).
+        try:
+            lookup = {'pk': uuid.UUID(target_id)}
+        except ValueError:
+            lookup = {'employee_id': target_id}
+        target = User.objects.filter(is_active=True, **lookup).first()
         if target is None:
             raise exceptions.PermissionDenied('Unknown employee.')
+        if target.pk == viewer.pk:
+            return viewer
 
         self._audit_view_as(request, viewer, target)
         target.viewed_by = viewer  # lets views tell "the employee" from the person looking

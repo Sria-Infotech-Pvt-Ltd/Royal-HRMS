@@ -1,10 +1,12 @@
 "use client";
 
 import { use, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import { viewWorkspacePath } from "@/lib/viewAs";
 import { useFetch } from "@/hooks/useFetch";
 import type { CustomFieldFileValue, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
@@ -41,6 +43,17 @@ export default function EmployeeProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
+  // Opening an employee, from anywhere, shows their workspace (what they see after login), read-only — for people
+  // allowed to. The admin profile (tabs, salary, actions) is still here, reached with ?view=profile.
+  const canViewWorkspace = usePermission("employees.view_workspace");
+  const [isOpeningWorkspace, setIsOpeningWorkspace] = useState(false);
+  useEffect(() => {
+    if (!canViewWorkspace) return;
+    if (new URLSearchParams(window.location.search).get("view") === "profile") return;
+    setIsOpeningWorkspace(true);
+    router.replace(viewWorkspacePath(id));
+  }, [canViewWorkspace, id, router]);
   const canEdit = usePermission("employees.edit");
   const canEditOnboarding = usePermission("onboarding.edit");
   const [tab,       setTab]       = useState<string>("profile");
@@ -161,6 +174,10 @@ export default function EmployeeProfilePage({
   const dirty =
     JSON.stringify(values) !== JSON.stringify(baseValues) ||
     JSON.stringify(tables) !== JSON.stringify(baseTables);
+
+  if (isOpeningWorkspace) {
+    return <div style={{ padding: 40, textAlign: "center", color: "var(--on-variant)" }}>Opening workspace…</div>;
+  }
 
   if (loading) {
     return (

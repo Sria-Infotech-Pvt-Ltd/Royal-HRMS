@@ -59,11 +59,16 @@ class ViewAsEmployeeTests(TestCase):
             self.assertEqual(resp.status_code, 403, f'{method} should be refused: {resp.data}')
 
     def test_an_unknown_or_inactive_employee_is_refused(self):
-        self.assertEqual(_client_for(self.superuser, 'not-a-uuid').get(ME_URL).status_code, 403)
+        self.assertEqual(_client_for(self.superuser, 'NO-SUCH-CODE').get(ME_URL).status_code, 403)
         self.assertEqual(_client_for(self.superuser, '00000000-0000-0000-0000-000000000000').get(ME_URL).status_code, 403)
         self.other.is_active = False
         self.other.save(update_fields=['is_active'])
         self.assertEqual(_client_for(self.superuser, self.other.pk).get(ME_URL).status_code, 403)
+
+    def test_an_employee_code_works_like_the_id(self):
+        resp = _client_for(self.superuser, 'VAE001').get(ME_URL)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data['data']['full_name'], 'Target Employee')
 
     def test_viewing_as_yourself_is_just_your_own_data(self):
         resp = _client_for(self.superuser, self.superuser.pk).get(ME_URL)

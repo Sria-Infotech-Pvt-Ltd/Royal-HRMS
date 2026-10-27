@@ -27,6 +27,7 @@ import ProfilePhotoModal from "@/components/ProfilePhotoModal";
 import SeparationCard from "./_components/SeparationCard";
 import ProfileDocumentsCard from "./ProfileDocumentsCard";
 import ProfileFaceIdCard from "./ProfileFaceIdCard";
+import { adminProfilePath } from "@/lib/viewAs";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import {
   type ProfileData, type DocumentItem,
@@ -184,7 +185,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           {canEditDirectly ? (
             <button
               type="button"
-              onClick={() => router.push(`/dashboard/employees/${profile?.employee_id}`)}
+              onClick={() => router.push(adminProfilePath(profile?.employee_id ?? ""))}
               disabled={!profile?.employee_id}
               style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
             >
@@ -274,7 +275,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           onClose={() => setShowRecord(false)}
           onRequestCorrection={() => {
             setShowRecord(false);
-            if (canEditDirectly) router.push(`/dashboard/employees/${profile.employee_id}`);
+            if (canEditDirectly) router.push(adminProfilePath(profile.employee_id));
             // Direct-edit is only offered when the account actually holds
             // employees.edit_own_profile — otherwise this must go through
             // the real HR-approved request flow (ProfileCorrectionModal),

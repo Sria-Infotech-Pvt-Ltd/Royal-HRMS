@@ -1,6 +1,6 @@
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
-import { isEmployeeUuid } from "@/lib/viewAs";
+import { isViewAsTarget } from "@/lib/viewAs";
 import EssShellClient from "./_client";
 
 // My Workspace — a single consolidated entry point that tabs together the
@@ -11,11 +11,11 @@ import EssShellClient from "./_client";
 // old routes keep working unchanged for anyone with them bookmarked; this is
 // an additional entry point, not a replacement.
 //
-// With ?as=<employee id>, someone allowed to (employees.view_workspace, enforced by the server) sees that
+// With ?as=<employee id or code>, someone allowed to (employees.view_workspace, enforced by the server) sees that
 // employee's own workspace, read-only.
 export default async function EssPage({ searchParams }: { searchParams: Promise<{ as?: string }> }) {
   const session = await getSession();
   if (!session) redirect("/login");
   const { as: viewAs } = await searchParams;
-  return <EssShellClient session={session} viewAsEmployee={isEmployeeUuid(viewAs) ? viewAs : undefined} />;
+  return <EssShellClient session={session} viewAsEmployee={isViewAsTarget(viewAs) ? viewAs : undefined} />;
 }

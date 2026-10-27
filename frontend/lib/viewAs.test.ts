@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { isEmployeeUuid, setViewAsEmployee, viewAsHeaderFor, viewWorkspacePath } from "./viewAs";
+import { adminProfilePath, isViewAsTarget, setViewAsEmployee, viewAsHeaderFor, viewWorkspacePath } from "./viewAs";
 
 const EMPLOYEE = "7f9c1d2e-3a4b-4c5d-8e6f-0123456789ab";
 
@@ -26,9 +26,17 @@ describe("view as employee", () => {
     expect(viewWorkspacePath(EMPLOYEE)).toBe(`/dashboard/ess?as=${EMPLOYEE}`);
   });
 
-  it("only accepts a real employee id", () => {
-    expect(isEmployeeUuid(EMPLOYEE)).toBe(true);
-    expect(isEmployeeUuid("EMP00081")).toBe(false);
-    expect(isEmployeeUuid(undefined)).toBe(false);
+  it("accepts an employee id or an employee code, and nothing else", () => {
+    expect(isViewAsTarget(EMPLOYEE)).toBe(true);
+    expect(isViewAsTarget("EMP00081")).toBe(true);
+    expect(isViewAsTarget("UAT26-050")).toBe(true);
+    expect(isViewAsTarget("../../etc")).toBe(false);
+    expect(isViewAsTarget("a b")).toBe(false);
+    expect(isViewAsTarget(undefined)).toBe(false);
+  });
+
+  it("builds the workspace address from an employee code and the admin profile address", () => {
+    expect(viewWorkspacePath("EMP00081")).toBe("/dashboard/ess?as=EMP00081");
+    expect(adminProfilePath("EMP00081")).toBe("/dashboard/employees/EMP00081?view=profile");
   });
 });
