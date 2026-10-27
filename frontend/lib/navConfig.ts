@@ -1,5 +1,7 @@
 export interface NavSection {
   section: string;
+  /** Where the section's pages live: a dropdown on the top bar (default) or the profile menu. */
+  placement?: "bar" | "profile";
 }
 export interface NavItem {
   id: string;
@@ -11,6 +13,8 @@ export interface NavItem {
   comingSoon?: boolean;       // true = non-clickable, shows "Soon" badge
   /** Shorter label for the flat top-nav strip, where the sidebar's fuller label doesn't fit — falls back to `label` when unset. */
   topNavLabel?: string;
+  /** Renders as a direct link on the top bar instead of inside its section's dropdown. */
+  pinned?: boolean;
 }
 export type NavEntry = NavSection | NavItem;
 
@@ -20,8 +24,8 @@ export function isSection(e: NavEntry): e is NavSection {
 
 const ALL_NAV: NavEntry[] = [
   { section: "Main" },
-  { id: "dashboard", icon: "ti-layout-dashboard", label: "Dashboard", path: "/dashboard", permission: null },
-  { id: "announcements", icon: "ti-speakerphone", label: "Announcements", path: "/dashboard/announcements", permission: "announcements.view" },
+  { id: "dashboard", icon: "ti-layout-dashboard", label: "Dashboard", path: "/dashboard", permission: null, pinned: true },
+  { id: "announcements", icon: "ti-speakerphone", label: "Announcements", path: "/dashboard/announcements", permission: "announcements.view", pinned: true },
 
   { section: "Recruitment" },
   { id: "interview-list", icon: "ti-users", label: "Interview List", path: "/dashboard/interview-list", permission: "recruitment.view" },
@@ -55,11 +59,15 @@ const ALL_NAV: NavEntry[] = [
   { id: "separation", icon: "ti-logout", label: "Separation & Exit", path: "/dashboard/separation", permission: null },
   { id: "documents", icon: "ti-folder", label: "Document Center", path: "/dashboard/documents", permission: "documents.view" },
 
-  { section: "My" },
+  { section: "My", placement: "profile" },
   // My Workspace is the single navigation entry for self-service modules
   // that also have legacy standalone routes. Those routes remain available
   // for bookmarks and deep links; distinct modules stay in the nav below.
   { id: "ess", icon: "ti-apps", label: "My Workspace", path: "/dashboard/ess", permission: null },
+  // Self-service pages that had no link anywhere in the navigation; reachable from the profile menu.
+  { id: "my-attendance", icon: "ti-clock", label: "My Attendance", path: "/dashboard/my-attendance", permission: null },
+  { id: "my-requests", icon: "ti-checklist", label: "My Requests", path: "/dashboard/my-requests", permission: null },
+  { id: "my-payslips", icon: "ti-receipt-2", label: "My Payslips", path: "/dashboard/my-payslip", permission: null },
   // My Assessments is the employee entry point to the shared assessments page;
   // it is not a tab in My Workspace.
   // Same path as the admin "Assessments" entry above (Recruitment section) —
@@ -69,6 +77,7 @@ const ALL_NAV: NavEntry[] = [
   // (i.e. everyone assigned an onboarding assessment) had no sidebar link.
   { id: "my-assessments", icon: "ti-clipboard-check", label: "My Assessments", path: "/dashboard/assessments", permission: null },
   { id: "referrals", icon: "ti-user-plus", label: "My Referrals", path: "/dashboard/referrals", permission: null },
+  { id: "my-profile", icon: "ti-user-circle", label: "My Profile", path: "/dashboard/profile", permission: null },
 
   { section: "System" },
   { id: "reports", icon: "ti-chart-bar", label: "Reports", path: "/dashboard/reports", permission: null },
@@ -101,4 +110,40 @@ export function buildNav(permissions: string[]): NavEntry[] {
     }
   }
   return result;
+}
+
+/** One entry on the top bar: a direct link, or a dropdown holding a section's pages. */
+export type BarEntry =
+  | { kind: "link"; item: NavItem }
+  | { kind: "menu"; id: string; title: string; items: NavItem[] };
+
+export interface NavGroups {
+  bar: BarEntry[];
+  /** The pages shown in the profile menu. */
+  profile: NavItem[];
+}
+
+/**
+ * Groups the permission-filtered nav (buildNav's output) for the top bar. A section with no visible pages
+ * disappears, a section with exactly one becomes a plain link, and "profile" sections go to the profile menu.
+ */
+export function groupNav(entries: NavEntry[]): NavGroups {
+  const sections: { section: NavSection; items: NavItem[] }[] = [];
+  for (const entry of entries) {
+    if (isSection(entry)) sections.push({ section: entry, items: [] });
+    else sections[sections.length - 1]?.items.push(entry);
+  }
+
+  const groups: NavGroups = { bar: [], profile: [] };
+  for (const { section, items } of sections) {
+    if (section.placement === "profile") {
+      groups.profile.push(...items);
+      continue;
+    }
+    const inMenu = items.filter(item => !item.pinned);
+    items.filter(item => item.pinned).forEach(item => groups.bar.push({ kind: "link", item }));
+    if (inMenu.length === 1) groups.bar.push({ kind: "link", item: inMenu[0] });
+    else if (inMenu.length > 1) groups.bar.push({ kind: "menu", id: section.section.toLowerCase().replace(/\W+/g, "-"), title: section.section, items: inMenu });
+  }
+  return groups;
 }

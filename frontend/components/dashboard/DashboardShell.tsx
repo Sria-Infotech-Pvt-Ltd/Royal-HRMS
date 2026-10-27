@@ -1,27 +1,22 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { SessionPayload } from "@/lib/session";
 import { clearAuth } from "@/lib/auth";
 import clientApi, { markIntentionalLogout } from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import {
-  buildNav, isSection,
-  type NavItem,
-} from "@/lib/navConfig";
+import { buildNav, groupNav, isSection, type NavItem } from "@/lib/navConfig";
 import { NotificationBell } from "@/components/NotificationBell";
 import GlobalSearch from "@/components/dashboard/GlobalSearch";
 import DarkModeToggle from "@/components/dashboard/DarkModeToggle";
 import DashboardFooter from "@/components/dashboard/DashboardFooter";
 import { useFetch } from "@/hooks/useFetch";
-import Avatar from "@/app/dashboard/employees/_components/Avatar";
-import { NAV_ICONS } from "@/components/dashboard/NavIcons";
+import TopNavLinks from "@/components/dashboard/TopNavLinks";
+import ProfileMenu from "@/components/dashboard/ProfileMenu";
+import { useOpenMenu } from "@/hooks/useOpenMenu";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
-
-function initials(name: string) {
-  return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
-}
 
 export default function DashboardShell({
   session,
@@ -53,21 +48,10 @@ export default function DashboardShell({
     return () => window.removeEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
   }, [refetchMyProfile]);
 
-  // The nav row scrolls horizontally with its scrollbar hidden — on a
-  // narrow/zoomed viewport with ~28 items, the active page's own link could
-  // sit off-screen with no indication where it went. Scrolls it into view
-  // whenever the active page changes, instead of always landing back at
-  // the (possibly unrelated) leftmost item.
-  const activeLinkRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => {
-    activeLinkRef.current?.scrollIntoView({ block: "nearest", inline: "center" });
-  }, [pathname]);
-
-
   const visibleNav = buildNav(session.permissions ?? []);
-  // Top-nav layout (matching the AIRA mockup's single-row navlinks) has no
-  // room for the sidebar's section subheadings — every entry renders as one
-  // flat, horizontally scrollable strip, section labels dropped, order kept.
+  // The bar groups the pages into dropdowns by section (groupNav); the flat list still feeds global search and
+  // the active-page lookup below.
+  const navGroups = groupNav(visibleNav);
   const navItems = visibleNav.filter((entry): entry is NavItem => !isSection(entry));
   const canSearchEmployees = (session.permissions ?? []).includes("employees.view");
 
@@ -93,6 +77,12 @@ export default function DashboardShell({
     router.push(path);
   }
 
+  const isEssPage = pathname.startsWith("/dashboard/ess");
+  const menu = useOpenMenu(pathname);
+  const currentUser = useCurrentUser();
+  // The workspace shell has its own profile tab; keep sending "My Profile" there from inside it.
+  const navigateFromMenu = (path: string) => navigate(isEssPage && path === "/dashboard/profile" ? "/dashboard/ess?tab=profile" : path);
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
 
@@ -111,88 +101,33 @@ export default function DashboardShell({
           </div>
         </div>
 
-        {/* Horizontal scrollable nav links — hidden on the ESS shell, which
-            has its own complete tab bar (Home/My profile/Attendance/...);
-            showing both stacked one above the other is redundant. */}
-        {!pathname.startsWith("/dashboard/ess") && (
-        <nav
-          className={[
-            "navlinks",
-            "flex",
-            "order-3 md:order-none basis-full md:basis-auto",
-          ].join(" ")}
-        >
-          {navItems.map(item => {
-            const isActive = !item.comingSoon && item.id === activeNavId;
-            if (item.comingSoon) {
-              return (
-                <div
-                  key={item.id}
-                  className="navlink"
-                  style={{ cursor: "not-allowed", opacity: 0.6 }}
-                  title={`${item.label} — Coming Soon`}
-                >
-                  {NAV_ICONS[item.id] ?? <i className={`ti ${item.icon}`} style={{ fontSize: 14 }} />}
-                  {item.topNavLabel ?? item.label}
-                  <span style={{ fontSize: 8.5, fontWeight: 700, background: "var(--line)", color: "var(--faint)", padding: "1px 5px", borderRadius: 99, letterSpacing: "0.04em" }}>
-                    SOON
-                  </span>
-                </div>
-              );
-            }
-            return (
-              <button
-                key={item.id}
-                ref={isActive ? activeLinkRef : undefined}
-                className={`navlink${isActive ? " on" : ""}`}
-                onClick={() => navigate(item.path)}
-                suppressHydrationWarning
-              >
-                {NAV_ICONS[item.id] ?? <i className={`ti ${item.icon}`} style={{ fontSize: 14 }} />}
-                {item.topNavLabel ?? item.label}
-                {item.badge && (
-                  <span className="text-[9.5px] font-bold bg-[var(--brand)] text-white px-1.5 py-px rounded-full flex-shrink-0">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-        )}
+        {/* Page links grouped into dropdowns — hidden on the ESS shell, which has its own tab bar. */}
+        {!isEssPage && <TopNavLinks bar={navGroups.bar} activeNavId={activeNavId} menu={menu} onNavigate={navigate} />}
+        {isEssPage && <div className="flex-1" />}
 
         {/* Right-side utilities */}
         <div className="navright order-2 md:order-none">
           {/* Hidden on the ESS shell, as in the reference (.ess-mode .navsearch). */}
-          {!pathname.startsWith("/dashboard/ess") && (
+          {!isEssPage && (
             <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
           )}
           <DarkModeToggle />
           <NotificationBell />
-          <button
-            className="who-chip"
-            onClick={() => navigate(
-              pathname.startsWith("/dashboard/ess") ? "/dashboard/ess?tab=profile" : "/dashboard/profile",
-            )}
-            title="My Profile"
-            suppressHydrationWarning
-          >
-            <Avatar text={initials(session.name)} size={24} photoUrl={myProfile?.profile_photo_url} />
-            <span className="whitespace-nowrap hidden lg:inline">{session.name}</span>
-          </button>
-          <button
-            className="iconbtn"
-            onClick={handleLogout}
-            title="Sign out"
-            suppressHydrationWarning
-          >
-            <i className="ti ti-logout text-[16px]" />
-          </button>
+          <ProfileMenu
+            name={session.name}
+            subtitle={currentUser?.is_superuser ? "All permissions" : (session.designation || session.email)}
+            photoUrl={myProfile?.profile_photo_url}
+            items={navGroups.profile}
+            activeNavId={activeNavId}
+            menu={menu}
+            onNavigate={navigateFromMenu}
+            onLogout={handleLogout}
+          />
         </div>
       </header>
 
       {/* ══════════════════ CONTENT ══════════════════ */}
-      <main className={`flex-1 overflow-y-auto bg-[var(--bg)]${isFitPage ? " flex flex-col" : ""}`}>
+      <main className={`min-h-0 flex-1 overflow-y-auto bg-[var(--bg)]${isFitPage ? " flex flex-col" : ""}`}>
         {/* The ESS shell uses the reference's .module-page spacing
             (16px 24px 40px) instead of the standard page gutter.
             The Employee Directory is a "fit" page (as in the reference): the wrapper fills <main>
