@@ -17,6 +17,7 @@ import {
 import LeaderFields from "./LeaderFields";
 import BranchCard from "./BranchCard";
 import EmployeeDistributionChart from "./EmployeeDistributionChart";
+import BranchLocationPreview from "./BranchLocationPreview";
 import { TransferConfirmModal, HqConfirmModal, DeleteConfirmModal, type TransferConfirmState } from "./BranchConfirmModals";
 
 export default function BranchManagement() {
@@ -215,7 +216,12 @@ export default function BranchManagement() {
         if (!lon) errs.longitude = "Both latitude and longitude must be provided together.";
       } else {
         if (isNaN(Number(lat))) errs.latitude  = "Latitude must be a valid number.";
+        else if (Math.abs(Number(lat)) > 90) errs.latitude = "Latitude must be between -90 and 90 degrees.";
         if (isNaN(Number(lon))) errs.longitude = "Longitude must be a valid number.";
+        else if (Math.abs(Number(lon)) > 180) errs.longitude = "Longitude must be between -180 and 180 degrees.";
+        if (!errs.latitude && !errs.longitude && Number(lat) === 0 && Number(lon) === 0) {
+          errs.latitude = "0, 0 is not a real office location. Enter the office coordinates.";
+        }
       }
 
       const radius = editForm.allowed_radius_meters.trim();
@@ -829,7 +835,7 @@ export default function BranchManagement() {
                           setFieldErrors(prev => { const n = {...prev}; delete n.latitude; return n; });
                           setEditForm({ ...editForm, latitude: e.target.value });
                         }}
-                        placeholder="e.g. 19.0760"
+                        placeholder="Latitude of the office entrance"
                       />
                       {fieldErrors.latitude && <p className="field-error-msg">{fieldErrors.latitude}</p>}
                     </div>
@@ -844,15 +850,27 @@ export default function BranchManagement() {
                           setFieldErrors(prev => { const n = {...prev}; delete n.longitude; return n; });
                           setEditForm({ ...editForm, longitude: e.target.value });
                         }}
-                        placeholder="e.g. 72.8777"
+                        placeholder="Longitude of the office entrance"
                       />
                       {fieldErrors.longitude && <p className="field-error-msg">{fieldErrors.longitude}</p>}
                     </div>
                   </div>
                   <div style={{ fontSize: "11px", color: "var(--on-variant)", marginTop: "-8px", marginBottom: "16px" }}>
                     <i className="ti ti-info-circle" style={{ marginRight: "4px" }} />
-                    Enter the GPS coordinates of the office entrance. Use Google Maps — right-click the location and copy the coordinates.
+                    Enter the GPS coordinates of the office entrance. Use Google Maps — right-click the location and copy the coordinates —
+                    or stand at the office and use &ldquo;Use my current location&rdquo;.
                   </div>
+                  <BranchLocationPreview
+                    latitude={editForm.latitude}
+                    longitude={editForm.longitude}
+                    stateId={editForm.state}
+                    cityId={editForm.city}
+                    radiusMeters={editForm.allowed_radius_meters}
+                    onUseLocation={(latitude, longitude) => {
+                      setFieldErrors(prev => { const next = { ...prev }; delete next.latitude; delete next.longitude; return next; });
+                      setEditForm({ ...editForm, latitude, longitude });
+                    }}
+                  />
 
                   <div className="form-row">
                     <div className="field-group">

@@ -273,3 +273,31 @@ def generate_branch_code(city_name: str) -> str:
         default=0,
     )
     return f"{prefix}-{max_num + 1:02d}"
+
+
+def branch_employee_counts() -> dict:
+    """Active employees per branch, keyed by Branch pk.
+
+    An employee is counted under the branch they are linked to (branch_fk). Employees who only have the legacy
+    `branch` name text (created before the link was kept in sync, or by a flow that sets the text alone) are counted
+    under the branch whose name matches it, so a missing link never shows as zero employees.
+    """
+    from django.db.models import Count
+
+    from apps.accounts.models import User
+    from apps.branch.models import Branch
+
+    counts = dict(
+        User.objects.filter(is_active=True, branch_fk__isnull=False)
+        .values('branch_fk_id').annotate(count=Count('id')).values_list('branch_fk_id', 'count')
+    )
+    by_name = {branch.branch_name.strip().lower(): branch.pk for branch in Branch.objects.only('pk', 'branch_name')}
+    unlinked = (
+        User.objects.filter(is_active=True, branch_fk__isnull=True).exclude(branch='')
+        .values('branch').annotate(count=Count('id')).values_list('branch', 'count')
+    )
+    for name, count in unlinked:
+        branch_pk = by_name.get((name or '').strip().lower())
+        if branch_pk is not None:
+            counts[branch_pk] = counts.get(branch_pk, 0) + count
+    return counts

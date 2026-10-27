@@ -4494,3 +4494,24 @@ Decisions: (1) permissions are attached to each **Position** (seat); whoever hol
 - `ApprovalStep.tsx`'s L2 section said "Waiting for all managers (L1) to approve first" even when zero managers exist (the actual contradiction reported) -- now says HR/Admin must complete L1 directly in that case.
 - The backend's L1 bypass path (no manager rows at all) already existed and worked, but never set `hr_self_approved_at` -- only the separate L2 self-approve path did. Since this branch only ever runs when there is no manager to defer to, it now sets `hr_self_approved_at` too (the ticket's "implement the HR/Admin approval path using hr_self_approved_at" ask) -- a real per-manager-row approval (the managers-ARE-configured case) still never touches this field.
 - Tests: `apps/payroll/tests_attendance_approval_hr_bypass.py` (11 new: no-managers visibility for HR and superuser, HR L1+L2 approval unlocks the cycle, non-HR/non-manager still refused, and the managers-configured case is unaffected -- HR still sees it, cannot bypass L1 when a real manager row exists, and a real manager's approval never sets hr_self_approved_at). Full `apps.payroll` suite: no regressions.
+
+### 16. Branch location, geofence validation and branch employee counts (UAT-040)
+**Bug:** UAT showed Kondapur with latitude 19.0 / longitude 72.88 (Mumbai), geofencing on and a 150 m radius, so Hyderabad staff were refused ("outside your assigned office location"); the address text looked corrupted; and every branch showed 0 employees.
+
+**Causes**
+- The branch form's example text for latitude/longitude was Mumbai's coordinates (19.0760 / 72.8777); the live values were almost certainly typed from it. The form and the API accepted any number (no range check), and a wrong-but-valid coordinate raised no warning.
+- Branch employee counts read `User.branch_fk`, which an old migration (0133) filled once. Employees created later (hire wizard, bulk import, candidate conversion) only get the `branch` name text, so they were never counted. On UAT that is every employee.
+
+**What changed**
+- `apps/branch/geo.py`: `coordinate_errors` (latitude -90..90, longitude -180..180, both or neither, not 0/0) are REJECTED on save; `location_warnings` (outside the branch's state box, or more than 60 km from a known city centre) are ADVISORY and never block. The state boxes and city centres are approximate reference data used only for warnings, never written to a branch. Radius must be 10-5000 m. The same rules apply to `PUT /branch/branches/<id>/` and `PUT .../geofencing/`; both return `location_warnings`. `POST /branch/branches/check-location/` checks a pair without saving.
+- Company Codes form: map preview (OpenStreetMap embed), live server check, "Use my current location" button, range checks, neutral placeholders (no real coordinates), and a "Check location" badge on a branch card whose coordinates look wrong.
+- Employee counts: `apps.branch.utils.branch_employee_counts()` counts by `branch_fk` and, for employees without it, by matching `branch` text, and is used by the list, distribution and serializer. A `post_save` signal on `User` fills a missing `branch_fk` from the `branch` name (never overrides an existing link). Migration `accounts 0200_link_employees_to_branches` links existing employees (7 on the dev database; Kondapur now 32).
+- `python manage.py set_branch_location --code KON ...` shows, dry-runs (default) or applies (`--apply`) coordinates, radius, address and the geofencing switch for ONE branch; it never guesses a value and is audit-logged.
+
+**TODO - needs the business (not applied by code)**
+- Confirm the real Kondapur office coordinates and address. For reference only: the map preview puts Kothaguda/Kondapur near 17.46, 78.36; the ticket's hint was about 17.44, 78.37. Do NOT use either without confirming.
+- Fix on UAT after deploying (migration 0200 runs automatically):
+  1. Interim, so staff can punch now: `python manage.py set_branch_location --code KON --disable-geofencing --apply`.
+  2. Then, with confirmed values: Company Codes > Kondapur > Edit (use the map and "Use my current location" while standing at the office), or `python manage.py set_branch_location --code KON --latitude <lat> --longitude <lon> --radius 150 --address "<confirmed address>" --enable-geofencing --apply`.
+  3. Replace the corrupted address text ("Kothaguda Udaya Vensar") with the confirmed address in the same form.
+- Tests: `apps/branch/tests_location.py` (25): validation, warnings, the geofence rejecting Mumbai coordinates and accepting a punch from the office after correction, the command, and employee counts.

@@ -25,6 +25,7 @@ export const API = {
     stats: "/branch/branches/stats/",
     distribution: "/branch/branches/distribution/",
     previewCode: "/branch/branches/preview-code/",
+    checkLocation: "/branch/branches/check-location/",
     detail: (id: string | number) => `/branch/branches/${id}/`,
     states: "/branch/states/",
     cities: (stateId: string | number) => `/branch/states/${stateId}/cities/`,

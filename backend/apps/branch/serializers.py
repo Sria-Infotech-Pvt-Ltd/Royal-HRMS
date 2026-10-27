@@ -5,7 +5,8 @@ from rest_framework import serializers
 
 from apps.accounts.models import CompanyGSTRegistration
 from apps.branch.models import Branch, City, EmployeeBranchAccess, State
-from apps.branch.utils import generate_branch_code
+from apps.branch.geo import MAX_RADIUS_METERS, MIN_RADIUS_METERS, coordinate_errors, location_warnings
+from apps.branch.utils import branch_employee_counts, generate_branch_code
 
 _BRANCH_NAME_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9 &\-.]*[A-Za-z0-9])?$')
 _CITY_NAME_RE   = re.compile(r"^[A-Za-z]+(?:[ '\-][A-Za-z]+)*$")
@@ -31,6 +32,8 @@ class BranchSerializer(serializers.ModelSerializer):
     hr_name    = serializers.CharField(source='hr.full_name', read_only=True, default=None)
     employees_count = serializers.SerializerMethodField()
     has_coordinates = serializers.BooleanField(read_only=True)
+    # Advisory only: coordinates that are valid but look wrong for the branch's state or city. Never blocks a save.
+    location_warnings = serializers.SerializerMethodField()
 
     city = serializers.PrimaryKeyRelatedField(queryset=City.objects.all(), required=False)
     # Fallback for a city that isn't in the City dropdown yet — get-or-created under
@@ -48,13 +51,10 @@ class BranchSerializer(serializers.ModelSerializer):
             # Keyed by Branch PK now, not branch_name — see the view's own
             # comment on where branch_counts is built (apps/branch/views.py).
             return branch_counts.get(obj.pk, 0)
-        # branch_fk, not the legacy branch=obj.branch_name string comparison —
-        # see User.branch_fk's docstring (apps/accounts/models.py). This is
-        # the first call site converted; branch=obj.branch_name misses any
-        # employee whose branch string doesn't exactly match (a stale/typo'd
-        # value — confirmed via the 0133 backfill migration's own report that
-        # such rows exist in this exact dataset).
-        return obj.employees.filter(is_active=True).count()
+        return branch_employee_counts().get(obj.pk, 0)
+
+    def get_location_warnings(self, obj):
+        return location_warnings(obj.latitude, obj.longitude, obj.state.name, obj.city.name)
 
     class Meta:
         model = Branch
@@ -65,10 +65,10 @@ class BranchSerializer(serializers.ModelSerializer):
             'gst_registration', 'gst_registration_gstin',
             'employees_count', 'status', 'is_headquarter', 'is_metro',
             'latitude', 'longitude', 'allowed_radius_meters', 'geofencing_enabled',
-            'has_coordinates',
+            'has_coordinates', 'location_warnings',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['branch_code', 'hr_name', 'employees_count', 'has_coordinates', 'created_at', 'updated_at']
+        read_only_fields = ['branch_code', 'hr_name', 'employees_count', 'has_coordinates', 'location_warnings', 'created_at', 'updated_at']
 
     def validate_address(self, value: str) -> str:
         if value is not None:
@@ -77,6 +77,13 @@ class BranchSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Company Code address is required.')
         if len(value) > 500:
             raise serializers.ValidationError('Address must be 500 characters or fewer.')
+        return value
+
+    def validate_allowed_radius_meters(self, value: int) -> int:
+        if not MIN_RADIUS_METERS <= value <= MAX_RADIUS_METERS:
+            raise serializers.ValidationError(
+                f'Allowed radius must be between {MIN_RADIUS_METERS} and {MAX_RADIUS_METERS} metres.'
+            )
         return value
 
     def validate_status(self, value: str) -> str:
@@ -129,15 +136,19 @@ class BranchSerializer(serializers.ModelSerializer):
                 {'gst_registration': f'This GST registration is for {gst_registration.state}, not {state.name}.'}
             )
 
-        # Geofencing: enabling requires coordinates either in this request or already on the branch
-        enabled = data.get('geofencing_enabled')
-        if enabled:
-            lat = data.get('latitude') or (self.instance.latitude if self.instance else None)
-            lon = data.get('longitude') or (self.instance.longitude if self.instance else None)
-            if lat is None or lon is None:
-                raise serializers.ValidationError(
-                    {'geofencing_enabled': 'Set latitude and longitude before enabling geofencing.'}
-                )
+        # Coordinates: must be real numbers in range, given as a pair, and geofencing needs them
+        lat = data['latitude'] if 'latitude' in data else (self.instance.latitude if self.instance else None)
+        lon = data['longitude'] if 'longitude' in data else (self.instance.longitude if self.instance else None)
+        problems = coordinate_errors(lat, lon)
+        if problems:
+            raise serializers.ValidationError(problems)
+        enabled = data['geofencing_enabled'] if 'geofencing_enabled' in data else (
+            self.instance.geofencing_enabled if self.instance else False
+        )
+        if enabled and (lat is None or lon is None):
+            raise serializers.ValidationError(
+                {'geofencing_enabled': 'Set latitude and longitude before enabling geofencing.'}
+            )
 
         return data
 

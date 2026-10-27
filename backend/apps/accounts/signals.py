@@ -55,3 +55,22 @@ def on_onboarding_section_change(sender, instance, **kwargs):
 def on_access_permission_change(sender, instance, **kwargs):
     from apps.platform_core import cache as metadata_cache
     metadata_cache.bump_version('authz')
+
+
+# Employees created by the hire wizard, bulk import or candidate conversion carry the branch NAME text; the real
+# link (branch_fk) is what the Company Codes employee counts read. Fill the link whenever it is missing. It never
+# overrides a link that is already set.
+@receiver(post_save, sender='accounts.User')
+def link_user_to_branch(sender, instance, update_fields=None, **kwargs):
+    if update_fields is not None and not {'branch', 'branch_fk'} & set(update_fields):
+        return
+    name = (instance.branch or '').strip()
+    if not name or instance.branch_fk_id is not None:
+        return
+    from apps.branch.models import Branch
+
+    branch = Branch.objects.filter(branch_name__iexact=name).first()
+    if branch is None:
+        return
+    type(instance).objects.filter(pk=instance.pk).update(branch_fk=branch)
+    instance.branch_fk = branch

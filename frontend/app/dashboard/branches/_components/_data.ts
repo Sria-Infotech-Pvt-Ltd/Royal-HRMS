@@ -31,6 +31,8 @@ export interface Branch {
   longitude:             number | null;
   allowed_radius_meters: number | null;
   has_coordinates:       boolean;
+  /** Valid coordinates that look wrong for the branch's state or city (advisory). */
+  location_warnings?:    string[];
 }
 
 export function geofenceBadge(branch: Branch): { label: string; cls: string } {
