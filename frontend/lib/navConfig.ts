@@ -77,7 +77,6 @@ const ALL_NAV: NavEntry[] = [
   // (i.e. everyone assigned an onboarding assessment) had no sidebar link.
   { id: "my-assessments", icon: "ti-clipboard-check", label: "My Assessments", path: "/dashboard/assessments", permission: null },
   { id: "referrals", icon: "ti-user-plus", label: "My Referrals", path: "/dashboard/referrals", permission: null },
-  { id: "my-profile", icon: "ti-user-circle", label: "My Profile", path: "/dashboard/profile", permission: null },
 
   { section: "System" },
   { id: "reports", icon: "ti-chart-bar", label: "Reports", path: "/dashboard/reports", permission: null },

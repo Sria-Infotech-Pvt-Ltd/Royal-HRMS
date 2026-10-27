@@ -80,8 +80,6 @@ export default function DashboardShell({
   const isEssPage = pathname.startsWith("/dashboard/ess");
   const menu = useOpenMenu(pathname);
   const currentUser = useCurrentUser();
-  // The workspace shell has its own profile tab; keep sending "My Profile" there from inside it.
-  const navigateFromMenu = (path: string) => navigate(isEssPage && path === "/dashboard/profile" ? "/dashboard/ess?tab=profile" : path);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -119,7 +117,7 @@ export default function DashboardShell({
             items={navGroups.profile}
             activeNavId={activeNavId}
             menu={menu}
-            onNavigate={navigateFromMenu}
+            onNavigate={navigate}
             onLogout={handleLogout}
           />
         </div>

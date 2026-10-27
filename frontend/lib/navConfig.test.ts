@@ -27,12 +27,12 @@ describe("groupNav", () => {
     expect(menus["System"]).toEqual(["Reports", "Audit Log", "Email Logs", "Settings"]);
   });
 
-  it("makes all 29 pages reachable, 4 of them newly linked in the profile menu", () => {
+  it("makes all 28 pages reachable, 3 of them newly linked in the profile menu", () => {
     const { bar, profile } = groupsFor(ADMIN_PERMISSIONS);
     const barPages = bar.flatMap(entry => (entry.kind === "link" ? [entry.item] : entry.items));
-    expect(barPages.length + profile.length).toBe(29);
+    expect(barPages.length + profile.length).toBe(28);
     expect(profile.map(item => item.label)).toEqual([
-      "My Workspace", "My Attendance", "My Requests", "My Payslips", "My Assessments", "My Referrals", "My Profile",
+      "My Workspace", "My Attendance", "My Requests", "My Payslips", "My Assessments", "My Referrals",
     ]);
   });
 
@@ -41,7 +41,7 @@ describe("groupNav", () => {
     // HR Ops and System each have one open page, so they are plain links; every other section disappears.
     expect(bar.map(labelOf)).toEqual(["Dashboard", "Separation & Exit", "Reports"]);
     expect(bar.every(entry => entry.kind === "link")).toBe(true);
-    expect(profile).toHaveLength(7);
+    expect(profile).toHaveLength(6);
   });
 
   it("hides a section with no visible pages and shows a one-page section as a plain link", () => {
