@@ -75,13 +75,17 @@ def _visible_qs(request) -> 'QuerySet[Announcement]':
     if _has_perm(request.user, 'announcements.edit'):
         qs = Announcement.objects.all()
     else:
-        qs = Announcement.objects.filter(
-            Q(visibility=Announcement.VISIBILITY_ALL)
-            | Q(visibility=Announcement.VISIBILITY_DEPARTMENT,
-                target_department__name=request.user.department)
-            | Q(visibility=Announcement.VISIBILITY_BRANCH,
-                target_branch__branch_name=request.user.branch)
-        )
+        # Company-wide posts, plus posts targeted at the user's own department /
+        # branch — only when the user actually has one (a missing assignment
+        # never matches a targeted post).
+        audience = Q(visibility=Announcement.VISIBILITY_ALL)
+        if request.user.department:
+            audience |= Q(visibility=Announcement.VISIBILITY_DEPARTMENT,
+                          target_department__name=request.user.department)
+        if request.user.branch:
+            audience |= Q(visibility=Announcement.VISIBILITY_BRANCH,
+                          target_branch__branch_name=request.user.branch)
+        qs = Announcement.objects.filter(audience)
 
     # Meta.ordering alone isn't enough here — annotate() below adds a GROUP BY,
     # which makes Django treat the queryset as unordered unless order_by() is

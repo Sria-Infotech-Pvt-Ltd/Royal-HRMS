@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import AnnouncementViewModal from "@/components/announcements/AnnouncementViewModal";
 import { useSharedAnnouncement, useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
 
@@ -83,6 +84,10 @@ export default function EmpUpdatesCard() {
             >
               View <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
             </button>
+            {/* Every announcement this employee may see (all categories, pinned and not). */}
+            <Link href="/dashboard/announcements" style={{ fontSize: 12, color: "var(--on-variant)", fontWeight: 500, textDecoration: "none", whiteSpace: "nowrap" }}>
+              View all
+            </Link>
             <button
               onClick={() => setAnnouncementDismissed(true)}
               style={{ background: "none", border: "none", cursor: "pointer", color: "var(--on-variant)", fontSize: 14, padding: "2px 4px", lineHeight: 1 }}

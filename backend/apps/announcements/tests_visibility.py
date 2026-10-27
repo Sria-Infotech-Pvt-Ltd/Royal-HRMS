@@ -93,3 +93,101 @@ class AnnouncementVisibilityTests(TestCase):
                          ('Branch A post', 'Branch A post body\nsecond line', 'VisBranchA'))
         self.assertEqual(api.get(reverse('announcement-detail', kwargs={'pk': other.pk})).status_code, 404)
         self.assertEqual(api.get(reverse('announcement-detail', kwargs={'pk': 999999})).status_code, 404)
+
+
+class BannerAndViewAllTests(TestCase):
+    """Banner: latest eligible pinned post, else latest eligible post. View All: every eligible post."""
+
+    def setUp(self):
+        import datetime
+        from django.utils import timezone
+        cache.clear()
+        state = State.objects.create(name='BAState', code='BA1')
+        city = City.objects.create(name='BACity', state=state)
+        self.sury = Branch.objects.create(branch_code='BAS', branch_name='Suryapet', status=Branch.STATUS_ACTIVE,
+                                          state=state, city=city)
+        self.hyd = Branch.objects.create(branch_code='BAH', branch_name='Hyderabad', status=Branch.STATUS_ACTIVE,
+                                         state=state, city=city)
+        role = make_role('ba_employee')                       # no announcement permissions at all
+        self.emp = make_user('ba.emp@test.com', role=role, branch='Suryapet')
+        self.other = make_user('ba.other@test.com', role=role, branch='Hyderabad')
+        self.nobranch = make_user('ba.none@test.com', role=role, branch='')
+        self._t0 = timezone.now() - datetime.timedelta(days=1)
+        self._n = 0
+
+    def _post(self, title, category=Announcement.CATEGORY_GENERAL, branch=None, pinned=False):
+        import datetime
+        a = Announcement.objects.create(
+            title=title, body=f'{title} body', category=category, is_pinned=pinned,
+            visibility=Announcement.VISIBILITY_BRANCH if branch else Announcement.VISIBILITY_ALL, target_branch=branch,
+        )
+        self._n += 1                                          # strictly increasing creation times
+        Announcement.objects.filter(pk=a.pk).update(created_at=self._t0 + datetime.timedelta(minutes=self._n))
+        return a
+
+    def _api(self, user):
+        api = APIClient()
+        _login(api, user.email)
+        return api
+
+    def _titles(self, user, **params):
+        data = self._api(user).get(reverse('announcement-list-create'), params).data['data']
+        return [r['title'] for r in data['results']], data
+
+    # ── Dashboard banner ────────────────────────────────────────────────────
+    def test_latest_eligible_pinned_post_wins(self):
+        self._post('Old pinned', pinned=True, branch=self.sury)
+        self._post('Newer pinned', pinned=True)
+        self._post('Newest unpinned', branch=self.sury)
+        self.assertEqual(self._api(self.emp).get(_BANNER).data['data']['title'], 'Newer pinned')
+
+    def test_latest_eligible_post_when_nothing_pinned(self):
+        for cat in ('general', 'policy', 'event', 'celebration'):
+            self._post(f'Suryapet {cat}', category=cat, branch=self.sury)
+        self.assertEqual(self._api(self.emp).get(_BANNER).data['data']['title'], 'Suryapet celebration')
+        self._post('Newest policy', category='policy', branch=self.sury)
+        self.assertEqual(self._api(self.emp).get(_BANNER).data['data']['category'], 'policy')   # not category-bound
+
+    def test_other_branch_pinned_post_never_shown(self):
+        self._post('Company post')
+        self._post('Hyderabad pinned', pinned=True, branch=self.hyd)
+        self.assertEqual(self._api(self.emp).get(_BANNER).data['data']['title'], 'Company post')
+        self.assertEqual(self._api(self.other).get(_BANNER).data['data']['title'], 'Hyderabad pinned')
+
+    # ── View All (Announcements page list API) ─────────────────────────────
+    def test_view_all_lists_every_eligible_post_in_all_categories(self):
+        for cat in ('general', 'policy', 'event', 'celebration'):
+            self._post(f'Suryapet {cat}', category=cat, branch=self.sury)
+        self._post('Company pinned', pinned=True)
+        self._post('Hyderabad only', branch=self.hyd)
+        titles, data = self._titles(self.emp)
+        self.assertEqual(titles, ['Company pinned', 'Suryapet celebration', 'Suryapet event', 'Suryapet policy',
+                                  'Suryapet general'])                        # pinned first, then newest
+        self.assertEqual(data['count'], 5)
+        self.assertNotIn('Hyderabad only', titles)
+
+    def test_view_all_category_filter_still_works(self):
+        self._post('Suryapet policy', category='policy', branch=self.sury)
+        self._post('Company event', category='event')
+        titles, _ = self._titles(self.emp, category='policy')
+        self.assertEqual(titles, ['Suryapet policy'])
+
+    def test_missing_branch_sees_company_posts_only(self):
+        self._post('Company post')
+        self._post('Suryapet post', branch=self.sury)
+        titles, _ = self._titles(self.nobranch)
+        self.assertEqual(titles, ['Company post'])
+        self.assertEqual(self._api(self.nobranch).get(_BANNER).data['data']['title'], 'Company post')
+
+    # ── Read-only for employees ────────────────────────────────────────────
+    def test_employee_cannot_publish_edit_or_delete(self):
+        post = self._post('Suryapet post', branch=self.sury)
+        api = self._api(self.emp)
+        create = api.post(reverse('announcement-list-create'),
+                          {'title': 'x', 'body': 'y', 'category': 'general', 'visibility': 'all'}, format='json')
+        self.assertEqual(create.status_code, 403)
+        detail = reverse('announcement-detail', kwargs={'pk': post.pk})
+        self.assertEqual(api.put(detail, {'title': 'z', 'body': 'z', 'category': 'general'}, format='json').status_code, 403)
+        self.assertEqual(api.delete(detail).status_code, 403)
+        self.assertEqual(Announcement.objects.count(), 1)
+        self.assertEqual(Announcement.objects.get().title, 'Suryapet post')
