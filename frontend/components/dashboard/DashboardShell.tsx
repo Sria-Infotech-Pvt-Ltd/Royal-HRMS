@@ -16,6 +16,7 @@ import TopNavLinks from "@/components/dashboard/TopNavLinks";
 import ProfileMenu from "@/components/dashboard/ProfileMenu";
 import { useOpenMenu } from "@/hooks/useOpenMenu";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { canOpenTeamDashboard } from "@/lib/dashboardHome";
 import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
 
 export default function DashboardShell({
@@ -80,6 +81,14 @@ export default function DashboardShell({
   const isEssPage = pathname.startsWith("/dashboard/ess");
   const menu = useOpenMenu(pathname);
   const currentUser = useCurrentUser();
+  // Team managers land on their workspace like everyone else; their team dashboard is one click away here.
+  const profileItems: NavItem[] = currentUser && canOpenTeamDashboard(currentUser)
+    ? [
+        ...navGroups.profile.slice(0, 1),
+        { id: "team-dashboard", icon: "ti-users-group", label: "Team Dashboard", path: "/dashboard/team", permission: null },
+        ...navGroups.profile.slice(1),
+      ]
+    : navGroups.profile;
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -114,7 +123,7 @@ export default function DashboardShell({
             name={session.name}
             subtitle={currentUser?.is_superuser ? "All permissions" : (session.designation || session.email)}
             photoUrl={myProfile?.profile_photo_url}
-            items={navGroups.profile}
+            items={profileItems}
             activeNavId={activeNavId}
             menu={menu}
             onNavigate={navigate}
