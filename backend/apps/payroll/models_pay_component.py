@@ -153,6 +153,10 @@ class PayComponent(models.Model):
     # ── Other flags ──────────────────────────────────────────────────────
     is_arrear_eligible = models.BooleanField(default=False)
     is_recurring = models.BooleanField(default=True)
+    is_company_allowance = models.BooleanField(
+        default=False,
+        help_text='Company-managed allowance available for selection in legacy salary structures.',
+    )
     gl_account_code = models.CharField(max_length=40, blank=True, help_text='Reserved for Phase 7B accounting-journal export — not read by anything today.')
     min_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     max_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)

@@ -44,7 +44,7 @@ export default function EmployeeBasicPayModal({ employee, onClose }: { employee:
         <>
           <button className="rvbtn ghost" type="button" onClick={onClose} disabled={editor.saving}>{canEdit ? "Cancel" : "Close"}</button>
           {canEdit && (
-            <button className="rvbtn pri" type="button" onClick={editor.save} disabled={editor.saving || editor.loading || editor.delimitIsError}>
+            <button className="rvbtn pri" type="button" onClick={editor.save} disabled={editor.saving || editor.loading || editor.delimitIsError || !editor.hasStructure}>
               {editor.saving ? "Saving…" : "Save basic pay"}
             </button>
           )}
@@ -52,6 +52,9 @@ export default function EmployeeBasicPayModal({ employee, onClose }: { employee:
       }
     >
       {editor.loadError && <div className="alert alert-error">{editor.loadError}</div>}
+      {!editor.loading && !editor.hasStructure && (
+        <div className="alert alert-warn">No salary structure applies to this employee. Add or activate one in Settings → Payroll Configuration → Salary Structures; pay components come from it.</div>
+      )}
       <div className="legend">
         <b style={{ fontSize: 10, letterSpacing: ".07em", color: "var(--faint)" }}>WHO MAINTAINS</b>
         <span><span className="own hr">HR</span> pay structure and amounts</span>
@@ -94,9 +97,19 @@ export default function EmployeeBasicPayModal({ employee, onClose }: { employee:
           </select>
         </div>
         <div className="f">
-          <label>Basic as % of CTC <span className="own hr">HR</span></label>
-          <select className="finput" value={form.basicPercent} disabled={!canEdit} onChange={event => form.changeBasicPercent(Number(event.target.value))}>
-            {[40, 45, 50].map(value => <option key={value} value={value}>{value}%</option>)}
+          <label>Salary structure <span className="own hr">HR</span></label>
+          <select
+            className="finput"
+            value={form.salaryStructureId}
+            disabled={!canEdit || editor.structures.length === 0}
+            onChange={event => form.setSalaryStructure(event.target.value)}
+          >
+            <option value="">Select a salary structure</option>
+            {editor.structures.map(structure => (
+              <option key={structure.id} value={structure.id}>
+                {structure.name}{structure.is_default ? " (Default)" : ""}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -107,8 +120,19 @@ export default function EmployeeBasicPayModal({ employee, onClose }: { employee:
         </div>
       </div>
 
-      <div className="hint">Monthly amounts. Any earning can be overridden; Special Allowance balances back to CTC and the statutory rows recalculate.</div>
-      <PayBreakupTables breakup={breakup} annualCostToCompany={editor.annualCostToCompany} editable={canEdit} variance={editor.variance} hasRecord={!!current} onChange={editor.setOverride} />
+      <div className="hint">
+        Monthly amounts use the selected salary structure and effective date. Enabled structure components appear here;
+        statutory contributions and deductions remain governed by payroll eligibility and statutory rules.
+      </div>
+      <PayBreakupTables
+        breakup={breakup}
+        annualCostToCompany={editor.annualCostToCompany}
+        editable={canEdit}
+        variance={editor.variance}
+        hasRecord={!!current}
+        visibleLineCodes={editor.visiblePayLineCodes}
+        onChange={editor.setOverride}
+      />
       {canEdit && (
         <div>
           <button className="rvbtn" type="button" onClick={editor.resetOverrides} disabled={!editor.hasOverrides}>Reset to derived amounts</button>

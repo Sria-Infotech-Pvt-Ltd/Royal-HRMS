@@ -7,6 +7,7 @@ export interface PayrollSettings {
   employee_query_window_hours: number;
   enable_reimbursements: boolean;
   enable_bonuses: boolean;
+  basic_pay_visible_lines: string[];
   eps_rate: string;
   edli_rate: string;
   edli_wage_ceiling: string;
@@ -17,13 +18,35 @@ export interface PayrollSettings {
 
 export interface SalaryComponent {
   id: string;
+  code: string;
   name: string;
   component_type: "earning" | "deduction" | "allowance";
-  calculation_type: "percentage_of_ctc" | "percentage_of_basic" | "fixed" | "metro_hra_of_basic";
+  calculation_type:
+    | "percentage_of_ctc"
+    | "percentage_of_basic"
+    | "percentage_of_basic_plus_da"
+    | "fixed"
+    | "balance_to_ctc"
+    | "metro_hra_of_basic";
   value: string;
   is_taxable: boolean;
   is_active: boolean;
   order: number;
+  effective_from: string;
+  reset_override: boolean;
+  affected_employee_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyAllowance {
+  id: string;
+  code: string;
+  name: string;
+  payslip_label: string;
+  is_taxable: boolean;
+  is_active: boolean;
+  display_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -76,6 +99,7 @@ export interface BranchPayrollConfig {
   branch_state: string;
   salary_structure: string | null;
   structure_name: string | null;
+  resolved_salary_structure: string | null;
   pf_applicable: boolean;
   pf_employee_rate: string;
   pf_employer_rate: string;
@@ -94,6 +118,8 @@ export interface EmployeeSalaryConfig {
   annual_ctc: string;
   monthly_ctc: string;
   salary_structure: string | null;
+  /** The structure actually used for this record — the assigned one, else the branch or company default. */
+  resolved_salary_structure: string | null;
   structure_name: string | null;
   effective_from: string;
   reason: CtcRevisionReason | "";

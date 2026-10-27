@@ -109,6 +109,21 @@ def build_lines_for_payslip(payslip) -> list:
             'display_order': base_order + i,
         })
 
+    deduction_order = base_order + len(payslip.other_earnings or {})
+    for i, (name, amount) in enumerate(sorted((payslip.other_deductions or {}).items())):
+        lines.append({
+            'component_code': 'DEDUCTION:' + re.sub(
+                r'[^A-Z0-9]+', '_', name.strip().upper(),
+            ).strip('_'),
+            'amount': Decimal(str(amount)),
+            'calculation_basis': {
+                'source': 'legacy_column',
+                'column': 'other_deductions',
+                'original_name': name,
+            },
+            'display_order': deduction_order + i,
+        })
+
     return lines
 
 

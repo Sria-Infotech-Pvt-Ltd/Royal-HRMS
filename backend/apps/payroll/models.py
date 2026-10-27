@@ -5,6 +5,17 @@ from django.conf import settings
 from core.encrypted_fields import EncryptedCharField
 
 
+BASIC_PAY_EDITOR_LINE_CODES = (
+    '1000', '1010', '1100', '1200', '1300', '1350', '1400',
+    '5000', '5010', '5100', '5200',
+    '6000', '6100', '6200',
+)
+
+
+def default_basic_pay_visible_lines():
+    return list(BASIC_PAY_EDITOR_LINE_CODES)
+
+
 class PayrollSettings(models.Model):
     """Company-wide payroll configuration. Only one active record should exist."""
 
@@ -39,6 +50,10 @@ class PayrollSettings(models.Model):
     )
     enable_reimbursements = models.BooleanField(default=True)
     enable_bonuses = models.BooleanField(default=True)
+    basic_pay_visible_lines = models.JSONField(
+        default=default_basic_pay_visible_lines,
+        help_text='Pay breakup rows visible in the employee Basic Pay editor. Hiding a row does not change its calculations.',
+    )
 
     # EPF / EDLI statutory rates — configurable so law changes don't require code changes
     eps_rate = models.DecimalField(
@@ -200,7 +215,9 @@ class SalaryComponent(models.Model):
 
     CALC_PCT_CTC = 'percentage_of_ctc'
     CALC_PCT_BASIC = 'percentage_of_basic'
+    CALC_PCT_BASIC_DA = 'percentage_of_basic_plus_da'
     CALC_FIXED = 'fixed'
+    CALC_BALANCE_CTC = 'balance_to_ctc'
     # Opt-in HRA rule that ignores `value` and instead computes 50% of Basic
     # for employees in a metro branch (Branch.is_metro), 40% otherwise — the
     # standard Income Tax HRA exemption split. A structure that already has
@@ -211,7 +228,9 @@ class SalaryComponent(models.Model):
     CALCULATION_TYPE_CHOICES = [
         (CALC_PCT_CTC, '% of CTC'),
         (CALC_PCT_BASIC, '% of Basic'),
+        (CALC_PCT_BASIC_DA, '% of Basic + DA'),
         (CALC_FIXED, 'Fixed Amount'),
+        (CALC_BALANCE_CTC, 'Balances earnings to CTC'),
         (CALC_METRO_HRA, 'Metro HRA (50%/40% of Basic)'),
     ]
 
@@ -221,6 +240,7 @@ class SalaryComponent(models.Model):
         on_delete=models.CASCADE,
         related_name='components',
     )
+    code = models.SlugField(max_length=40, blank=True, null=True)
     name = models.CharField(max_length=100)
     component_type = models.CharField(max_length=20, choices=COMPONENT_TYPE_CHOICES)
     calculation_type = models.CharField(max_length=30, choices=CALCULATION_TYPE_CHOICES)
@@ -237,10 +257,42 @@ class SalaryComponent(models.Model):
     class Meta:
         db_table = 'payroll_salary_components'
         ordering = ['order', 'name']
-        unique_together = [('structure', 'name')]
+        unique_together = [('structure', 'name'), ('structure', 'code')]
 
     def __str__(self):
         return f'{self.structure.name} › {self.name}'
+
+
+class SalaryComponentRevision(models.Model):
+    """Effective-dated component settings; issued payroll remains a frozen snapshot."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    component = models.ForeignKey(
+        SalaryComponent,
+        on_delete=models.CASCADE,
+        related_name='revisions',
+    )
+    effective_from = models.DateField()
+    configuration = models.JSONField()
+    reset_override = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'payroll_salary_component_revisions'
+        ordering = ['effective_from', 'created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['component', 'effective_from'],
+                name='salary_comp_revision_effective_uniq',
+            ),
+        ]
 
 
 class BranchPayrollConfig(models.Model):
@@ -560,6 +612,7 @@ class EmployeePayslip(models.Model):
         default=dict, blank=True,
         help_text='Additional components keyed by component name and amount',
     )
+    other_deductions = models.JSONField(default=dict, blank=True)
 
     # Reimbursements + bonuses (optional — governed by PayrollSettings toggles)
     reimbursements = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -967,4 +1020,3 @@ from apps.payroll.models_statutory_file import StatutoryFileTemplate, GeneratedS
 from apps.payroll.models_payslip_template import PayslipTemplate  # noqa: E402,F401
 # Phase 7B Task O.
 from apps.payroll.models_ops_v2 import PayrollOpsV2Entitlement  # noqa: E402,F401
-

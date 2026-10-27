@@ -35,6 +35,7 @@ from apps.payroll.services_income_tax import estimate_monthly_tds
 from apps.accounts.models import User
 from apps.attendance.models import AttendanceRecord, AttendanceSettings, AttendanceLateMarkRules
 from apps.branch.models import Branch
+from apps.payroll.services_salary_structure import effective_components
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ _PF_DEFAULT_CEILING = Decimal('15000.00')
 _PAYSLIP_FIELDS = [
     'salary_structure',
     'annual_ctc', 'monthly_ctc', 'basic', 'hra', 'special_allowance', 'other_earnings',
+    'other_deductions',
     'reimbursements', 'bonus', 'gross_earnings', 'total_working_days', 'lop_days',
     'lop_deduction', 'pf_wage_base', 'pf_employee', 'pf_employer', 'esi_employee', 'esi_employer',
     'pt_deduction', 'lwf_employee', 'lwf_employer', 'income_tax', 'adjustments_earning',
@@ -124,16 +126,35 @@ def _compute_employee_payslip(
     """
     monthly_ctc = salary_config.monthly_ctc
     basic = Decimal('0')
+    da_amount = Decimal('0')
     hra = Decimal('0')
     special_allowance = Decimal('0')
     other_earnings = {}
     other_earnings_total = Decimal('0')
+    other_deductions = {}
+    other_deductions_total = Decimal('0')
+    balance_components = []
+    overrides = getattr(salary_config, 'earnings_override', {}) or {}
+    old_override_keys = {
+        'basic': 'basic',
+        'dearness allowance': 'da',
+        'da': 'da',
+        'hra': 'hra',
+        'conveyance allowance': 'conv',
+        'medical allowance': 'med',
+        'leave travel allowance': 'lta',
+    }
 
     for component in components:
+        if component.calculation_type == SalaryComponent.CALC_BALANCE_CTC:
+            balance_components.append(component)
+            continue
         if component.calculation_type == SalaryComponent.CALC_PCT_CTC:
             amount = monthly_ctc * component.value / 100
         elif component.calculation_type == SalaryComponent.CALC_PCT_BASIC:
             amount = basic * component.value / 100
+        elif component.calculation_type == SalaryComponent.CALC_PCT_BASIC_DA:
+            amount = (basic + da_amount) * component.value / 100
         elif component.calculation_type == SalaryComponent.CALC_METRO_HRA:
             metro_pct = Decimal('50') if is_metro else Decimal('40')
             amount = basic * metro_pct / 100
@@ -141,8 +162,25 @@ def _compute_employee_payslip(
             amount = component.value
 
         name_lower = component.name.lower()
-        if name_lower == 'basic':
+        override_key = component.code if component.code in overrides else old_override_keys.get(name_lower)
+        reset_date = getattr(component, 'effective_from', None)
+        reset_is_effective = (
+            getattr(component, 'reset_override', False)
+            and reset_date is not None
+            and getattr(salary_config, 'effective_from', date.min) < reset_date
+        )
+        if override_key and not reset_is_effective and override_key in overrides:
+            amount = Decimal(str(overrides[override_key]))
+
+        if component.component_type == SalaryComponent.TYPE_DEDUCTION:
+            other_deductions[component.name] = float(amount)
+            other_deductions_total += amount
+        elif name_lower == 'basic':
             basic = amount
+        elif name_lower in ('da', 'dearness allowance'):
+            da_amount = amount
+            other_earnings[component.name] = float(amount)
+            other_earnings_total += amount
         elif name_lower == 'hra':
             hra = amount
         elif name_lower == 'special allowance':
@@ -153,12 +191,28 @@ def _compute_employee_payslip(
             other_earnings[component.name] = float(amount)
             other_earnings_total += amount
 
+    for component in balance_components:
+        amount = max(
+            Decimal('0'),
+            monthly_ctc - basic - hra - special_allowance - other_earnings_total,
+        )
+        if component.component_type == SalaryComponent.TYPE_DEDUCTION:
+            other_deductions[component.name] = float(amount)
+            other_deductions_total += amount
+        elif component.name.lower() == 'special allowance':
+            special_allowance = amount
+        else:
+            other_earnings[component.name] = float(amount)
+            other_earnings_total += amount
+
     if proration_factor != Decimal('1'):
         basic = basic * proration_factor
         hra = hra * proration_factor
         special_allowance = special_allowance * proration_factor
         other_earnings = {name: float(Decimal(str(v)) * proration_factor) for name, v in other_earnings.items()}
         other_earnings_total = other_earnings_total * proration_factor
+        other_deductions = {name: float(Decimal(str(v)) * proration_factor) for name, v in other_deductions.items()}
+        other_deductions_total = other_deductions_total * proration_factor
 
     gross = basic + hra + special_allowance + other_earnings_total
 
@@ -231,7 +285,8 @@ def _compute_employee_payslip(
     income_tax = estimate_monthly_tds(gross, tax_regime, declared_investments)
 
     total_deductions = (
-        lop_deduction + pf_employee + esi_employee + pt + lwf_employee + income_tax + adj_deduction
+        lop_deduction + pf_employee + esi_employee + pt + lwf_employee + income_tax
+        + other_deductions_total + adj_deduction
     )
     net_pay = gross + adj_earning - total_deductions
 
@@ -243,6 +298,7 @@ def _compute_employee_payslip(
         'hra':                   hra,
         'special_allowance':     special_allowance,
         'other_earnings':        other_earnings,
+        'other_deductions':      other_deductions,
         'reimbursements':        Decimal('0'),  # populated in wizard reimbursements step
         'bonus':                 Decimal('0'),  # populated in wizard bonuses step
         'gross_earnings':        gross,
@@ -616,11 +672,10 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     statutory_cache: dict = {}
 
     def _components_for(structure):
-        if structure.id not in components_cache:
-            components_cache[structure.id] = list(
-                structure.components.filter(is_active=True).order_by('order')
-            )
-        return components_cache[structure.id]
+        cache_key = (structure.id, cycle.cycle_start)
+        if cache_key not in components_cache:
+            components_cache[cache_key] = effective_components(structure, cycle.cycle_start)
+        return components_cache[cache_key]
 
     def _statutory_for(state):
         if state is None:

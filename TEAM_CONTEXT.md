@@ -278,7 +278,7 @@ backend/config/
 ### Frontend Prompts Given (not yet implemented)
 
 - **Geofencing UI**: lat/lon/radius inputs + enable toggle in branch settings form; show `has_coordinates` badge
-- **Corrections UI**: Corrections tab in HR Attendance; approve/reject buttons; pending badge on un-punch rows
+- ~~Corrections UI~~ — done (2026-10-27): `CorrectionsTab` is mounted as the **Corrections** tab in HR Attendance; its badge counts the caller's own pending (manager + HR) queue
 - **Branch scoping UI**: HR admin sees only their branch (locked dropdown); system_admin sees all; `isUnrestrictedUser()` helper
 - **Punch log display**: Show only latest IN + latest OUT in ClockWidget punch log (filter client-side from full `punches[]` array)
 
@@ -4427,3 +4427,43 @@ Decisions: (1) permissions are attached to each **Position** (seat); whoever hol
 - The ESS Profile and Employment views now use the same "Not assigned" fallback when a reporting manager is missing. Reporting-manager auto-assignment only selects an active, currently placed chief from the employee's org-unit chain and same branch; it does not automatically reassign existing employees when a chief is added later. For employee `EMP00081`, read-only inspection found no current chief placement in the AI & ML → Software Services → SRIA chain. No employee or payroll records were changed.
 - Payroll LOP must use persisted attendance records and approved leave; a calendar's inferred absence for a missing record is not, on its own, a payroll fact. Do not seed invented attendance or leave into production. Validate payroll changes with isolated fixtures or verified attendance evidence.
 - Validation in this session: frontend ESLint and TypeScript checks passed for attendance-calendar navigation and manager display; Django `manage.py check` and Python compilation passed for the direct-hire status fix. Database-backed regression tests were not run because the configured test database already existed; do not delete/reuse it without confirming it is disposable.
+
+### 9. Company allowance catalogue in Payroll Settings
+- `Settings → Payroll Configuration → Allowances` is the company-wide catalogue. Payroll users with `payroll.create` can add an earning allowance; users with `payroll.edit` can activate/deactivate it; `payroll.view` can read the catalogue.
+- An allowance must be added to the catalogue before it can be selected as an Allowance component in a salary structure. Its calculation type/value is then configured per structure.
+- Deactivating an allowance only removes it from future structure selection. Existing `SalaryComponent` rows, active employee salary structures, and issued payroll history are unchanged; HR must deactivate a component in a structure separately if it should stop being used there.
+- Migration `payroll 0037_company_allowance_catalogue` adds catalogue ownership to `PayComponent` and seeds the common DA/HRA/conveyance/medical/LTA/special-allowance options. A custom catalogue entry does not automatically alter payroll amounts until configured in a structure.
+- Regression tests are in `apps/payroll/tests_allowance_catalogue.py`; run them only with an isolated disposable test database.
+
+### 10. Basic Pay editor row visibility
+- Payroll Settings now stores `basic_pay_visible_lines`, the company-wide set of rows shown in the employee Basic Pay editor. `payroll.edit` is required to change it.
+- Supported rows are validated against the known line codes in `apps/payroll/models.py`; missing settings default to showing every row.
+- This is display-only: hiding a row does not remove its calculation, change overrides, recalculate employee pay, or alter payroll history/payslips.
+- Migration `payroll 0038_payrollsettings_basic_pay_visible_lines` adds the setting; it was applied to the configured database on 2026-10-26.
+- Focused API regression tests are in `apps/payroll/tests_basic_pay_visibility.py`. Do not run against the configured PostgreSQL server unless its test database is confirmed disposable.
+
+### 11. Access management is position-based, not inherited through reporting lines
+- `BaselinePermission` is shared by every employee and is additive: effective access includes the baseline plus permissions from the employee's current position.
+- `PositionPermission` attaches permissions to a seat. The current holder gets that seat's permissions; a future holder gets them when placed. All employees sharing one position share its access.
+- Reporting hierarchy does not automatically cascade permission codenames from reports to managers or unit heads. One person can get extra access on top of their seat without a new position: Settings > Permissions > One person (see section 13). Only a superuser has every permission; `settings.edit` grants Settings only.
+- Configure seat permissions in Organization: select a position, open **Permissions**, then save its module permissions. `settings.edit` is required.
+- `can_manage_team` and `can_manage_branch` are separate scope flags, not permission inheritance.
+
+### 12. Attendance corrections tab, and hired employees show as Active
+- The HR Attendance page now has a **Corrections** tab (approve/reject, two-stage L1 manager then L2 HR). The badge comes from the caller's own review queue (`GET /api/attendance/corrections/?status=pending|l2_pending`), not the cached branch dashboard. Tests: `apps/attendance/tests_correction_review.py`.
+- Employee Directory: a hired employee whose onboarding is complete is **Active** immediately. Probation (`employment_status`) is a separate label shown as "On probation" under the Active pill / in the drawer, and the Probation filter is a subset of Active. The Confirmation action (`employees.confirm`) still flips probation to confirmed; confirmation does not change the Active status. The Active filter and Active KPI card both exclude only inactive, still-onboarding, and notice-period people.
+- Settings > Access now uses `components/PermissionMatrix.tsx`: one row per module, one column per action (view/create/edit/delete/export/import/approve, plus an Other column and a row-level All toggle), instead of a card per module. `settings.edit` stays locked out of the baseline.
+
+### 13. Access for one person (extra permissions)
+- `EmployeePermission` (`hrms_employee_permissions`, migration `accounts 0199`) grants an extra permission to ONE employee. It is additive to the company baseline and the seat's permissions, follows the person (not the seat), and never removes access.
+- Enforced everywhere access is decided: `core.permissions.has_perm`, `effective_permission_codenames` (login token), and `core.access.users_with_permission`. Changing someone's extras ends their session so the new set loads at next sign-in; every change is audit-logged (`employee_permissions_update`).
+- API: `GET/PUT /api/employees/<uuid>/permissions/` (GET needs `settings.view`, PUT needs `settings.edit`). `settings.edit` can never be granted to one person; full access is a seat or superuser decision.
+- UI: Settings > Access has two tabs: **Everyone** (baseline matrix) and **One person** (search an employee, see baseline/seat counts, add or remove extra permissions). Tests: `apps/accounts/tests_employee_permissions.py`.
+
+### 14. Salary structures: effective-dated components, audit, and the Basic pay dialog
+- Components of a structure change from an effective date (never earlier than the next pay cycle start). Each change is a `SalaryComponentRevision`; history and issued payslips are never rewritten, and values an employee already has stay stored even when a component is disabled (they are ignored while it is off, and reset when it is re-enabled).
+- Every revision stores the full component configuration. Creating a component now saves the component's own values (a missing `is_active`/`order` used to break the payroll lookup), and audit entries are JSON-encoded (changing, disabling or reordering a component used to fail with a 500).
+- Audit Log (module `payroll`): `salary_component_created/updated/deactivated/reordered`, `salary_structure_created/updated/deleted` (including switching the default), `payroll_allowance_created/updated`. A save that changes nothing is not logged.
+- A salary structure that employees still use cannot be deleted (409 with the employee count); the default cannot be deleted.
+- The employee Basic pay dialog shows only the components of the structure assigned to that employee (default structure when none is set). With no usable structure it shows a warning and cannot be saved, instead of falling back to a fixed legacy list.
+- Tests: `apps/payroll/tests_salary_structure_effective.py` (16), `frontend/lib/payBreakup.test.ts` (7).

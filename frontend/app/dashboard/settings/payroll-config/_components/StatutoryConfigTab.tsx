@@ -187,9 +187,11 @@ export default function StatutoryConfigTab() {
                 <button
                   onClick={saveConfig}
                   disabled={saving}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[var(--info)] text-white rounded-lg hover:bg-[var(--info)] disabled:opacity-50"
+                  className="btn btn-filled disabled:opacity-50"
                 >
-                  {saving ? "Saving…" : <><i className="ti ti-device-floppy text-sm" /> Save</>}
+                  {saving
+                    ? <><i className="ti ti-loader-2 animate-spin text-sm" /> Saving…</>
+                    : <><i className="ti ti-device-floppy text-sm" /> Save Changes</>}
                 </button>
               )}
             </div>
@@ -216,7 +218,7 @@ export default function StatutoryConfigTab() {
                   onChange={v => setField("esi_applicable", v)}
                 />
                 {current.esi_applicable && (
-                  <div className="grid grid-cols-3 gap-3 mt-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                     <NumField
                       label="Wage Ceiling (₹)"
                       value={String(current.esi_wage_ceiling ?? "")}
@@ -247,7 +249,7 @@ export default function StatutoryConfigTab() {
                 />
                 {current.lwf_applicable && (
                   <>
-                    <div className="grid grid-cols-3 gap-3 mt-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                       <NumField
                         label="Employee Amount (₹)"
                         value={String(current.lwf_employee_amount ?? "")}
@@ -275,7 +277,7 @@ export default function StatutoryConfigTab() {
                       The amount above is charged in full only in the due month(s) below — it is never divided across the year.
                     </p>
                     {current.lwf_frequency === "annual" && (
-                      <div className="grid grid-cols-3 gap-3 mt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                         <MonthSelect
                           label="Due Month"
                           value={current.lwf_due_months?.[0]}
@@ -284,7 +286,7 @@ export default function StatutoryConfigTab() {
                       </div>
                     )}
                     {current.lwf_frequency === "halfyearly" && (
-                      <div className="grid grid-cols-3 gap-3 mt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                         <MonthSelect
                           label="Due Month 1"
                           value={current.lwf_due_months?.[0]}
