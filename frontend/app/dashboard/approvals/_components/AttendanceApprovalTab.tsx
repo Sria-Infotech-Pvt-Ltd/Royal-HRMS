@@ -81,7 +81,14 @@ export default function AttendanceApprovalTab() {
   const mgrTotalCount     = summary?.cycle.mgr_total_count ?? 0;
 
   // Determine what action the current user can take
-  const canDoL1 = currentUserPending && !l1Done;
+  // When no manager has team-lead rights configured at all for this cycle
+  // (mgrTotalCount === 0), nobody will ever have a ManagerAttendanceApproval
+  // row, so current_user_pending can never be true -- that's exactly the
+  // "no managers configured" bypass case, where whoever can see this cycle
+  // at all (HR/Admin, gated server-side) is also allowed to approve L1
+  // directly (backend's AttendanceApprovalView has the matching fallback).
+  const noManagersConfigured = mgrTotalCount === 0;
+  const canDoL1 = (currentUserPending || noManagersConfigured) && !l1Done;
   const canDoL2 = l1Done && !l2Done;
   const approvalLevel: 1 | 2 | null = canDoL1 ? 1 : canDoL2 ? 2 : null;
 
@@ -312,7 +319,9 @@ export default function AttendanceApprovalTab() {
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
                 <i className="ti ti-user-check" style={{ marginRight: 6, color: "var(--primary)" }} />
                 {approvalLevel === 1
-                  ? "Your sign-off is required — review your team's attendance and approve"
+                  ? noManagersConfigured
+                    ? "No managers have team-lead rights configured for this cycle — HR/Admin can approve L1 directly"
+                    : "Your sign-off is required — review your team's attendance and approve"
                   : "HR (L2) — Final sign-off on attendance"}
               </div>
               <textarea
