@@ -57,9 +57,12 @@ def send_announcement_email_task(self, schema_name: str, announcement_id: int):
     rather than raised, so a retry can never re-send a batch that already
     went out to its recipients.
     """
-    from django.core.mail import EmailMultiAlternatives
+    from html import unescape
 
-    from apps.accounts.utils import _company_email_wrapper, _get_company_branding, _get_smtp_connection
+    from django.core.mail import EmailMultiAlternatives
+    from django.template.defaultfilters import linebreaksbr
+
+    from apps.accounts.utils import _company_email_wrapper, _get_company_branding, _get_smtp_connection, _html_to_text
     from apps.announcements.models import Announcement
     from apps.tenants.utils import run_in_tenant
 
@@ -86,7 +89,17 @@ def send_announcement_email_task(self, schema_name: str, announcement_id: int):
 
             smtp_connection, from_email = _get_smtp_connection()
             subject = f'[Announcement] {announcement.title}'
-            body    = _company_email_wrapper(announcement.body, *_get_company_branding())
+            # The body is plain text typed into a textarea (the app shows it
+            # escaped), so escape it and keep its line breaks as <br> before
+            # placing it inside the branded HTML wrapper.
+            body    = _company_email_wrapper(linebreaksbr(announcement.body, autoescape=True), *_get_company_branding())
+            # Readable plain-text alternative: the same block-aware conversion
+            # the other branded emails use (_build_message), with entities
+            # such as &amp; / &nbsp; turned back into characters.
+            text    = unescape(_html_to_text(body))
+            # Drop the template's indentation and repeated spaces (including
+            # the footer's non-breaking spaces) so the fallback reads cleanly.
+            text    = '\n'.join(' '.join(line.split()) for line in text.splitlines())
         except RuntimeError as exc:
             # No active SMTP config — matches the previous synchronous
             # behaviour: log and give up, since retrying immediately won't
@@ -103,14 +116,20 @@ def send_announcement_email_task(self, schema_name: str, announcement_id: int):
                 batch     = recipients[i:i + _ANNOUNCEMENT_EMAIL_BATCH_SIZE]
                 batch_num = i // _ANNOUNCEMENT_EMAIL_BATCH_SIZE + 1
                 try:
-                    EmailMultiAlternatives(
+                    # `body` is the branded HTML — send it as the text/html
+                    # alternative with a plain-text fallback. (It used to be
+                    # passed as the plain-text body itself, so mail clients
+                    # showed the raw HTML source.)
+                    msg = EmailMultiAlternatives(
                         subject=subject,
-                        body=body,
+                        body=text,
                         from_email=from_email,
                         to=[from_email],   # required "to" for RFC compliance
                         bcc=batch,
                         connection=smtp_connection,
-                    ).send()
+                    )
+                    msg.attach_alternative(body, 'text/html')
+                    msg.send()
                     sent_batches += 1
                 except Exception as exc:
                     failed_batches += 1
