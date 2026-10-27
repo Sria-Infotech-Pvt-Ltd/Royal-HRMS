@@ -202,7 +202,10 @@ class PunchService:
                 device_id=punch_data.get('device_id', ''),
                 face_verified=face.is_match if face.required else False,
                 face_match_distance=face.distance,
+                face_fallback=face.fallback,
             )
+            if face.fallback:
+                _audit_punch_without_face(punch, employee)
 
         # WFH-mode punches already resolved WorkFromHomeRequest.approved_for()
         # once above (via GeofencingService._validate_wfh) — passed straight
@@ -1138,3 +1141,19 @@ def _build_location_label(employee, punch=None) -> str:
     if punch:
         parts.append(mode_labels.get(punch.source, punch.source.title()))
     return ' · '.join(parts) if parts else 'Web'
+
+
+def _audit_punch_without_face(punch, employee) -> None:
+    """A punch accepted without a face match under the Face ID fallback: always on the audit log, so HR can review it."""
+    from apps.accounts.models import AuditLog
+    from apps.attendance.services_face_policy import employee_state, registration_mode
+
+    AuditLog.objects.create(
+        user=employee, action='punch_without_face_id', module='attendance', object_id=str(punch.pk),
+        branch=getattr(employee, 'branch', '') or '',
+        changes={
+            'employee_id': employee.employee_id, 'punch_type': punch.punch_type,
+            'attendance_mode': punch.attendance_mode, 'face_id_state': employee_state(employee),
+            'registration_mode': registration_mode(),
+        },
+    )

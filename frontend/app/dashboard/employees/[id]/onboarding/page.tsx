@@ -42,7 +42,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
   const router = useRouter();
   const canEdit    = usePermission("onboarding.edit");
   const canApprove = usePermission("onboarding.approve");
-  const { isMandatory: faceIdMandatory } = useFaceVerificationStatus();
+  const { isMandatory: faceIdMandatory, hrNote: faceIdHrNote, fallbackActive: faceFallbackActive } = useFaceVerificationStatus();
   // Basic Details reuses PUT /employees/<id>/ (Edit Employee's own endpoint)
   // directly, so it's gated on the same permission that endpoint itself
   // checks (employees.edit), not onboarding.edit.
@@ -872,20 +872,18 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
         <div>
           {faceIdMandatory ? (
             <>
-              <b>Face ID registration required.</b> Your organisation requires every employee to register a
-              Face ID before they can clock in or out on the web — this record will stay unable to punch in
-              until it&apos;s completed. It isn&apos;t part of this wizard; register it in person from{" "}
+              <b>Face ID registration required.</b> {faceIdHrNote}{" "}
+              {faceFallbackActive
+                ? "Until it is done, this employee can still clock in from the office; those punches are flagged for HR."
+                : "Until it is done, this employee cannot clock in on the web."}{" "}
               <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>
                 Face ID Registrations
-              </a>.
+              </a>
             </>
           ) : (
             <>
-              Face ID registration isn&apos;t part of this wizard — register it in person from{" "}
-              <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>
-                Face ID Registrations
-              </a>{" "}
-              if your organisation ever turns on Attendance Settings → Face ID Verification.
+              Face ID registration isn&apos;t required at the moment. It starts to apply if your organisation turns on{" "}
+              Attendance Settings → Face ID Verification.
             </>
           )}
         </div>

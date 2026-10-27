@@ -971,6 +971,31 @@ class AttendanceFaceVerificationRules(models.Model):
         help_text='When on, face ID registration is mandatory for every employee and is enforced at web clock-in/out.',
     )
 
+    # Who registers a face ID (no `choices=` on purpose: the allowed values are validated in the settings serializer;
+    # see scripts/check_no_new_choices.py).
+    MODE_SELF_SERVICE = 'self_service'                    # the employee registers; active at once
+    MODE_HR_IN_PERSON = 'hr_in_person'                    # only HR registers, in person
+    MODE_SELF_SERVICE_APPROVAL = 'self_service_hr_approval'  # the employee registers; HR approves
+    REGISTRATION_MODES = (MODE_SELF_SERVICE, MODE_HR_IN_PERSON, MODE_SELF_SERVICE_APPROVAL)
+    registration_mode = models.CharField(
+        max_length=30, default=MODE_SELF_SERVICE_APPROVAL,
+        help_text='Who registers an employee\'s face ID: the employee, HR in person, or the employee with HR approval.',
+    )
+
+    # An optional, audited way to clock in from the office before a face ID exists.
+    FALLBACK_NONE = 'none'
+    FALLBACK_DAYS_AFTER_JOINING = 'days_after_joining'
+    FALLBACK_UNTIL_APPROVED = 'until_approved'
+    FALLBACK_POLICIES = (FALLBACK_NONE, FALLBACK_DAYS_AFTER_JOINING, FALLBACK_UNTIL_APPROVED)
+    fallback_policy = models.CharField(
+        max_length=30, default=FALLBACK_NONE,
+        help_text='none: a face ID is always required. days_after_joining: geofenced punches without a face ID for '
+                  'fallback_days after the date of joining. until_approved: until a face ID is approved.',
+    )
+    fallback_days = models.PositiveSmallIntegerField(
+        default=7, help_text='Days after the date of joining (used when fallback_policy is days_after_joining).',
+    )
+
     class Meta:
         db_table = 'attendance_settings_face_verification'
 
@@ -1127,6 +1152,11 @@ class AttendancePunch(models.Model):
         null=True, blank=True,
         help_text='Euclidean distance between submitted and registered face '
                    'descriptors. Null when face verification did not apply.',
+    )
+    face_fallback       = models.BooleanField(
+        default=False,
+        help_text='True when this punch was accepted WITHOUT a face match because the employee has no approved face '
+                   'ID yet and the organisation\'s Face ID fallback allowed it. Always audit-logged.',
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

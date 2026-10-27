@@ -20,6 +20,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
 from apps.attendance.models import FaceRegistrationRequest
+from apps.attendance.tests_face_verification import _set_face_verification_mandatory
 
 
 def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
@@ -35,6 +36,8 @@ class SelfSubmitCaptureQualityTests(TestCase):
     """POST /api/attendance/face-registration/ (FaceRegistrationSubmitView)."""
 
     def setUp(self):
+        # Self-registration only exists while Face ID is switched on; do not depend on settings left in the database.
+        _set_face_verification_mandatory(True)
         self.client = APIClient()
         self.employee = make_user('capturequality@test.com', role=make_role('employee'), password='TestPass123!')
         _login(self.client, 'capturequality@test.com')

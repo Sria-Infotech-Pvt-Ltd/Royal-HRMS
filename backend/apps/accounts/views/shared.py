@@ -836,12 +836,12 @@ def _submit_onboarding(target_user):
         )
 
     # Face ID registration — only required when the admin's org-wide
-    # "Face ID Verification" toggle (Attendance Settings) is mandatory.
-    # Approval isn't required at this point, only that a request was
-    # submitted — same "uploaded, not yet approved, is enough" bar as
-    # the documents check above.
-    from apps.attendance.services_face_matching import is_face_verification_mandatory
-    if is_face_verification_mandatory():
+    # "Face ID Verification" toggle (Attendance Settings) is mandatory AND employees may register it themselves.
+    # When HR registers Face ID in person (registration mode "hr_in_person") the new hire cannot do it, so it must not
+    # block their onboarding; HR registers it afterwards. Approval isn't required at this point, only that a request
+    # was submitted — same "uploaded, not yet approved, is enough" bar as the documents check above.
+    from apps.attendance.services_face_policy import can_employee_self_register
+    if can_employee_self_register():
         from apps.attendance.models import FaceRegistrationRequest
         has_face_registration = FaceRegistrationRequest.objects.filter(employee=target_user).exists()
         if not has_face_registration:

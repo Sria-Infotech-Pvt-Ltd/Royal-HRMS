@@ -7,38 +7,31 @@ import type { FaceRegistrationRequest } from "@/types/faceRegistration";
 
 export type FaceRegistrationCardState =
   | "disabled"        // org toggle is off — feature switched off, contact admin
-  | "not_registered"  // toggle on, employee has never submitted a request
+  | "not_registered"  // toggle on, no Face ID and no request
   | "pending"         // toggle on, submitted and awaiting HR approval
-  | "rejected"        // toggle on, HR rejected the last submission
+  | "rejected"        // toggle on, the last submission was rejected
   | "approved";       // toggle on, employee is registered and verified at punch
 
 /**
- * Drives the "Face Registration" card on the employee Profile page.
- * Combines the org-wide mandatory toggle with the employee's own latest
- * FaceRegistrationRequest so the card can render the right state instead of
- * always showing a "Register My Face" button regardless of admin config.
+ * Drives the "Face Registration" card on the employee Profile page. The state, the instruction text and whether the
+ * employee may register at all all come from the server's Face ID answer (the organisation's registration mode), so
+ * this card says exactly what the clock-in error and the onboarding screens say.
  */
 export function useFaceRegistrationCard() {
-  const { isMandatory, loading: statusLoading } = useFaceVerificationStatus();
-  const { data: registration, loading: registrationLoading, refetch } =
+  const status = useFaceVerificationStatus();
+  const { data: registration, loading: registrationLoading, refetch: refetchRegistration } =
     useFetch<Partial<FaceRegistrationRequest>>(API.attendance.faceRegistration.me);
 
-  let state: FaceRegistrationCardState = "not_registered";
-  if (!isMandatory) {
-    state = "disabled";
-  } else if (registration?.status === "approved") {
-    state = "approved";
-  } else if (registration?.status === "pending") {
-    state = "pending";
-  } else if (registration?.status === "rejected") {
-    state = "rejected";
-  }
+  const state: FaceRegistrationCardState = status.isMandatory ? status.state : "disabled";
 
   return {
-    isMandatory,
+    isMandatory: status.isMandatory,
     state,
+    message: status.message,
+    canSelfRegister: status.canSelfRegister,
+    fallbackActive: status.fallbackActive,
     notes: registration?.notes ?? "",
-    loading: statusLoading || registrationLoading,
-    refetch,
+    loading: status.loading || registrationLoading,
+    refetch: () => { status.refetch(); refetchRegistration(); },
   };
 }

@@ -37,6 +37,8 @@ import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "./S
 import DocumentsChecklistStep, { REQUIRED_DOC_KEYS, REQUIRED_DOC_LABELS, EMPTY_VERIFICATION, type VerificationDraft, type HireDocument } from "./DocumentsChecklistStep";
 import ReviewStep from "./ReviewStep";
 import DateInput from "@/components/shared/DateInput";
+import HireCompletionPanel from "./HireCompletionPanel";
+import type { FaceIdHireSummary } from "@/types/faceId";
 import {
   EMPTY_FORM,
   type IdentityExtras,
@@ -129,6 +131,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [eduExpFieldConfig, setEduExpFieldConfig] = useState<EducationExperienceFieldConfigResponse>({ education: [], experience: [] });
 
   const [hiring, setHiring] = useState(false);
+  const [completedHire, setCompletedHire] = useState<{ faceId: FaceIdHireSummary; code: string } | null>(null);
   const [hireError, setHireError] = useState<string | null>(null);
 
   // QA report #37 — the error banner rendered at the top of the step, so
@@ -423,6 +426,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         if (statutory.account_number.trim().length < 6) return "Enter a valid account number.";
         if (!statutory.ifsc_code.trim()) return "IFSC code is required.";
         if (!IFSC_RE.test(statutory.ifsc_code.trim())) return "Enter a valid IFSC code (format: HDFC0001234).";
+        if (statutory.uan_number.trim() && statutory.uan_number.trim().length !== 12) return "UAN must be exactly 12 digits.";
         if (statutory.passport_issue_date && statutory.passport_expiry && statutory.passport_expiry <= statutory.passport_issue_date) {
           return "Passport expiry must be after the issue date.";
         }
@@ -561,8 +565,11 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       // happened without going through handleNext/goToStep (e.g. the last
       // real save site missed in some future change to this file).
       await patchAction(buildFullDraftPayload()).catch(() => {});
-      await clientApi.post(API.hireActions.complete(hireActionId));
-      onHired();
+      const response = await clientApi.post<{ data?: { face_id?: FaceIdHireSummary; reserved_employee_id?: string } }>(API.hireActions.complete(hireActionId));
+      const faceId = response.data?.data?.face_id;
+      // Show the completion screen (with the Face ID next step); closing the wizard happens from there.
+      if (faceId) setCompletedHire({ faceId, code: response.data?.data?.reserved_employee_id ?? "" });
+      else onHired();
     } catch (e) {
       setHireError((e as { message?: string })?.message || "Could not hire this employee.");
     } finally {
@@ -635,6 +642,17 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     return count + (isDone ? 1 : 0);
   }, 0);
   const progressPct = Math.round((doneStepCount / STEPS.length) * 100);
+
+  if (completedHire) {
+    return (
+      <HireCompletionPanel
+        employeeName={[firstName, lastName].filter(Boolean).join(" ") || "The new hire"}
+        employeeCode={completedHire.code}
+        faceId={completedHire.faceId}
+        onDone={onHired}
+      />
+    );
+  }
 
   return (
     <>

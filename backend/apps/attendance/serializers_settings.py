@@ -143,6 +143,15 @@ class AbsenceAlertWriteSerializer(serializers.Serializer):
 
 class FaceVerificationRulesWriteSerializer(serializers.Serializer):
     is_mandatory = serializers.BooleanField(default=False)
+    registration_mode = serializers.ChoiceField(
+        choices=AttendanceFaceVerificationRules.REGISTRATION_MODES,
+        default=AttendanceFaceVerificationRules.MODE_SELF_SERVICE_APPROVAL,
+    )
+    fallback_policy = serializers.ChoiceField(
+        choices=AttendanceFaceVerificationRules.FALLBACK_POLICIES,
+        default=AttendanceFaceVerificationRules.FALLBACK_NONE,
+    )
+    fallback_days = serializers.IntegerField(min_value=1, max_value=90, default=7)
 
 
 class AttendanceSettingsWriteSerializer(serializers.Serializer):
@@ -289,7 +298,7 @@ class AbsenceAlertReadSerializer(serializers.ModelSerializer):
 class FaceVerificationRulesReadSerializer(serializers.ModelSerializer):
     class Meta:
         model  = AttendanceFaceVerificationRules
-        fields = ('is_mandatory',)
+        fields = ('is_mandatory', 'registration_mode', 'fallback_policy', 'fallback_days')
         read_only_fields = fields
 
 

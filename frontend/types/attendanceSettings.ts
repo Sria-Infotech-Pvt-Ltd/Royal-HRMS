@@ -1,3 +1,5 @@
+import type { FaceIdFallbackPolicy, FaceIdMode } from "@/types/faceId";
+
 export interface WorkingHoursSection {
   shift_start: string;           // "HH:MM" in form — converted to "HH:MM:SS" on save
   shift_end: string;
@@ -40,6 +42,12 @@ export interface AbsenceAlertSection {
 
 export interface FaceVerificationSection {
   is_mandatory: boolean;
+  /** Who registers a Face ID: the employee, HR in person, or the employee with HR approval. */
+  registration_mode: FaceIdMode;
+  /** An optional, audited way to clock in from the office before a Face ID exists. */
+  fallback_policy: FaceIdFallbackPolicy;
+  /** Days after the date of joining, for the "days_after_joining" fallback (1-90). */
+  fallback_days: number;
 }
 
 export interface AttendanceSettingsForm {

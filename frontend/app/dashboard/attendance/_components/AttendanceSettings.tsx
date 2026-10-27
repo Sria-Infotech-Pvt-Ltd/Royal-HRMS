@@ -2,6 +2,7 @@
 
 import { useAttendanceSettings } from "@/hooks/useAttendanceSettings";
 import type { AttendanceSettingsForm } from "@/types/attendanceSettings";
+import { FACE_ID_FALLBACK_LABELS, FACE_ID_MODE_LABELS, type FaceIdFallbackPolicy, type FaceIdMode } from "@/types/faceId";
 import WeeklyOffPatternsCard from "./WeeklyOffPatternsCard";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -337,12 +338,57 @@ export default function AttendanceSettings() {
         <div className="card-body">
           <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>
             {form.face_verification.is_mandatory ? (
-              <>Face ID registration is <strong>mandatory</strong> for every employee. Web clock-in/out is blocked until an employee registers and is approved, and every web punch after that requires a live face match.</>
+              <>Face ID registration is <strong>mandatory</strong> for every employee. Every web punch needs a live face match against an approved Face ID; until one exists, web clock-in/out is blocked unless you allow the fallback below.</>
             ) : (
               <>Face ID verification is <strong>off</strong>. Employees cannot register a face ID or be asked to verify — their Profile page shows &ldquo;Contact admin to use this feature&rdquo;, and no punch requires a face match.</>
             )}
           </p>
           {fieldErr("face_verification", "is_mandatory") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 8, display: "block" }}>{fieldErr("face_verification", "is_mandatory")}</span>}
+
+          {form.face_verification.is_mandatory && (
+            <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
+              <div className="form-group">
+                <label className="field-label">Who registers a Face ID</label>
+                <select
+                  className="field-input field-select"
+                  value={form.face_verification.registration_mode}
+                  onChange={e => setForm(f => ({ ...f, face_verification: { ...f.face_verification, registration_mode: e.target.value as FaceIdMode } }))}
+                >
+                  {(Object.keys(FACE_ID_MODE_LABELS) as FaceIdMode[]).map(mode => <option key={mode} value={mode}>{FACE_ID_MODE_LABELS[mode]}</option>)}
+                </select>
+                <span style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginTop: 4 }}>
+                  Every message (the clock-in error, the Profile page, the Face ID Registrations screen, the hire screen and the welcome email) follows this choice.
+                </span>
+                {fieldErr("face_verification", "registration_mode") && <span style={{ fontSize: 11, color: "var(--error)" }}>{fieldErr("face_verification", "registration_mode")}</span>}
+              </div>
+
+              <div className="form-group">
+                <label className="field-label">Before a Face ID exists (new hires)</label>
+                <select
+                  className="field-input field-select"
+                  value={form.face_verification.fallback_policy}
+                  onChange={e => setForm(f => ({ ...f, face_verification: { ...f.face_verification, fallback_policy: e.target.value as FaceIdFallbackPolicy } }))}
+                >
+                  {(Object.keys(FACE_ID_FALLBACK_LABELS) as FaceIdFallbackPolicy[]).map(policy => <option key={policy} value={policy}>{FACE_ID_FALLBACK_LABELS[policy]}</option>)}
+                </select>
+                <span style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginTop: 4 }}>
+                  A fallback punch must still be from inside the office geofence. It is flagged on the punch and recorded in the Audit Log.
+                </span>
+              </div>
+
+              {form.face_verification.fallback_policy === "days_after_joining" && (
+                <div className="form-group" style={{ maxWidth: 220 }}>
+                  <label className="field-label">Days after joining</label>
+                  <input
+                    className="field-input" type="number" min={1} max={90}
+                    value={form.face_verification.fallback_days}
+                    onChange={e => setForm(f => ({ ...f, face_verification: { ...f.face_verification, fallback_days: Number(e.target.value) } }))}
+                  />
+                  {fieldErr("face_verification", "fallback_days") && <span style={{ fontSize: 11, color: "var(--error)" }}>{fieldErr("face_verification", "fallback_days")}</span>}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

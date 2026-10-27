@@ -233,6 +233,11 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
                         {p.source} · {p.mode}
                         {p.distance_m !== null && ` · ${p.distance_m.toFixed(0)}m from geofence`}
                       </div>
+                      {p.face_fallback && (
+                        <div style={{ fontSize: 11, color: "var(--warn)", fontWeight: 600, marginTop: 2 }}>
+                          <i className="ti ti-alert-triangle" /> No Face ID — allowed by the Face ID fallback, review
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

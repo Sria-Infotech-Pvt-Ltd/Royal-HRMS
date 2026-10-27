@@ -103,6 +103,8 @@ class PunchEntrySerializer(serializers.Serializer):
     mode        = serializers.CharField()
     is_geofence = serializers.BooleanField(allow_null=True)
     distance_m  = serializers.FloatField(allow_null=True)
+    # True when the punch went through without a face match under the Face ID fallback (flagged for HR review).
+    face_fallback = serializers.BooleanField(default=False)
 
 
 class AttendanceDetailSerializer(serializers.Serializer):

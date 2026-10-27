@@ -101,11 +101,6 @@ _LOW_CONFIDENCE_MESSAGE = (
     'Face verification failed and trying again right now won’t change the result. '
     'Please contact your HR representative to review or refresh your Face ID registration.'
 )
-_REGISTRATION_REQUIRED_MESSAGE = (
-    'Face ID registration is mandatory and you don’t have one yet. Please contact your '
-    'HR representative or manager — they can register your face ID for you from the Face ID '
-    'Registrations page.'
-)
 _ATTEMPT_CAP_MESSAGE = (
     'Too many failed face verification attempts. Please wait a few minutes before trying '
     'again, or contact HR if this keeps happening.'
@@ -175,6 +170,9 @@ class FaceVerificationOutcome:
     # retry loop (see apps.voice_commands.conversation_clock_in_face) uses
     # this to decide whether "try again" is even worth offering.
     blocked:            bool = False
+    # True when the punch goes ahead WITHOUT a face match because the employee has no approved face ID yet and the
+    # organisation's Face ID fallback allows it (see services_face_policy.fallback_allows). Always flagged and audited.
+    fallback:           bool = False
 
 
 class FaceVerificationService:
@@ -194,6 +192,14 @@ class FaceVerificationService:
             return cls._not_required(submitted_embedding)
 
         registration = cls._resolve_active_registration(employee)
+        if registration is None:
+            from apps.attendance.services_face_policy import fallback_allows
+
+            if fallback_allows(employee):
+                return FaceVerificationOutcome(
+                    required=False, embedding_provided=bool(submitted_embedding), is_match=False,
+                    distance=None, rejection_message=None, fallback=True,
+                )
         precondition_failure = cls._check_preconditions(registration, submitted_embedding, is_secure, employee)
         if precondition_failure:
             return precondition_failure
@@ -215,9 +221,11 @@ class FaceVerificationService:
         is touched any further. Returns the terminal outcome to short-circuit
         with, or None to continue."""
         if not registration:
+            from apps.attendance.services_face_policy import employee_state, instruction_for
+
             return FaceVerificationOutcome(
                 required=True, embedding_provided=False, is_match=False,
-                distance=None, rejection_message=_REGISTRATION_REQUIRED_MESSAGE,
+                distance=None, rejection_message=instruction_for(employee_state(employee)),
             )
         if not submitted_embedding:
             return FaceVerificationOutcome(

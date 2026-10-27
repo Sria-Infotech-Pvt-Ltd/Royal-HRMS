@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { usePermission } from "@/hooks/usePermission";
+import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
 import {
   useFaceRegistrationEmployeePicker,
   useEmployeeFaceStatus,
@@ -24,6 +25,7 @@ function StatusBadge({ status }: { status: FaceRegistrationStatus | undefined })
 
 export default function FaceIdRegistrationsPage() {
   const canRegister = usePermission("facial_recognition.approve");
+  const faceStatus = useFaceVerificationStatus();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<FaceRegistrationEmployee | null>(null);
   const [confirmReplace, setConfirmReplace] = useState(false);
@@ -64,7 +66,7 @@ export default function FaceIdRegistrationsPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Face ID Registrations</div>
-          <div className="page-sub">Register or update an employee&apos;s face ID in person — approved immediately.</div>
+          <div className="page-sub">{faceStatus.hrNote || "Register or update an employee's face ID in person — approved immediately."}</div>
         </div>
       </div>
 

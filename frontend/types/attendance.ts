@@ -158,6 +158,8 @@ export interface AttendanceDetailPunch {
   mode:        string;
   is_geofence: boolean | null;
   distance_m:  number | null;
+  /** Accepted without a face match under the Face ID fallback — flagged for HR review. */
+  face_fallback?: boolean;
 }
 
 export interface AttendanceDetail {

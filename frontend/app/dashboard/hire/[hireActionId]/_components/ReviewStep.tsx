@@ -60,7 +60,7 @@ export default function ReviewStep(props: Props) {
   // capture is an in-person webcam interaction (HRFaceCaptureModal, via
   // Face ID Registrations), not something this wizard can collect itself —
   // so it can never be a blockingReasons entry, only a reminder here.
-  const { isMandatory: faceIdMandatory } = useFaceVerificationStatus();
+  const { isMandatory: faceIdMandatory, registrationMode: faceIdMode, fallbackActive: faceFallbackActive } = useFaceVerificationStatus();
 
   const missingRequiredDocs = requiredDocTypes.filter(t => !uploadedDocTypes.has(t));
   const nomineeTotals: Record<string, number> = {};
@@ -86,6 +86,7 @@ export default function ReviewStep(props: Props) {
   if (!statutory.account_holder_name.trim()) blockingReasons.push("Account holder name");
   if (!statutory.account_number.trim()) blockingReasons.push("Account number");
   if (!statutory.ifsc_code.trim()) blockingReasons.push("IFSC code");
+  if (statutory.uan_number && statutory.uan_number.length !== 12) blockingReasons.push("UAN must be 12 digits");
   // The shared EducationChecklist component's own copy ("at least one is
   // required before you can submit") was never actually enforced anywhere
   // in this wizard — QA report #39 caught the step passing through empty.
@@ -136,13 +137,20 @@ export default function ReviewStep(props: Props) {
 
       {faceIdMandatory && (
         <div className="note warn" style={{ marginBottom: 16 }}>
-          <b>Face ID registration still required</b>
-          Your organisation requires every employee to register a Face ID before they can clock in or out
-          on the web. This isn&apos;t collected by this wizard — it&apos;s an in-person capture done separately.
-          Hiring this employee now will leave them unable to punch in until it&apos;s completed on{" "}
-          <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>
-            Face ID Registrations
-          </a>.
+          <b>Face ID after hiring</b>
+          {faceIdMode === "hr_in_person" && (
+            <>Face ID is registered in person by HR. After the hire is created, register it on{" "}
+              <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>Face ID Registrations</a>.
+              The new hire cannot register it themselves.</>
+          )}
+          {faceIdMode === "self_service" && <>The new hire registers their own Face ID from their Profile page; it is active immediately.</>}
+          {faceIdMode === "self_service_hr_approval" && (
+            <>The new hire registers their Face ID from their Profile page, and HR approves it on{" "}
+              <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>Face ID Registrations</a>.</>
+          )}{" "}
+          {faceFallbackActive
+            ? "Until then they can still clock in from the office; those punches are flagged for HR."
+            : "Until it is done they cannot clock in on the web."}
         </div>
       )}
 
@@ -190,10 +198,10 @@ export default function ReviewStep(props: Props) {
         <h4>STATUTORY &amp; ACCOUNTS</h4>
         <div className="g2">
           <div className="kvlist">
-            <Row label="PAN" value={panNumber} warn={!panNumber} />
-            <Row label="Aadhaar" value={aadhaarNumber} warn={!aadhaarNumber} />
+            <Row label="PAN" value={panNumber ? `${panNumber.slice(0, 3)}••••${panNumber.slice(-1)}` : ""} warn={!panNumber} />
+            <Row label="Aadhaar" value={aadhaarNumber ? `XXXX XXXX ${aadhaarNumber.slice(-4)}` : ""} warn={!aadhaarNumber} />
             <Row label="Bank account" value={statutory.account_number ? `••••${statutory.account_number.slice(-4)}` : ""} />
-            <Row label="IFSC / bank" value={statutory.bank_name ? `${statutory.ifsc_code} · ${statutory.bank_name}` : statutory.ifsc_code} />
+            <Row label="IFSC / bank" value={statutory.bank_name ? `${"•".repeat(statutory.ifsc_code.length)} · ${statutory.bank_name}` : "•".repeat(statutory.ifsc_code.length)} />
           </div>
           <div className="kvlist">
             <Row label="Tax regime" value={basicPay.tax_regime === "old" ? "Old Regime" : "New Regime (115BAC)"} />

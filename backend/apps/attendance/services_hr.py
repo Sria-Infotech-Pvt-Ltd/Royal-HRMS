@@ -387,6 +387,7 @@ def get_attendance_detail(
             'mode':        p.attendance_mode,
             'is_geofence': p.is_inside_geofence,
             'distance_m':  float(p.calculated_distance) if p.calculated_distance else None,
+            'face_fallback': p.face_fallback,
         }
         for p in punches
     ]

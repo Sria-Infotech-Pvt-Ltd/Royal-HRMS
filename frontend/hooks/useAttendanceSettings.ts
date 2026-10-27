@@ -41,6 +41,9 @@ const DEFAULTS: AttendanceSettingsForm = {
   },
   face_verification: {
     is_mandatory: false,
+    registration_mode: "self_service_hr_approval",
+    fallback_policy: "none",
+    fallback_days: 7,
   },
 };
 
@@ -97,6 +100,9 @@ function mergeWithDefaults(api: AttendanceSettingsApiResponse): AttendanceSettin
     },
     face_verification: {
       is_mandatory: fv.is_mandatory ?? DEFAULTS.face_verification.is_mandatory,
+      registration_mode: fv.registration_mode ?? DEFAULTS.face_verification.registration_mode,
+      fallback_policy: fv.fallback_policy ?? DEFAULTS.face_verification.fallback_policy,
+      fallback_days: fv.fallback_days ?? DEFAULTS.face_verification.fallback_days,
     },
   };
 }

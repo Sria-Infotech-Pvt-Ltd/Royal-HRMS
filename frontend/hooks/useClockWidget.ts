@@ -7,14 +7,6 @@ import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
 import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
 import type { TodaySession, AttendanceMode, PunchLocation } from "@/types/attendance";
-import type { FaceRegistrationRequest } from "@/types/faceRegistration";
-
-const _REGISTRATION_MESSAGES: Record<string, string> = {
-  pending:  "Your face ID registration is pending HR approval. You can clock in once it's approved.",
-  rejected: "Your face ID registration was rejected. Please register again from your Profile page.",
-};
-const _REGISTRATION_MISSING_MESSAGE =
-  "Face ID registration is mandatory. Please register your face ID from your Profile page before clocking in.";
 
 type NormalisedError = { message?: string };
 
@@ -44,17 +36,13 @@ function parseOS(): string {
 export function useClockWidget() {
   const { showToast } = useToast();
   const { data: todayData, loading: fetchLoading, refetch } = useFetch<TodaySession>(API.attendance.today);
-  // Backend returns {} (not an actual registration) when the employee has
-  // never submitted one — .status only ever matches "approved" for a real one.
-  const { data: faceStatus } = useFetch<Partial<FaceRegistrationRequest>>(API.attendance.faceRegistration.me);
-  const { isMandatory } = useFaceVerificationStatus();
-  const isApproved = faceStatus?.status === "approved";
-  // Org toggle is the single source of truth (see AttendanceFaceVerificationRules
-  // on the backend) — when it's off, nobody is asked to verify, even someone
-  // approved from before; when it's on, an approved employee must verify and
-  // everyone else is blocked from punching until they register (see punch() below).
-  const faceVerificationRequired = isMandatory && isApproved;
-  const faceRegistrationMissing  = isMandatory && !isApproved;
+  // The server decides everything about Face ID (mode, this person's state, the instruction, the fallback), so this
+  // hook never writes its own wording. The org toggle is the single source of truth: when it is off nobody is asked
+  // to verify; when it is on, an employee with an approved Face ID must verify, and everyone else is stopped with the
+  // server's instruction unless the audited fallback currently allows an office punch without one.
+  const { isMandatory, requiresFaceToPunch, fallbackActive, message: faceMessage } = useFaceVerificationStatus();
+  const faceVerificationRequired = isMandatory && requiresFaceToPunch;
+  const faceRegistrationMissing  = isMandatory && !requiresFaceToPunch && !fallbackActive;
   const [session, setSession] = useState<TodaySession | null>(null);
   const [isPunching, setIsPunching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
@@ -148,9 +136,7 @@ export function useClockWidget() {
       captureSessionId?: string,
     ): Promise<boolean> => {
       if (faceRegistrationMissing) {
-        const message = (faceStatus?.status && _REGISTRATION_MESSAGES[faceStatus.status])
-          ?? _REGISTRATION_MISSING_MESSAGE;
-        showToast(message, "error");
+        showToast(faceMessage || "Face ID registration is required before you can clock in.", "error");
         return false;
       }
 
@@ -188,11 +174,11 @@ export function useClockWidget() {
         setIsPunching(false);
       }
     },
-    [showToast, faceRegistrationMissing, faceStatus]
+    [showToast, faceRegistrationMissing, faceMessage]
   );
 
   return {
     session, isLoading: fetchLoading && !session, isPunching, isLocating,
-    faceVerificationRequired, faceRegistrationMissing, prepareLocation, punch,
+    faceVerificationRequired, faceRegistrationMissing, faceFallbackActive: fallbackActive, prepareLocation, punch,
   };
 }
