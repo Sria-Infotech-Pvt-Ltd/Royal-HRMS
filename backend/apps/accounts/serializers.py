@@ -1413,9 +1413,10 @@ class MyProfileSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(obj.profile_photo.url) if request else obj.profile_photo.url
 
     def get_reporting_manager(self, obj):
-        # Managers are the reporting manager for others — they have none of their own to show.
-        if obj.role and obj.role.can_manage_team:
-            return None
+        # Returned for every role, Managers included: a Manager may report to
+        # the COO / Admin Head / their branch's HR or Branch Admin (see
+        # accounts.views._manager_reporting_candidates), and that must be
+        # visible on their own profile — same as _employee_dict() already does.
         mgr = obj.reporting_manager
         if not mgr:
             return None

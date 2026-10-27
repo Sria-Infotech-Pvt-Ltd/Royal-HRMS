@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { NOT_ASSIGNED, assignedName } from "@/lib/assignedPerson";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { SessionPayload } from "@/lib/session";
@@ -135,6 +136,17 @@ function fmtDate(iso: string | null | undefined): string {
 function val(v: string | number | null | undefined): string {
   if (v === null || v === undefined || v === "") return "—";
   return String(v);
+}
+
+/** Read-only assigned person (name only, never an id); "Not assigned" when empty. */
+function AssignedField({ label, person }: { label: string; person: AssignedPerson | null | undefined }) {
+  const display = assignedName(person);
+  return (
+    <div className="field-group">
+      <label className="field-label">{label}</label>
+      <div className={`field-static${display === NOT_ASSIGNED ? " is-empty" : ""}`}>{display}</div>
+    </div>
+  );
 }
 
 function ReadField({ label, value }: { label: string; value: string | number | null | undefined }) {
@@ -657,6 +669,13 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               <div className="form-row cols-2">
                 <ReadField label="Branch"         value={profile?.branch} />
                 <ReadField label="Date of Joining" value={joinedDate} />
+              </div>
+              <div className="form-row cols-2">
+                <AssignedField label="Reporting Manager"  person={profile?.reporting_manager} />
+                <AssignedField label="Reporting Approver" person={profile?.reporting_approver} />
+              </div>
+              <div className="form-row cols-2">
+                <AssignedField label="HR" person={profile?.hr} />
               </div>
               <div className="form-row cols-2">
                 <div className="field-group">
