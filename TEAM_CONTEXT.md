@@ -4562,7 +4562,7 @@ Decisions: (1) permissions are attached to each **Position** (seat); whoever hol
 - Fixed two now-flaky tests this exposed: `apps/hrms/tests.py`'s backdated-leave tests used a hardcoded `today - 2 days`, which happened to be a Sunday on test-run day -- now that weekly-off is actually enforced (it never was before, for lack of a default policy), that date got correctly rejected as a weekly off instead of accepted as a valid backdated leave day. Replaced with `_recent_past_weekday()`, which walks back to the nearest real weekday instead of a fixed offset.
 - Tests: ran `apps.hrms` suite (93 tests) alone against real Neon -- clean after the date fix. `makemigrations --check --dry-run` confirms no missing model migrations.
 
-### 18. Salary Setup pagination, one "payroll ready" rule, and no duplicate CTC revisions (bug 7)
+### 20. Salary Setup pagination, one "payroll ready" rule, and no duplicate CTC revisions (bug 8)
 **Bug:** Salary Setup loaded page 1 (20 rows) of `GET /payroll/employee-salary/` and page 1 of the employee list and joined them in the browser, so only 20 of 52 employees were reachable, the KPI cards contradicted the banner and the Payroll dashboard, an employee with a salary set at hire showed "Not set", a successful save still showed "Not set", an empty save said nothing, page 4 of 3 returned page 3, and saving an unchanged CTC added a revision each time.
 
 **What changed**
@@ -4596,7 +4596,9 @@ Decisions: (1) permissions are attached to each **Position** (seat); whoever hol
 - Have NOT updated `TEAM_CONTEXT.md`'s final state (this entry) after tests pass, NOT committed, NOT pushed, NOT reported results/reply message to the user, and have NOT asked for the next bug yet -- all per the user's standing per-bug workflow.
 - Full bug-9 ticket text and the exact 5 numbered tasks/acceptance criteria are in this session's conversation history if resuming fresh without memory of this turn.
 
-### 19. CONTINUATION - bug-fix log and how to resume (read this first in a new session)
+### 21. CONTINUATION - bug-fix log and how to resume (read this first in a new session)
+**More than one Claude session can work in this repo at once** (bugs 7 and 9 were done by a different session while 6 and 8 were done here). Before committing: `git status`, stage only the files YOU changed (use a hunk-level stage for shared files such as TEAM_CONTEXT.md or accounts/views/shared.py), never `git add -A`, and never revert or commit another session's edits. Keep section numbers unique when appending here.
+
 **How we work on each bug (the user's standing rule):** read the code and data first; fix it fully in the tool (backend, frontend, tests); test on the Neon dev database only (no SQLite); update this file (a new numbered section above); commit and push to `New-AI` (a push deploys to UAT); give the results in plain words and a reply message for the ticket; then ASK the user for the next bug. Never leave the user's payroll or other unreviewed files in a commit: stage only the files you changed.
 
 **Bugs done (newest last)**
@@ -4605,12 +4607,14 @@ Decisions: (1) permissions are attached to each **Position** (seat); whoever hol
 | 1-5 | CTC rounding, roles removal (access via org-chart positions), assessments, modal overlap, employee flows, nav bar dropdowns, permissions UI, view-as-employee | 1-15 | various |
 | 5 | Kondapur branch geofence/coordinates and branch employee counts (UAT-040) | 16 | `fix: branch location validation...` |
 | 6 | Face ID ownership setting (self-service / HR in person / self-service + HR approval), one instruction, audited fallback, hire completion + welcome email | 17 | `feat: Face ID ownership setting...` |
-| 7 | Salary Setup pagination, KPI summary, one "payroll ready" rule, no duplicate CTC revisions | 18 | `fix: Salary Setup...` |
+| 7 | Holiday CSV import + default weekly-off pattern (done by another Claude session) | 18 | `Add holiday CSV import...` |
+| 8 | Salary Setup pagination, KPI summary, one "payroll ready" rule, no duplicate CTC revisions | 20 | `fix: Salary Setup...` |
+| 9 | Bank account/IFSC masking + audited reveal, hire-wizard bank persistence, UAN validation (ANOTHER Claude session; may still be uncommitted - see section 19 and its own memory note) | 19 | not committed when this was written |
 
 **Open items the business / the user must do (not done by code)**
 - Confirm Kondapur's real coordinates and address on UAT, then set them (section 16: Company Codes form or `python manage.py set_branch_location`); until then `--disable-geofencing` lets staff punch.
 - Retest Face ID on a real device (camera + GPS) under each mode and with the fallback on and off (section 17).
-- Check the Salary Setup screen, the Payroll dashboard card and the HR dashboard show the same numbers on UAT (section 18).
+- Check the Salary Setup screen, the Payroll dashboard card and the HR dashboard show the same numbers on UAT (section 20).
 - After each deploy UAT runs the new migrations: accounts 0199-0201, attendance 0044, payroll 0037-0039.
 
 **Environment facts that bit us**
