@@ -145,6 +145,20 @@ export interface EmployeeAccess {
   extra: string[];
 }
 
+/** One row of the Settings > Permissions employee list. */
+export interface EmployeeAccessRow {
+  uuid: string;
+  employee_id: string;
+  full_name: string;
+  branch: string;
+  position: string;
+  is_superuser: boolean;
+  total: number;
+  from_baseline: number;
+  from_seat: number;
+  extra: number;
+}
+
 export interface PermissionCatalogueItem {
   codename: string;
   action: string;

@@ -41,10 +41,9 @@ def has_perm(user, codename: str, *, full_access_bypass: bool = True) -> bool:
     # with no Role and no position must still pass.
     if getattr(user, 'is_superuser', False) and full_access_bypass:
         return True
-    # settings.edit is this codebase's universal "sees/does everything"
-    # signal — checking it here (permission-based) instead of a hardcoded
-    # role name means anything actually granted settings.edit gets the same bypass.
-    wanted = {codename, 'settings.edit'} if full_access_bypass else {codename}
+    # Only a superuser has every permission. Holding settings.edit (through a seat) lets someone manage Settings,
+    # nothing more: it no longer stands in for every other permission.
+    wanted = {codename}
     if not _is_saved_user(user):
         return False  # a stand-in object, not a saved User: there is no seat or baseline to look up
     if _seat_permission_rows(user).filter(permission__codename__in=wanted).exists():

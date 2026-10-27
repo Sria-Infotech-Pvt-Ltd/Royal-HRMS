@@ -4,8 +4,9 @@
 // added here is on top, follows the person (not the seat), and takes effect the next time they sign in.
 
 import { useEffect, useState } from "react";
-import { usePersonAccess, usePersonSearch, type PersonSearchResult } from "@/hooks/usePersonAccess";
-import type { PermissionCatalogueItem } from "@/types/orgStructure";
+import EmployeeAccessList from "@/components/EmployeeAccessList";
+import { usePersonAccess, type PersonSearchResult } from "@/hooks/usePersonAccess";
+import type { EmployeeAccessRow, PermissionCatalogueItem } from "@/types/orgStructure";
 
 interface Props {
   catalogue: Record<string, PermissionCatalogueItem[]>;
@@ -17,12 +18,10 @@ const labelOf = (text: string) => text.replace(/_/g, " ");
 const NOT_GRANTABLE = "settings.edit";
 
 export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
-  const [term, setTerm] = useState("");
   const [person, setPerson] = useState<PersonSearchResult | null>(null);
   const [extra, setExtra] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
-  const search = usePersonSearch(person ? "" : term);
   const { access: fetchedAccess, loading, error, isSaving, saveError, saveExtra } = usePersonAccess(person?.uuid ?? null);
   // Ignore a previous person's access while the newly chosen person's is still loading.
   const access = fetchedAccess && fetchedAccess.employee === person?.uuid ? fetchedAccess : null;
@@ -47,9 +46,8 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
     setExtra(current => (current.includes(codename) ? current.filter(value => value !== codename) : [...current, codename]));
   }
 
-  function choose(result: PersonSearchResult) {
+  function choose(result: EmployeeAccessRow) {
     setPerson(result);
-    setTerm("");
     setMessage(null);
   }
 
@@ -61,25 +59,7 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
   return (
     <div className="space-y-5">
       {!person ? (
-        <div>
-          <label className="mb-1 block text-sm font-semibold text-[var(--on-bg)]" htmlFor="person-search">Find an employee</label>
-          <input id="person-search" className="finput w-full max-w-md" type="search" value={term} onChange={event => setTerm(event.target.value)} placeholder="Name or email" autoComplete="off" />
-          {search.loading && <p className="mt-2 text-xs text-[var(--on-variant)]">Searching…</p>}
-          {search.error && <p className="mt-2 text-xs text-[var(--error)]">{search.error}</p>}
-          {search.isSearching && !search.loading && search.results.length === 0 && (
-            <p className="mt-2 text-xs text-[var(--on-variant)]">No employee found.</p>
-          )}
-          <ul className="mt-2 max-w-md divide-y divide-[var(--outline-v)]">
-            {search.results.map(result => (
-              <li key={result.uuid}>
-                <button type="button" className="flex w-full items-center justify-between py-2.5 text-left hover:text-[var(--primary)]" onClick={() => choose(result)}>
-                  <span className="text-sm font-medium">{result.full_name}</span>
-                  <span className="text-xs text-[var(--on-variant)]">{result.employee_id}{result.designation ? ` · ${result.designation}` : ""}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <EmployeeAccessList onSelect={choose} />
       ) : (
         <>
           <div className="flex items-center justify-between gap-3">

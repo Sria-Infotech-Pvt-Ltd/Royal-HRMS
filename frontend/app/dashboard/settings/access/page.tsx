@@ -91,7 +91,7 @@ export default function AccessSettingsPage() {
       </div>
 
       <header>
-        <h1 className="text-2xl font-bold text-[var(--on-bg)]">Access</h1>
+        <h1 className="text-2xl font-bold text-[var(--on-bg)]">Permissions</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--on-variant)]">
           Everyone gets the baseline. On top of that, each person gets the access of the position they hold
           (set in <Link className="font-semibold text-[var(--primary)] hover:underline" href="/dashboard/org-chart">Organization</Link>),

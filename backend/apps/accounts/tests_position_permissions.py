@@ -54,10 +54,11 @@ class SeatPermissionTests(TestCase):
         Position.objects.filter(pk=self.seat.pk).update(is_active=False)
         self.assertFalse(has_perm(self.person, 'payroll.view'), 'inactive seat')
 
-    def test_settings_edit_on_a_seat_is_full_access(self):
+    def test_settings_edit_on_a_seat_is_not_full_access(self):
         PositionPermission.objects.create(position=self.seat, permission=_permission('settings.edit'))
         self._place(date.today())
-        self.assertTrue(has_perm(self.person, 'employees.edit'))
+        self.assertTrue(has_perm(self.person, 'settings.edit'))
+        self.assertFalse(has_perm(self.person, 'employees.edit'))  # only a superuser has everything
 
 
 class PositionPermissionsApiTests(TestCase):
@@ -150,10 +151,10 @@ class BaselinePermissionTests(TestCase):
         self.person = make_user('baseline-person@test.com', role=None, employee_id='BASE1')
 
     def test_everyone_gets_baseline_permissions_without_a_seat(self):
-        self.assertFalse(has_perm(self.person, 'leave.apply'))
-        BaselinePermission.objects.create(permission=_permission('leave.apply'))
-        self.assertTrue(has_perm(self.person, 'leave.apply'))
-        self.assertEqual(effective_permission_codenames(self.person), ['leave.apply'])
+        self.assertFalse(has_perm(self.person, 'leave.create'))
+        BaselinePermission.objects.create(permission=_permission('leave.create'))
+        self.assertTrue(has_perm(self.person, 'leave.create'))
+        self.assertEqual(effective_permission_codenames(self.person), ['leave.create'])
 
 
 class BaselinePermissionsApiTests(TestCase):
@@ -163,7 +164,7 @@ class BaselinePermissionsApiTests(TestCase):
         admin_role = make_role('admin_baseline_api', permission_codenames=['settings.edit'])
         self.admin = make_user('admin-baseline@test.com', role=admin_role, employee_id='BAPI1')
         self.plain = make_user('plain-baseline@test.com', role=make_role('plain_baseline_api', permission_codenames=[]), employee_id='BAPI2')
-        for codename in ('leave.apply', 'attendance.view'):
+        for codename in ('leave.create', 'attendance.view'):
             _permission(codename)
         self.url = reverse('baseline-permissions')
 
@@ -173,20 +174,20 @@ class BaselinePermissionsApiTests(TestCase):
         return client
 
     def test_admin_replaces_the_baseline_and_everyone_gets_it(self):
-        resp = self._client(self.admin).put(self.url, {'codenames': ['leave.apply', 'attendance.view']}, format='json')
+        resp = self._client(self.admin).put(self.url, {'codenames': ['leave.create', 'attendance.view']}, format='json')
         self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertTrue(has_perm(self.plain, 'leave.apply'))
+        self.assertTrue(has_perm(self.plain, 'leave.create'))
         self._client(self.admin).put(self.url, {'codenames': ['attendance.view']}, format='json')
-        self.assertFalse(has_perm(self.plain, 'leave.apply'))
+        self.assertFalse(has_perm(self.plain, 'leave.create'))
         self.assertEqual(AuditLog.objects.filter(action='baseline_permissions_update').count(), 2)
 
     def test_any_signed_in_user_can_read_it(self):
-        BaselinePermission.objects.create(permission=_permission('leave.apply'))
+        BaselinePermission.objects.create(permission=_permission('leave.create'))
         resp = self._client(self.plain).get(self.url)
-        self.assertEqual(resp.data['data']['codenames'], ['leave.apply'])
+        self.assertEqual(resp.data['data']['codenames'], ['leave.create'])
 
     def test_non_admin_cannot_change_it_and_full_access_cannot_be_baseline(self):
-        self.assertEqual(self._client(self.plain).put(self.url, {'codenames': ['leave.apply']}, format='json').status_code, 403)
+        self.assertEqual(self._client(self.plain).put(self.url, {'codenames': ['leave.create']}, format='json').status_code, 403)
         self.assertEqual(self._client(self.admin).put(self.url, {'codenames': ['settings.edit']}, format='json').status_code, 400)
         self.assertEqual(self._client(self.admin).put(self.url, {'codenames': ['no.such']}, format='json').status_code, 400)
         self.assertFalse(BaselinePermission.objects.exists())

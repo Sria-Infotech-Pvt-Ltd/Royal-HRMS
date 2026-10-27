@@ -67,12 +67,8 @@ def can_manage_branch(user) -> bool:
 
 
 def is_full_access(user) -> bool:
-    """Superuser, or holds settings.edit (the codebase's "can do everything" permission)."""
-    from core.permissions import has_perm
-
-    if not user:
-        return False
-    return bool(getattr(user, 'is_superuser', False) or has_perm(user, 'settings.edit'))
+    """Only a superuser has full access. settings.edit gives Settings, not everything."""
+    return bool(user and getattr(user, 'is_superuser', False))
 
 
 # ── Permissions ────────────────────────────────────────────────────────────────

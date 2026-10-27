@@ -103,6 +103,7 @@ export const API = {
 
   access: {
     baselinePermissions: "/settings/baseline-permissions/",
+    employeeList: "/settings/employee-access/",
     employeePermissions: (employeeUuid: string) => `/employees/${employeeUuid}/permissions/`,
   },
 
