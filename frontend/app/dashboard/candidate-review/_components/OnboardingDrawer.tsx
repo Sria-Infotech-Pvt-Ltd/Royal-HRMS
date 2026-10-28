@@ -8,6 +8,7 @@ import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import { usePermission } from "@/hooks/usePermission";
+import { maritalStatusLabel } from "@/lib/maritalStatus";
 import { SectionCard, Row } from "@/app/dashboard/employees/_components/EmployeeDrawerParts";
 
 interface OnboardingDocument {
@@ -326,7 +327,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                 <SectionCard icon="ti-id-badge-2" title="Personal">
                   <Row label="DOB"             value={user.profile.date_of_birth} />
                   <Row label="Gender"          value={user.profile.gender} />
-                  <Row label="Marital Status"  value={user.profile.marital_status} />
+                  <Row label="Marital Status"  value={maritalStatusLabel(user.profile.marital_status)} />
                   <Row label="Father Name"     value={user.profile.father_name} />
                   <Row label="Blood Group"     value={user.profile.blood_group} />
                   <Row label="Address Line 1"  value={user.profile.current_address} />

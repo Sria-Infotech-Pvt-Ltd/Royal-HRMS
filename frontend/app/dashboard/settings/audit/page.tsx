@@ -15,6 +15,7 @@ type LogEntry = {
   actor_email: string | null;
   actor_role:  string | null;
   action:      string;
+  description?: string;
   module:      string;
   object_id:   string;
   ip_address:  string | null;
@@ -35,7 +36,7 @@ const MODULES = [
   { value: 'accounts', label: 'Accounts' },
   { value: 'settings', label: 'Settings' },
   { value: 'company',  label: 'Company'  },
-  { value: 'branch',        label: 'Branch'        },
+  { value: 'branch',        label: 'Company Code'  },
   { value: 'announcements', label: 'Announcements' },
   { value: 'birthday',      label: 'Birthday'      },
 ];
@@ -314,6 +315,9 @@ function AuditLogPageInner() {
                           <span className={`badge ${actionClass(log.action)}`} style={{ textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
                             {fmtAction(log.action)}
                           </span>
+                          {log.description && (
+                            <div style={{ fontSize: 11, color: 'var(--on-variant)', marginTop: 4 }}>{log.description}</div>
+                          )}
                         </td>
 
                         {/* IP */}

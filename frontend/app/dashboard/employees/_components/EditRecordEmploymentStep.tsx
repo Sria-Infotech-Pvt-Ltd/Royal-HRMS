@@ -46,12 +46,6 @@ export default function EditRecordEmploymentStep({ value, onChange, positionTitl
   const unitName = selectedPosition?.org_unit_name ?? orgUnitName;
   const band = selectedPosition ? [selectedPosition.grade, selectedPosition.job_template_name].filter(Boolean).join(" · ") : "";
 
-  const workLocations = useMemo(() => {
-    const names = new Set(lookups.people.map(p => p.work_location?.trim()).filter((name): name is string => !!name));
-    if (value.work_location) names.add(value.work_location);
-    return [...names].sort();
-  }, [lookups.people, value.work_location]);
-
   const confirmationDate = addMonthsIso(value.date_of_joining ?? "", Number(value.probation_period_months) || 0);
 
   return (
@@ -118,11 +112,9 @@ export default function EditRecordEmploymentStep({ value, onChange, positionTitl
       <div className="divider" />
       <div className="sechead">WORK SETUP</div>
       <div className="g3">
-        <div className="f"><label>Work location <Required /></label>
-          <select className="finput" value={value.work_location} onChange={e => set("work_location", e.target.value)}>
-            <option value="">Select</option>
-            {workLocations.map(name => <option key={name} value={name}>{name}</option>)}
-          </select></div>
+        <div className="f"><label>Work location <Tag text="FROM COMPANY CODE" /></label>
+          <input className="finput auto" disabled value={value.work_location} placeholder="Set from the Company Code address" />
+          <div className="hint">Follows the Company Code; a value entered earlier is kept until the Company Code changes.</div></div>
         <div className="f"><label>Work mode</label>
           <select className="finput" value={value.work_mode} onChange={e => set("work_mode", e.target.value)}>
             <option value="">Select</option>
@@ -142,11 +134,9 @@ export default function EditRecordEmploymentStep({ value, onChange, positionTitl
           <select className="finput" value={value.attendance_scheme} onChange={e => set("attendance_scheme", e.target.value)}>
             {ATTENDANCE_SCHEMES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
           </select></div>
-        <div className="f"><label>Leave plan <Required /></label>
-          <select className="finput" value={value.leave_plan} onChange={e => set("leave_plan", e.target.value)}>
-            <option value="">Select</option>
-            {lookups.leavePolicies.map(policy => <option key={policy.id} value={String(policy.id)}>{policy.leave_type_display}</option>)}
-          </select></div>
+        <div className="f"><label>Leave balances <Tag text="FROM POLICY" /></label>
+          <input className="finput auto" disabled value="Automatic" />
+          <div className="hint">Credited from the leave policy by Company Code, gender and service period; not chosen per employee.</div></div>
       </div>
 
       <div className="divider" />

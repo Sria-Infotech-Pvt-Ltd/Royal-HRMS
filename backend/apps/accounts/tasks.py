@@ -226,3 +226,13 @@ def send_onboarding_approved_notification_task(self, user_id, assigned_assessmen
             user_id, exc, exc_info=True,
         )
         raise self.retry(exc=exc)
+
+
+@shared_task
+def expire_stale_hire_drafts():
+    """Daily: discard hire drafts untouched for HIRE_DRAFT_EXPIRY_DAYS and release their reserved employee numbers."""
+    from apps.accounts.services_hire_drafts import expire_stale_drafts
+
+    count = expire_stale_drafts()
+    logger.info('Expired %s stale hire draft(s).', count)
+    return count

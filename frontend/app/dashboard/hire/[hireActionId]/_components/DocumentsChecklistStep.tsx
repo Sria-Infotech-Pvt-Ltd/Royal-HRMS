@@ -56,8 +56,14 @@ interface Props {
 const PER_ENTRY_TYPES = new Set(["degree_certificate", "experience_letter"]);
 
 export default function DocumentsChecklistStep({ documents, uploading, error, onUpload, onDelete, verification, onVerificationChange, hasExperienceEntries }: Props) {
-  const items = DOC_ITEMS.filter(d => d.key !== "experience_letter" || hasExperienceEntries);
+  // The Experience Letter is only asked for once an employer is listed — but a letter that is already on file must
+  // always be shown (Edit full record opens employees whose experience was never entered as separate rows).
+  const hasExperienceLetter = documents.some(d => d.document_type === "experience_letter");
+  const items = DOC_ITEMS.filter(d => d.key !== "experience_letter" || hasExperienceEntries || hasExperienceLetter);
   const categories = Array.from(new Set(items.map(d => d.category)));
+  // Any uploaded type this checklist has no row for (a custom or older document type) is listed too, never hidden.
+  const knownKeys = new Set(DOC_ITEMS.map(d => d.key));
+  const otherDocuments = documents.filter(d => !knownKeys.has(d.document_type) && !d.entry_ref);
   const docFor = (key: string) => documents.find(d => d.document_type === key && !d.entry_ref);
   const perEntryCount = (key: string) => documents.filter(d => d.document_type === key && d.entry_ref).length;
 
@@ -111,6 +117,27 @@ export default function DocumentsChecklistStep({ documents, uploading, error, on
           </div>
         </div>
       ))}
+
+      {otherDocuments.length > 0 && (
+        <div className="mb-5">
+          <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Other documents</div>
+          <div className="space-y-2">
+            {otherDocuments.map(doc => (
+              <div key={doc.id} className="flex items-center justify-between px-3.5 py-3 rounded-lg border border-[var(--outline-v)]">
+                <span className="text-[13px] font-semibold">{doc.document_type_display || doc.document_type}</span>
+                <DocUploadButton
+                  documentType={doc.document_type}
+                  label={doc.document_type_display || doc.document_type}
+                  existing={doc}
+                  uploading={uploading === doc.document_type}
+                  onUpload={onUpload}
+                  onDelete={onDelete}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Background verification</div>
       <div className="grid grid-cols-3 gap-3">

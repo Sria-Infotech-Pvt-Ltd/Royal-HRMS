@@ -193,7 +193,7 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
         key: "gender", label: "Gender", type: "radio", required: true,
         options: [{ value: "male", label: "Male" }, { value: "female", label: "Female" }, { value: "other", label: "Other / Prefer not to say" }],
       },
-      { key: "maritalStatus",  label: "Marital Status",  type: "select",   options: opt("Single", "Married", "Divorced", "Widowed") },
+      { key: "maritalStatus",  label: "Marital Status",  type: "select",   options: opt("Single", "Married", "Divorced", "Widowed", "Separated") },
       { key: "fatherName",     label: "Father's Name",   type: "text",     placeholder: "Father's full name" },
       { key: "bloodGroup",     label: "Blood Group",     type: "select",   options: opt("A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-") },
       // current_address and its sub-fields aren't part of this page's

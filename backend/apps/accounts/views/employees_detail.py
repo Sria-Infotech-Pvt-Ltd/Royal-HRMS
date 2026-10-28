@@ -115,6 +115,7 @@ from apps.accounts.services_contact_change import (
     ContactChangeError,
     check_email_unique,
     check_mobile_unique,
+    invalidate_old_email_access,
     is_mobile_changed,
     is_truthy,
     normalise_email,
@@ -123,6 +124,7 @@ from apps.accounts.services_contact_change import (
     require_login_email_confirmation,
 )
 from apps.accounts.services_placement import assign_position, sync_from_position
+from apps.accounts.services_work_location import follow_branch_change
 from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle, ResetPasswordRateThrottle
 from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
 from apps.accounts.utils import send_otp_email, send_template_email, send_test_email
@@ -244,6 +246,12 @@ class EmployeeDetailView(APIView):
                 old_val = getattr(employee, field, '')
                 if old_val != val:
                     changes[field] = {'from': old_val, 'to': val}
+                    # Work location is derived from the Company Code: it follows the move unless someone set it by hand.
+                    moved_to = follow_branch_change(employee.work_location, old_val, val)
+                    if moved_to != employee.work_location:
+                        changes['work_location'] = {'from': employee.work_location, 'to': moved_to}
+                        employee.work_location = moved_to
+                        update_fields.append('work_location')
                 setattr(employee, field, val)
                 update_fields.append(field)
 
@@ -573,7 +581,10 @@ class EmployeeDetailView(APIView):
 
         message = 'Employee updated successfully.'
         if 'email' in changes:
+            # The old address must stop working in every way: sessions, and reset/activation links and codes sent to it.
+            invalidate_old_email_access(employee)
             is_notified = notify_login_email_changed(employee, old_login_email, employee.email, request.user)
+            message += ' Existing sign-ins ended and pending reset links for the old address no longer work.'
             message += (
                 ' The login email changed; the employee has been notified at both addresses.' if is_notified
                 else ' The login email changed, but the notification email could not be sent. Please tell the employee yourself.'

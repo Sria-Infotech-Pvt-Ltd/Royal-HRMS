@@ -284,16 +284,16 @@ def branch_employee_counts() -> dict:
     """
     from django.db.models import Count
 
-    from apps.accounts.models import User
+    from apps.accounts.services_headcount import current_workforce
     from apps.branch.models import Branch
 
     counts = dict(
-        User.objects.filter(is_active=True, branch_fk__isnull=False)
+        current_workforce().filter(branch_fk__isnull=False)
         .values('branch_fk_id').annotate(count=Count('id')).values_list('branch_fk_id', 'count')
     )
     by_name = {branch.branch_name.strip().lower(): branch.pk for branch in Branch.objects.only('pk', 'branch_name')}
     unlinked = (
-        User.objects.filter(is_active=True, branch_fk__isnull=True).exclude(branch='')
+        current_workforce().filter(branch_fk__isnull=True).exclude(branch='')
         .values('branch').annotate(count=Count('id')).values_list('branch', 'count')
     )
     for name, count in unlinked:

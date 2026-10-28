@@ -43,7 +43,7 @@ export default function EmployeeAccessList({ onSelect }: Props) {
             <tr className="border-b border-[var(--outline-v)] bg-[var(--bg-low)] text-left text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--on-variant)]">
               <th className="px-4 py-3">Employee</th>
               <th className="px-3 py-3">Position</th>
-              <th className="px-3 py-3">Branch</th>
+              <th className="px-3 py-3">Company Code</th>
               <th className="px-3 py-3 text-right">Permissions</th>
               <th className="px-3 py-3 text-right">From position</th>
               <th className="px-3 py-3 text-right">Extra</th>

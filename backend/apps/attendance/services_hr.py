@@ -12,6 +12,7 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, OuterRef, Subquery, Q
 
+from apps.accounts.services_headcount import current_workforce
 from apps.attendance.models import AttendanceRecord, AttendancePunch, EmployeeWeeklyOffAssignment
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ def get_dashboard_stats(
     if cached is not None:
         return cached
 
-    employee_qs = User.objects.filter(is_active=True)
+    employee_qs = current_workforce()
     if employee_ids is not None:
         employee_qs = employee_qs.filter(id__in=employee_ids)
     elif branch:
@@ -177,7 +178,7 @@ def reprocess_date(
     from apps.attendance.models import AttendanceAuditLog
     from apps.attendance.services_attendance import AttendanceProcessorService
 
-    employee_qs = User.objects.filter(is_active=True)
+    employee_qs = current_workforce()
     if employee_ids is not None:
         employee_qs = employee_qs.filter(id__in=employee_ids)
     elif branch:
@@ -261,7 +262,7 @@ def get_attendance_list(filters: dict) -> list[dict]:
     sort_by      = filters.get('sort_by', 'name')
     sort_dir     = filters.get('sort_dir', 'asc')
 
-    employee_qs = User.objects.filter(is_active=True)
+    employee_qs = current_workforce()
     if employee_ids is not None:
         employee_qs = employee_qs.filter(id__in=employee_ids)
     elif branch:
@@ -480,7 +481,7 @@ def build_weekly_off_assignment_queryset(filters: dict):
     employee_ids = filters.get('employee_ids')
 
     today = datetime.date.today()
-    qs = User.objects.filter(is_active=True).exclude(employee_id='')  # portal candidates have no employee_id until onboarding is approved
+    qs = current_workforce()  # portal candidates have no employee_id until onboarding is approved
     if employee_ids is not None:
         qs = qs.filter(id__in=employee_ids)
     elif branch:

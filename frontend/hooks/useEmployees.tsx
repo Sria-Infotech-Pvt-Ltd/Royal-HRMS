@@ -10,17 +10,18 @@ import {
 import type { EmployeeStatCard } from "@/app/dashboard/employees/_components/EmployeeStatCards";
 import { downloadCsv, employeesToCsv } from "@/lib/exportEmployeesCsv";
 
+// total == active + onboarding + notice_period; probation is a subset of active (see backend services_headcount).
 interface EmployeeStats {
-  total: number; active: number; onboarding: number; departments: number;
+  total: number; active: number; probation: number; onboarding: number; notice_period: number; exited: number;
+  departments: number;
   branch_names: string[]; department_names: string[];
-  new_this_month: number; onboarding_or_probation: number;
-  needs_reporting_manager: number; notice_period: number;
+  new_this_month: number; needs_reporting_manager: number;
 }
 
 const EMPTY_STATS: EmployeeStats = {
-  total: 0, active: 0, onboarding: 0, departments: 0,
+  total: 0, active: 0, probation: 0, onboarding: 0, notice_period: 0, exited: 0, departments: 0,
   branch_names: [], department_names: [],
-  new_this_month: 0, onboarding_or_probation: 0, needs_reporting_manager: 0, notice_period: 0,
+  new_this_month: 0, needs_reporting_manager: 0,
 };
 
 /** Data-fetching + filter state for the Employee Directory list/stats — the
@@ -217,17 +218,15 @@ export function useEmployees() {
     },
     {
       label: "ACTIVE", value: empStats.active, icon: "ti-user-check", tint: "success" as const,
-      sub: `${activePct}% of headcount`,
+      sub: `${activePct}% of headcount · ${empStats.probation} on probation`,
       onClick: () => setStatus("active"),
     },
     {
-      label: "ONBOARDING / PROBATION", value: empStats.onboarding_or_probation, icon: "ti-clock", tint: "warn" as const,
+      label: "ONBOARDING", value: empStats.onboarding, icon: "ti-clock", tint: "warn" as const,
       sub: empStats.needs_reporting_manager > 0
         ? <><b>{empStats.needs_reporting_manager}</b> need a reporting manager</>
         : "all assigned a reporting manager",
       subTone: empStats.needs_reporting_manager > 0 ? "warn" as const : undefined,
-      // The card combines two distinct filter values into one count — jumps
-      // to "onboarding" (the more common of the two) rather than nothing.
       onClick: () => setStatus("onboarding"),
     },
     {

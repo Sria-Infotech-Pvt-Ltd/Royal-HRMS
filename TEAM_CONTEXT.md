@@ -4609,6 +4609,7 @@ Decisions: (1) permissions are attached to each **Position** (seat); whoever hol
 | 7 | Holiday CSV import + default weekly-off pattern (done by another Claude session) | 18 | `Add holiday CSV import...` |
 | 8 | Salary Setup pagination, KPI summary, one "payroll ready" rule, no duplicate CTC revisions | 20 | `fix: Salary Setup...` |
 | - | Form error handling (shared handler) + F&F negative net payable rule (UAT-016); bug number not given | 22 | `fix: show server errors on forms...` |
+| - | UAT-030..040 batch (HR edits mobile/login email, UAN, Company Code term + derived work location, leave plan removed, marital status, org-unit tools, documents in Edit record, drafts, reveal audit, one headcount) | 23 | `fix(UAT-030..040): ...` on New-AI |
 | 9 | Bank account/IFSC masking + audited reveal, hire-wizard bank persistence, UAN validation (ANOTHER Claude session; may still be uncommitted - see section 19 and its own memory note) | 19 | not committed when this was written |
 
 **Open items the business / the user must do (not done by code)**
@@ -4638,7 +4639,7 @@ Decisions: (1) permissions are attached to each **Position** (seat); whoever hol
 ---
 
 ### 23. UAT-030 to UAT-040 batch (11 tickets from one paste; bug numbers not given)
-**State when written:** all code and tests are in the working tree, NOT committed or pushed: `git` was in the middle of another session's merge (`MERGE_HEAD` present, 6 files `UU`), and a path-limited commit is refused during a merge. Commit after that merge is finished. Backend tests for this batch were still being run on a private DB (`TEST_DB_SUFFIX`) when this was written; the first runs before the setting existed hit the shared DB and are not evidence.
+**State:** committed and pushed to `New-AI` from a separate worktree (the shared checkout had been switched to another session's `chore/testing-foundation-2` branch). Only this batch's files were copied in; other sessions' deletions (docs/*, ONBOARDING.md, PR_DESCRIPTION.md) were left out. Backend tests for this batch pass on the private DB `test_neondb_uat3040` (`TEST_DB_SUFFIX=uat3040`): 51 tests in the first batch, then 75 across all new/changed modules (5 first-run problems were a Neon connection drop and test org-unit names clashing with seeded units; fixed, rerun green). Runs before the setting existed hit the shared DB and are not evidence.
 
 | Ticket | What changed | Where |
 |---|---|---|

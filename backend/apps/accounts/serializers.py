@@ -1200,13 +1200,18 @@ class AuditLogSerializer(serializers.ModelSerializer):
     actor_name  = serializers.SerializerMethodField()
     actor_email = serializers.SerializerMethodField()
     actor_role  = serializers.SerializerMethodField()
+    description = serializers.SerializerMethodField()
 
     class Meta:
         model  = AuditLog
         fields = [
             'id', 'actor_name', 'actor_email', 'actor_role',
-            'action', 'module', 'object_id', 'ip_address', 'created_at',
+            'action', 'description', 'module', 'object_id', 'ip_address', 'created_at',
         ]
+
+    def get_description(self, obj: AuditLog) -> str:
+        from apps.accounts.audit_descriptions import describe_audit_event
+        return describe_audit_event(self.get_actor_name(obj), obj.action, obj.changes)
 
     def get_actor_name(self, obj: AuditLog) -> str:
         return obj.user.full_name if obj.user_id else 'System'
@@ -1443,7 +1448,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
     def validate_uan_number(self, value: str) -> str:
         value = (value or '').strip()
         if value and (len(value) != 12 or not value.isdigit()):
-            raise serializers.ValidationError('UAN must be exactly 12 digits.')
+            raise serializers.ValidationError('UAN must be 12 digits')
         return value
 
     def validate_ifsc_code(self, value: str) -> str:
@@ -2397,7 +2402,7 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
     def validate_uan_number(self, value: str) -> str:
         value = value.strip()
         if value and (len(value) != 12 or not value.isdigit()):
-            raise serializers.ValidationError('UAN must be exactly 12 digits.')
+            raise serializers.ValidationError('UAN must be 12 digits')
         return value
 
     def validate_org_unit(self, value: str) -> str:

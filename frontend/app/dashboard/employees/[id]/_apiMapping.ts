@@ -31,6 +31,8 @@ export interface ApiProfile {
   emergency_name?: string; emergency_relationship?: string;
   emergency_phone?: string; emergency_email?: string;
   uan_number?: string; name_as_per_aadhar?: string; esi_number?: string;
+  /** Last four digits of the UAN only; the full value comes from the audited reveal. */
+  uan_masked?: string;
   custom_field_values?: Record<string, string>;
 }
 

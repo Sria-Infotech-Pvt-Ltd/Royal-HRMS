@@ -96,7 +96,7 @@ export default function PayrollPeriodStep({
 
   async function createCycle() {
     if (isAdmin && !lockedBranch && !branchId) {
-      setFormError("Please select a branch for this payroll run.");
+      setFormError("Please select a Company Code for this payroll run.");
       return;
     }
 

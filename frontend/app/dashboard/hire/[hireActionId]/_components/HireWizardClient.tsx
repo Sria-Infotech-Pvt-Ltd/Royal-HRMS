@@ -16,6 +16,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useApiErrors } from "@/hooks/useApiErrors";
+import { useHireDraftActions } from "@/hooks/useHireDraftActions";
+import ConfirmModal from "@/components/ConfirmModal";
 import Modal from "@/components/Modal";
 import PhoneInput, { nationalDigitCount, isPlausibleNationalNumber } from "@/components/PhoneInput";
 import LanguagesSelect from "@/components/LanguagesSelect";
@@ -40,6 +42,7 @@ import ReviewStep from "./ReviewStep";
 import DateInput from "@/components/shared/DateInput";
 import HireCompletionPanel from "./HireCompletionPanel";
 import type { FaceIdHireSummary } from "@/types/faceId";
+import { MARITAL_STATUS_OPTIONS } from "@/lib/maritalStatus";
 import {
   EMPTY_FORM,
   type IdentityExtras,
@@ -91,6 +94,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [docUploading, setDocUploading] = useState<string | null>(null);
   const [docError, setDocError] = useState("");
   const { handleError: handleApiError } = useApiErrors();
+  const draftActions = useHireDraftActions({ hireActionId, save: () => patchAction(buildFullDraftPayload()), onClose });
+  const [documentToRemove, setDocumentToRemove] = useState<HireDocument | null>(null);
   const [verification, setVerification] = useState<VerificationDraft>(EMPTY_VERIFICATION);
 
   async function uploadDocument(documentType: string, file: File, entryRef?: string) {
@@ -117,8 +122,13 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     }
   }
 
-  async function deleteDocument(doc: HireDocument) {
-    if (!window.confirm("Remove this document? You'll need to re-upload it before hiring.")) return;
+  // Asks first (the app's own modal, not a native confirm); removeDocument does the delete once confirmed.
+  function deleteDocument(doc: HireDocument) {
+    setDocumentToRemove(doc);
+  }
+
+  async function removeDocument(doc: HireDocument) {
+    setDocumentToRemove(null);
     setDocError("");
     try {
       await clientApi.delete(API.hireActions.documentDetail(hireActionId, doc.id));
@@ -433,7 +443,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         if (statutory.account_number.trim().length < 6) return "Enter a valid account number.";
         if (!statutory.ifsc_code.trim()) return "IFSC code is required.";
         if (!IFSC_RE.test(statutory.ifsc_code.trim())) return "Enter a valid IFSC code (format: HDFC0001234).";
-        if (statutory.uan_number.trim() && statutory.uan_number.trim().length !== 12) return "UAN must be exactly 12 digits.";
+        if (statutory.uan_number.trim() && statutory.uan_number.trim().length !== 12) return "UAN must be 12 digits";
         if (statutory.passport_issue_date && statutory.passport_expiry && statutory.passport_expiry <= statutory.passport_issue_date) {
           return "Passport expiry must be after the issue date.";
         }
@@ -479,7 +489,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       probation_period_months: employment.probation_period_months, notice_period_days: employment.notice_period_days,
       weekly_off_policy: employment.weekly_off_policy, working_hours_policy: employment.working_hours_policy,
       salary_structure: employment.salary_structure, annual_ctc: employment.annual_ctc,
-      pay_group: employment.pay_group, attendance_scheme: employment.attendance_scheme, leave_plan: employment.leave_plan,
+      pay_group: employment.pay_group, attendance_scheme: employment.attendance_scheme,
       tax_regime: basicPay.tax_regime, payment_method: basicPay.payment_method,
       ...statutory,
       emergency_contacts: emergencyContacts,
@@ -692,8 +702,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
             </div>
             <div className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{progressPct}% complete</div>
           </div>
-          <button onClick={onClose} className="btn btn-ghost">Discard</button>
-          <button onClick={() => patchAction(buildFullDraftPayload()).catch(() => {})} className="btn btn-ghost">Save draft</button>
+          <button onClick={draftActions.openDiscard} className="btn btn-ghost" style={{ color: "var(--error)" }}>Discard</button>
+          <button onClick={draftActions.saveAndExit} disabled={draftActions.isSaving} className="btn btn-ghost">Save &amp; exit</button>
+          <button onClick={draftActions.saveDraft} disabled={draftActions.isSaving} className="btn btn-ghost">Save draft</button>
           <button onClick={() => setShowScanFill(true)} className="btn btn-ghost">Scan &amp; fill</button>
           {tab > 0 && <button onClick={() => goToStep(Math.max(0, tab - 1))} className="btn btn-ghost">Back</button>}
           <button onClick={handleNext} className="btn btn-filled">Next →</button>
@@ -803,7 +814,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Marital status</label>
                   <select value={form.marital_status} onChange={e => setForm(f => ({ ...f, marital_status: e.target.value }))} className="field-input field-select">
-                    <option value="single">Single</option><option value="married">Married</option>
+                    {MARITAL_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -1060,6 +1071,28 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         </div>
       </div>
     </Modal>
+
+    {draftActions.isDiscardOpen && (
+      <ConfirmModal
+        title="Discard this draft?"
+        body="The draft and everything entered so far will be deleted, and its reserved employee number is released. This cannot be undone. To keep it, use Save & exit instead."
+        confirmLabel="Discard draft"
+        danger
+        saving={draftActions.isDiscarding}
+        onConfirm={draftActions.confirmDiscard}
+        onCancel={draftActions.closeDiscard}
+      />
+    )}
+    {documentToRemove && (
+      <ConfirmModal
+        title="Remove this document?"
+        body="You will need to upload it again before hiring."
+        confirmLabel="Remove"
+        danger
+        onConfirm={() => removeDocument(documentToRemove)}
+        onCancel={() => setDocumentToRemove(null)}
+      />
+    )}
 
     {showScanFill && (
       <ScanFillModal

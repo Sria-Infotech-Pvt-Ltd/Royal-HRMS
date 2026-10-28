@@ -82,7 +82,7 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
     // a legitimate submission whenever the best-effort name-match above
     // hasn't resolved `branch` yet (branches list still loading, etc.).
     if (unrestricted && !branch) {
-      setError("Please select a branch.");
+      setError("Please select a Company Code.");
       return;
     }
     const formattedDate     = interviewDate ? interviewDate.slice(0, 10) : "";

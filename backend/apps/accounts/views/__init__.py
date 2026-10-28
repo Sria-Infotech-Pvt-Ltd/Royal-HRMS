@@ -24,6 +24,7 @@ from .email_templates import *  # noqa: F401,F403
 from .documents import *  # noqa: F401,F403
 from .company import *  # noqa: F401,F403
 from .employees_list import *  # noqa: F401,F403
+from .employees_headcount import *  # noqa: F401,F403
 from .employees_detail import *  # noqa: F401,F403
 from .employees_actions import *  # noqa: F401,F403
 from .onboarding_wizard import *  # noqa: F401,F403

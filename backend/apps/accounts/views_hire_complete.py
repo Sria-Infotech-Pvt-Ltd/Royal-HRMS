@@ -24,6 +24,7 @@ from core.permissions import has_perm as _has_perm
 from core.responses import error, success, get_client_ip
 from apps.accounts.models import AuditLog, Company, EmployeeDocument, HireAction, HireActionDocument, User
 from apps.accounts.services_placement import assign_position
+from apps.accounts.services_work_location import work_location_for_branch
 from apps.accounts.utils import send_template_email
 from apps.attendance.services_face_policy import hire_summary
 from apps.accounts.views_hire import _hire_action_dict, _DENIED
@@ -173,7 +174,7 @@ _PROFILE_FIELDS = (
     'permanent_village', 'permanent_district', 'permanent_state', 'permanent_pin_code',
     'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
     'account_number', 'ifsc_code', 'bank_name', 'account_holder_name', 'account_type',
-    'pan_number', 'aadhaar_number', 'name_as_per_aadhar', 'uan_number', 'passport_number', 'passport_expiry',
+    'pan_number', 'aadhaar_number', 'name_as_per_aadhar', 'uan_number', 'esi_number', 'passport_number', 'passport_expiry',
     'passport_issue_date', 'passport_place_of_issue', 'passport_country_of_issue',
     'core_skills', 'certifications',
 )
@@ -325,14 +326,13 @@ class HireActionCompleteView(APIView):
                 # employee to self-report, so they should never be routed
                 # into the self-service onboarding wizard on first login.
                 must_change_password=True, onboarding_status=User.ONBOARDING_COMPLETE,
-                work_location=(draft.get('work_location') or '').strip(),
+                work_location=(draft.get('work_location') or '').strip() or work_location_for_branch(branch),
                 work_mode=(draft.get('work_mode') or '').strip(),
                 probation_period_months=draft.get('probation_period_months') or None,
                 notice_period_days=draft.get('notice_period_days') or None,
                 pay_group=(draft.get('pay_group') or User.PAY_GROUP_MONTHLY),
                 attendance_scheme=(draft.get('attendance_scheme') or User.ATTENDANCE_SCHEME_STANDARD),
                 payment_method=(draft.get('payment_method') or User.PAYMENT_METHOD_BANK_TRANSFER),
-                leave_plan_id=(draft.get('leave_plan') or None),
             )
             assign_position(user, action.position, effective_from=action.effective_from, created_by=request.user)
             user.refresh_from_db()

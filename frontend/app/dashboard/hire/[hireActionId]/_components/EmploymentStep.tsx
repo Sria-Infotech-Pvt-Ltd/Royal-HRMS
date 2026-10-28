@@ -22,7 +22,6 @@ export interface EmploymentDraft {
   annual_ctc: string;
   pay_group: string;
   attendance_scheme: string;
-  leave_plan: string;
   // Edit record only: the Hire wizard takes these from the hire action instead.
   date_of_joining?: string;
   position?: string;
@@ -32,7 +31,7 @@ export const EMPTY_EMPLOYMENT: EmploymentDraft = {
   employment_type: "", work_email: "", branch: "", reporting_manager_id: "", dotted_line_manager_id: "",
   work_location: "", work_mode: "", probation_period_months: "", notice_period_days: "",
   weekly_off_policy: "", working_hours_policy: "", salary_structure: "", annual_ctc: "",
-  pay_group: "monthly", attendance_scheme: "standard", leave_plan: "",
+  pay_group: "monthly", attendance_scheme: "standard",
 };
 
 // In-memory cache for this step's 7 lookup calls (roles, branches, people,
@@ -53,7 +52,6 @@ interface EmploymentLookups {
   weeklyPolicies: { id: string; name: string }[];
   shiftPolicies: { id: string; name: string }[];
   structures: { id: string; name: string }[];
-  leavePolicies: { id: string | number; leave_type_display: string }[];
 }
 
 const EMP_TYPES = EMPLOYMENT_TYPES;
@@ -81,7 +79,6 @@ export default function EmploymentStep({
   const [weeklyPolicies, setWeeklyPolicies] = useState<{ id: string; name: string }[]>([]);
   const [shiftPolicies, setShiftPolicies] = useState<{ id: string; name: string }[]>([]);
   const [structures, setStructures] = useState<{ id: string; name: string }[]>([]);
-  const [leavePolicies, setLeavePolicies] = useState<{ id: string | number; leave_type_display: string }[]>([]);
 
   useEffect(() => {
     if (employmentLookupsCache && employmentLookupsCache.expiresAt > Date.now()) {
@@ -91,7 +88,6 @@ export default function EmploymentStep({
       setWeeklyPolicies(c.weeklyPolicies);
       setShiftPolicies(c.shiftPolicies);
       setStructures(c.structures);
-      setLeavePolicies(c.leavePolicies);
       return;
     }
 
@@ -101,19 +97,16 @@ export default function EmploymentStep({
       clientApi.get<{ data: { results: typeof weeklyPolicies } }>(API.attendance.weeklyDayPolicies, { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: typeof shiftPolicies } }>(API.attendance.workingHoursPolicies, { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: typeof structures } }>(API.payroll.structures, { params: { page_size: 100 } }),
-      clientApi.get<{ data: typeof leavePolicies }>(API.leave.policy),
-    ]).then(([b, p, w, s, st, lp]) => {
+    ]).then(([b, p, w, s, st]) => {
       const resolved: EmploymentLookups = {
         branches:       b.status === "fulfilled" ? (b.value.data.data.results ?? []) : [],
         people:         p.status === "fulfilled" ? (p.value.data.data.results ?? []) : [],
         weeklyPolicies: w.status === "fulfilled" ? (w.value.data.data.results ?? []) : [],
         shiftPolicies:  s.status === "fulfilled" ? (s.value.data.data.results ?? []) : [],
         structures:     st.status === "fulfilled" ? (st.value.data.data.results ?? []) : [],
-        leavePolicies:  lp.status === "fulfilled" ? (lp.value.data.data ?? []) : [],
       };
       setBranches(resolved.branches);
       setPeople(resolved.people);
-      setLeavePolicies(resolved.leavePolicies);
       setWeeklyPolicies(resolved.weeklyPolicies);
       setShiftPolicies(resolved.shiftPolicies);
       setStructures(resolved.structures);
@@ -122,7 +115,7 @@ export default function EmploymentStep({
       // partial/failed result would keep serving empty dropdowns for the
       // next 5 minutes even after a transient failure (e.g. QA #66's
       // intermittent 503) has cleared up.
-      const allFulfilled = [b, p, w, s, st, lp].every(x => x.status === "fulfilled");
+      const allFulfilled = [b, p, w, s, st].every(x => x.status === "fulfilled");
       if (allFulfilled) {
         employmentLookupsCache = {
           data: resolved,
@@ -218,6 +211,7 @@ export default function EmploymentStep({
           <label>Company code <span className="req">*</span></label>
           <SearchableSelect value={value.branch} onChange={v => set("branch", v)}
             placeholder="Select" options={branches.map(b => ({ value: b.branch_name, label: b.branch_name }))} />
+          <div className="hint">The work location is taken from the Company Code&apos;s address.</div>
         </div>
         <div className="f">
           <label>Work mode</label>
@@ -225,10 +219,6 @@ export default function EmploymentStep({
             <option value="">Select</option>
             {WORK_MODES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-        </div>
-        <div className="f">
-          <label>Work location</label>
-          <input value={value.work_location} onChange={e => set("work_location", e.target.value)} placeholder="e.g. Kondapur" className="finput" />
         </div>
         <div className="f">
           <label>Weekly off</label>
@@ -257,9 +247,9 @@ export default function EmploymentStep({
           </select>
         </div>
         <div className="f">
-          <label>Leave plan</label>
-          <SearchableSelect value={value.leave_plan} onChange={v => set("leave_plan", v)}
-            placeholder="Not assigned yet" options={leavePolicies.map(p => ({ value: String(p.id), label: p.leave_type_display }))} />
+          <label>Leave balances</label>
+          <div className="finput auto" style={{ display: "flex", alignItems: "center" }}>Automatic</div>
+          <div className="hint">Credited from the leave policy (Settings &gt; Leave policy) by Company Code, gender and service period.</div>
         </div>
       </div>
 

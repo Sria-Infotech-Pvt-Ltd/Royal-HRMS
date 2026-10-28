@@ -112,6 +112,10 @@ if DATABASES['default'].get('ENGINE') != 'django.db.backends.postgresql':
     from django.core.exceptions import ImproperlyConfigured
     raise ImproperlyConfigured('DATABASE_URL must be a postgresql:// URL (this app supports PostgreSQL only).')
 DATABASES['default']['CONN_MAX_AGE'] = env.int('DB_CONN_MAX_AGE', default=60)
+# Several people/sessions share one Neon server, and the shared `test_neondb` is often mid-migration for someone else.
+# TEST_DB_SUFFIX=<name> runs the tests on a private `test_neondb_<name>` database instead (use with --keepdb to reuse it).
+if env('TEST_DB_SUFFIX', default=''):
+    DATABASES['default']['TEST'] = {'NAME': f"test_neondb_{env('TEST_DB_SUFFIX')}"}
 # Neon (and any managed cloud Postgres) requires sslmode to be forwarded to
 # psycopg2 — but a local PostgreSQL server (e.g. pgAdmin) almost never has
 # SSL configured, so hardcoding 'require' here would break local setups.
@@ -294,7 +298,17 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
 # 1s backoff sleep) to bound a dead broker to a single retry.
 CELERY_BROKER_CONNECTION_MAX_RETRIES = 1
 
+# Hire-wizard drafts untouched for this many days are discarded by the daily expire-stale-hire-drafts task.
+HIRE_DRAFT_EXPIRY_DAYS = env.int('HIRE_DRAFT_EXPIRY_DAYS', default=30)
+
 CELERY_BEAT_SCHEDULE = {
+    # Runs daily at 02:10 IST — discards hire drafts nobody has touched for HIRE_DRAFT_EXPIRY_DAYS and releases their
+    # reserved employee numbers. Drafts that merely look like an existing employee are NOT touched here (see the
+    # cleanup_hire_drafts command, where a person approves the list).
+    'expire-stale-hire-drafts': {
+        'task':     'apps.accounts.tasks.expire_stale_hire_drafts',
+        'schedule': crontab(hour=2, minute=10),
+    },
     # Runs every 5 minutes — detects employees past shift_end + grace with no clock-out.
     'check-missing-clockouts': {
         'task':     'apps.attendance.tasks.check_missing_clockouts',

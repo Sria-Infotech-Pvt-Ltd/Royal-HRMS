@@ -4,6 +4,7 @@ import type { OnboardingFieldConfig } from "@/types/onboardingFieldConfig";
 import CountrySelect from "@/components/CountrySelect";
 import { StateSelect, DistrictSelect } from "@/components/StateDistrictSelect";
 import LanguagesSelect from "@/components/LanguagesSelect";
+import { MARITAL_STATUS_OPTIONS } from "@/lib/maritalStatus";
 
 const INP = "field-input";
 
@@ -22,12 +23,7 @@ const BUILTIN_CHOICE_FIELDS: Record<string, { value: string; label: string }[]> 
     { value: "female", label: "Female" },
     { value: "other", label: "Other / Prefer not to say" },
   ],
-  marital_status: [
-    { value: "single", label: "Single" },
-    { value: "married", label: "Married" },
-    { value: "divorced", label: "Divorced" },
-    { value: "widowed", label: "Widowed" },
-  ],
+  marital_status: MARITAL_STATUS_OPTIONS,
   blood_group: ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map(g => ({ value: g, label: g })),
   account_type: [
     { value: "savings", label: "Savings" },

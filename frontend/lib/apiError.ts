@@ -15,6 +15,9 @@ export interface ParsedApiError {
 /** Labels for keys that read badly once humanised. Anything not listed becomes "Sentence case". */
 export const FIELD_LABELS: Record<string, string> = {
   phone: "Mobile number",
+  uan_number: "UAN",
+  esi_number: "ESI number",
+  email: "Email",
   emergency_phone: "Emergency contact phone",
   emergency_email: "Emergency contact email",
   current_pin_code: "Current PIN code",

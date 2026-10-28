@@ -10,6 +10,9 @@ import { useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDateTime } from "@/lib/formatDate";
+import ConfirmModal from "@/components/ConfirmModal";
+import { useToast } from "@/components/ToastProvider";
+import { useApiErrors } from "@/hooks/useApiErrors";
 
 interface Draft {
   id: string;
@@ -17,12 +20,18 @@ interface Draft {
   position_title: string;
   reserved_employee_id: string;
   updated_at: string;
+  /** Non-blank when the draft looks like someone who already is an employee (a stale or test leftover). */
+  existing_employee_match?: string;
 }
 
 export default function DraftsPopover({ onResume }: { onResume: (hireActionId: string) => void }) {
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const { showToast } = useToast();
+  const { handleError } = useApiErrors();
+  const [draftToDelete, setDraftToDelete] = useState<Draft | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -47,13 +56,17 @@ export default function DraftsPopover({ onResume }: { onResume: (hireActionId: s
     };
   }, [open]);
 
-  async function handleDelete(id: string) {
-    if (!window.confirm("Discard this draft? This cannot be undone.")) return;
+  async function confirmDelete(draft: Draft) {
+    setIsDeleting(true);
     try {
-      await clientApi.delete(API.hireActions.detail(id));
-      setDrafts(prev => prev?.filter(d => d.id !== id) ?? null);
-    } catch {
-      // best-effort — popover stays open, list unchanged on failure
+      await clientApi.delete(API.hireActions.detail(draft.id));
+      setDrafts(prev => prev?.filter(d => d.id !== draft.id) ?? null);
+      showToast("Draft discarded.", "success");
+      setDraftToDelete(null);
+    } catch (err: unknown) {
+      handleError(err, "Could not discard the draft.");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -81,15 +94,29 @@ export default function DraftsPopover({ onResume }: { onResume: (hireActionId: s
                     {d.position_title}{d.reserved_employee_id ? ` · ${d.reserved_employee_id}` : ""} ·{" "}
                     {formatDateTime(d.updated_at)}
                   </span>
+                  {d.existing_employee_match && (
+                    <span className="meta" style={{ color: "var(--warn)" }}>Possible leftover: {d.existing_employee_match}</span>
+                  )}
                 </div>
                 <span className="acts">
                   <button className="btn btn-outline" onClick={() => { setOpen(false); onResume(d.id); }}>Resume</button>
-                  <button className="mini" onClick={() => handleDelete(d.id)}>Delete</button>
+                  <button className="mini" onClick={() => setDraftToDelete(d)}>Discard</button>
                 </span>
               </div>
             ))
           )}
         </div>
+      )}
+      {draftToDelete && (
+        <ConfirmModal
+          title="Discard this draft?"
+          body={`The draft for ${draftToDelete.label} will be deleted${draftToDelete.reserved_employee_id ? ` and employee number ${draftToDelete.reserved_employee_id} released` : ""}. This cannot be undone.`}
+          confirmLabel="Discard draft"
+          danger
+          saving={isDeleting}
+          onConfirm={() => confirmDelete(draftToDelete)}
+          onCancel={() => setDraftToDelete(null)}
+        />
       )}
     </span>
   );

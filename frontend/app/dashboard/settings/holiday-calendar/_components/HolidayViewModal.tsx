@@ -27,7 +27,7 @@ export default function HolidayViewModal({ holiday, onClose, onEdit }: Props) {
     ["Type",    holiday.holiday_type_display],
     ["Applies", holiday.mandatory_optional],
     ["Status",  holiday.is_active ? "Active" : "Inactive"],
-    ["Branch",  holiday.branch_name],
+    ["Company Code",  holiday.branch_name],
   ];
 
   return (

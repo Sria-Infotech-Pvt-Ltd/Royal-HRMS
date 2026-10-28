@@ -10,6 +10,7 @@ import type { EmploymentDraft } from "./EmploymentStep";
 import type { BasicPayDraft } from "./BasicPayStep";
 import type { StatutoryDraft } from "./StatutoryAccountsStep";
 import { REQUIRED_DOC_LABELS } from "./DocumentsChecklistStep";
+import { maritalStatusLabel } from "@/lib/maritalStatus";
 
 interface Props {
   reservedEmployeeId: string;
@@ -169,7 +170,7 @@ export default function ReviewStep(props: Props) {
             <Row label="Legal name" value={`${firstName} ${lastName}`.trim()} />
             <Row label="Date of birth" value={form.date_of_birth} />
             <Row label="Gender" value={form.gender ? form.gender[0].toUpperCase() + form.gender.slice(1) : ""} />
-            <Row label="Marital status" value={form.marital_status} />
+            <Row label="Marital status" value={maritalStatusLabel(form.marital_status)} />
             <Row label="Father/mother" value={form.father_name} />
             <Row label="Current address" value={[form.current_village, form.current_state].filter(Boolean).join(", ")} />
             <Row
@@ -188,7 +189,7 @@ export default function ReviewStep(props: Props) {
             <Row label="Grade / band" value={grade} />
             <Row label="Employment type" value={employment.employment_type} />
             <Row label="Date of joining" value={effectiveFrom} />
-            <Row label="Work location" value={employment.work_location} />
+            <Row label="Work location" value={employment.work_location || "From the Company Code address"} />
             <Row label="Annual CTC" value={employment.annual_ctc ? `₹${Number(employment.annual_ctc).toLocaleString("en-IN")}` : ""} />
           </div>
         </div>

@@ -47,13 +47,14 @@
 // probation_period_months, notice_period_days — see the backend
 // employees_detail.py whitelist extension that went with this change).
 // Others (weekly_off_policy, working_hours_policy/shift, salary_structure,
-// annual_ctc, pay_group, attendance_scheme, leave_plan) have NO post-hire
+// annual_ctc, pay_group, attendance_scheme) have NO post-hire
 // write path anywhere in this codebase yet — they render (same UI, same
 // fields, matching the explicit request) but are NOT sent on save; this is
 // stated in-code at the save call, not silently dropped without a trace.
 
 import { matchEmploymentType } from "@/lib/employmentType";
 import { parseApiError } from "@/lib/apiError";
+import { MARITAL_STATUS_OPTIONS } from "@/lib/maritalStatus";
 import { usePermission } from "@/hooks/usePermission";
 import EditRecordContactFields from "./EditRecordContactFields";
 import { buildContactChanges } from "./editRecordContact";
@@ -214,6 +215,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   // what the server holds, so only a real change is sent, and a login-email change needs the explicit tick.
   const canEditContact = usePermission("employees.edit");
   const [savedContact, setSavedContact] = useState({ email: "", mobile: "" });
+  const [savedUanMasked, setSavedUanMasked] = useState("");
   const [isLoginChangeConfirmed, setIsLoginChangeConfirmed] = useState(false);
   const [contactErrors, setContactErrors] = useState<{ email?: string; phone?: string }>({});
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContactEntry[]>([]);
@@ -294,6 +296,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     setHireDocs((raw.documents ?? []).map(d => ({
       id: String(d.id), document_type: d.document_type, document_type_display: d.document_type_display,
       entry_ref: "", file_name: d.file_name, file_size: d.file_size, uploaded_at: d.uploaded_at,
+      file_url: d.file || undefined,  // the signed link the profile page's Preview uses too
     })));
   }, []);
 
@@ -331,6 +334,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         personalEmail: emp.email ?? "", mobileNumber: emp.phone ?? "",
       }));
       setSavedContact({ email: emp.email ?? "", mobile: emp.phone ?? "" });
+      setSavedUanMasked(raw.profile?.uan_masked ?? "");
 
       const legacyEmergency: EmergencyContactEntry = {
         id: nextTempId(), name: emp.details.emergencyName ?? "", relationship: emp.details.emergencyRelationship ?? "",
@@ -365,7 +369,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         account_holder_name: emp.details.accountHolderName ?? "",
         bank_name: emp.details.bankName ?? "",
         bank_branch_address: emp.details.bankBranch ?? "",
-        uan_number: emp.details.uanNumber ?? "", esi_number: emp.details.esiNumber ?? "",
+        // UAN / ESI number are never returned in full (UAN only masked): blank here means "keep what is on file".
+        uan_number: "", esi_number: "",
         pf_covered: typeof rawRecord.pf_covered === "boolean" ? String(rawRecord.pf_covered) : s.pf_covered,
         esi_covered: typeof rawRecord.esi_covered === "boolean" ? String(rawRecord.esi_covered) : s.esi_covered,
       }));
@@ -525,6 +530,11 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     setSaveError(null);
     setSavedMsg(false);
     setContactErrors({});
+    if (statutory.uan_number && statutory.uan_number.length !== 12) {
+      setSaveError("UAN must be 12 digits");
+      setSaving(false);
+      return;
+    }
     const contactChanges = buildContactChanges(personal, savedContact, canEditContact, isLoginChangeConfirmed);
     try {
       const primaryEmergency = emergencyContacts.find(c => c.is_primary) ?? emergencyContacts[0];
@@ -540,7 +550,6 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
           ? { date_of_joining: employment.date_of_joining } : {}),
         reporting_manager_id: employment.reporting_manager_id || null,
         dotted_line_manager_id: employment.dotted_line_manager_id || '',
-        work_location: employment.work_location || '',
         work_mode: employment.work_mode || '',
         probation_period_months: employment.probation_period_months || null,
         notice_period_days: employment.notice_period_days || null,
@@ -582,8 +591,6 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         account_holder_name: statutory.account_holder_name || "",
         bank_name: statutory.bank_name || "",
         bank_branch_name: statutory.bank_branch_address || "",
-        uan_number: statutory.uan_number || "",
-        esi_number: statutory.esi_number || "",
         pf_covered: statutory.pf_covered === "true",
         esi_covered: statutory.esi_covered === "true",
         // Write-only re-entry — blank means "no change" (see
@@ -591,6 +598,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         // the employee GET only ever returns masked previews, never
         // plaintext, so there is nothing to prefill and clear would mean
         // losing data silently).
+        ...(statutory.uan_number ? { uan_number: statutory.uan_number } : {}),
+        ...(statutory.esi_number ? { esi_number: statutory.esi_number } : {}),
         ...(statutory.pan_number ? { pan_number: statutory.pan_number } : {}),
         ...(statutory.aadhaar_number ? { aadhaar_number: statutory.aadhaar_number } : {}),
         ...(statutory.account_number ? { account_number: statutory.account_number } : {}),
@@ -796,7 +805,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                     <div>
                       <label className="block text-[12.5px] font-semibold mb-1.5">Marital status</label>
                       <select value={personal.maritalStatus} onChange={e => setPersonal(p => ({ ...p, maritalStatus: e.target.value }))} className="field-input field-select">
-                        <option value="single">Single</option><option value="married">Married</option>
+                        {MARITAL_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
                     </div>
                     <div>
@@ -951,6 +960,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
 
               {step === 3 && (
                 <StatutoryAccountsStep
+                  savedUanMasked={savedUanMasked}
                   value={statutory}
                   onChange={setStatutory}
                   documents={hireDocs}

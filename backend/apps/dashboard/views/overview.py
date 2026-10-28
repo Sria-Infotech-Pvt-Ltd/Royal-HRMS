@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from apps.accounts.services_headcount import current_workforce
 from core.permissions import HasCompletedOnboarding, has_perm as _has_perm
 from core.responses import error, success
 
@@ -140,7 +141,7 @@ class SystemAdminKPIView(APIView):
         # excludes them.
         total_employees = cache.get('dashboard:sysadmin:total_employees')
         if total_employees is None:
-            total_employees = User.objects.filter(is_active=True).exclude(employee_id='').count()
+            total_employees = current_workforce().count()
             cache.set('dashboard:sysadmin:total_employees', total_employees, 5 * 60)
 
         # Pending-action counts — deliberately NOT cached (matches HRKPIView's
@@ -291,7 +292,7 @@ class HRKPIView(APIView):
         if total_workforce is None:
             # Excludes employee_id='' — see SystemAdminKPIView.total_employees
             # above for why (matches EmployeeListCreateView.get()'s own filter).
-            workforce_qs = User.objects.filter(is_active=True).exclude(employee_id='')
+            workforce_qs = current_workforce()
             if branch:
                 workforce_qs = workforce_qs.filter(branch=branch)
             total_workforce = workforce_qs.count()
@@ -574,7 +575,7 @@ class HRDashboardOverviewView(APIView):
         today = timezone.localdate()
         branch = _hr_dashboard_branch(request.user)
 
-        employees = User.objects.filter(is_active=True).exclude(employee_id='')
+        employees = current_workforce()
         if branch:
             employees = employees.filter(branch=branch)
         total_headcount = employees.count()

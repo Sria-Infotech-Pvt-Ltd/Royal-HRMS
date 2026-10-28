@@ -42,9 +42,11 @@ interface Props {
   docError: string;
   onUploadDoc: (documentType: string, file: File) => void;
   onDeleteDoc: (doc: HireDocument) => void;
+  /** Edit full record only: the stored UAN, masked. The field itself stays write-only. */
+  savedUanMasked?: string;
 }
 
-export default function StatutoryAccountsStep({ value, onChange, documents, uploading, docError, onUploadDoc, onDeleteDoc }: Props) {
+export default function StatutoryAccountsStep({ value, onChange, documents, uploading, docError, onUploadDoc, onDeleteDoc, savedUanMasked }: Props) {
   function set<K extends keyof StatutoryDraft>(key: K, v: StatutoryDraft[K]) {
     onChange({ ...value, [key]: v });
   }
@@ -157,9 +159,13 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
           <label>UAN <span className="tag">OPTIONAL</span></label>
           <input value={value.uan_number} onChange={e => set("uan_number", e.target.value.replace(/\D/g, ""))} placeholder="12 digits, if available" maxLength={12} className="finput" />
           {value.uan_number && value.uan_number.length !== 12 ? (
-            <div className="hint" style={{ color: "var(--error)" }}>UAN must be exactly 12 digits.</div>
+            <div className="hint" style={{ color: "var(--error)" }}>UAN must be 12 digits</div>
           ) : (
-            <div className="hint">Leave blank for a first job — EPFO will allot one.</div>
+            <div className="hint">
+              {savedUanMasked
+                ? `On file: ${savedUanMasked}. Leave blank to keep it, or type a new 12-digit UAN to replace it.`
+                : "Leave blank for a first job — EPFO will allot one."}
+            </div>
           )}
         </div>
       </div>

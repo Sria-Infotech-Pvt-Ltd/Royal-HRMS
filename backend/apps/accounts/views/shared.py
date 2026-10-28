@@ -329,6 +329,11 @@ def _employee_dict(user: User) -> dict:
             f'XXXX XXXX {p.aadhaar_number[-4:]}'
             if (p and p.aadhaar_number and len(p.aadhaar_number) >= 4) else ''
         ),
+        # UAN: last four only; the full value comes back only from the audited reveal action.
+        'uan_masked': (
+            f'••••••••{p.uan_number[-4:]}'
+            if (p and p.uan_number and len(p.uan_number) >= 4) else ''
+        ),
         'pf_masked': (
             f'••••{p.pf_number[-4:]}'
             if (p and p.pf_number and len(p.pf_number) >= 4) else ''

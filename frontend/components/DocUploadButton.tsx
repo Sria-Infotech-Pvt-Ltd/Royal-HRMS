@@ -10,6 +10,8 @@ export interface HireDocument {
   file_name: string;
   file_size: number;
   uploaded_at: string;
+  /** Short-lived signed link to the file (set where the server provides one, e.g. Edit full record); opens in a new tab. */
+  file_url?: string;
 }
 
 interface Props {
@@ -48,6 +50,11 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
         <span style={{ color: "var(--on-variant)" }} title={existing.file_name}>
           {existing.file_name.length > 22 ? `${existing.file_name.slice(0, 19)}…` : existing.file_name}
         </span>
+        {existing.file_url && (
+          <a href={existing.file_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" title={`View ${label}`}>
+            <i className="ti ti-eye" /> View
+          </a>
+        )}
         <button
           type="button"
           onClick={() => inputRef.current?.click()}

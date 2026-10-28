@@ -118,7 +118,7 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
     // block a legitimate submission whenever the best-effort name-match below
     // hasn't resolved form.branch yet (branches list still loading, etc.).
     if (unrestricted && !form.branch) {
-      setError("Please select a branch.");
+      setError("Please select a Company Code.");
       return;
     }
     setSaving(true);

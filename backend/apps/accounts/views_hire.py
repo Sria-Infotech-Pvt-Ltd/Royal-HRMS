@@ -27,6 +27,7 @@ from apps.accounts.models import (
 )
 from apps.accounts.serializers import HireActionDocumentSerializer
 from apps.accounts.serializers_profile_photo import ProfilePhotoUploadSerializer
+from apps.accounts.services_hire_drafts import discard_draft, existing_employee_match
 from apps.accounts.services_placement import assign_position
 from apps.accounts.views.shared import _get_document_type_config
 
@@ -107,6 +108,8 @@ class HireActionListCreateView(APIView):
                 'position_title': d.position.title,
                 'reserved_employee_id': d.reserved_employee_id,
                 'updated_at': d.updated_at,
+                # Non-blank when this draft looks like someone who already is an employee (stale / test leftover).
+                'existing_employee_match': existing_employee_match(d),
             })
         return success('Draft hire actions.', results)
 
@@ -213,6 +216,11 @@ class HireActionDetailView(APIView):
                 except DjangoValidationError:
                     return error(f'Enter a valid {"work " if email_field == "work_email" else ""}email address.')
 
+        # UAN is optional, but an entered one must be 12 digits; rejected here so a bad value is never stored in the draft.
+        uan = str(data.get('uan_number') or '').strip()
+        if uan and (len(uan) != 12 or not uan.isdigit()):
+            return error('UAN must be 12 digits', data={'uan_number': 'UAN must be 12 digits'})
+
         if data:
             action.draft_data = {**action.draft_data, **data}
             update_fields.append('draft_data')
@@ -228,9 +236,8 @@ class HireActionDetailView(APIView):
         action = self._get_draft(pk)
         if not action:
             return error('Hire action not found or already completed.', http_status=status.HTTP_404_NOT_FOUND)
-        action.status = HireAction.STATUS_DISCARDED
-        action.save(update_fields=['status', 'updated_at'])
-        return success('Hire action discarded.', data={})
+        is_released = discard_draft(action, request.user, reason='discarded', ip_address=get_client_ip(request))
+        return success('Draft discarded.', data={'number_released': is_released})
 
 
 class HireActionPhotoView(APIView):

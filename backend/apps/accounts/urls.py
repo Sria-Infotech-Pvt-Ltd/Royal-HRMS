@@ -103,6 +103,7 @@ from apps.accounts.views import (
     DocumentStatsView,
     EmployeeListCreateView,
     EmployeeStatsView,
+    EmployeeHeadcountView,
     JobTemplateListCreateView,
     JobTemplateDetailView,
     LoginView,
@@ -165,6 +166,7 @@ urlpatterns = [
     # Employees
     path('employees/',                                           EmployeeListCreateView.as_view(),       name='employee-list-create'),
     path('employees/stats/',                                     EmployeeStatsView.as_view(),             name='employee-stats'),
+    path('employees/headcount/',                                 EmployeeHeadcountView.as_view(),         name='employee-headcount'),
     path('employees/bulk-import/',                               EmployeeBulkImportView.as_view(),       name='employee-bulk-import'),
     path('employees/bulk-import/sample/',                        EmployeeBulkImportSampleView.as_view(), name='employee-bulk-import-sample'),
     path('employees/bulk-import/status/<uuid:batch_id>/',        EmployeeBulkImportStatusView.as_view(), name='employee-bulk-import-status'),

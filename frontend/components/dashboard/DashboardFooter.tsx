@@ -7,6 +7,9 @@
 
 import { useRouter } from "next/navigation";
 
+// "Interactive demo" is only true of a demo build; set NEXT_PUBLIC_DEMO_BUILD=true for one. UAT and production show nothing.
+const IS_DEMO_BUILD = process.env.NEXT_PUBLIC_DEMO_BUILD === "true";
+
 export default function DashboardFooter() {
   const router = useRouter();
 
@@ -28,7 +31,7 @@ export default function DashboardFooter() {
           <button type="button">Support</button>
         </div>
 
-        <div className="footer-meta">Interactive demo · Role-aware access · © 2026 AIRA</div>
+        <div className="footer-meta">{IS_DEMO_BUILD ? "Interactive demo · " : ""}Role-aware access · © 2026 AIRA</div>
       </div>
     </footer>
   );

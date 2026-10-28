@@ -227,18 +227,18 @@ class BranchEmployeeCountTests(TestCase):
         self.client.force_authenticate(user=self.admin)
 
     def test_a_new_employee_with_only_the_branch_name_is_linked_and_counted(self):
-        employee = make_user('count-a@test.com', branch='Count Test Office')
+        employee = make_user('count-a@test.com', employee_id='EMPCNTA', branch='Count Test Office')
         employee.refresh_from_db()
         self.assertEqual(employee.branch_fk_id, self.branch.pk)
         self.assertEqual(branch_employee_counts().get(self.branch.pk), 1)
 
     def test_an_employee_missing_the_link_is_still_counted_by_name(self):
-        employee = make_user('count-b@test.com', branch='count test office')  # different case
+        employee = make_user('count-b@test.com', employee_id='EMPCNTB', branch='count test office')  # different case
         User.objects.filter(pk=employee.pk).update(branch_fk=None)
         self.assertEqual(branch_employee_counts().get(self.branch.pk), 1)
 
     def test_an_existing_link_is_never_overridden_by_the_name(self):
-        employee = make_user('count-c@test.com', branch='Count Test Office')
+        employee = make_user('count-c@test.com', employee_id='EMPCNTC', branch='Count Test Office')
         User.objects.filter(pk=employee.pk).update(branch_fk=self.other)
         employee.refresh_from_db()
         employee.save()
@@ -246,16 +246,16 @@ class BranchEmployeeCountTests(TestCase):
         self.assertEqual(employee.branch_fk_id, self.other.pk)
 
     def test_inactive_employees_and_unknown_names_are_not_counted(self):
-        gone = make_user('count-d@test.com', branch='Count Test Office', is_active=False)
-        stray = make_user('count-e@test.com', branch='No Such Office')
+        gone = make_user('count-d@test.com', employee_id='EMPCNTD', branch='Count Test Office', is_active=False)
+        stray = make_user('count-e@test.com', employee_id='EMPCNTE', branch='No Such Office')
         self.assertIsNone(User.objects.get(pk=stray.pk).branch_fk_id)
         self.assertNotIn(self.branch.pk, branch_employee_counts())
         self.assertFalse(gone.is_active)
 
     def test_the_list_and_distribution_endpoints_show_the_same_counts(self):
-        make_user('count-f@test.com', branch='Count Test Office')
-        make_user('count-g@test.com', branch='Count Test Office')
-        make_user('count-h@test.com', branch='Other Count Office')
+        make_user('count-f@test.com', employee_id='EMPCNTF', branch='Count Test Office')
+        make_user('count-g@test.com', employee_id='EMPCNTG', branch='Count Test Office')
+        make_user('count-h@test.com', employee_id='EMPCNTH', branch='Other Count Office')
         listing = self.client.get(reverse('branch-list-create'), {'page_size': 50})
         by_code = {row['branch_code']: row['employees_count'] for row in listing.data['data']['results']}
         self.assertEqual(by_code['CNT01'], 2)

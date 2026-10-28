@@ -1759,6 +1759,26 @@ class EmployeeCodeSeries(models.Model):
             series.save(update_fields=['next_sequence', 'updated_at'])
         return emp_id
 
+    @classmethod
+    def release_employee_id(cls, employment_type: str, emp_id: str) -> bool:
+        """Gives a reserved number back when its draft is thrown away, but only if it is still the newest number of its
+        series (nothing was issued after it) and no employee holds it. Otherwise it stays a gap, as real HRMS/payroll
+        numbering tolerates, rather than risk handing the same number out twice. True when the number was returned."""
+        from django.db import transaction as _tx
+
+        with _tx.atomic():
+            series = cls.objects.select_for_update().filter(employment_type=employment_type).first()
+            if series is None or not emp_id.startswith(series.prefix):
+                return False
+            digits = emp_id[len(series.prefix):]
+            if not digits.isdigit() or int(digits) != series.next_sequence - 1:
+                return False
+            if User.objects.filter(employee_id=emp_id).exists():
+                return False
+            series.next_sequence -= 1
+            series.save(update_fields=['next_sequence', 'updated_at'])
+        return True
+
 
 # ─── Birthday Settings (singleton) ───────────────────────────────────────────
 
@@ -1896,11 +1916,13 @@ class EmployeeProfile(models.Model):
     MARITAL_MARRIED  = 'married'
     MARITAL_DIVORCED = 'divorced'
     MARITAL_WIDOWED  = 'widowed'
+    MARITAL_SEPARATED = 'separated'
     MARITAL_CHOICES  = [
         (MARITAL_SINGLE,   'Single'),
         (MARITAL_MARRIED,  'Married'),
         (MARITAL_DIVORCED, 'Divorced'),
         (MARITAL_WIDOWED,  'Widowed'),
+        (MARITAL_SEPARATED, 'Separated'),
     ]
 
     BLOOD_CHOICES = [

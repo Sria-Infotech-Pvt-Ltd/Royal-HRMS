@@ -22,6 +22,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.accounts.services_headcount import current_workforce
 from apps.payroll.models import BranchPayrollConfig, EmployeeSalaryConfig, SalaryStructure
 
 User = get_user_model()
@@ -40,7 +41,7 @@ BLOCKER_NO_BANK = 'Bank account number or IFSC code missing'
 
 def payroll_employees():
     """Employees payroll can ever apply to: active, with an employee code."""
-    return User.objects.filter(is_active=True).exclude(employee_id='')
+    return current_workforce()
 
 
 @dataclass

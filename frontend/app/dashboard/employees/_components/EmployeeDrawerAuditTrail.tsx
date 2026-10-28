@@ -14,6 +14,8 @@ export interface AuditTrailRow {
   actor_name: string;
   actor_role: string | null;
   action: string;
+  /** One readable sentence from the server, e.g. "Admin revealed PAN, bank account"; blank for events it has no wording for. */
+  description?: string;
   created_at: string;
 }
 
@@ -40,7 +42,7 @@ export default function EmployeeDrawerAuditTrail({ rows, forbidden = false, load
           <div key={row.id} className="actrow">
             <span className="bar" />
             <div className="meta">
-              <div className="t1">{row.action === "profile_viewed_self" ? "Record viewed" : row.action}</div>
+              <div className="t1">{row.description || (row.action === "profile_viewed_self" ? "Record viewed" : row.action.replace(/_/g, " "))}</div>
               <div className="t2">
                 {row.actor_name} · {row.action === "profile_viewed_self" ? "Employee (self-service)" : (row.actor_role || "Admin")}
               </div>

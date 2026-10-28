@@ -433,7 +433,10 @@ class BranchStatsView(APIView):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         total_branches = Branch.objects.count()
         total_active = Branch.objects.filter(status=Branch.STATUS_ACTIVE).count()
-        total_employees = User.objects.filter(is_active=True).count()
+        # Same definition as the per-branch counts and every other headcount (services_headcount): the Admin account
+        # has no employee record, so it is not part of the workforce.
+        from apps.accounts.services_headcount import current_workforce
+        total_employees = current_workforce().count()
         total_cities = Branch.objects.values('city').distinct().count()
         return success('Company Code statistics retrieved successfully.', data={
             'total_employees': total_employees,

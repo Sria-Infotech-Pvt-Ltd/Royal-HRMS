@@ -276,6 +276,7 @@ class EmployeeProfileDocumentView(APIView):
         type_config = _get_document_type_config(doc_type)
         if not type_config:
             return error('Invalid document type.', http_status=status.HTTP_400_BAD_REQUEST)
+        replaced = []
         with transaction.atomic():
             doc = serializer.save(
                 user=employee,
@@ -286,13 +287,19 @@ class EmployeeProfileDocumentView(APIView):
             # same document_type replaces the previous file rather than
             # accumulating duplicates.
             if not type_config.allow_multiple:
-                ED.objects.filter(user=employee, document_type=doc_type).exclude(pk=doc.pk).delete()
+                earlier = ED.objects.filter(user=employee, document_type=doc_type).exclude(pk=doc.pk)
+                # Recorded before the delete: the audit entry is the trace of what the replaced file was.
+                replaced = list(earlier.values('id', 'file_name', 'file_size'))
+                earlier.delete()
 
         try:
             AuditLog.objects.create(
-                user=request.user, action='document_uploaded', module='documents',
+                user=request.user, action='document_replaced' if replaced else 'document_uploaded', module='documents',
                 object_id=str(doc.id),
-                changes={'employee': employee.employee_id, 'document_type': doc_type},
+                changes={
+                    'employee': employee.employee_id, 'document_type': doc_type, 'file_name': doc.file_name,
+                    **({'replaced': replaced} if replaced else {}),
+                },
                 branch=employee.branch,
                 ip_address=get_client_ip(request),
             )

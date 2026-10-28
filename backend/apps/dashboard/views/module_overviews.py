@@ -13,6 +13,7 @@ from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from apps.accounts.services_headcount import current_workforce
 from core.permissions import has_perm as _has_perm
 from core.responses import error, success
 
@@ -35,7 +36,7 @@ class AttendanceOverviewView(APIView):
         from apps.attendance.models import AttendanceRecord
 
         today = timezone.localdate()
-        active_total = User.objects.filter(is_active=True).exclude(employee_id='').count()
+        active_total = current_workforce().count()
 
         counts = {
             row['status']: row['n']
@@ -139,7 +140,7 @@ class PayrollOverviewView(APIView):
         from apps.payroll.models import EmployeePayslip, EmployeeSalaryConfig, PayrollCycle
 
         cycle = PayrollCycle.objects.order_by('-cycle_start').first()
-        employees = User.objects.filter(is_active=True).exclude(employee_id='')
+        employees = current_workforce()
         total_headcount = employees.count()
 
         # The one shared "payroll ready" definition (services_payroll_readiness): an active, effective salary record, a
@@ -331,7 +332,7 @@ class ReportsOverviewView(APIView):
         days = _last_7_days_labels(today)
         chart = [{'label': d.strftime('%a')[0], 'count': AuditLog.objects.filter(created_at__date=d).count()} for d in days]
 
-        employees = User.objects.filter(is_active=True).exclude(employee_id='')
+        employees = current_workforce()
         total_headcount = employees.count()
         last_updated = employees.order_by('-updated_at').values_list('updated_at', flat=True).first()
 

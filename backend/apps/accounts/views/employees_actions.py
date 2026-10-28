@@ -369,6 +369,8 @@ class EmployeeRevealSensitiveView(APIView):
         'account_number':      'account_number',
         'ifsc_code':           'ifsc_code',
         'pf_number':           'pf_number',
+        'uan_number':          'uan_number',
+        'esi_number':          'esi_number',
         'passport_number':     'passport_number',
     }
 
@@ -390,7 +392,10 @@ class EmployeeRevealSensitiveView(APIView):
         AuditLog.objects.create(
             user=request.user, action='sensitive_reveal', module='employees',
             object_id=str(employee.id),
-            changes={'fields': requested},
+            changes={'fields': requested, 'user_agent': request.META.get('HTTP_USER_AGENT', '')[:200]},
+            # The employee's branch, not the viewer's: a branch-scoped HR only sees events whose target branch is theirs
+            # (AuditLogListView), so a reveal without it never reached Settings > Audit Log.
+            branch=employee.branch or '',
             ip_address=get_client_ip(request),
         )
         return success('Sensitive fields revealed.', data=data)

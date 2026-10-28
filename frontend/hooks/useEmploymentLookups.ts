@@ -10,7 +10,6 @@ import { API } from "@/lib/api/endpoints";
 export interface PositionOption { id: string; title: string; org_unit_name: string; grade: string; job_template_name: string | null; is_active: boolean }
 export interface PersonOption { id: string; full_name: string; employee_id: string; work_location?: string }
 export interface NamedOption { id: string; name: string }
-export interface LeavePolicyOption { id: string | number; leave_type_display: string }
 
 export interface EmploymentLookups {
   positions: PositionOption[];
@@ -18,10 +17,9 @@ export interface EmploymentLookups {
   weeklyPolicies: NamedOption[];
   shiftPolicies: NamedOption[];
   structures: NamedOption[];
-  leavePolicies: LeavePolicyOption[];
 }
 
-const EMPTY: EmploymentLookups = { positions: [], people: [], weeklyPolicies: [], shiftPolicies: [], structures: [], leavePolicies: [] };
+const EMPTY: EmploymentLookups = { positions: [], people: [], weeklyPolicies: [], shiftPolicies: [], structures: [] };
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cached: { data: EmploymentLookups; expiresAt: number } | null = null;
 
@@ -39,8 +37,7 @@ export function useEmploymentLookups(): EmploymentLookups {
       clientApi.get<Paged<NamedOption>>(API.attendance.weeklyDayPolicies, { params }),
       clientApi.get<Paged<NamedOption>>(API.attendance.workingHoursPolicies, { params }),
       clientApi.get<Paged<NamedOption>>(API.payroll.structures, { params }),
-      clientApi.get<{ data: LeavePolicyOption[] }>(API.leave.policy),
-    ]).then(([positions, people, weekly, shifts, structures, leave]) => {
+    ]).then(([positions, people, weekly, shifts, structures]) => {
       const rows = <T,>(result: PromiseSettledResult<{ data: Paged<T> }>): T[] =>
         result.status === "fulfilled" ? (result.value.data.data.results ?? []) : [];
       const resolved: EmploymentLookups = {
@@ -49,10 +46,9 @@ export function useEmploymentLookups(): EmploymentLookups {
         weeklyPolicies: rows(weekly),
         shiftPolicies: rows(shifts),
         structures: rows(structures),
-        leavePolicies: leave.status === "fulfilled" ? (leave.value.data.data ?? []) : [],
       };
       setLookups(resolved);
-      if ([positions, people, weekly, shifts, structures, leave].every(result => result.status === "fulfilled")) {
+      if ([positions, people, weekly, shifts, structures].every(result => result.status === "fulfilled")) {
         cached = { data: resolved, expiresAt: Date.now() + CACHE_TTL_MS };
       }
     });
