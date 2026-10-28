@@ -8,7 +8,7 @@ import { API } from "@/lib/api/endpoints";
 import type { EmployeeSalaryConfig, SalaryStructureListItem } from "@/types/payroll";
 import DateInput from "@/components/shared/DateInput";
 
-interface PagedResponse<T> { results: T[]; count: number; }
+interface PagedResponse<T> { results: T[]; count: number; page: number; total_pages: number; }
 interface Employee { id: string; uuid: string; full_name: string; employee_id: string; department: string; branch: string; }
 
 interface SalaryModalState {
@@ -22,31 +22,45 @@ interface SalaryModalState {
 const fmt = (n: number | string) =>
   `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
+// UAT-019 — both this screen's KPI cards and its employee table used to come
+// from the SAME page-1-only fetch of two independently-paginated endpoints
+// (20 of 52 employees, 20 of 52 configs), so "Total"/"Configured" never
+// matched the real counts and most employees never appeared at all.
+// Employees drive real server-side pagination + search below; salary configs
+// are fetched in one page at PAGE_SIZE_CAP (the system's own designed
+// ceiling for a single request — see core/pagination.py's max_page_size)
+// purely to build the Set/Not-Set lookup, never for a displayed count.
+const EMPLOYEE_PAGE_SIZE = 20;
+const PAGE_SIZE_CAP      = 100;
+
 export default function SalarySetupTab() {
-  const { data: salaryPage, loading: salaryLoading, refetch: refetchSalaries } =
-    useFetch<PagedResponse<EmployeeSalaryConfig>>(API.payroll.employeeSalary);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+
+  const { data: salaryPage, refetch: refetchSalaries } =
+    useFetch<PagedResponse<EmployeeSalaryConfig>>(`${API.payroll.employeeSalary}?page_size=${PAGE_SIZE_CAP}`);
   const { data: structures } = useFetch<SalaryStructureListItem[]>(API.payroll.structures);
-  const { data: employeePage } = useFetch<PagedResponse<Employee>>(API.employees.list);
+  const { data: employeePage, loading: employeesLoading } = useFetch<PagedResponse<Employee>>(
+    `${API.employees.list}?page=${page}&page_size=${EMPLOYEE_PAGE_SIZE}&search=${encodeURIComponent(search)}`,
+  );
 
   const [modal, setModal] = useState<SalaryModalState | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; isError: boolean } | null>(null);
   const [modalErr, setModalErr] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
 
   const salaryConfigs = salaryPage?.results ?? [];
-  const allEmployees = employeePage?.results ?? [];
+  const filteredEmployees = employeePage?.results ?? [];
 
   const configById = new Map(salaryConfigs.map(c => [c.employee, c]));
 
-  const filteredEmployees = allEmployees.filter(emp =>
-    emp.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    emp.employee_id.toLowerCase().includes(search.toLowerCase()) ||
-    emp.department.toLowerCase().includes(search.toLowerCase())
-  );
-
   const withCTC    = filteredEmployees.filter(e => configById.has(e.uuid));
   const withoutCTC = filteredEmployees.filter(e => !configById.has(e.uuid));
+
+  function changeSearch(value: string) {
+    setSearch(value);
+    setPage(1);
+  }
 
   function openModal(employee: Employee) {
     const current = configById.get(employee.uuid) ?? null;
@@ -66,8 +80,9 @@ export default function SalarySetupTab() {
   }
 
   async function save() {
-    if (!modal || !modal.annual_ctc) return;
+    if (!modal) return;
     setModalErr(null);
+    if (!modal.annual_ctc) { setModalErr("Annual CTC is required."); return; }
     const ctc = Number(modal.annual_ctc);
     if (Number.isNaN(ctc) || ctc <= 0) { setModalErr("Annual CTC must be greater than 0."); return; }
     setSaving(true);
@@ -89,8 +104,10 @@ export default function SalarySetupTab() {
     }
   }
 
-  const totalWithCTC = salaryConfigs.length;
-  const totalEmployees = allEmployees.length;
+  // The single count source the recommendation asked for — paginator totals,
+  // never results.length (which only ever reflected one page).
+  const totalEmployees = employeePage?.count ?? 0;
+  const totalWithCTC   = salaryPage?.count ?? 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -133,7 +150,7 @@ export default function SalarySetupTab() {
                 type="text"
                 placeholder="Search employees…"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => changeSearch(e.target.value)}
                 className="field-input"
                 style={{ paddingLeft: 32, width: 220 }}
               />
@@ -147,7 +164,7 @@ export default function SalarySetupTab() {
             <div style={{ padding: "10px 20px 6px", borderTop: "1px solid var(--outline-v)", display: "flex", alignItems: "center", gap: 8 }}>
               <i className="ti ti-alert-circle" style={{ color: "var(--warn)", fontSize: 15 }} />
               <span style={{ fontSize: 12, fontWeight: 600, color: "var(--warn)" }}>
-                {withoutCTC.length} employee{withoutCTC.length !== 1 ? "s" : ""} without CTC — assign before running payroll
+                Without CTC on this page — assign before running payroll ({totalEmployees - totalWithCTC} missing in total)
               </span>
             </div>
             <EmployeeTable
@@ -166,7 +183,7 @@ export default function SalarySetupTab() {
               <div style={{ padding: "10px 20px 6px", borderTop: "1px solid var(--outline-v)", display: "flex", alignItems: "center", gap: 8 }}>
                 <i className="ti ti-circle-check" style={{ color: "var(--success)", fontSize: 15 }} />
                 <span style={{ fontSize: 12, fontWeight: 600, color: "var(--success)" }}>
-                  {withCTC.length} employee{withCTC.length !== 1 ? "s" : ""} configured
+                  Configured on this page
                 </span>
               </div>
             )}
@@ -179,16 +196,32 @@ export default function SalarySetupTab() {
           </>
         )}
 
-        {salaryLoading && (
+        {employeesLoading && (
           <div style={{ padding: "24px", textAlign: "center", color: "var(--on-variant)" }}>
             <i className="ti ti-loader-2" style={{ fontSize: 20, display: "block", marginBottom: 8 }} />
             Loading…
           </div>
         )}
 
-        {!salaryLoading && filteredEmployees.length === 0 && (
+        {!employeesLoading && filteredEmployees.length === 0 && (
           <div style={{ padding: "24px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
             No employees found
+          </div>
+        )}
+
+        {employeePage && employeePage.total_pages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
+            <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
+              Page {employeePage.page} of {employeePage.total_pages} · {totalEmployees} employees
+            </span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
+                <i className="ti ti-chevron-left" /> Prev
+              </button>
+              <button className="btn btn-ghost btn-sm" disabled={page >= employeePage.total_pages} onClick={() => setPage(p => Math.min(employeePage.total_pages, p + 1))}>
+                Next <i className="ti ti-chevron-right" />
+              </button>
+            </div>
           </div>
         )}
       </div>

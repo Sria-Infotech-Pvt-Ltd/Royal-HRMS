@@ -1,7 +1,7 @@
 "use client";
 
 import type { PayrollCycle } from "@/types/payroll";
-import { STATUS_BADGE, STATUS_LABEL, UNCANCELLABLE, PENDING_CYCLES_SECTION_ID } from "./payrollDashboardShared";
+import { STATUS_BADGE, STATUS_LABEL, UNCANCELLABLE, PENDING_CYCLES_SECTION_ID, cyclePeriodLabel } from "./payrollDashboardShared";
 
 interface PendingCyclesCardProps {
   pending: PayrollCycle[];
@@ -31,7 +31,7 @@ export default function PendingCyclesCard({ pending, canResume, onResumeCycle, o
             {pending.map(c => (
               <tr key={c.id} style={{ cursor: canResume ? "pointer" : "default" }} onClick={canResume ? () => onResumeCycle(c.id, c.status, c.cycle_start) : undefined}>
                 <td style={{ fontWeight: 600 }}>
-                  {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
+                  {cyclePeriodLabel(c)}
                 </td>
                 <td>{c.pay_date}</td>
                 <td><span className={STATUS_BADGE[c.status] ?? "badge badge-neutral"}>{STATUS_LABEL[c.status] ?? c.status}</span></td>

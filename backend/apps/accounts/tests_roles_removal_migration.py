@@ -28,6 +28,24 @@ class RolesRemovalMigrationTests(TransactionTestCase):
     def tearDown(self):
         executor = MigrationExecutor(connection)
         executor.migrate(executor.loader.graph.leaf_nodes())
+        # setUp() builds its fixtures with TransactionTestCase's real commits
+        # (required to run actual migrations against them), so nothing here
+        # auto-rolls-back the way a plain TestCase would. Migrating the
+        # schema back to the leaf state (above) restores the TABLES; it does
+        # nothing about the ROWS this test created, which were otherwise
+        # left behind for every later test run to trip over (stray MIG1-5
+        # users inflating unrelated "active employee"/"onboarding" counts
+        # elsewhere in the suite).
+        apps = executor.loader.project_state(executor.loader.graph.leaf_nodes()).apps
+        User = apps.get_model('accounts', 'User')
+        Placement = apps.get_model('accounts', 'Placement')
+        Position = apps.get_model('accounts', 'Position')
+        OrgUnit = apps.get_model('accounts', 'OrgUnit')
+        stray_users = User.objects.filter(email__endswith='@mig.test')
+        Placement.objects.filter(employee__in=stray_users).delete()
+        stray_users.delete()
+        Position.objects.filter(org_unit__name__in=('Migration Unit', 'Legacy access (review)')).delete()
+        OrgUnit.objects.filter(name='Migration Unit').delete()
 
     def _build_old_world(self):
         Role = self.old.get_model('accounts', 'Role')

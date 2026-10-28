@@ -8,10 +8,10 @@ interface Props {
   onView:   (r: SeparationRequest) => void;
   onEdit:   (r: SeparationRequest) => void;
   onCancel: (r: SeparationRequest) => void;
-  onDelete: (r: SeparationRequest) => void;
+  onReject: (r: SeparationRequest) => void;
 }
 
-export default function SeparationTable({ requests, onView, onEdit, onCancel, onDelete }: Props) {
+export default function SeparationTable({ requests, onView, onEdit, onCancel, onReject }: Props) {
   if (requests.length === 0) {
     return (
       <div style={{ padding: "48px 20px", textAlign: "center" }}>
@@ -71,7 +71,7 @@ export default function SeparationTable({ requests, onView, onEdit, onCancel, on
                     </button>
                   )}
                   {r.can_delete && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => onDelete(r)} title="Reject" style={{ color: "var(--error)" }} suppressHydrationWarning>
+                    <button className="btn btn-ghost btn-sm" onClick={() => onReject(r)} title="Reject" style={{ color: "var(--error)" }} suppressHydrationWarning>
                       <i className="ti ti-x" />
                     </button>
                   )}

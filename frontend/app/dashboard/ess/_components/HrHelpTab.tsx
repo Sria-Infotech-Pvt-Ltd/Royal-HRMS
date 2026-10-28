@@ -84,84 +84,84 @@ export default function HrHelpTab() {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-headset" /> Create HR request</div>
-        </div>
-        <div style={{ padding: "20px 24px" }}>
-          {submitErr && <div className="alert alert-error" style={{ marginBottom: 16 }}>{submitErr}</div>}
-          <div className="form-row cols-2">
-            <div className="field-group">
-              <label className="field-label">Topic</label>
-              <select className="field-input field-select" value={topic} onChange={e => setTopic(e.target.value)}>
-                {TOPICS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-            <div className="field-group">
-              <label className="field-label">Priority</label>
-              <select className="field-input field-select" value={priority} onChange={e => setPriority(e.target.value)}>
-                {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="field-group" style={{ marginBottom: 16 }}>
-            <label className="field-label">Message</label>
-            <textarea
-              className="field-input"
-              rows={3}
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              placeholder="Describe your question or request"
-            />
-          </div>
-          <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting || message.trim().length < 10}>
-            {submitting ? "Submitting…" : "Submit to HR"}
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div className="card" style={{ flex: "2 1 480px" }}>
+      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 20 }}>
+        <div className="card" style={{ flex: "0 1 600px" }}>
           <div className="card-header">
-            <div className="card-title"><i className="ti ti-list-details" /> {canRespond ? "HR request queue" : "My HR requests"}</div>
+            <div className="card-title"><i className="ti ti-headset" /> Create HR request</div>
           </div>
-          {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
-          {loading ? (
-            <div className="empty-state">
-              <i className="ti ti-loader-2 spin" />
-              <h3>Loading requests…</h3>
+          <div style={{ padding: "20px 24px" }}>
+            {submitErr && <div className="alert alert-error" style={{ marginBottom: 16 }}>{submitErr}</div>}
+            <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+              <div className="field-group" style={{ width: 220 }}>
+                <label className="field-label">Topic</label>
+                <select className="field-input field-select" value={topic} onChange={e => setTopic(e.target.value)}>
+                  {TOPICS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div className="field-group" style={{ width: 160 }}>
+                <label className="field-label">Priority</label>
+                <select className="field-input field-select" value={priority} onChange={e => setPriority(e.target.value)}>
+                  {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
             </div>
-          ) : requests.length === 0 ? (
-            <div className="empty-state">
-              <i className="ti ti-headset" />
-              <h3>No active HR cases</h3>
-              <p>Your submitted requests will be listed here.</p>
+            <div className="field-group" style={{ marginBottom: 16, maxWidth: 560 }}>
+              <label className="field-label">Message</label>
+              <textarea
+                className="field-input"
+                rows={3}
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                placeholder="Describe your question or request"
+              />
             </div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Ref</th>
-                    {canRespond && <th>From</th>}
-                    <th>Topic</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th>Submitted</th>
-                    {canRespond && <th>Action</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {requests.map(r => (
-                    <HrHelpRow key={r.id} entry={r} canRespond={canRespond} onUpdated={refetch} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+            <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting || message.trim().length < 10}>
+              {submitting ? "Submitting…" : "Submit to HR"}
+            </button>
+          </div>
         </div>
 
         <SupportStatusCard openCount={requests.filter(r => r.status !== "resolved").length} />
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title"><i className="ti ti-list-details" /> {canRespond ? "HR request queue" : "My HR requests"}</div>
+        </div>
+        {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
+        {loading ? (
+          <div className="empty-state">
+            <i className="ti ti-loader-2 spin" />
+            <h3>Loading requests…</h3>
+          </div>
+        ) : requests.length === 0 ? (
+          <div className="empty-state">
+            <i className="ti ti-headset" />
+            <h3>No active HR cases</h3>
+            <p>Your submitted requests will be listed here.</p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ref</th>
+                  {canRespond && <th>From</th>}
+                  <th>Topic</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Submitted</th>
+                  {canRespond && <th>Action</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map(r => (
+                  <HrHelpRow key={r.id} entry={r} canRespond={canRespond} onUpdated={refetch} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -245,17 +245,15 @@ function HrHelpRow({ entry, canRespond, onUpdated }: { entry: ApiHrHelpRequest; 
             <div style={{ padding: 14 }}>
               <p style={{ fontSize: 13, marginBottom: 10 }}>{entry.message}</p>
               {err && <div className="alert alert-error" style={{ marginBottom: 10 }}>{err}</div>}
-              <div className="form-row cols-2" style={{ marginBottom: 10 }}>
-                <div className="field-group">
-                  <label className="field-label">Status</label>
-                  <select className="field-input field-select" value={status} onChange={e => setStatus(e.target.value as ApiHrHelpRequest["status"])}>
-                    <option value="open">Open</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="resolved">Resolved</option>
-                  </select>
-                </div>
+              <div className="field-group" style={{ marginBottom: 10, width: 180 }}>
+                <label className="field-label">Status</label>
+                <select className="field-input field-select" value={status} onChange={e => setStatus(e.target.value as ApiHrHelpRequest["status"])}>
+                  <option value="open">Open</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="resolved">Resolved</option>
+                </select>
               </div>
-              <div className="field-group" style={{ marginBottom: 10 }}>
+              <div className="field-group" style={{ marginBottom: 10, maxWidth: 560 }}>
                 <label className="field-label">
                   Response {status === "resolved" && <span style={{ color: "var(--error)" }}>*</span>}
                 </label>

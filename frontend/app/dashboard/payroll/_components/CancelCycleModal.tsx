@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle } from "@/types/payroll";
+import { cyclePeriodLabel } from "./payrollDashboardShared";
 
 interface Props {
   cycle: PayrollCycle;
@@ -11,8 +12,7 @@ interface Props {
   onClose: () => void;
 }
 
-const PERIOD_LABEL = (c: PayrollCycle) =>
-  new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" });
+const PERIOD_LABEL = (c: PayrollCycle) => cyclePeriodLabel(c);
 
 export default function CancelCycleModal({ cycle, onCancelled, onClose }: Props) {
   const [reason, setReason] = useState("");

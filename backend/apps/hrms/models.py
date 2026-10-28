@@ -441,6 +441,41 @@ SEPARATION_STATUS_CHOICES = [
 ]
 
 
+class SeparationRequestNumberSequence(models.Model):
+    """One singleton row holding the last SEP-N number ever issued.
+
+    UAT-018 — request_number used to be derived as Max(existing rows)+1,
+    which silently reused a number once the row holding it was gone (the
+    list view's "Reject" action used to hard-delete; see views/separation.py).
+    A real HR deletion (the correctly-scoped admin cleanup action that
+    remains after that fix) would still trigger the same reuse through
+    Max(), since Max() only ever sees rows that currently exist. Tracking
+    the last-issued number in its own row — never decremented, independent
+    of whether any particular SeparationRequest still exists — is what
+    actually guarantees "never reuse" rather than "usually doesn't reuse"."""
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    last_number = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = 'hrms_separation_request_number_sequence'
+
+    def __str__(self):
+        return f'Last SEP number: {self.last_number}'
+
+    @classmethod
+    def next_number(cls) -> int:
+        """Must be called inside a transaction.atomic() block — the caller
+        (SeparationRequestListCreateView.post) already wraps request
+        creation in one. select_for_update() serializes concurrent callers
+        so two simultaneous requests can never be handed the same number."""
+        row, _created = cls.objects.select_for_update().get_or_create(
+            id='00000000-0000-0000-0000-000000000001',
+        )
+        row.last_number += 1
+        row.save(update_fields=['last_number'])
+        return row.last_number
+
+
 class SeparationRequest(models.Model):
     id                        = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     request_number            = models.PositiveIntegerField(unique=True, null=True, blank=True, db_index=True)
@@ -683,6 +718,10 @@ class SeparationSettlement(models.Model):
     reimbursements_amount    = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     advances_recovery_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     tds_amount               = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # UAT-017 — the settlement had no field at all for statutory PF/PT
+    # recovery, so Finance had nowhere to record them in a Full & Final.
+    pf_recovery_amount       = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    pt_recovery_amount       = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     # Can be positive or negative — anything the above line items don't cover.
     other_adjustment_amount  = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     other_adjustment_note    = models.CharField(max_length=200, blank=True)

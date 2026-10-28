@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import type { PayrollCycle } from "@/types/payroll";
-import { STATUS_BADGE, STATUS_LABEL, DETAIL_STATUSES, TERMINAL_STATUSES } from "./payrollDashboardShared";
+import { STATUS_BADGE, STATUS_LABEL, DETAIL_STATUSES, TERMINAL_STATUSES, cyclePeriodLabel } from "./payrollDashboardShared";
 
 interface RecentPayrollRunsCardProps {
   cycles: PayrollCycle[];
@@ -58,7 +58,7 @@ export default function RecentPayrollRunsCard({ cycles, cyclesLoading, canResume
                 return (
                 <tr key={c.id} style={{ cursor: handleClick ? "pointer" : "default" }} onClick={handleClick}>
                   <td style={{ fontWeight: 600, fontSize: 13 }}>
-                    {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
+                    {cyclePeriodLabel(c)}
                   </td>
                   <td style={{ fontSize: 13 }}>{c.cycle_start}</td>
                   <td style={{ fontSize: 13 }}>{c.cycle_end}</td>

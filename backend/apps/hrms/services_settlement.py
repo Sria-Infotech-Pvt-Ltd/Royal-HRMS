@@ -96,4 +96,6 @@ def recompute_net_payable(settlement: SeparationSettlement) -> None:
         - settlement.notice_period_recovery_amount
         - settlement.advances_recovery_amount
         - settlement.tds_amount
+        - settlement.pf_recovery_amount
+        - settlement.pt_recovery_amount
     )

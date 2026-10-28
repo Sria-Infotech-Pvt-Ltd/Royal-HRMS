@@ -1,5 +1,6 @@
 from core.access import can_manage_branch, can_manage_team
 from core.permissions import has_perm
+from decimal import Decimal
 import logging
 import re
 
@@ -1014,6 +1015,14 @@ class SeparationSettlementSerializer(serializers.ModelSerializer):
     finalized_by_name = serializers.SerializerMethodField()
     can_edit           = serializers.SerializerMethodField()
     can_finalize       = serializers.SerializerMethodField()
+    # A negative net_payable_amount is a real, legitimate outcome (e.g. a
+    # large advance or a notice-period shortfall the employee must repay) —
+    # not something to block. What UAT-016 actually flagged is that nothing
+    # told the UI this was a recovery rather than an ordinary payment, so it
+    # rendered a raw negative number ("Rs-1,50,000"). This flag lets the
+    # frontend label and format that case clearly instead of guessing from
+    # the sign of a plain number.
+    is_recovery        = serializers.SerializerMethodField()
 
     class Meta:
         model  = SeparationSettlement
@@ -1025,8 +1034,9 @@ class SeparationSettlementSerializer(serializers.ModelSerializer):
             'notice_period_shortfall_days', 'notice_period_recovery_amount',
             'gratuity_amount', 'statutory_bonus_amount', 'reimbursements_amount',
             'advances_recovery_amount', 'tds_amount',
+            'pf_recovery_amount', 'pt_recovery_amount',
             'other_adjustment_amount', 'other_adjustment_note',
-            'net_payable_amount',
+            'net_payable_amount', 'is_recovery',
             'status', 'status_display', 'finalized_by_name', 'finalized_at',
             'can_edit', 'can_finalize',
             'created_at', 'updated_at',
@@ -1035,12 +1045,15 @@ class SeparationSettlementSerializer(serializers.ModelSerializer):
             'id', 'pro_rata_salary', 'leave_encashment_days', 'leave_encashment_amount',
             'notice_period_required_days', 'notice_period_served_days',
             'notice_period_shortfall_days', 'notice_period_recovery_amount',
-            'net_payable_amount', 'status', 'status_display', 'finalized_by_name',
+            'net_payable_amount', 'is_recovery', 'status', 'status_display', 'finalized_by_name',
             'finalized_at', 'can_edit', 'can_finalize', 'created_at', 'updated_at',
         ]
 
     def get_finalized_by_name(self, obj):
         return obj.finalized_by.full_name if obj.finalized_by_id else ''
+
+    def get_is_recovery(self, obj):
+        return obj.net_payable_amount < 0
 
     def get_can_edit(self, obj):
         user = _authed_user(self.context)
@@ -1075,9 +1088,42 @@ class SeparationSettlementSerializer(serializers.ModelSerializer):
     def validate_tds_amount(self, value):
         return self._validate_nonnegative(value, 'TDS')
 
+    def validate_pf_recovery_amount(self, value):
+        return self._validate_nonnegative(value, 'PF recovery')
+
+    def validate_pt_recovery_amount(self, value):
+        return self._validate_nonnegative(value, 'Professional tax recovery')
+
     def validate(self, data):
         if self.instance and self.instance.status == SEP_SETTLEMENT_FINALIZED:
             raise serializers.ValidationError('This settlement is already finalized and can no longer be edited.')
+
+        # UAT-016/UAT-017 — TDS (or PF/PT) saved against a much smaller
+        # payable produced a nonsensical negative "net payable" with no
+        # warning. Unlike advances_recovery/notice_period_recovery_amount
+        # (real debts the employee can legitimately owe back, surfaced
+        # instead via is_recovery above), TDS/PF/PT are all withheld FROM
+        # this payment — together they cannot structurally exceed the
+        # earnings they're withheld from, so a data-entry mistake there is
+        # always worth rejecting, not flagging and allowing.
+        def merged(name):
+            return data[name] if name in data else (getattr(self.instance, name) if self.instance else Decimal('0'))
+
+        statutory_withholdings = merged('tds_amount') + merged('pf_recovery_amount') + merged('pt_recovery_amount')
+        if statutory_withholdings:
+            gross_earnings = (
+                (self.instance.pro_rata_salary if self.instance else Decimal('0'))
+                + (self.instance.leave_encashment_amount if self.instance else Decimal('0'))
+                + merged('gratuity_amount')
+                + merged('statutory_bonus_amount')
+                + merged('reimbursements_amount')
+                + max(merged('other_adjustment_amount'), Decimal('0'))
+            )
+            if statutory_withholdings > gross_earnings:
+                raise serializers.ValidationError(
+                    f'TDS + PF + PT (₹{statutory_withholdings}) cannot exceed the gross earnings '
+                    f'(₹{gross_earnings}) they are withheld from.'
+                )
         return data
 
 
