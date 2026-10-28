@@ -22,7 +22,7 @@ from ..serializers import (
     SeparationDocumentSerializer, SeparationHandoverTaskCreateSerializer,
     SeparationHandoverTaskSerializer, SeparationRequestSerializer, SeparationSettlementSerializer,
 )
-from ..services_settlement import compute_draft, recompute_net_payable
+from ..services_settlement import compute_draft, negative_net_message, recompute_net_payable
 from .separation import _has_perm, _log, _user_branch
 
 logger = logging.getLogger(__name__)
@@ -329,7 +329,8 @@ class SeparationSettlementView(APIView):
         settlement = self._current_settlement(sep_request)
         serializer = SeparationSettlementSerializer(settlement, data=request.data, partial=True)
         if not serializer.is_valid():
-            return error(first_error(serializer.errors))
+            # `data` carries every field's errors so the form can show each one beside its own input.
+            return error(first_error(serializer.errors), data=serializer.errors)
         settlement = serializer.save()
         recompute_net_payable(settlement)
         settlement.save()
@@ -355,6 +356,13 @@ class SeparationSettlementFinalizeView(APIView):
         settlement = sep_request.settlement
         if settlement.status == SEP_SETTLEMENT_FINALIZED:
             return error('This settlement is already finalized.')
+        # A draft is recomputed from live payroll data, so the net can have gone negative since the last edit.
+        recompute_net_payable(settlement)
+        if settlement.net_payable_amount < 0 and not settlement.is_recovery:
+            return error(
+                negative_net_message(settlement.net_payable_amount),
+                data={'is_recovery': [negative_net_message(settlement.net_payable_amount)]},
+            )
 
         settlement.status       = SEP_SETTLEMENT_FINALIZED
         settlement.finalized_by = request.user

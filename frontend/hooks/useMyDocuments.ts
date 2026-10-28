@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { parseApiError } from "@/lib/apiError";
 
 export type DocumentCategory = "identity" | "education" | "employment" | "tax_proof" | "benefits" | "other";
 export type DocumentStatus = "pending" | "verified" | "rejected";
@@ -46,8 +47,7 @@ export interface DocumentSubmissionInput {
 }
 
 function extractMessage(err: unknown, fallback: string): string {
-  const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-  return message ?? fallback;
+  return parseApiError(err, fallback).message;
 }
 
 export function useMyDocuments() {

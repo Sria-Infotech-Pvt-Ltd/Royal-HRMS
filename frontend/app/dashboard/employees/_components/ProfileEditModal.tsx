@@ -12,6 +12,8 @@
 import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useApiErrors } from "@/hooks/useApiErrors";
+import FieldError from "@/components/shared/FieldError";
 import { STATES } from "@/app/dashboard/settings/company/_data";
 
 interface ProfileForEdit {
@@ -91,15 +93,16 @@ function buildInitialForm(profile: ProfileForEdit): FormState {
 export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
   const [form, setForm] = useState<FormState>(() => buildInitialForm(profile));
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { fieldErrors, formError, handleError, clearAll, clearField } = useApiErrors();
 
   function field<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
+    clearField(key);
   }
 
   async function handleSave() {
     setSaving(true);
-    setError(null);
+    clearAll();
     try {
       await clientApi.patch(API.employees.me, {
         phone: form.phone,
@@ -123,8 +126,7 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
       });
       onSaved();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg ?? "Failed to update profile.");
+      handleError(err, "Failed to update profile.");
     } finally {
       setSaving(false);
     }
@@ -139,14 +141,15 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
         </div>
 
         <div className="drawer-body">
-          {error && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {error}</div>}
+          {formError && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {formError}</div>}
 
           <div style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", marginBottom: 10 }}>
             Contact
           </div>
           <div className="field-group">
             <label className="field-label">Mobile number</label>
-            <input className="field-input" value={form.phone} onChange={e => field("phone", e.target.value)} placeholder="+91 98765 43210" />
+            <input className={`field-input${fieldErrors.phone ? " field-error" : ""}`} value={form.phone} onChange={e => field("phone", e.target.value)} placeholder="+91 98765 43210" />
+            <FieldError message={fieldErrors.phone} />
           </div>
 
           <div style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", margin: "18px 0 10px" }}>
@@ -253,11 +256,13 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Phone</label>
-              <input className="field-input" value={form.emergency_phone} onChange={e => field("emergency_phone", e.target.value)} />
+              <input className={`field-input${fieldErrors.emergency_phone ? " field-error" : ""}`} value={form.emergency_phone} onChange={e => field("emergency_phone", e.target.value)} />
+              <FieldError message={fieldErrors.emergency_phone} />
             </div>
             <div className="field-group">
               <label className="field-label">Email</label>
-              <input className="field-input" value={form.emergency_email} onChange={e => field("emergency_email", e.target.value)} />
+              <input className={`field-input${fieldErrors.emergency_email ? " field-error" : ""}`} value={form.emergency_email} onChange={e => field("emergency_email", e.target.value)} />
+              <FieldError message={fieldErrors.emergency_email} />
             </div>
           </div>
         </div>

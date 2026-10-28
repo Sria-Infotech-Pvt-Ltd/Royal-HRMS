@@ -5,6 +5,7 @@
 
 import { useRef, useState, type ChangeEvent } from "react";
 import Modal from "@/components/Modal";
+import FieldError from "@/components/shared/FieldError";
 import type { DocumentSubmissionInput } from "@/hooks/useMyDocuments";
 import { ACCEPTED_EXTENSIONS, ACCEPTED_TYPES_LABEL, MAX_FILE_SIZE_LABEL, formatFileSize, validateDocumentFile } from "@/lib/documentFile";
 import type { TaxProofItem } from "@/types/taxDeclaration";
@@ -34,7 +35,9 @@ export default function TaxProofUploadModal({ item, submit, submitting, submitEr
   }
 
   async function handleUpload() {
-    if (!file) { setFileError("Please choose the proof document."); return; }
+    // A file that failed the size/type check is dropped, so `file` is empty too: keep saying why instead of
+    // replacing the real reason (e.g. "File is too large") with "Please choose the proof document."
+    if (!file) { setFileError(previous => previous ?? "Please choose the proof document."); return; }
     const isUploaded = await submit({ file, tax_item: item.key, reference_number: referenceNumber.trim() });
     if (isUploaded) onUploaded();
   }
@@ -53,7 +56,7 @@ export default function TaxProofUploadModal({ item, submit, submitting, submitEr
       }
     >
       <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--on-variant)" }}>Proof needed: {item.proof}.</p>
-      {(fileError || submitError) && <div className="alert alert-error" style={{ marginBottom: 12 }}>{fileError ?? submitError}</div>}
+      {submitError && !fileError && <div className="alert alert-error" style={{ marginBottom: 12 }}>{submitError}</div>}
 
       {item.asksReference && (
         <div className="field-group" style={{ marginBottom: 12 }}>
@@ -73,6 +76,7 @@ export default function TaxProofUploadModal({ item, submit, submitting, submitEr
           <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file ? file.name : "Choose file"}</span>
           {file && <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{formatFileSize(file.size)}</span>}
         </label>
+        <FieldError message={fileError} />
         <span style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 6 }}>Accepted: {ACCEPTED_TYPES_LABEL} · Max {MAX_FILE_SIZE_LABEL}</span>
       </div>
     </Modal>

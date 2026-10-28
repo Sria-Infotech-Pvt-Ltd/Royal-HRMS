@@ -82,18 +82,51 @@ def compute_draft(sep_request) -> SeparationSettlement:
     return settlement
 
 
+def compute_net_payable(settlement: SeparationSettlement, overrides: dict | None = None) -> Decimal:
+    """The net payable for the settlement's field values, with `overrides` (e.g. an edit not yet saved) applied on top."""
+    def value(name: str) -> Decimal:
+        if overrides and overrides.get(name) is not None:
+            return Decimal(overrides[name])
+        return Decimal(getattr(settlement, name))
+
+    return _q(
+        value('pro_rata_salary')
+        + value('leave_encashment_amount')
+        + value('gratuity_amount')
+        + value('statutory_bonus_amount')
+        + value('reimbursements_amount')
+        + value('other_adjustment_amount')
+        - value('notice_period_recovery_amount')
+        - value('advances_recovery_amount')
+        - value('tds_amount')
+    )
+
+
 def recompute_net_payable(settlement: SeparationSettlement) -> None:
     """Sets net_payable_amount from the settlement's current field values —
     called after compute_draft() and after any manual-field edit, never
     saves on its own (callers save once, after this)."""
-    settlement.net_payable_amount = _q(
-        settlement.pro_rata_salary
-        + settlement.leave_encashment_amount
-        + settlement.gratuity_amount
-        + settlement.statutory_bonus_amount
-        + settlement.reimbursements_amount
-        + settlement.other_adjustment_amount
-        - settlement.notice_period_recovery_amount
-        - settlement.advances_recovery_amount
-        - settlement.tds_amount
+    settlement.net_payable_amount = compute_net_payable(settlement)
+
+
+def format_inr(amount: Decimal) -> str:
+    """'Rs 1,50,000' (Indian digit grouping); a negative amount reads '-Rs 1,50,000'."""
+    rounded = int(Decimal(amount).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    digits = str(abs(rounded))
+    if len(digits) > 3:
+        head, tail = digits[:-3], digits[-3:]
+        groups = []
+        while len(head) > 2:
+            groups.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            groups.insert(0, head)
+        digits = ','.join(groups + [tail])
+    return f'{"-" if rounded < 0 else ""}Rs {digits}'
+
+
+def negative_net_message(net: Decimal) -> str:
+    return (
+        f'Net payable is {format_inr(net)}. A negative settlement means the employee owes the company, '
+        'so it can only be saved when it is marked as a recovery.'
     )
