@@ -8,6 +8,7 @@ import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
+import { attendanceExportFilename, attendanceExportParams, type AttendanceExportMode } from "@/lib/attendanceExport";
 import { useToast } from "@/components/ToastProvider";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import type { DashboardData, PaginatedAttendance } from "@/types/attendance";
@@ -73,6 +74,8 @@ export default function AttendanceTab({ onMutated }: Props) {
   const [showImport, setShowImport]     = useState(false);
   const [viewingId, setViewingId]       = useState<string | null>(null);
   const [exporting, setExporting]       = useState(false);
+  const [exportMode, setExportMode]     = useState<AttendanceExportMode>("day");
+  const [exportMonth, setExportMonth]   = useState(todayISO().slice(0, 7));
 
   // hr_admin never gets to choose a branch — it's always their own, locked.
   const branch = unrestricted ? branchInput : effectiveBranch;
@@ -105,13 +108,14 @@ export default function AttendanceTab({ onMutated }: Props) {
   async function handleExport() {
     setExporting(true);
     try {
-      const url = `${API.attendance.export}${toQuery(filters)}`;
+      const exportInput = { mode: exportMode, date, month: exportMonth, branch, department };
+      const url = `${API.attendance.export}${toQuery(attendanceExportParams(exportInput))}`;
       const response = await clientApi.get(url, { responseType: "blob" });
       const blobUrl = URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = blobUrl;
       const branchSlug = !unrestricted && effectiveBranch ? `${effectiveBranch.trim().replace(/\s+/g, "-")}_` : "";
-      link.download = `attendance_${branchSlug}${date}.csv`;
+      link.download = attendanceExportFilename(exportInput, branchSlug);
       link.click();
       URL.revokeObjectURL(blobUrl);
     } catch (err: unknown) {
@@ -167,7 +171,30 @@ export default function AttendanceTab({ onMutated }: Props) {
         </select>
         <div style={{ flex: 1 }} />
         {canExport && (
-          <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={exporting}>
+          <select
+            className="field-input"
+            style={{ width: 110 }}
+            aria-label="Export range"
+            value={exportMode}
+            onChange={e => setExportMode(e.target.value as AttendanceExportMode)}
+          >
+            <option value="day">Day</option>
+            <option value="month">Month</option>
+          </select>
+        )}
+        {canExport && exportMode === "month" && (
+          <input
+            type="month"
+            className="field-input"
+            style={{ width: 150 }}
+            aria-label="Export month"
+            value={exportMonth}
+            max={todayISO().slice(0, 7)}
+            onChange={e => setExportMonth(e.target.value)}
+          />
+        )}
+        {canExport && (
+          <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={exporting || (exportMode === "month" && !exportMonth)}>
             <i className="ti ti-download" /> {exporting ? "Exporting…" : "Export CSV"}
           </button>
         )}

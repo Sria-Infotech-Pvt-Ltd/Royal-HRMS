@@ -11,6 +11,7 @@ import logging
 import re
 import time as _time
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -26,6 +27,7 @@ from apps.attendance.serializers_hr import ImportRowSerializer
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+_IST = ZoneInfo('Asia/Kolkata')
 
 # Maps common/exported column names → what ImportRowSerializer expects.
 # Keys must already be lowercase with spaces replaced by underscores.
@@ -886,23 +888,28 @@ def export_attendance_csv(filters: dict) -> str:
     from apps.attendance.services_hr import get_attendance_list
 
     rows = get_attendance_list(filters)
+    target_date = filters.get('date', datetime.date.today())
+    for row in rows:
+        row['date'] = target_date
+    return _write_attendance_csv(rows, _punch_locations_by_record(rows, target_date))
 
+
+_EXPORT_COLUMNS = [
+    'employee_id', 'name', 'department', 'branch',
+    'date', 'clock_in', 'clock_out', 'total_hours',
+    'overtime', 'status',
+    'clock_in_location', 'clock_out_location',
+    'clock_in_gps_accuracy_m', 'clock_out_gps_accuracy_m',
+]
+
+
+def _write_attendance_csv(rows: list[dict], locations: dict) -> str:
+    """Shared CSV writer for the daily and monthly export (same columns)."""
     output = io.StringIO()
     output.write('﻿')  # UTF-8 BOM — required for Excel/WPS auto-detection
-    writer = csv.DictWriter(output, fieldnames=[
-        'employee_id', 'name', 'department', 'branch',
-        'date', 'clock_in', 'clock_out', 'total_hours',
-        'overtime', 'status',
-        'clock_in_location', 'clock_out_location',
-        'clock_in_gps_accuracy_m', 'clock_out_gps_accuracy_m',
-    ])
+    writer = csv.DictWriter(output, fieldnames=_EXPORT_COLUMNS)
     writer.writeheader()
 
-    target_date = filters.get('date', datetime.date.today())
-    locations = _punch_locations_by_record(rows, target_date)
-
-    # DD-MM-YYYY survives Indian-locale Excel round-trip; YYYY-MM-DD gets reformatted to MM-DD-YYYY
-    date_str = target_date.strftime('%d-%m-%Y')
     for row in rows:
         clock_in_location, clock_out_location, clock_in_accuracy, clock_out_accuracy = locations.get(
             row['record_id'], ('', '', '', ''),
@@ -912,7 +919,8 @@ def export_attendance_csv(filters: dict) -> str:
             'name':        row['name'],
             'department':  row['department'],
             'branch':      row['branch'],
-            'date':        date_str,
+            # DD-MM-YYYY survives Indian-locale Excel round-trip; YYYY-MM-DD gets reformatted to MM-DD-YYYY
+            'date':        row['date'].strftime('%d-%m-%Y'),
             'clock_in':    _dash_to_empty(row['clock_in']),
             'clock_out':   _dash_to_empty(row['clock_out']),
             'total_hours': _dash_to_empty(row['total_hours']),
@@ -927,17 +935,95 @@ def export_attendance_csv(filters: dict) -> str:
     return output.getvalue()
 
 
-def _punch_locations_by_record(rows: list[dict], target_date: datetime.date) -> dict[str, tuple[str, str, str, str]]:
+def export_attendance_month_csv(filters: dict) -> str:
+    """
+    CSV for every in-scope employee for every day from month_start to
+    month_end (one row per employee per day), same columns as the daily export.
+
+    A day with an AttendanceRecord exports that record, exactly like the daily
+    export. A day without one follows the employee calendar's rules
+    (AttendanceDashboardService._build_day): Holiday, then Weekly Off, then
+    approved leave (On Leave), else Absent.
+    """
+    from apps.attendance.services_attendance import AttendanceDashboardService
+    from apps.attendance.services_hr import _fmt_minutes, _fmt_time, filtered_employees
+    from apps.hrms.models import STATUS_APPROVED, LeaveRequest
+    from core.cache_service import HolidayCacheService
+
+    start, end = filters['month_start'], filters['month_end']
+    status_f = filters.get('status', '')
+    employees = list(filtered_employees(filters).order_by('full_name', 'employee_id'))
+
+    records = {
+        (rec.employee_id, rec.date): rec
+        for rec in AttendanceRecord.objects.filter(employee__in=employees, date__gte=start, date__lte=end)
+    }
+    leave_dates: dict = {}
+    for lr in LeaveRequest.objects.filter(
+        employee__in=employees, status=STATUS_APPROVED, start_date__lte=end, end_date__gte=start,
+    ).values('employee_id', 'start_date', 'end_date'):
+        day = max(lr['start_date'], start)
+        while day <= min(lr['end_date'], end):
+            leave_dates.setdefault(lr['employee_id'], set()).add(day)
+            day += datetime.timedelta(days=1)
+    holidays_by_branch: dict = {}
+
+    rows = []
+    for emp in employees:
+        branch_name = emp.branch or ''
+        if branch_name not in holidays_by_branch:
+            holidays_by_branch[branch_name] = HolidayCacheService.get_holiday_dates(start, end, branch_name)
+        holiday_dates = holidays_by_branch[branch_name]
+        off_dates = AttendanceDashboardService._weekly_off_dates(emp, start, end)
+        emp_leave = leave_dates.get(emp.pk, set())
+
+        day = start
+        while day <= end:
+            rec = records.get((emp.pk, day))
+            if rec:
+                status_key = rec.status
+            elif day in holiday_dates:
+                status_key = AttendanceRecord.STATUS_HOLIDAY
+            elif day in off_dates:
+                status_key = AttendanceRecord.STATUS_WEEKLY_OFF
+            elif day in emp_leave:
+                status_key = AttendanceRecord.STATUS_ON_LEAVE
+            else:
+                status_key = AttendanceRecord.STATUS_ABSENT
+            if not status_f or status_f == status_key:
+                rows.append({
+                    'record_id':   str(rec.id) if rec else None,
+                    'employee_id': emp.employee_id or '',
+                    'name':        emp.full_name or '',
+                    'department':  emp.department or '',
+                    'branch':      branch_name,
+                    'date':        day,
+                    'clock_in':    _fmt_time(rec.first_punch_in) if rec else '',
+                    'clock_out':   _fmt_time(rec.last_punch_out) if rec else '',
+                    'total_hours': _fmt_minutes(rec.total_working_minutes or 0) if rec else _fmt_minutes(0),
+                    'ot':          _fmt_minutes(rec.overtime_minutes or 0) if rec else _fmt_minutes(0),
+                    'status':      AttendanceRecord.STATUS_DISPLAY_MAP.get(status_key, status_key.title()),
+                })
+            day += datetime.timedelta(days=1)
+
+    return _write_attendance_csv(rows, _punch_locations_by_record(rows, start, end))
+
+
+def _punch_locations_by_record(
+    rows: list[dict], target_date: datetime.date, end_date: datetime.date | None = None,
+) -> dict[str, tuple[str, str, str, str]]:
     """
     record_id -> (clock-in location, clock-out location, clock-in accuracy m,
-    clock-out accuracy m), taken from the punch whose
+    clock-out accuracy m), taken from the punch on the record's own date whose
     IST wall-clock time equals the record's first_punch_in / last_punch_out (that's
     how AttendanceProcessorService derives them). A manually edited time with no
     matching punch exports blank rather than another punch's location. Two queries
-    total; stored data only, never geocodes at export time.
+    total, for one date or a range (target_date..end_date, the monthly export);
+    stored data only, never geocodes at export time.
     """
     from apps.attendance.services_attendance import _ist_time
 
+    end_date = end_date or target_date
     record_ids = [r['record_id'] for r in rows if r['record_id']]
     if not record_ids:
         return {}
@@ -946,7 +1032,7 @@ def _punch_locations_by_record(rows: list[dict], target_date: datetime.date) -> 
         rec for rec in (
             AttendanceRecord.objects
             .filter(id__in=record_ids)
-            .values('id', 'employee_id', 'first_punch_in', 'last_punch_out')
+            .values('id', 'employee_id', 'date', 'first_punch_in', 'last_punch_out')
         )
         if rec['first_punch_in'] is not None or rec['last_punch_out'] is not None
     ]
@@ -956,17 +1042,21 @@ def _punch_locations_by_record(rows: list[dict], target_date: datetime.date) -> 
     punches: dict[tuple, list[AttendancePunch]] = {}
     for punch in (
         AttendancePunch.objects
-        .filter(employee_id__in={rec['employee_id'] for rec in records}, punched_at__date=target_date)
+        .filter(
+            employee_id__in={rec['employee_id'] for rec in records},
+            punched_at__date__gte=target_date, punched_at__date__lte=end_date,
+        )
         .only('employee_id', 'punched_at', 'punch_type', 'location_label', 'latitude', 'longitude', 'accuracy')
         .order_by('punched_at')
     ):
-        key = (punch.employee_id, _ist_time(punch.punched_at).replace(microsecond=0))
+        punch_day = punch.punched_at.astimezone(_IST).date()
+        key = (punch.employee_id, punch_day, _ist_time(punch.punched_at).replace(microsecond=0))
         punches.setdefault(key, []).append(punch)
 
-    def _punch_for(employee_id, record_time, preferred_type):
+    def _punch_for(employee_id, record_date, record_time, preferred_type):
         if record_time is None:
             return None
-        candidates = punches.get((employee_id, record_time.replace(microsecond=0)))
+        candidates = punches.get((employee_id, record_date, record_time.replace(microsecond=0)))
         if not candidates:
             return None
         return next((p for p in candidates if p.punch_type == preferred_type), candidates[0])
@@ -975,8 +1065,8 @@ def _punch_locations_by_record(rows: list[dict], target_date: datetime.date) -> 
 
     result = {}
     for rec in records:
-        in_punch = _punch_for(rec['employee_id'], rec['first_punch_in'], AttendancePunch.PUNCH_IN)
-        out_punch = _punch_for(rec['employee_id'], rec['last_punch_out'], AttendancePunch.PUNCH_OUT)
+        in_punch = _punch_for(rec['employee_id'], rec['date'], rec['first_punch_in'], AttendancePunch.PUNCH_IN)
+        out_punch = _punch_for(rec['employee_id'], rec['date'], rec['last_punch_out'], AttendancePunch.PUNCH_OUT)
         result[str(rec['id'])] = (
             _format_punch_location(in_punch) if in_punch else '',
             _format_punch_location(out_punch) if out_punch else '',

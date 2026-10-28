@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from core.responses import error, first_error, success
 
 from apps.attendance.serializers_hr import (
+    AttendanceExportFilterSerializer,
     AttendanceListFilterSerializer,
     CorrectionListFilterSerializer,
     CorrectionReviewSerializer,
@@ -53,6 +54,7 @@ from apps.attendance.services_hr_audit import (
 from apps.attendance.services_hr_ops import (
     create_overtime,
     export_attendance_csv,
+    export_attendance_month_csv,
     import_attendance_csv,
     list_overtime,
 )
@@ -795,19 +797,23 @@ class HRAttendanceExportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _has_perm(request.user, 'attendance.view'):
+        # Same permission the Export CSV button is shown for.
+        if not _has_perm(request.user, 'attendance.export'):
             return error('Permission denied.', http_status=403)
 
-        ser = AttendanceListFilterSerializer(data=request.query_params)
+        ser = AttendanceExportFilterSerializer(data=request.query_params)
         if not ser.is_valid():
             return error(first_error(ser.errors))
 
         filters = ser.validated_data
         filters['branch'] = _branch_scope(request.user, filters.get('branch', ''))
         filters['employee_ids'] = _manager_scope_employee_ids(request.user)
-        csv_content = export_attendance_csv(filters)
-        date_str = ser.validated_data['date'].strftime('%Y-%m-%d')
-        filename = f'attendance_{date_str}.csv'
+        if 'month_start' in filters:
+            csv_content = export_attendance_month_csv(filters)
+            filename = f"attendance_{filters['month_start'].strftime('%Y-%m')}.csv"
+        else:
+            csv_content = export_attendance_csv(filters)
+            filename = f"attendance_{filters['date'].strftime('%Y-%m-%d')}.csv"
 
         response = HttpResponse(csv_content, content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'

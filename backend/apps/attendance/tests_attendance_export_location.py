@@ -292,7 +292,7 @@ class AttendanceExportLocationTests(TestCase):
 class AttendanceExportEndpointLocationTests(TestCase):
     def setUp(self):
         cache.clear()
-        hr_role = make_role('export_location_hr', permission_codenames=['attendance.view'])
+        hr_role = make_role('export_location_hr', permission_codenames=['attendance.view', 'attendance.export'])
         make_user('export.hr@test.com', role=hr_role, employee_id='EMPXLHR1', full_name='Export HR', branch=BRANCH)
         self.emp = make_user(
             'export.ep@test.com', role=make_role('export_location_staff'), employee_id='EMPXLEP1',
@@ -324,7 +324,7 @@ class AttendanceExportEndpointLocationTests(TestCase):
         self.assertEqual(rows[self.emp.employee_id]['clock_in_location'], 'London, England, United Kingdom')
         self.assertEqual(rows[self.emp.employee_id]['clock_out_location'], '')
 
-    def test_export_endpoint_still_requires_attendance_view(self):
+    def test_export_endpoint_requires_an_export_permission(self):
         make_user('export.noperm@test.com', role=make_role('export_location_noperm'),
                   employee_id='EMPXLNP1', full_name='No Perm', branch=BRANCH)
         self._login('export.noperm@test.com')

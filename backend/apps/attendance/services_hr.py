@@ -234,21 +234,13 @@ def reprocess_date(
 
 # ── Attendance list ───────────────────────────────────────────────────────────
 
-def get_attendance_list(filters: dict) -> list[dict]:
-    """
-    Return attendance rows for all active employees on `date`.
-
-    Employees without an AttendanceRecord appear with status='absent'.
-    Uses Subquery annotations — one DB round-trip, no N+1.
-    """
-    target_date  = filters['date']
+def filtered_employees(filters: dict):
+    """Active employees in scope for the attendance list / export: a manager's
+    direct reports (employee_ids) else the branch, then department and search."""
     branch       = filters.get('branch', '')
     department   = filters.get('department', '')
     employee_ids = filters.get('employee_ids')
-    status_f     = filters.get('status', '')
     search       = filters.get('search', '').strip()
-    sort_by      = filters.get('sort_by', 'name')
-    sort_dir     = filters.get('sort_dir', 'asc')
 
     employee_qs = User.objects.filter(is_active=True)
     if employee_ids is not None:
@@ -261,6 +253,22 @@ def get_attendance_list(filters: dict) -> list[dict]:
         employee_qs = employee_qs.filter(
             Q(full_name__icontains=search) | Q(employee_id__icontains=search)
         )
+    return employee_qs
+
+
+def get_attendance_list(filters: dict) -> list[dict]:
+    """
+    Return attendance rows for all active employees on `date`.
+
+    Employees without an AttendanceRecord appear with status='absent'.
+    Uses Subquery annotations — one DB round-trip, no N+1.
+    """
+    target_date  = filters['date']
+    status_f     = filters.get('status', '')
+    sort_by      = filters.get('sort_by', 'name')
+    sort_dir     = filters.get('sort_dir', 'asc')
+
+    employee_qs = filtered_employees(filters)
 
     rec_qs = AttendanceRecord.objects.filter(date=target_date)
 

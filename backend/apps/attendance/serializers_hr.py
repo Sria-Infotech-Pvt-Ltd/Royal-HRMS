@@ -39,6 +39,34 @@ class AttendanceListFilterSerializer(serializers.Serializer):
         return attrs
 
 
+class AttendanceExportFilterSerializer(AttendanceListFilterSerializer):
+    """Export filters: the list filters for one `date`, or `month=YYYY-MM` for
+    the whole month (never both). A month export adds month_start / month_end,
+    with month_end capped at today for the current month."""
+    month = serializers.RegexField(r'^\d{4}-\d{2}$', required=False, allow_blank=True, default='',
+                                   error_messages={'invalid': 'month must be in YYYY-MM format.'})
+
+    def validate(self, attrs: dict) -> dict:
+        import calendar
+
+        month = attrs.pop('month', '')
+        if not month:
+            return super().validate(attrs)
+        if attrs.get('date'):
+            raise serializers.ValidationError('Use either date or month, not both.')
+        year, mon = (int(x) for x in month.split('-'))
+        if not 1 <= mon <= 12 or year < 2000:
+            raise serializers.ValidationError('month must be in YYYY-MM format.')
+        today = datetime.date.today()
+        month_start = datetime.date(year, mon, 1)
+        if month_start > today:
+            raise serializers.ValidationError('Cannot export a future month.')
+        month_end = datetime.date(year, mon, calendar.monthrange(year, mon)[1])
+        attrs['month_start'] = month_start
+        attrs['month_end'] = min(month_end, today)
+        return attrs
+
+
 class DateFilterSerializer(serializers.Serializer):
     date = serializers.DateField(required=False)
 
