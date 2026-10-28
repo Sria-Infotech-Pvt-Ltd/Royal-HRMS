@@ -4,6 +4,8 @@
 // payroll needs it to work out the tax still due. Applies to both tax regimes.
 
 import type { TaxFormState } from "@/types/taxDeclaration";
+import FieldError from "@/components/shared/FieldError";
+import { previousEmployerTdsError } from "@/lib/taxPreviousEmployer";
 
 interface Props {
   form: TaxFormState;
@@ -12,6 +14,7 @@ interface Props {
 
 export default function TaxPreviousEmployerFields({ form, onChange }: Props) {
   const previous = form.previousEmployer;
+  const tdsError = previousEmployerTdsError(previous.income, previous.tds);
 
   function setPrevious(changes: Partial<TaxFormState["previousEmployer"]>) {
     onChange({ ...form, previousEmployer: { ...previous, ...changes } });
@@ -35,7 +38,8 @@ export default function TaxPreviousEmployerFields({ form, onChange }: Props) {
         </div>
         <div className="field-group">
           <label className="field-label" htmlFor="tax-prev-tds">Tax deducted (TDS) (₹)</label>
-          <input id="tax-prev-tds" className="field-input" type="number" min={0} placeholder="₹ 0" value={previous.tds} onChange={event => setPrevious({ tds: event.target.value })} />
+          <input id="tax-prev-tds" className={`field-input${tdsError ? " field-error" : ""}`} type="number" min={0} placeholder="₹ 0" value={previous.tds} onChange={event => setPrevious({ tds: event.target.value })} aria-invalid={!!tdsError} />
+          <FieldError message={tdsError} />
         </div>
       </div>
     </section>

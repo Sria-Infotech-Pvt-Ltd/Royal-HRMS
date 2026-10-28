@@ -20,6 +20,7 @@ export interface ExpenseRequest {
   description:    string;
   status:         "pending" | "approved" | "rejected";
   employee_name:  string;
+  employee_code?: string;
   employee_email?: string;
   branch_name:    string;
   receipts:       ExpenseReceipt[];
@@ -228,7 +229,7 @@ export function expenseToItem(r: ExpenseRequest): ApprovalItem {
     kind:           "expense",
     id:             String(r.expense_number),
     employeeName:   r.employee_name,
-    employeeCode:   "—",
+    employeeCode:   r.employee_code || "—",
     branch:         r.branch_name,
     status:         r.status,
     displayStatus:  toDisplayStatus(r.status),

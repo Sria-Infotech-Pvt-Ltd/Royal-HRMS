@@ -7,6 +7,7 @@ import { EmailTemplate, RECRUITMENT_API } from "../interview-list/_data";
 import clientApi from "@/lib/clientApi";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import Modal from "@/components/Modal";
+import FieldError from "@/components/shared/FieldError";
 
 interface Props {
   action:        "approve" | "reject";
@@ -37,6 +38,7 @@ export function ApprovalModal({
   const [extraVars,        setExtraVars]        = useState<Record<string, string>>({});
   const [company,          setCompany]          = useState<CompanyInfo | null>(null);
   const [templateErr,      setTemplateErr]      = useState("");
+  const [remarksError,     setRemarksError]     = useState("");
   const [serverContext,    setServerContext]    = useState<Record<string, string>>({});
 
   // Resolve every real variable the backend knows for this record (leave
@@ -150,6 +152,11 @@ export function ApprovalModal({
   const hasUnfilledVars = Object.values(extraVars).some(v => !v.trim());
 
   function handleConfirm() {
+    // Rejecting needs a reason: say so beside the field instead of leaving a dead button.
+    if (!isApprove && !remarks.trim()) {
+      setRemarksError("A reason is required to reject.");
+      return;
+    }
     if (isApprove) {
       onConfirm(remarks, selectedTemplate?.name, { ...autoContext, ...extraVars });
     } else {
@@ -170,7 +177,7 @@ export function ApprovalModal({
           <button
             className={`btn ${isApprove ? "btn-success" : "btn-danger"}`}
             suppressHydrationWarning
-            disabled={saving || (!isApprove && !remarks.trim()) || (isApprove && hasUnfilledVars)}
+            disabled={saving || (isApprove && hasUnfilledVars)}
             onClick={handleConfirm}
           >
             {saving ? (
@@ -208,7 +215,7 @@ export function ApprovalModal({
                       setSelectedTemplate(found);
                     }}
                   >
-                    <option value="">— No email —</option>
+                    <option value="">Don&apos;t notify the employee</option>
                     {templateGroups.map(g => (
                       <optgroup key={g.category} label={g.category.charAt(0).toUpperCase() + g.category.slice(1)}>
                         {g.templates.map(t => (
@@ -247,7 +254,7 @@ export function ApprovalModal({
                     <i className="ti ti-mail" /> Email Preview
                   </div>
                   <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 2 }}>
-                    <strong>To:</strong> {employeeEmail ?? employeeName}
+                    <strong>To:</strong> {employeeName}{employeeEmail ? ` <${employeeEmail}>` : ""}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
                     <strong>Subject:</strong>{" "}
@@ -281,9 +288,10 @@ export function ApprovalModal({
               rows={3}
               placeholder={isApprove ? "Optional notes for the record…" : "Reason for rejection (required)"}
               value={remarks}
-              onChange={e => setRemarks(e.target.value)}
+              onChange={e => { setRemarks(e.target.value); setRemarksError(""); }}
               style={{ resize: "vertical" }}
             />
+            <FieldError message={remarksError} />
           </div>
     </Modal>
   );

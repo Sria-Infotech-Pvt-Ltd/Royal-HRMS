@@ -121,7 +121,7 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
       <div className="drawer open" onClick={e => e.stopPropagation()}>
         <div className="drawer-header">
           <span className="drawer-title">Attendance Detail</span>
-          <button className="drawer-close" onClick={onClose}>
+          <button className="drawer-close" onClick={onClose} aria-label="Close">
             <i className="ti ti-x" />
           </button>
         </div>

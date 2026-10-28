@@ -70,7 +70,7 @@ export default function EmployeeRowActionsMenu({ actions }: Props) {
         title="Actions"
         suppressHydrationWarning
         className="actbtn"
-      >
+       aria-label="Actions">
         <i className="ti ti-dots text-[16px]" />
       </button>
       {open && coords && createPortal(

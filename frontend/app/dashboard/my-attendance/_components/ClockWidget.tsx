@@ -7,6 +7,7 @@ import { API } from "@/lib/api/endpoints";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
 import type { PunchLocation } from "@/types/attendance";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
+import { useAfterMount } from "@/hooks/useAfterMount";
 
 // Local calendar date, not UTC (Date.toISOString() would misdate the hours
 // just after local midnight, e.g. 12:30 AM IST is still UTC "yesterday" —
@@ -42,7 +43,12 @@ function geofenceDot(isInside: boolean | null) {
   return { color: "var(--outline)", title: "Geofence N/A" };
 }
 
+function browserDate(): string {
+  return new Date().toDateString();
+}
+
 export default function ClockWidget() {
+  const clientDate = useAfterMount(browserDate, "");
   const { session, isLoading, isPunching, isLocating, faceVerificationRequired, prepareLocation, punch } = useClockWidget();
   const [showFaceModal, setShowFaceModal] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
@@ -96,7 +102,7 @@ export default function ClockWidget() {
       <div className="card" style={{ padding: 24 }}>
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 6 }}>
-            {session?.date_display ?? new Date().toDateString()}
+            {session?.date_display ?? clientDate}
           </div>
           <span
             style={{

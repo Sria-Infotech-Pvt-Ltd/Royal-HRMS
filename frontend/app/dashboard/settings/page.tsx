@@ -23,7 +23,8 @@ const SETTINGS_ITEMS = [
   { id: "smtp",               cat: "comm",    icon: "ti-server",          iconClass: "sc-comm",    label: "SMTP Settings",         desc: "Outgoing email server configuration" },
   { id: "notifications",      cat: "comm",    icon: "ti-bell",            iconClass: "sc-comm",    label: "Notifications",         desc: "In-app and email notification preferences" },
   { id: "employee-code",      cat: "company", icon: "ti-id-badge",        iconClass: "sc-company", label: "Employee ID Format",    desc: "Prefix, padding, and starting number for employee codes" },
-  { id: "audit",              cat: "system",  icon: "ti-history",         iconClass: "sc-system",  label: "Audit Log",             desc: "View all system actions and changes" },
+  { id: "project-sync",       cat: "system",  icon: "ti-refresh",         iconClass: "sc-system",  label: "Project Budgeting Sync", desc: "Last synced time, failed syncs and unmatched employee IDs" },
+  { id: "audit",              cat: "system",  icon: "ti-history",        iconClass: "sc-system",  label: "Audit Log",             desc: "View all system actions and changes" },
 ] as const;
 
 const CATS = [
@@ -42,6 +43,7 @@ const ITEM_ROUTES: Record<string, string> = {
   smtp:                   "/dashboard/settings/smtp",
   "email-templates":      "/dashboard/settings/email-templates",
   audit:                  "/dashboard/settings/audit",
+  "project-sync":         "/dashboard/settings/project-sync",
   "employee-code":        "/dashboard/settings/employee-code",
   "leave-policy":         "/dashboard/settings/leave-policy",
   "holiday-calendar":     "/dashboard/settings/holiday-calendar",

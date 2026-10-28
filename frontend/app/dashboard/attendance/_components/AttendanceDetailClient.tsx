@@ -13,8 +13,10 @@ import UnpunchesTab      from "./UnpunchesTab";
 import CorrectionsTab    from "./CorrectionsTab";
 import EmployeeMonthView from "./EmployeeMonthView";
 import WeeklyOffAssignmentTab from "./WeeklyOffAssignmentTab";
+import { buildAttendanceSearch, parseAttendanceLocation, type AttendanceTabId } from "./attendanceTabs";
+import { useAfterMount } from "@/hooks/useAfterMount";
 
-type TabId = "attendance" | "ot" | "invalid" | "unpunches" | "corrections" | "weekly-off";
+type TabId = AttendanceTabId;
 
 interface Tab {
   id: TabId;
@@ -22,12 +24,13 @@ interface Tab {
   badge?: number;
 }
 
-const TODAY_LABEL = new Date().toLocaleDateString("en-IN", {
-  weekday: "short", day: "numeric", month: "short", year: "numeric",
-});
+function todayLabel(): string {
+  return new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+}
 
 export default function AttendanceDetailClient({ initialTab, onBack }: { initialTab?: string; onBack?: () => void }) {
-  const [active, setActive]       = useState<TabId>((initialTab as TabId) || "attendance");
+  const today = useAfterMount(todayLabel, "");  // the viewer's own date, after mount: the server's clock may differ
+  const [active, setActive]       = useState<TabId>(() => parseAttendanceLocation(initialTab ? `?tab=${initialTab}` : "").tab);
   const [viewMode, setViewMode]   = useState<"team" | "employee">("team");
   const [preEmployee, setPreEmployee] = useState<string | null>(null);
   const [preMonth, setPreMonth]   = useState<string | null>(null);
@@ -38,17 +41,31 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
   // applies) and sets the filter, instead of making the user land on the tab
   // and then hunt for the right chip themselves.
   function jumpToStatus(status: string) {
-    setActive("attendance");
-    setViewMode("team");
+    goTo("attendance", "team");
     setStatusFilter(status);
   }
 
+  // The URL is the source of truth for tab and view: read it on load and on browser back/forward, write it on every change.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("view") === "employee") setViewMode("employee");
-    if (params.get("employee")) setPreEmployee(params.get("employee"));
-    if (params.get("month")) setPreMonth(params.get("month"));
-  }, []);
+    function syncFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const location = parseAttendanceLocation(window.location.search);
+      if (params.has("tab") || !initialTab) setActive(location.tab);
+      setViewMode(location.view);
+      if (params.get("employee")) setPreEmployee(params.get("employee"));
+      if (params.get("month")) setPreMonth(params.get("month"));
+    }
+    syncFromUrl();
+    window.addEventListener("popstate", syncFromUrl);
+    return () => window.removeEventListener("popstate", syncFromUrl);
+  }, [initialTab]);
+
+  function goTo(tab: TabId, view: "team" | "employee") {
+    setActive(tab);
+    setViewMode(view);
+    const search = buildAttendanceSearch(window.location.search, { tab, view });
+    window.history.pushState(null, "", `${window.location.pathname}${search}`);
+  }
 
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
@@ -98,7 +115,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
           <div className="page-sub">Monitor daily attendance, overtime, and correction requests</div>
         </div>
         <div className="page-actions">
-          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{TODAY_LABEL}</span>
+          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{today}</span>
         </div>
       </div>
 
@@ -179,7 +196,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
           <button
             key={tab.id}
             className={`tab${active === tab.id ? " active" : ""}`}
-            onClick={() => setActive(tab.id)}
+            onClick={() => goTo(tab.id, tab.id === "attendance" ? viewMode : "team")}
           >
             {tab.label}
             {!!tab.badge && (
@@ -203,30 +220,30 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
             <div style={{ display: "flex", gap: 6, marginBottom: 18, padding: "10px 0 0" }}>
               <button
                 className={viewMode === "team" ? "btn btn-filled btn-sm" : "btn btn-ghost btn-sm"}
-                onClick={() => setViewMode("team")}
+                onClick={() => goTo("attendance", "team")}
                 style={{ gap: 6 }}
               >
                 <i className="ti ti-layout-list" /> Team Day View
               </button>
               <button
                 className={viewMode === "employee" ? "btn btn-filled btn-sm" : "btn btn-ghost btn-sm"}
-                onClick={() => setViewMode("employee")}
+                onClick={() => goTo("attendance", "employee")}
                 style={{ gap: 6 }}
               >
                 <i className="ti ti-calendar-user" /> Employee Month View
               </button>
             </div>
             {viewMode === "team"
-              ? <AttendanceTab onMutated={refetchDashboard} status={statusFilter} onStatusChange={setStatusFilter} />
-              : <EmployeeMonthView initialEmployee={preEmployee} initialMonth={preMonth} />
+              ? <AttendanceTab key="team-day" onMutated={refetchDashboard} status={statusFilter} onStatusChange={setStatusFilter} />
+              : <EmployeeMonthView key="employee-month" initialEmployee={preEmployee} initialMonth={preMonth} />
             }
           </>
         )}
-        {active === "ot"         && <OtEntryTab />}
+        {active === "ot"         && <OtEntryTab key="ot" />}
         {active === "invalid"    && <InvalidPunchesTab onMutated={refetchDashboard} />}
-        {active === "unpunches"  && <UnpunchesTab />}
-        {active === "corrections" && <CorrectionsTab />}
-        {active === "weekly-off" && <WeeklyOffAssignmentTab />}
+        {active === "unpunches"  && <UnpunchesTab key="unpunches" />}
+        {active === "corrections" && <CorrectionsTab key="corrections" />}
+        {active === "weekly-off" && <WeeklyOffAssignmentTab key="weekly-off" />}
       </div>
     </div>
   );

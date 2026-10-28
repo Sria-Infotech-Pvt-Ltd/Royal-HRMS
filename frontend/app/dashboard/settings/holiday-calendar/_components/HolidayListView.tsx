@@ -118,7 +118,7 @@ export default function HolidayListView({
               </span>
               <div className="flex items-center gap-1">
                 <button onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page === 1}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-40 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors">
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-40 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label="Previous">
                   <i className="ti ti-chevron-left text-xs" />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
@@ -128,7 +128,7 @@ export default function HolidayListView({
                   </button>
                 ))}
                 <button onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page === totalPages}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-40 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors">
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-40 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label="Next">
                   <i className="ti ti-chevron-right text-xs" />
                 </button>
               </div>

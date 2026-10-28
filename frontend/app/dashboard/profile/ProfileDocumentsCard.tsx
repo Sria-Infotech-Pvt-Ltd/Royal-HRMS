@@ -40,7 +40,7 @@ export default function ProfileDocumentsCard({ docEntries, uploadingDocType, onU
                   <i className="ti ti-eye" />
                 </a>
               ) : (
-                <button type="button" disabled className="btn btn-ghost btn-sm" title="Not uploaded" style={{ opacity: 0.3, cursor: "not-allowed" }}>
+                <button type="button" disabled className="btn btn-ghost btn-sm" title="Not uploaded" style={{ opacity: 0.3, cursor: "not-allowed" }} aria-label="Not uploaded">
                   <i className="ti ti-eye" />
                 </button>
               )}

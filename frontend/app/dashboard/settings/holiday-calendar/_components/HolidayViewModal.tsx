@@ -38,7 +38,7 @@ export default function HolidayViewModal({ holiday, onClose, onEdit }: Props) {
             <span className={`w-3 h-3 rounded-full ${TYPE_DOT[holiday.holiday_type]}`} />
             <span className="text-sm font-bold text-[var(--on-bg)]">{holiday.name}</span>
           </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--outline)] transition-colors">
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--outline)] transition-colors" aria-label="Close">
             <i className="ti ti-x text-sm" />
           </button>
         </div>

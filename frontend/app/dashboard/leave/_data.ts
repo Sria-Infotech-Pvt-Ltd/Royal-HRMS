@@ -61,6 +61,8 @@ export interface LeaveBalance {
   used_days:                 number;
   carried_forward:           number;
   available_days:            number;
+  /** Days asked for by requests still waiting for a decision; already subtracted from available_days. */
+  pending_days?:             number;
   employee_name:             string;
   carry_forward_expiry_date: string | null; // ISO date, or null when it never expires
 }
@@ -83,6 +85,10 @@ export interface LeaveRequest {
   employee_dept:      string;
   employee_branch:    string;
   l1_approver_name:   string;
+  /** True when there was no manager stage for this request; l1_remarks then says why. */
+  l1_skipped?:        boolean;
+  /** Masked recipient for notification previews, e.g. "r***@example.com". */
+  employee_email?:    string;
   l1_status:          string | null;
   l1_remarks:         string;
   l1_actioned_at:     string | null;

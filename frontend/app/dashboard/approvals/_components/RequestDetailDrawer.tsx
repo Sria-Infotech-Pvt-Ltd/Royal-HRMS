@@ -88,7 +88,7 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
           <>
             <div className="drawer-header">
               <div className="drawer-title">Request Details</div>
-              <button className="drawer-close" onClick={onClose} suppressHydrationWarning>
+              <button className="drawer-close" onClick={onClose} suppressHydrationWarning aria-label="Close">
                 <i className="ti ti-x" />
               </button>
             </div>

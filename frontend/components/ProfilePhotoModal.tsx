@@ -142,7 +142,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
             onClick={handleClose}
             suppressHydrationWarning
             className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/15 transition-colors"
-          >
+           aria-label="Close">
             <i className="ti ti-x text-[18px]" />
           </button>
         </div>

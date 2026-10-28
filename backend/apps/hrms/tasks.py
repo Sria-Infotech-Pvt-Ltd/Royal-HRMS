@@ -51,6 +51,7 @@ def reset_annual_leave_balances(self):
 
         created_total = 0
         skipped_total = 0
+        carried_total = Decimal('0')
 
         from apps.accounts.services_approval import resolve_employee_department_name
         from apps.hrms.services_leave_ledger import employee_matches_policy_gender
@@ -112,11 +113,23 @@ def reset_annual_leave_balances(self):
                 )
                 if created:
                     created_total += 1
+                    carried_total += carry_forward
                 else:
                     skipped_total += 1
 
-        result = {'year': new_year, 'created': created_total, 'skipped': skipped_total}
-        logger.info('reset_annual_leave_balances completed: %s', result)
+        # One row for the year transition (closing year -> new year). A re-run never double-credits (get_or_create above) and
+        # never writes a second log row for the same transition.
+        from apps.hrms.models import CarryForwardLog
+        if not CarryForwardLog.objects.filter(process_mode='year_end', from_year=prev_year, to_year=new_year).exists():
+            CarryForwardLog.objects.create(
+                from_year=prev_year, to_year=new_year, process_mode='year_end',
+                total_processed=created_total, total_skipped=skipped_total, total_failed=0, is_completed=True,
+                notes=f'{created_total} balance(s) created for {new_year}, {carried_total:g} day(s) carried forward from {prev_year}; '
+                      f'{skipped_total} already existed.',
+            )
+
+        result = {'from_year': prev_year, 'to_year': new_year, 'created': created_total, 'skipped': skipped_total, 'carried_days': float(carried_total)}
+        logger.info('reset_annual_leave_balances %s -> %s completed: %s', prev_year, new_year, result)
         return result
     except Exception as exc:
         logger.error('reset_annual_leave_balances error: %s', exc, exc_info=True)
@@ -305,16 +318,19 @@ def expire_unused_carry_forward(self):
                 )
                 failed += 1
 
-        CarryForwardLog.objects.create(
-            from_year=today.year,
-            to_year=today.year,
-            process_mode='expire',
-            total_processed=processed,
-            total_skipped=skipped,
-            total_failed=failed,
-            is_completed=True,
-            notes=f'Automatic daily expiry sweep, run {today.isoformat()}.',
-        )
+        # Only a sweep that actually did something is worth a log row: this is an expiry of carried-forward days inside one
+        # year, not a year transition, and an empty run every night (2026 -> 2026, 0 processed) was just noise.
+        if processed or skipped or failed:
+            CarryForwardLog.objects.create(
+                from_year=today.year,
+                to_year=today.year,
+                process_mode='expire',
+                total_processed=processed,
+                total_skipped=skipped,
+                total_failed=failed,
+                is_completed=True,
+                notes=f'Expiry sweep of unused carried-forward days, run {today.isoformat()} (not a year transition).',
+            )
 
         result = {'date': today.isoformat(), 'processed': processed, 'skipped': skipped, 'failed': failed}
         logger.info('expire_unused_carry_forward completed: %s', result)
@@ -453,3 +469,4 @@ def _record_birthday_delivery(employee, action: str, changes: dict) -> None:
         )
     except Exception:
         logger.exception('Failed to record birthday delivery audit log for %s', employee.id)
+

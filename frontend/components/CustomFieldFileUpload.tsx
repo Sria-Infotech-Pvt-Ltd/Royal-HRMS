@@ -102,7 +102,7 @@ export default function CustomFieldFileUpload({
             suppressHydrationWarning
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0 transition-colors"
             style={{ color: "var(--error)" }}
-          >
+           aria-label="Delete file">
             <i className="ti ti-trash text-[15px]" />
           </button>
         )}
@@ -114,7 +114,7 @@ export default function CustomFieldFileUpload({
           suppressHydrationWarning
           className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           style={{ color: uploaded ? "var(--primary)" : "var(--on-variant)" }}
-        >
+         aria-label="View">
           <i className="ti ti-eye text-[15px]" />
         </button>
       </div>

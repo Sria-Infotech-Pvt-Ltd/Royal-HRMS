@@ -7,7 +7,6 @@ import Avatar from "./Avatar";
 import EmployeeFullRecordBody from "./EmployeeFullRecordBody";
 import EditRecordModal from "./EditRecordModal";
 import { usePermission } from "@/hooks/usePermission";
-import ViewWorkspaceButton from "@/components/employees/ViewWorkspaceButton";
 
 interface Props {
   employee: Employee;
@@ -69,7 +68,6 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
               </button>
             </>
           )}
-          {isAdmin && <ViewWorkspaceButton employeeUuid={employee.uuid} className="rvbtn" />}
           {isAdmin && canEditRecord && (
             <button className="rvbtn pri" onClick={() => setEditOpen(true)}>
               Edit full record

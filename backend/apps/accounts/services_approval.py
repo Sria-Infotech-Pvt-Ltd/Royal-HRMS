@@ -46,6 +46,11 @@ def resolve_approval_chain(employee: 'User', workflow_type: str) -> tuple:
 
     l1 = resolve_approver(rule.l1_approver_kind, employee)
     l2 = resolve_approver(rule.l2_approver_kind, employee)
+    if l2 is None:
+        # The HR stage must never be left with nobody: fall back along the configured chain (reporting approver, branch HR,
+        # company HR/admin). The manager is excluded because that is the first stage, not this one.
+        from apps.accounts.services_reporting_line import resolve_approver_route
+        l2 = resolve_approver_route(employee, exclude_sources=('reporting_manager',)).user
     return l1, l2
 
 

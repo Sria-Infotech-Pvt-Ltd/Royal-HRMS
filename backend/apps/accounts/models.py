@@ -2580,6 +2580,7 @@ class CompanyAsset(models.Model):
         ('monitor',      'Monitor'),
         ('headset',      'Headset'),
         ('sim_card',     'SIM Card'),
+        ('access_card',  'Access Card'),
     ]
     CONDITION_CHOICES = [
         ('new',         'New'),

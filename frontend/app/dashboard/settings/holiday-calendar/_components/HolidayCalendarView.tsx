@@ -44,7 +44,7 @@ export default function HolidayCalendarView({ year, calMonth, holidays, onMonthC
     <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--outline-v)]">
         <button onClick={() => onMonthChange(Math.max(0, calMonth - 1))} disabled={calMonth === 0}
-          className="w-8 h-8 flex items-center justify-center rounded-xl border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-30 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors">
+          className="w-8 h-8 flex items-center justify-center rounded-xl border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-30 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label="Previous">
           <i className="ti ti-chevron-left text-sm" />
         </button>
         <div className="text-center">
@@ -52,7 +52,7 @@ export default function HolidayCalendarView({ year, calMonth, holidays, onMonthC
           <div className="text-xs text-[var(--outline)] mt-0.5">{holidays.length} holiday{holidays.length !== 1 ? "s" : ""} this month</div>
         </div>
         <button onClick={() => onMonthChange(Math.min(11, calMonth + 1))} disabled={calMonth === 11}
-          className="w-8 h-8 flex items-center justify-center rounded-xl border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-30 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors">
+          className="w-8 h-8 flex items-center justify-center rounded-xl border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-30 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label="Next">
           <i className="ti ti-chevron-right text-sm" />
         </button>
       </div>

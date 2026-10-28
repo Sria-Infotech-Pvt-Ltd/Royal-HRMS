@@ -78,6 +78,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [phone, setPhone] = useState("");
   // Server messages for the two fields it checks for duplicates (email / mobile already belong to someone), shown inline.
   const [contactErrors, setContactErrors] = useState<{ email?: string; phone?: string }>({});
+  // True while a step is being saved on its way to the next one: the button shows it and ignores clicks.
+  const [isNavigating, setIsNavigating] = useState(false);
   const [identityExtras, setIdentityExtras] = useState<IdentityExtras>(EMPTY_IDENTITY_EXTRAS);
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContactEntry[]>([emptyEmergencyContact("temp-ec-1", true)]);
   const [addressExtras, setAddressExtras] = useState<AddressExtras>(EMPTY_ADDRESS_EXTRAS);
@@ -565,9 +567,11 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   }
 
   async function handleNext() {
+    if (isNavigating) return;  // a second click while the step is saving must not save (or advance) twice
     const err = validateCurrentStep();
     if (err) { setStepErr(err); return; }
     setStepErr("");
+    setIsNavigating(true);
     try {
       await patchAction(buildFullDraftPayload());
       setHighestSaved(h => Math.max(h, tab));
@@ -576,6 +580,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       const parsed = parseApiError(e, "Could not save this step.");
       setContactErrors({ email: parsed.fieldErrors.email, phone: parsed.fieldErrors.phone });
       setStepErr(parsed.message);
+    } finally {
+      setIsNavigating(false);
     }
   }
 
@@ -714,7 +720,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
           <button onClick={draftActions.saveDraft} disabled={draftActions.isSaving} className="btn btn-ghost">Save draft</button>
           <button onClick={() => setShowScanFill(true)} className="btn btn-ghost">Scan &amp; fill</button>
           {tab > 0 && <button onClick={() => goToStep(Math.max(0, tab - 1))} className="btn btn-ghost">Back</button>}
-          <button onClick={handleNext} className="btn btn-filled">Next →</button>
+          <button onClick={handleNext} disabled={isNavigating} className="btn btn-filled">
+            {isNavigating ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Next →"}
+          </button>
         </div>
       ) : (
         <button onClick={onClose} className="btn btn-ghost">Close</button>

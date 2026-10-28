@@ -27,6 +27,12 @@ interface Props {
  *  back, HR/admin get everyone). Only rendered for users with employees.view
  *  — leaving it unselected means the request is filed for the logged-in
  *  employee themselves (the backend defaults employee_id to self). */
+/** "EMP001 · Operations · Executive": parts that are missing are skipped, never shown as an empty segment between dots. */
+function joinParts(parts: (string | null | undefined)[], leading = ""): string {
+  const present = parts.map(part => (part ?? "").trim()).filter(Boolean);
+  return present.length ? `${leading}${present.join(" · ")}` : "";
+}
+
 export default function EmployeePickerField({ value, onChange, disabled }: Props) {
   const [query,   setQuery]   = useState("");
   const [open,    setOpen]    = useState(false);
@@ -74,10 +80,10 @@ export default function EmployeePickerField({ value, onChange, disabled }: Props
       <div className="field-input" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           <strong>{value.name}</strong>
-          <span style={{ color: "var(--on-variant)" }}> · {value.code} · {value.department}</span>
+          <span style={{ color: "var(--on-variant)" }}>{joinParts([value.code, value.department], " · ")}</span>
         </span>
         {!disabled && (
-          <button type="button" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }} onClick={() => onChange(null)}>
+          <button type="button" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }} onClick={() => onChange(null)} aria-label="Close">
             <i className="ti ti-x" />
           </button>
         )}
@@ -115,7 +121,7 @@ export default function EmployeePickerField({ value, onChange, disabled }: Props
                 style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", borderBottom: "1px solid var(--outline-v)", background: "none", cursor: "pointer" }}
               >
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>{r.full_name}</div>
-                <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{r.employee_id} · {r.department} · {r.designation}</div>
+                <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{joinParts([r.employee_id, r.department, r.designation])}</div>
               </button>
             ))
           )}

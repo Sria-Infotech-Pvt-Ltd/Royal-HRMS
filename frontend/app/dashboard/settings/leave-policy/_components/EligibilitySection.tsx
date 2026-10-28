@@ -4,14 +4,13 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { MultiCheckRow, type PolicyRuleFields } from "./LeavePoliciesTab";
 import type { JobTemplate, OrgUnit } from "@/types/orgStructure";
+import { EMPLOYMENT_TYPES } from "@/lib/employmentType";
 
 interface BranchOption      { id: number; branch_name: string }
 
-// No employment-type concept exists anywhere in this system yet (checked
-// accounts.models — no field, no choices). Kept as a static placeholder list
-// matching the exact values the backend's PUT example uses ("Full-time",
-// "Part-time") until a real backend enum exists to source it from.
-const EMPLOYMENT_TYPE_OPTIONS = ["Full-time", "Part-time", "Contract", "Intern", "Consultant"];
+// The one employment-type list (User.EMPLOYMENT_TYPE_CHOICES), the same one the hire form uses. This screen used to keep its own
+// ("Full-time", "Part-time"...), so a policy limited to "Full-time" never matched an employee whose type is "Permanent".
+const EMPLOYMENT_TYPE_OPTIONS = EMPLOYMENT_TYPES;
 
 // Exactly the three values the backend accepts — confirmed from the field
 // reference table (all / male / female, no "other").

@@ -20,16 +20,18 @@ const DECISION_LABEL: Record<string, string> = {
 };
 
 function DecisionRow({
-  level, approverName, decisionStatus, remarks, actionedAt,
+  level, approverName, decisionStatus, remarks, actionedAt, isSkipped = false,
 }: {
   level:          string;
   approverName:   string;
   decisionStatus: string | null;
   remarks:        string;
   actionedAt:     string | null;
+  /** The stage was skipped on purpose (no manager): say so instead of "Pending - Not yet assigned". */
+  isSkipped?:     boolean;
 }) {
-  const label = decisionStatus ? (DECISION_LABEL[decisionStatus] ?? decisionStatus) : "Pending";
-  const dotClass = decisionStatus === "approved" ? "bg-[var(--success)]" : decisionStatus === "rejected" ? "bg-[var(--error)]" : "bg-[var(--warn)]";
+  const label = isSkipped ? "Skipped" : decisionStatus ? (DECISION_LABEL[decisionStatus] ?? decisionStatus) : "Pending";
+  const dotClass = isSkipped ? "bg-[var(--outline-v)]" : decisionStatus === "approved" ? "bg-[var(--success)]" : decisionStatus === "rejected" ? "bg-[var(--error)]" : "bg-[var(--warn)]";
 
   return (
     <div className="flex gap-3">
@@ -39,7 +41,7 @@ function DecisionRow({
           <span className="text-sm font-semibold text-[var(--on-bg)]">{level}</span>
           <span className="text-xs font-medium text-[var(--on-variant)]">{label}</span>
         </div>
-        <p className="text-xs text-[var(--on-variant)] mt-0.5">{approverName || "Not yet assigned"}</p>
+        <p className="text-xs text-[var(--on-variant)] mt-0.5">{isSkipped ? "No approval needed at this stage" : (approverName || "Not yet assigned")}</p>
         {remarks && (
           <p className="text-xs text-[var(--on-variant)] bg-[var(--bg-low)] rounded-lg px-2.5 py-1.5 mt-1.5">“{remarks}”</p>
         )}
@@ -79,7 +81,7 @@ export default function LeaveRequestDetailModal({
           <button
             onClick={onClose}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--on-variant)] hover:bg-[var(--bg-mid)] hover:text-[var(--on-bg)] transition-colors"
-          >
+           aria-label="Close">
             <i className="ti ti-x text-sm" />
           </button>
         </div>
@@ -145,8 +147,9 @@ export default function LeaveRequestDetailModal({
               decisionStatus={r.l1_status}
               remarks={r.l1_remarks}
               actionedAt={r.l1_actioned_at}
+              isSkipped={!!r.l1_skipped}
             />
-            {r.l2_approver_name && (
+            {(r.l2_approver_name || r.status === "l2_pending") && (
               <DecisionRow
                 level="HR Approval"
                 approverName={r.l2_approver_name}

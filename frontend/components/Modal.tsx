@@ -2,6 +2,7 @@
 
 import { useId, useRef, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 interface ModalProps {
   title: ReactNode;
@@ -46,6 +47,9 @@ export default function Modal({
   // the gesture both started AND ended on the backdrop itself.
   const mouseDownOnOverlay = useRef(false);
   const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Focus moves in, Tab stays in, Esc closes (unless a save is running), focus returns to the opener on close.
+  useDialogFocus(dialogRef, closeDisabled ? null : onClose);
 
   // Rendered at the top level of the page (document.body), not where the caller happens to sit in the tree. A
   // position:fixed element inside a transformed ancestor — e.g. the employee side panel, which slides in with
@@ -61,6 +65,8 @@ export default function Modal({
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

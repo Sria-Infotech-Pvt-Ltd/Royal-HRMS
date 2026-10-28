@@ -141,7 +141,7 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
           className="btn btn-ghost btn-sm"
           style={{ padding: "0 8px" }}
           onClick={() => { setDate(d => shiftDate(d, -1)); setPage(1); }}
-        >
+         aria-label="Previous">
           <i className="ti ti-chevron-left" />
         </button>
         <DateInput className="field-input" style={{ width: 160 }} value={date} max={todayISO()} onChange={isoDate => { setDate(isoDate); setPage(1); }} />
@@ -150,7 +150,7 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
           style={{ padding: "0 8px" }}
           disabled={date >= todayISO()}
           onClick={() => { setDate(d => shiftDate(d, 1)); setPage(1); }}
-        >
+         aria-label="Next">
           <i className="ti ti-chevron-right" />
         </button>
         <BranchFilterSelect

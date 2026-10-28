@@ -165,7 +165,7 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
                   value={entry.note}
                   onChange={e => updateEntry(idx, "note", e.target.value)}
                 />
-                <button className="btn btn-ghost btn-sm" onClick={() => removeEntry(idx)} style={{ color: "var(--error)" }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => removeEntry(idx)} style={{ color: "var(--error)" }} aria-label="Delete">
                   <i className="ti ti-trash" />
                 </button>
               </div>

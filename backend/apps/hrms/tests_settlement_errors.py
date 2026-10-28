@@ -29,7 +29,7 @@ class SettlementEditErrorTests(TestCase):
         self.separation = SeparationRequest.objects.create(
             employee=self.employee, separation_type='resignation',
             request_date=datetime.date(2026, 4, 1), proposed_last_working_day=datetime.date(2026, 5, 1),
-            created_by=self.finance,
+            created_by=self.employee,  # someone other than the finaliser: the requester cannot finalise their own separation
         )
         self.client = APIClient()
         self.client.force_authenticate(user=self.finance)

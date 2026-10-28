@@ -281,7 +281,7 @@ export default function PolicyTab() {
                           style={{ width: 28, height: 28, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6 }}
                           onClick={() => openEdit(p)}
                           title="Edit"
-                        >
+                         aria-label="Edit">
                           <i className="ti ti-edit" style={{ fontSize: 13 }} />
                         </button>
                         <button
@@ -304,7 +304,7 @@ export default function PolicyTab() {
                           onClick={() => deletePolicy(p)}
                           disabled={busyType === p.leave_type || BUILTIN_TYPES.has(p.leave_type)}
                           title={BUILTIN_TYPES.has(p.leave_type) ? "Built-in leave types cannot be deleted" : "Delete"}
-                        >
+                         aria-label="Delete">
                           <i className="ti ti-trash" style={{ fontSize: 13 }} />
                         </button>
                       </div>

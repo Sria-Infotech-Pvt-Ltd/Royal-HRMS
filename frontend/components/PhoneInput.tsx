@@ -100,8 +100,17 @@ export default function PhoneInput({ value, onChange, placeholder, className, in
     function onDocClick(e: MouseEvent) {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     }
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.stopImmediatePropagation();
+      setOpen(false);
+    }
+    document.addEventListener("keydown", onKey, true);
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("mousedown", onDocClick);
+    };
   }, [open]);
 
   function commit(nextCountry: CountryDialOption, nextNational: string) {

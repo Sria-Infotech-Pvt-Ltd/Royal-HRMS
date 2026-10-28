@@ -44,3 +44,86 @@ def resolve_manager_with_source(employee: User) -> ManagerResolution:
 
 def resolve_manager(employee: User) -> User | None:
     return resolve_manager_with_source(employee).user
+
+
+# ─── Approver route: who actually decides when the manager cannot ──────────────────────────────────────────────────────────
+
+APPROVER_SOURCES = ('reporting_manager', 'reporting_approver', 'branch_hr', 'company_admin')
+SOURCE_LABELS = {
+    'reporting_manager': 'reporting manager',
+    'reporting_approver': 'reporting approver',
+    'branch_hr': 'branch HR',
+    'company_admin': 'company HR/admin',
+}
+
+
+def approver_fallback_order() -> tuple:
+    """The configured order (settings.APPROVER_FALLBACK_ORDER, env APPROVER_FALLBACK_ORDER); unknown names are ignored."""
+    from django.conf import settings
+
+    configured = getattr(settings, 'APPROVER_FALLBACK_ORDER', None) or APPROVER_SOURCES
+    order = tuple(name for name in configured if name in APPROVER_SOURCES)
+    return order or APPROVER_SOURCES
+
+
+@dataclass(frozen=True)
+class ApproverRoute:
+    user: User | None
+    source: str                 # one of APPROVER_SOURCES, or '' when nobody could be found
+    skipped: tuple = ()         # sources tried first that had nobody, in order
+
+    def skipped_note(self) -> str:
+        """'Manager stage skipped - no manager assigned' style text, or '' when nothing was skipped."""
+        if not self.skipped:
+            return ''
+        names = ', '.join(SOURCE_LABELS[name] for name in self.skipped)
+        target = SOURCE_LABELS.get(self.source, 'nobody')
+        return f'No {names} could be found, so this was routed to the {target}.' if self.user else f'No {names} could be found and nobody else could approve.'
+
+
+def _branch_hr(employee: User) -> User | None:
+    from core.access import users_with_permission
+    from apps.branch.models import Branch
+
+    if _usable(getattr(employee, 'hr', None), employee):
+        return employee.hr
+    branch_name = (employee.branch or '').strip()
+    if not branch_name:
+        return None
+    branch = Branch.objects.select_related('hr').filter(branch_name__iexact=branch_name).first()
+    if branch and _usable(branch.hr, employee):
+        return branch.hr
+    return (
+        User.objects.filter(users_with_permission('leave.approve'), is_active=True, branch__iexact=branch_name)
+        .exclude(pk=employee.pk).order_by('date_joined').first()
+    )
+
+
+def _company_admin(employee: User) -> User | None:
+    from core.access import users_with_permission
+
+    return User.objects.filter(users_with_permission('settings.edit'), is_active=True).exclude(pk=employee.pk).order_by('date_joined').first()
+
+
+def resolve_approver_route(employee: User, exclude_sources: tuple = ()) -> ApproverRoute:
+    """The first person who can decide for `employee`, trying the configured order and remembering which sources had nobody.
+
+    Default order: reporting manager -> reporting approver -> branch HR -> company HR/admin. `exclude_sources` lets a stage that
+    is NOT the manager stage (for example the HR stage) start further down the list."""
+    skipped = []
+    for source in approver_fallback_order():
+        if source in exclude_sources:
+            continue
+        if source == 'reporting_manager':
+            candidate = resolve_manager(employee)
+        elif source == 'reporting_approver':
+            candidate = getattr(employee, 'reporting_approver', None)
+            candidate = candidate if _usable(candidate, employee) else None
+        elif source == 'branch_hr':
+            candidate = _branch_hr(employee)
+        else:
+            candidate = _company_admin(employee)
+        if candidate is not None:
+            return ApproverRoute(candidate, source, tuple(skipped))
+        skipped.append(source)
+    return ApproverRoute(None, '', tuple(skipped))

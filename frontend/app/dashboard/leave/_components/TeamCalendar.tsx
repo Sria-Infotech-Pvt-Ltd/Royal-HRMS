@@ -85,11 +85,11 @@ export default function TeamCalendar() {
       <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--outline-v)]">
-          <button onClick={prev} className="w-8 h-8 rounded-lg border border-[var(--outline-v)] flex items-center justify-center text-[var(--on-variant)] hover:bg-[var(--bg-low)] transition-colors">
+          <button onClick={prev} className="w-8 h-8 rounded-lg border border-[var(--outline-v)] flex items-center justify-center text-[var(--on-variant)] hover:bg-[var(--bg-low)] transition-colors" aria-label="Previous">
             <i className="ti ti-chevron-left text-sm" />
           </button>
           <span className="text-sm font-bold text-[var(--on-bg)]">{MONTH_NAMES[month]} {year}</span>
-          <button onClick={next} className="w-8 h-8 rounded-lg border border-[var(--outline-v)] flex items-center justify-center text-[var(--on-variant)] hover:bg-[var(--bg-low)] transition-colors">
+          <button onClick={next} className="w-8 h-8 rounded-lg border border-[var(--outline-v)] flex items-center justify-center text-[var(--on-variant)] hover:bg-[var(--bg-low)] transition-colors" aria-label="Next">
             <i className="ti ti-chevron-right text-sm" />
           </button>
         </div>

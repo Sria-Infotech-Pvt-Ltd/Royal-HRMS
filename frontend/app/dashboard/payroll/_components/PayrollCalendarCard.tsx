@@ -39,13 +39,13 @@ export default function PayrollCalendarCard({
           <i className="ti ti-calendar-event" /> Payroll Calendar
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={prevMonth}>
+          <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={prevMonth} aria-label="Previous">
             <i className="ti ti-chevron-left" />
           </button>
           <span style={{ fontSize: 12, fontWeight: 600, minWidth: 100, textAlign: "center" }}>
             {calMonthName} {calYear}
           </span>
-          <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={nextMonth}>
+          <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={nextMonth} aria-label="Next">
             <i className="ti ti-chevron-right" />
           </button>
         </div>

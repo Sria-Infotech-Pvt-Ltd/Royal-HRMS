@@ -71,7 +71,7 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
             style={{ color: "var(--error)" }}
             disabled={uploading}
             title={`Remove ${label}`}
-          >
+           aria-label="Delete">
             <i className="ti ti-trash" />
           </button>
         )}

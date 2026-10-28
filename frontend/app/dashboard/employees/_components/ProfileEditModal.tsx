@@ -15,6 +15,7 @@ import { API } from "@/lib/api/endpoints";
 import { useApiErrors } from "@/hooks/useApiErrors";
 import FieldError from "@/components/shared/FieldError";
 import { STATES } from "@/app/dashboard/settings/company/_data";
+import { mobileError, normaliseMobile } from "@/lib/mobile";
 
 interface ProfileForEdit {
   phone: string | null;
@@ -94,18 +95,23 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
   const [form, setForm] = useState<FormState>(() => buildInitialForm(profile));
   const [saving, setSaving] = useState(false);
   const { fieldErrors, formError, handleError, clearAll, clearField } = useApiErrors();
+  const [phoneClientError, setPhoneClientError] = useState<string | null>(null);
 
   function field<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
     clearField(key);
+    if (key === "phone") setPhoneClientError(null);
   }
 
   async function handleSave() {
+    // The shared mobile rule is checked here first so a bad number never needs a round trip to be explained.
+    const mobileProblem = mobileError(form.phone);
+    if (mobileProblem) { setPhoneClientError(mobileProblem); return; }
     setSaving(true);
     clearAll();
     try {
       await clientApi.patch(API.employees.me, {
-        phone: form.phone,
+        phone: normaliseMobile(form.phone) ?? form.phone,
         current_address: form.current_address,
         current_address_line2: form.current_address_line2,
         current_village: form.current_village,
@@ -137,7 +143,7 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
       <div className="drawer open" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
         <div className="drawer-header">
           <div className="drawer-title">Edit my details</div>
-          <button className="drawer-close" onClick={onClose}><i className="ti ti-x" /></button>
+          <button className="drawer-close" onClick={onClose} aria-label="Close"><i className="ti ti-x" /></button>
         </div>
 
         <div className="drawer-body">
@@ -149,7 +155,7 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
           <div className="field-group">
             <label className="field-label">Mobile number</label>
             <input className={`field-input${fieldErrors.phone ? " field-error" : ""}`} value={form.phone} onChange={e => field("phone", e.target.value)} placeholder="+91 98765 43210" />
-            <FieldError message={fieldErrors.phone} />
+            <FieldError message={fieldErrors.phone ?? phoneClientError} />
           </div>
 
           <div style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", margin: "18px 0 10px" }}>

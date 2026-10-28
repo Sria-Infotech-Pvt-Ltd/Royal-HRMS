@@ -217,6 +217,14 @@ class HireActionDetailView(APIView):
                 except DjangoValidationError:
                     return error(f'Enter a valid {"work " if email_field == "work_email" else ""}email address.')
 
+        # The mobile follows the same rule as Edit full record and Edit my details; stored normalised (10 digits).
+        if 'phone' in data and str(data.get('phone') or '').strip():
+            from apps.accounts.services_contact_change import ContactChangeError, normalise_mobile
+            try:
+                data['phone'] = normalise_mobile(str(data['phone']))
+            except ContactChangeError as exc:
+                return error(exc.message, data={'phone': exc.message})
+
         # UAN is optional, but an entered one must be 12 digits; rejected here so a bad value is never stored in the draft.
         uan = str(data.get('uan_number') or '').strip()
         if uan and (len(uan) != 12 or not uan.isdigit()):

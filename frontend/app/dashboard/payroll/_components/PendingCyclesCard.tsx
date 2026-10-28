@@ -2,6 +2,7 @@
 
 import type { PayrollCycle } from "@/types/payroll";
 import { STATUS_BADGE, STATUS_LABEL, UNCANCELLABLE, PENDING_CYCLES_SECTION_ID, cyclePeriodLabel } from "./payrollDashboardShared";
+import { formatDate } from "@/lib/formatDate";
 
 interface PendingCyclesCardProps {
   pending: PayrollCycle[];
@@ -33,7 +34,7 @@ export default function PendingCyclesCard({ pending, canResume, onResumeCycle, o
                 <td style={{ fontWeight: 600 }}>
                   {cyclePeriodLabel(c)}
                 </td>
-                <td>{c.pay_date}</td>
+                <td>{formatDate(c.pay_date)}</td>
                 <td><span className={STATUS_BADGE[c.status] ?? "badge badge-neutral"}>{STATUS_LABEL[c.status] ?? c.status}</span></td>
                 <td style={{ fontSize: 13, color: "var(--on-variant)" }}>{c.l1_approver_name ?? "—"}</td>
                 <td>{c.payslip_count}</td>

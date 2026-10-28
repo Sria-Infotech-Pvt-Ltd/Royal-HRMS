@@ -11,6 +11,7 @@ import { usePermission } from "@/hooks/usePermission";
 import type { Position } from "@/types/orgStructure";
 import HireWizardClient from "@/app/dashboard/hire/[hireActionId]/_components/HireWizardClient";
 import DateInput from "@/components/shared/DateInput";
+import FieldError from "@/components/shared/FieldError";
 
 // Stage 1 of the two-stage Hire flow — collects just enough to reserve a
 // HireAction (reason/effective date/position) before any User exists. Once
@@ -40,6 +41,12 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
   const [orgUnitId, setOrgUnitId] = useState("");
   const [positionId, setPositionId] = useState("");
   const [err, setErr] = useState("");
+  // One message per field, all shown at once; each clears as soon as its own field is corrected.
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<"reason" | "effectiveFrom" | "orgUnit" | "position", string>>>({});
+  function clearFieldError(field: keyof typeof fieldErrors) {
+    setFieldErrors(previous => ({ ...previous, [field]: undefined }));
+    setErr("");
+  }
   const [saving, setSaving] = useState(false);
 
   // The shared org-unit/position hook has no way to add a just-created
@@ -96,11 +103,19 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
   }
 
   async function submit() {
-    if (!reason)         { setErr("Select a reason.");        return; }
-    if (!effectiveFrom)  { setErr("Effective from is required."); return; }
-    if (effectiveFrom < todayStr) { setErr("Effective from cannot be in the past."); return; }
-    if (!orgUnitId)      { setErr("Select an org unit.");     return; }
-    if (!positionId)     { setErr("Select a position.");      return; }
+    const found: typeof fieldErrors = {};
+    if (!reason) found.reason = "Select a reason.";
+    if (!effectiveFrom) found.effectiveFrom = "Effective from is required.";
+    else if (effectiveFrom < todayStr) found.effectiveFrom = "Effective from cannot be in the past.";
+    if (!orgUnitId) found.orgUnit = "Select an org unit.";
+    if (!positionId) found.position = "Select a position.";
+    setFieldErrors(found);
+    const firstInvalid = (["reason", "effectiveFrom", "orgUnit", "position"] as const).find(field => found[field]);
+    if (firstInvalid) {
+      // Take the person to the first problem instead of leaving it off-screen.
+      document.getElementById(`hire-field-${firstInvalid}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     setSaving(true);
     setErr("");
     try {
@@ -155,12 +170,14 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
             <div className="finput" style={{ cursor: "not-allowed", display: "flex", alignItems: "center" }}>Hire</div>
           </div>
           <div className="f">
-            <label>Reason <span className="req">*</span></label>
-            <SearchableSelect value={reason} onChange={setReason} placeholder="Select a reason" options={REASONS} />
+            <label id="hire-field-reason">Reason <span className="req">*</span></label>
+            <SearchableSelect value={reason} onChange={value => { setReason(value); clearFieldError("reason"); }} placeholder="Select a reason" options={REASONS} />
+            <FieldError message={fieldErrors.reason} />
           </div>
           <div className="f">
-            <label>Effective from <span className="req">*</span></label>
-            <DateInput min={todayStr} value={effectiveFrom} onChange={setEffectiveFrom} className="finput" separator="-" />
+            <label id="hire-field-effectiveFrom">Effective from <span className="req">*</span></label>
+            <DateInput min={todayStr} value={effectiveFrom} onChange={value => { setEffectiveFrom(value); clearFieldError("effectiveFrom"); }} className="finput" separator="-" />
+            <FieldError message={fieldErrors.effectiveFrom} />
             <p className="hint">This becomes the date of joining.</p>
           </div>
         </div>
@@ -172,24 +189,26 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
                 selected — QA report #30 found only Position marked
                 required, leaving no visual cue for why it stayed
                 unselectable. */}
-            <label>Org unit <span className="req">*</span></label>
+            <label id="hire-field-orgUnit">Org unit <span className="req">*</span></label>
             <SearchableSelect
               value={orgUnitId}
-              onChange={v => { setOrgUnitId(v); setPositionId(""); }}
+              onChange={v => { setOrgUnitId(v); setPositionId(""); clearFieldError("orgUnit"); }}
               disabled={positionsLoading}
               placeholder="Select an org unit"
               options={units.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
             />
+            <FieldError message={fieldErrors.orgUnit} />
           </div>
           <div className="f">
-            <label>Position <span className="req">*</span></label>
+            <label id="hire-field-position">Position <span className="req">*</span></label>
             <SearchableSelect
               value={positionId}
-              onChange={setPositionId}
+              onChange={value => { setPositionId(value); clearFieldError("position"); }}
               disabled={!orgUnitId || positionsLoading}
               placeholder={!orgUnitId ? "Select an org unit first" : "Select a position"}
               options={positionOptions.map(p => ({ value: p.id, label: p.title }))}
             />
+            <FieldError message={fieldErrors.position} />
             {orgUnitId && !positionsLoading && canCreatePosition && !showCreatePosition && (
               <button
                 type="button"

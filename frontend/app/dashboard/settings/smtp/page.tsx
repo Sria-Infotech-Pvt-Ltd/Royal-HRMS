@@ -356,7 +356,7 @@ export default function SmtpSettingsPage() {
                 <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
                 Delete SMTP Configuration?
               </div>
-              <button className="modal-close" onClick={() => setDeleteTarget(null)} disabled={deleting === deleteTarget.id}>
+              <button className="modal-close" onClick={() => setDeleteTarget(null)} disabled={deleting === deleteTarget.id} aria-label="Close">
                 <i className="ti ti-x" />
               </button>
             </div>

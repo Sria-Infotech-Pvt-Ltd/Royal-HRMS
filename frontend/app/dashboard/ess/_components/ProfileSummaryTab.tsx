@@ -112,7 +112,7 @@ export default function ProfileSummaryTab() {
                   display: "flex", alignItems: "center", justifyContent: "center",
                   border: "2px solid var(--surface)", cursor: "pointer",
                 }}
-              >
+               aria-label="Change profile photo">
                 <i className="ti ti-camera" style={{ fontSize: 10 }} />
               </button>
             )}

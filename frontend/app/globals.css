@@ -2995,3 +2995,24 @@ html[data-theme="dark"] {
 .ta-timeline-item:last-child { padding-bottom: 0; }
 .ta-timeline-dot { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; border: 2px solid var(--ta-surface); box-shadow: 0 0 0 1px var(--ta-border); z-index: 1; }
 .ta-comment { background: var(--ta-bg); border-radius: var(--ta-radius-sm); padding: 10px 12px; font-size: 13px; color: var(--ta-text); margin-top: 8px; }
+
+
+/* ── Small screens and narrow windows (UAT-066 / UAT-070) ───────────────────────────────────────────────────────────────── */
+
+/* Data tables never push their Actions column out of reach: the card around a table scrolls sideways instead. */
+@media (max-width: 900px) {
+  .card:has(> table),
+  .card-body:has(> table),
+  .panel:has(> table),
+  .settings-card:has(> table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* The floating assistant is smaller on phones and the page keeps room below its content, so it never sits on top of
+   the last card (Quick actions / Today). */
+@media (max-width: 480px) {
+  .voice-fab { transform: scale(0.82); transform-origin: bottom right; }
+  body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+}

@@ -19,6 +19,7 @@ import type { ApiTaxDeclaration, TaxFormState, TaxRegime } from "@/types/taxDecl
 import TaxDeclarationSections from "./TaxDeclarationSections";
 import TaxRentFields from "./TaxRentFields";
 import TaxPreviousEmployerFields from "./TaxPreviousEmployerFields";
+import { previousEmployerTdsError } from "@/lib/taxPreviousEmployer";
 
 interface Props {
   current: ApiTaxDeclaration | null;
@@ -51,6 +52,8 @@ export default function TaxDeclarationModal({ current, onClose, onSaved }: Props
 
   function findProblem(): string | null {
     if (!schema) return "The form is still loading.";
+    const previousProblem = previousEmployerTdsError(form.previousEmployer.income, form.previousEmployer.tds);
+    if (previousProblem) return previousProblem;
     return isOldRegime ? validateRent(form, schema) ?? validateHomeLoan(form) : null;
   }
 

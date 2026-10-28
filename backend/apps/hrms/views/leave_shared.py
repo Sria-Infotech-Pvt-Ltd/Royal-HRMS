@@ -29,7 +29,7 @@ from ..models import (
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
 )
-from ..services_leave_ledger import employee_matches_policy_gender, is_unpaid_lwp
+from ..services_leave_ledger import employee_matches_policy_gender, is_unpaid_lwp, pending_leave_days
 from ..serializers import (
     CarryForwardInputSerializer,
     CarryForwardLogSerializer,
@@ -494,13 +494,15 @@ def _leave_preview(request):
     week_offs_out = [{'date': w['date'], 'day': w['day']} for w in week_offs]
 
     available      = 0.0
+    pending_days   = 0.0
     convert_to_lop = getattr(policy, 'convert_to_lop', False)
     if leave_type and not is_unpaid_lwp(leave_type):
         bal = LeaveBalance.objects.filter(
             employee=request.user, leave_type=leave_type, year=start.year
         ).first()
         if bal:
-            available = float(bal.total_days - bal.used_days)
+            pending_days = pending_leave_days(request.user, leave_type, start.year)
+            available = float(bal.total_days - bal.used_days) - pending_days
 
     lop_days        = round(max(0.0, actual_days - available), 1) if convert_to_lop and not is_unpaid_lwp(leave_type) else 0.0
     leave_days_used = round(actual_days - lop_days, 1)
@@ -530,6 +532,7 @@ def _leave_preview(request):
         'sandwich_leave_enabled': getattr(policy, 'sandwich_leave_enabled', False),
         'actual_leave_days':      actual_days,
         'available_balance':      available,
+        'pending_days':           pending_days,  # already subtracted from available_balance
         'leave_days_used':        leave_days_used,
         'lop_days':               lop_days,
         'lop_enabled':            convert_to_lop,

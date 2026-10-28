@@ -270,7 +270,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
                     onClick={() => setSaveStatus(null)}
                     style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0, marginLeft: 4, display: "flex" }}
                     title="Dismiss"
-                  >
+                   aria-label="Dismiss">
                     <i className="ti ti-x" style={{ fontSize: 12 }} />
                   </button>
                 </>

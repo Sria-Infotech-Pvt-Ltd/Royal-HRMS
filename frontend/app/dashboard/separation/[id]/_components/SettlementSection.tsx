@@ -151,6 +151,17 @@ export default function SettlementSection({ r }: Props) {
           />
         </div>
 
+        {settlement.notice_period_shortfall_days > 0 && (
+          <div className="alert alert-warning" role="status" style={{ marginBottom: 12 }}>
+            <i className="ti ti-alert-triangle" />
+            <div>
+              <b>Notice period shortfall:</b> {settlement.notice_period_served_days} of {settlement.notice_period_required_days} days served
+              ({settlement.notice_period_shortfall_days} short). A recovery of {INR(settlement.notice_period_recovery_amount)} has been calculated.
+              Confirm with HR or finance whether this recovery applies before finalising.
+            </div>
+          </div>
+        )}
+
         {!editing ? (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 16 }}>

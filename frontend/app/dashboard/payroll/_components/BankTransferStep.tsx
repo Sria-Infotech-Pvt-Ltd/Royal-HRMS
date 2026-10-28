@@ -6,6 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import ConfirmModal from "@/components/ConfirmModal";
 import type { EmployeePayslip, PayrollCycle } from "@/types/payroll";
+import { formatDate } from "@/lib/formatDate";
 
 interface Props {
   cycleId: string;
@@ -154,7 +155,7 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
           <div className="stat-value" style={{ color: isPaid ? "var(--success)" : "var(--warn)", fontSize: 18 }}>
             {isPaid ? "Paid" : "Pending"}
           </div>
-          <div className="stat-sub">{cycle?.pay_date ? `Pay date: ${cycle.pay_date}` : "—"}</div>
+          <div className="stat-sub">{cycle?.pay_date ? `Pay date: ${formatDate(cycle.pay_date)}` : "—"}</div>
         </div>
       </div>
 

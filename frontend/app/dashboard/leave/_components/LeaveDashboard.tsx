@@ -12,6 +12,7 @@ import {
 } from "../_data";
 import LopBadge from "./LopBadge";
 import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
+import { notifyLeaveChanged, useOnLeaveChanged } from "@/hooks/useLeaveRefresh";
 
 // Short pill text for this card only — "PENDING"/"APPROVED" rather than
 // StatusCell's longer "Pending Manager Approval" wording used elsewhere.
@@ -45,10 +46,13 @@ const BALANCE_DISPLAY = [
 // load the first one already paid.
 export function useLeaveBalances() {
   const currentYear = getLeaveYear();
-  return useFetch<LeaveBalance[]>(
+  const result = useFetch<LeaveBalance[]>(
     API.leave.balance + `?year=${currentYear}`,
     { cache: true },
   );
+  // A submit / cancel / approval anywhere reloads the balance, so "Available" and "Pending" never lag behind.
+  useOnLeaveChanged(result.refetch);
+  return result;
 }
 
 function fmtDays(value: number | null): string {
@@ -70,12 +74,16 @@ export function LeaveBalanceStats() {
     <div className="stats-grid" style={{ marginBottom: 0 }}>
       {BALANCE_DISPLAY.map(({ key, label }) => {
         const b = balanceMap[key];
-        const available = loading || !balances ? null : (b ? Number(b.total_days) - Number(b.used_days) : 0);
+        // available_days is entitlement - used - pending (days already asked for are spoken for)
+        const available = loading || !balances ? null : (b ? Number(b.available_days) : 0);
+        const pending = b ? Number(b.pending_days ?? 0) : 0;
         return (
           <div key={key} className="stat-card">
             <div className="stat-label">{label.toUpperCase()}</div>
             <div className="stat-value">{fmtDays(available)}</div>
-            <div className="stat-sub">days available</div>
+            <div className="stat-sub">
+              days available{pending > 0 ? ` · Pending: ${pending.toFixed(1)} day${pending === 1 ? "" : "s"}` : ""}
+            </div>
           </div>
         );
       })}
@@ -106,6 +114,8 @@ export default function LeaveDashboard() {
     API.leave.requests
   );
 
+  useOnLeaveChanged(refetchRequests);
+
   const requestList = requests?.results ?? [];
   const recentRequests = requestList.slice(0, RECENT_COUNT);
 
@@ -114,6 +124,7 @@ export default function LeaveDashboard() {
       const res = await clientApi.patch<{ message: string }>(API.leave.requestDetail(id));
       showToast(res.data.message, "success");
       refetchRequests();
+      notifyLeaveChanged();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       showToast(msg || "Failed to cancel leave request.", "error");

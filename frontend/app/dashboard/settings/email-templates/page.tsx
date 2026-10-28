@@ -471,10 +471,10 @@ export default function EmailTemplatesPage() {
                         </div>
                       </div>
                       <div className="et-card-actions" style={{ display: "flex", gap: 3, flexShrink: 0, marginTop: 2, alignItems: "center" }}>
-                        <button className="btn btn-ghost btn-sm" title="Preview" onClick={() => openPreview(template)} style={{ padding: "4px 7px" }} suppressHydrationWarning>
+                        <button className="btn btn-ghost btn-sm" title="Preview" onClick={() => openPreview(template)} style={{ padding: "4px 7px" }} suppressHydrationWarning aria-label="Preview">
                           <i className="ti ti-eye" style={{ fontSize: 14 }} />
                         </button>
-                        <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => setEditing(template)} style={{ padding: "4px 7px" }} suppressHydrationWarning>
+                        <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => setEditing(template)} style={{ padding: "4px 7px" }} suppressHydrationWarning aria-label="Edit">
                           <i className="ti ti-pencil" style={{ fontSize: 14 }} />
                         </button>
                         <button

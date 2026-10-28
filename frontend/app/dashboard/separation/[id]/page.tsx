@@ -2,6 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
@@ -24,6 +25,7 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
   const { id } = use(params);
   const access = useSeparationAccess();
   const { showToast } = useToast();
+  const router = useRouter();
 
   const { data: r, loading, error, refetch } = useFetch<SeparationRequest>(API.separation.detail(id));
 
@@ -44,7 +46,9 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
       await clientApi.post(API.separation.stageAction(r.id, decision.stageId), { action: decision.action, remarks });
       showToast(decision.action === "approve" ? "Stage approved." : "Stage rejected.", "success");
       setDecision(null);
-      refetch();
+      // A rejection ends the request: go back to the list (the rejected request stays there, filterable, with its reason).
+      if (decision.action === "reject") router.push("/dashboard/separation");
+      else refetch();
     } catch (err: unknown) {
       showToast(extractError(err, "Failed to submit the decision."), "error");
     } finally {
@@ -79,7 +83,7 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
       await clientApi.patch(API.separation.detail(r.id), { action: "reject", reason });
       showToast("Separation request rejected.", "success");
       setRejecting(false);
-      refetch();
+      router.push("/dashboard/separation");
     } catch (err: unknown) {
       showToast(extractError(err, "Failed to reject the request."), "error");
     } finally {

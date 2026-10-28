@@ -123,7 +123,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                 display: "flex", alignItems: "center", justifyContent: "center",
                 border: "2px solid #fff", cursor: "pointer",
               }}
-            >
+             aria-label="Change profile photo">
               <i className="ti ti-camera" style={{ fontSize: 12 }} />
             </button>
           )}

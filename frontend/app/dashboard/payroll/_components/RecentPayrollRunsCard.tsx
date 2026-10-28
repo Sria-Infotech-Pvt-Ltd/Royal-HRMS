@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import type { PayrollCycle } from "@/types/payroll";
 import { STATUS_BADGE, STATUS_LABEL, DETAIL_STATUSES, TERMINAL_STATUSES, cyclePeriodLabel } from "./payrollDashboardShared";
+import { formatDate } from "@/lib/formatDate";
 
 interface RecentPayrollRunsCardProps {
   cycles: PayrollCycle[];
@@ -60,9 +61,9 @@ export default function RecentPayrollRunsCard({ cycles, cyclesLoading, canResume
                   <td style={{ fontWeight: 600, fontSize: 13 }}>
                     {cyclePeriodLabel(c)}
                   </td>
-                  <td style={{ fontSize: 13 }}>{c.cycle_start}</td>
-                  <td style={{ fontSize: 13 }}>{c.cycle_end}</td>
-                  <td style={{ fontSize: 13, fontWeight: 500 }}>{c.pay_date}</td>
+                  <td style={{ fontSize: 13 }}>{formatDate(c.cycle_start)}</td>
+                  <td style={{ fontSize: 13 }}>{formatDate(c.cycle_end)}</td>
+                  <td style={{ fontSize: 13, fontWeight: 500 }}>{formatDate(c.pay_date)}</td>
                   <td>
                     <span style={{ fontWeight: 600 }}>{c.payslip_count}</span>
                     <span style={{ color: "var(--on-variant)", fontSize: 12 }}> employees</span>

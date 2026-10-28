@@ -6,7 +6,10 @@ import { usePermission } from "@/hooks/usePermission";
 import { useToast } from "@/components/ToastProvider";
 import { useEmployees } from "@/hooks/useEmployees";
 import Pagination from "@/components/shared/Pagination";
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
 import type { Employee, EmployeeStatusFilter } from "./_data";
+import { apiToEmployee, type ApiEmployee } from "./[id]/_apiMapping";
 import EmployeeDirectoryHeader from "./_components/EmployeeDirectoryHeader";
 import BulkAssignManagerModal from "./_components/BulkAssignManagerModal";
 import EmployeeStatCards from "./_components/EmployeeStatCards";
@@ -71,6 +74,19 @@ function EmployeesPageInner() {
   useEffect(() => {
     if (canCreate && searchParams.get("action") === "hire") setShowModal(true);
   }, [canCreate, searchParams]);
+
+  // Lets the header's global search deep-link straight into the full-record
+  // drawer (?open=<id>) instead of landing on the bare directory list.
+  useEffect(() => {
+    const openId = searchParams.get("open");
+    if (!openId) return;
+    router.replace("/dashboard/employees");
+    const found = emp.employees.find(e => e.id === openId);
+    if (found) { setDrawerEmployee(found); return; }
+    clientApi.get<{ data: ApiEmployee }>(API.employees.detail(openId))
+      .then(({ data }) => setDrawerEmployee(apiToEmployee(data.data, [])))
+      .catch(() => showToast("Could not load that employee.", "error"));
+  }, [searchParams, router, emp.employees, showToast]);
 
   return (
     <div className="emp-fit">

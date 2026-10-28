@@ -107,6 +107,8 @@ export interface TaxProofItem {
   label: string;
   /** Rupees claimed against the item. */
   declared: number;
+  /** What actually counts after the statutory limit (limits come from the server's schema, never hard-coded here). */
+  eligible: number;
   /** What document payroll will ask for. */
   proof: string;
   /** Whether a policy / account / receipt number is worth asking for. */

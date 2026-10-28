@@ -153,7 +153,7 @@ export default function OnboardingFieldsPage() {
                   title="Rename section"
                   onClick={() => setRenamingSection(t.section!)}
                   style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", color: "var(--on-variant)" }}
-                >
+                 aria-label="Rename section">
                   <i className="ti ti-pencil" style={{ fontSize: 13 }} />
                 </button>
                 {!BUILTIN_STEP_NUMBERS.has(t.step) && (
@@ -162,7 +162,7 @@ export default function OnboardingFieldsPage() {
                   disabled={deletingSectionId === t.section.id}
                   onClick={() => handleDeleteSection(t.section!)}
                   style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", color: "var(--error)" }}
-                >
+                 aria-label="Delete section">
                   <i className="ti ti-trash" style={{ fontSize: 13 }} />
                 </button>
                 )}

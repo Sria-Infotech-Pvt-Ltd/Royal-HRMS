@@ -185,7 +185,7 @@ export default function TabDocuments({
                         disabled={isUploading}
                         type="button"
                         title="Remove this document"
-                      >
+                       aria-label="Remove this document">
                         <i className="ti ti-trash" style={{ fontSize: 13 }} />
                       </button>
                     )}

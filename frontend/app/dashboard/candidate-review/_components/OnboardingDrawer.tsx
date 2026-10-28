@@ -459,7 +459,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                         <span className="badge" style={{ fontSize: ".7rem", background: "var(--error-c)", color: "var(--error)" }}><i className="ti ti-alert-triangle" /> Needs Correction</span>
                       )}
                       {d.file_url
-                        ? <button className="btn btn-ghost btn-sm" onClick={() => setPreviewDoc(d)} title="Preview">
+                        ? <button className="btn btn-ghost btn-sm" onClick={() => setPreviewDoc(d)} title="Preview" aria-label="Preview">
                             <i className="ti ti-eye" style={{ fontSize: 15 }} />
                           </button>
                         : <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>No link</span>

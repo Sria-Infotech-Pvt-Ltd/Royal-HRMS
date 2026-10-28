@@ -193,6 +193,22 @@ const LEGACY_PROOF_LABELS: Record<string, string> = {
 };
 const RENT_PROOF = "Rent receipts or rent agreement";
 
+/** The limit for a field given what the declaration says about senior citizens (null = no limit). */
+function savedFieldCap(fieldKey: string, schema: TaxDeclarationSchema, details: ApiTaxDeclaration["declared_investments"]["_details"]): number | null {
+  if (fieldKey === "80D_SELF_FAMILY") return details?.senior_self_family ? schema.senior_cap : schema.standard_cap;
+  if (fieldKey === "80D_PARENTS") return details?.senior_parents ? schema.senior_cap : schema.standard_cap;
+  for (const group of schema.groups) {
+    const field = group.fields.find(candidate => candidate.key === fieldKey);
+    if (field) return field.cap;
+  }
+  return null;
+}
+
+/** "Declared 70,000, eligible 50,000": a declared amount never counts for more than its limit. */
+export function eligibleAmount(declared: number, cap: number | null): number {
+  return cap === null ? declared : Math.min(declared, cap);
+}
+
 /** The items an old-regime employee has claimed, i.e. what proof can be uploaded for. */
 export function proofItems(declaration: ApiTaxDeclaration, schema: TaxDeclarationSchema): TaxProofItem[] {
   if (declaration.tax_regime !== "old") return [];
@@ -201,18 +217,18 @@ export function proofItems(declaration: ApiTaxDeclaration, schema: TaxDeclaratio
 
   const rent = saved._details?.hra;
   const legacyRent = legacyHraExemption(declaration);
-  if (rent) items.push({ key: "HRA", label: LEGACY_PROOF_LABELS.HRA, declared: rent.monthly_rent * rent.months, proof: RENT_PROOF, asksReference: false });
-  else if (legacyRent > 0) items.push({ key: "HRA", label: LEGACY_PROOF_LABELS.HRA, declared: legacyRent, proof: RENT_PROOF, asksReference: false });
+  if (rent) items.push({ key: "HRA", label: LEGACY_PROOF_LABELS.HRA, declared: rent.monthly_rent * rent.months, eligible: rent.monthly_rent * rent.months, proof: RENT_PROOF, asksReference: false });
+  else if (legacyRent > 0) items.push({ key: "HRA", label: LEGACY_PROOF_LABELS.HRA, declared: legacyRent, eligible: legacyRent, proof: RENT_PROOF, asksReference: false });
 
   for (const group of schema.groups) {
     for (const field of group.fields) {
       const declared = saved[field.key];
-      if (typeof declared === "number" && declared > 0) items.push({ key: field.key, label: field.label, declared, proof: field.proof, asksReference: true });
+      if (typeof declared === "number" && declared > 0) items.push({ key: field.key, label: field.label, declared, eligible: eligibleAmount(declared, savedFieldCap(field.key, schema, saved._details)), proof: field.proof, asksReference: true });
     }
   }
   for (const key of ["80C", "80D"]) {
     const declared = saved[key];
-    if (typeof declared === "number" && declared > 0) items.push({ key, label: LEGACY_PROOF_LABELS[key], declared, proof: "Relevant receipt or statement", asksReference: true });
+    if (typeof declared === "number" && declared > 0) items.push({ key, label: LEGACY_PROOF_LABELS[key], declared, eligible: declared, proof: "Relevant receipt or statement", asksReference: true });
   }
   return items;
 }

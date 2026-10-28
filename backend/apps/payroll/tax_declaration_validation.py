@@ -83,8 +83,10 @@ def _validate_details(details) -> None:
     if previous is not None:
         if not isinstance(previous, dict):
             raise ValueError('Previous employer details must be an object.')
-        _to_amount(previous.get('income', 0) or 0, 'Income from previous employer')
-        _to_amount(previous.get('tds', 0) or 0, 'Tax deducted by previous employer')
+        income = _to_amount(previous.get('income', 0) or 0, 'Income from previous employer')
+        tds = _to_amount(previous.get('tds', 0) or 0, 'Tax deducted by previous employer')
+        if tds > income:
+            raise ValueError('Tax deducted by your previous employer cannot be more than the income they paid you.')
 
 
 def validate_declared_investments(value) -> None:

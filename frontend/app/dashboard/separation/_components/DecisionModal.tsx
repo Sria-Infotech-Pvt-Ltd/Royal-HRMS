@@ -30,7 +30,7 @@ export default function DecisionModal({ action, employeeName, onClose, onConfirm
           <div className="modal-title">
             {isApprove ? "Approve" : "Reject"} — {employeeName}
           </div>
-          <button className="modal-close" onClick={onClose} suppressHydrationWarning>
+          <button className="modal-close" onClick={onClose} suppressHydrationWarning aria-label="Close">
             <i className="ti ti-x" />
           </button>
         </div>

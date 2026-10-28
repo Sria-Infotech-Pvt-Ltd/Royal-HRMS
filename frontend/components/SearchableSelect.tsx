@@ -55,11 +55,19 @@ export default function SearchableSelect({
       const r = rootRef.current?.getBoundingClientRect();
       if (r) setRect({ top: r.bottom + 4, left: r.left, width: r.width });
     }
+    // Esc closes just this dropdown (not the modal behind it): the capture phase gets there first.
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.stopImmediatePropagation();
+      setOpen(false);
+    }
     updateRect();
+    document.addEventListener("keydown", onKey, true);
     document.addEventListener("mousedown", onDocClick);
     window.addEventListener("scroll", updateRect, true);
     window.addEventListener("resize", updateRect);
     return () => {
+      document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("mousedown", onDocClick);
       window.removeEventListener("scroll", updateRect, true);
       window.removeEventListener("resize", updateRect);

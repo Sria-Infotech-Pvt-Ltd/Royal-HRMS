@@ -104,7 +104,7 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
                       onClick={() => move(f, "up")}
                       disabled={!canEdit || idx === 0 || busyKey === f.field_key}
                       title="Move up"
-                    >
+                     aria-label="Move up">
                       <i className="ti ti-chevron-up" style={{ fontSize: 12 }} />
                     </button>
                     <button
@@ -113,7 +113,7 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
                       onClick={() => move(f, "down")}
                       disabled={!canEdit || idx === fields.length - 1 || busyKey === f.field_key}
                       title="Move down"
-                    >
+                     aria-label="Move down">
                       <i className="ti ti-chevron-down" style={{ fontSize: 12 }} />
                     </button>
                   </div>
@@ -159,7 +159,7 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
                       onClick={() => onEdit(f)}
                       disabled={!canEdit || busyKey === f.field_key}
                       title="Edit label / options"
-                    >
+                     aria-label="Edit label / options">
                       <i className="ti ti-pencil" style={{ fontSize: 13 }} />
                     </button>
                     <button
@@ -173,7 +173,7 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
                       onClick={() => remove(f)}
                       disabled={!canEdit || !f.is_custom || busyKey === f.field_key}
                       title={f.is_custom ? "Delete custom field" : "Built-in fields can't be deleted — hide them instead"}
-                    >
+                     aria-label="Delete">
                       <i className="ti ti-trash" style={{ fontSize: 13 }} />
                     </button>
                   </div>

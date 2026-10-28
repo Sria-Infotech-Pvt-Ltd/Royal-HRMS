@@ -62,7 +62,7 @@ export default function CancelCycleModal({ cycle, onCancelled, onClose }: Props)
               </div>
             </div>
           </div>
-          <button className="btn btn-ghost btn-icon" onClick={onClose}><i className="ti ti-x" /></button>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close"><i className="ti ti-x" /></button>
         </div>
 
         <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -74,10 +74,11 @@ export default function CancelCycleModal({ cycle, onCancelled, onClose }: Props)
             </span>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Reason for cancellation <span style={{ color: "var(--error)" }}>*</span></label>
+          <div className="field-group">
+            <label className="field-label" htmlFor="cancel-cycle-reason">Reason for cancellation <span style={{ color: "var(--error)" }}>*</span></label>
             <textarea
-              className="form-input"
+              id="cancel-cycle-reason"
+              className="field-input"
               rows={3}
               placeholder="e.g. Wrong cycle dates entered, payroll period needs to be restarted…"
               value={reason}

@@ -89,6 +89,7 @@ export function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeCo
   const p: ApiProfile = u.profile ?? {};
   return {
     id:            u.employee_id || u.id,
+    uuid:          u.uuid || u.id,
     code:          u.employee_id || u.id,
     firstName:     u.first_name,
     middleName:    "",

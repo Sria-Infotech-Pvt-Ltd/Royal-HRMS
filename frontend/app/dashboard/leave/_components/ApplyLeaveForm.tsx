@@ -16,6 +16,7 @@ import { type LeaveForm, BLANK, Err } from "./applyLeaveFormHelpers";
 import LeaveSubmittedScreen from "./LeaveSubmittedScreen";
 import LeaveSupportingDocument from "./LeaveSupportingDocument";
 import LeaveHandoverFields from "./LeaveHandoverFields";
+import { notifyLeaveChanged } from "@/hooks/useLeaveRefresh";
 
 const DURATION_OPTIONS: { value: DurationKey; label: string }[] = [
   { value: "full_day",       label: "Full day" },
@@ -78,6 +79,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
     [form.from_date, form.to_date, form.duration, sandwichEnabled]
   );
   const available     = balance ? Number(balance.available_days) : 0;
+  const pendingDays   = balance ? Number(balance.pending_days ?? 0) : 0;
   const convertToLop   = policy?.convert_to_lop ?? false;
   const exceedsBalance = !ltConfig.isLwp && workDays > available && workDays > 0;
   // With convert_to_lop on, exceeding balance is allowed — the shortfall is
@@ -150,6 +152,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
       const res = await clientApi.post(API.leave.requests, fd);
       setSubmitted(res.data.data as LeaveRequest);
+      notifyLeaveChanged(); // the list and the balance reload behind this modal, so they are current when it closes
     } catch (err: unknown) {
       // The server's reason (e.g. insufficient balance) goes beside the field it is about, and in the alert above
       // the buttons when it names no field of this form.
@@ -185,7 +188,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const requestedLabel = preview ? preview.actual_leave_days : workDays;
   const balancePreviewText = ltConfig.isLwp
     ? "Unpaid — no balance deducted"
-    : `${available} day${available === 1 ? "" : "s"} available · ${requestedLabel} day${requestedLabel === 1 ? "" : "s"} requested`;
+    : `${available} day${available === 1 ? "" : "s"} available${pendingDays > 0 ? ` (after ${pendingDays} pending)` : ""} · ${requestedLabel} day${requestedLabel === 1 ? "" : "s"} requested`;
 
   return (
     <div className="p-6">

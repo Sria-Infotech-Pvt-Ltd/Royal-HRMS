@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef } from "react";
+import { useId, useRef } from "react";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 interface Props {
   title:        string;
@@ -26,6 +27,9 @@ export default function ConfirmModal({ title, body, confirmLabel, danger, saving
   // the overlay and close it. Only close when the gesture both started AND
   // ended on the backdrop itself.
   const mouseDownOnOverlay = useRef(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useDialogFocus(dialogRef, saving ? null : onCancel);
 
   return (
     <div
@@ -34,13 +38,13 @@ export default function ConfirmModal({ title, body, confirmLabel, danger, saving
       onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
       onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) onCancel(); }}
     >
-      <div className="modal" style={{ maxWidth: "min(420px, 94vw)" }}>
+      <div ref={dialogRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby={titleId} className="modal" style={{ maxWidth: "min(420px, 94vw)" }}>
         <div className="modal-header">
-          <div className="modal-title" style={danger ? { color: "var(--error)" } : undefined}>
+          <div id={titleId} className="modal-title" style={danger ? { color: "var(--error)" } : undefined}>
             <i className={`ti ${danger ? "ti-alert-triangle" : "ti-help-circle"}`} style={{ marginRight: 8 }} />
             {title}
           </div>
-          <button className="modal-close" onClick={onCancel} suppressHydrationWarning>
+          <button className="modal-close" aria-label="Close" onClick={onCancel} suppressHydrationWarning>
             <i className="ti ti-x" />
           </button>
         </div>

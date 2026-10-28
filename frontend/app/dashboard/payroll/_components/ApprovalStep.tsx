@@ -4,6 +4,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { formatDateTime } from "@/lib/formatDate";
 import type { PayrollCycle, PayrollSettings, ManagerApprovalStatus } from "@/types/payroll";
+import { formatDate } from "@/lib/formatDate";
 
 interface Props {
   cycleId: string;
@@ -57,7 +58,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
             ? <span className="badge badge-success"><i className="ti ti-check" /> Approved</span>
             : <span className="badge badge-warn"><i className="ti ti-clock" /> Pending</span>}
           <span className="badge badge-info">{isL1L2 ? "L1 + L2 required" : "L1 only"}</span>
-          <button className="btn btn-ghost btn-sm" onClick={refetchAll} title="Refresh status">
+          <button className="btn btn-ghost btn-sm" onClick={refetchAll} title="Refresh status" aria-label="Refresh status">
             <i className="ti ti-refresh" />
           </button>
         </div>
@@ -280,7 +281,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
         <div>
           {cycle && (
             <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-              Cycle: {cycle.cycle_start} → {cycle.cycle_end} · Pay date: {cycle.pay_date}
+              Cycle: {formatDate(cycle.cycle_start)} → {formatDate(cycle.cycle_end)} · Pay date: {formatDate(cycle.pay_date)}
             </span>
           )}
         </div>

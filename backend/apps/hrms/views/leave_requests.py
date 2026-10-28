@@ -29,7 +29,7 @@ from ..models import (
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
 )
-from ..services_leave_ledger import is_unpaid_lwp
+from ..services_leave_ledger import is_unpaid_lwp, pending_leave_days
 from ..serializers import (
     CarryForwardInputSerializer,
     CarryForwardLogSerializer,
@@ -193,7 +193,8 @@ class LeaveRequestListCreateView(APIView):
                 )
                 if not balance:
                     return error(f'No leave balance found for {leave_type} in {year}. Contact HR.')
-                available = float(balance.total_days - balance.used_days)
+                held_by_pending = pending_leave_days(request.user, leave_type, year)
+                available = float(balance.total_days - balance.used_days) - held_by_pending
                 if total_days > available:
                     if policy and policy.convert_to_lop:
                         # Use available balance; excess days become LOP — leave_type stays unchanged
@@ -201,13 +202,21 @@ class LeaveRequestListCreateView(APIView):
                     elif policy and policy.allow_negative_balance:
                         pass  # allow overdraft
                     else:
-                        return error(f'Insufficient balance. You have {available} day(s) available.')
+                        held_note = f' ({held_by_pending:g} more day(s) are held by your pending requests)' if held_by_pending else ''
+                        return error(f'Insufficient balance. You have {max(available, 0):g} day(s) available{held_note}.')
 
             l1, l2 = _resolve_approval_chain(request.user)
 
             # Managers skip L1 — their leave routes directly to HR (L2).
             # Also escalate to L2 when the employee has no reporting manager set,
             # so the request is never orphaned with no one to act on it.
+            # When the manager stage is skipped it is recorded explicitly (shown on the request), never left as a blank
+            # "Pending - Not yet assigned" that nobody can act on.
+            skipped_note = ''
+            if can_manage_team(request.user):
+                skipped_note = 'Manager stage skipped - managers\' leave goes straight to HR.'
+            elif l1 is None:
+                skipped_note = 'Manager stage skipped - no manager assigned.'
             if can_manage_team(request.user) or l1 is None:
                 initial_status = REQ_L2_PENDING
                 l1_approver    = None
@@ -232,6 +241,7 @@ class LeaveRequestListCreateView(APIView):
                 document=data.get('document'),
                 is_lwp=is_unpaid_lwp(leave_type),
                 l1_approver=l1_approver,
+                l1_remarks=skipped_note,
                 l2_approver=l2_approver,
                 status=initial_status,
             )
@@ -441,6 +451,12 @@ class LeaveApprovalView(APIView):
         logger.info('Leave request %s %sd by %s', leave_request.id, action, request.user.email)
 
         from apps.accounts.models import AuditLog
+        if not request.data.get('template_name'):
+            # The approver chose "Don't notify the employee": recorded so a missing email is a visible decision, not a mystery.
+            AuditLog.objects.create(
+                user=request.user, action='approval_without_notification', module='leave', object_id=str(leave_request.id),
+                changes={'kind': 'leave', 'decision': f'{action}d'}, branch=leave_request.employee.branch or '',
+            )
         AuditLog.objects.create(
             user=request.user, action=f'leave_{action}d', module='leave',
             object_id=str(leave_request.id),

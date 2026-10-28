@@ -27,6 +27,32 @@ from .separation import _has_perm, _log, _user_branch
 
 logger = logging.getLogger(__name__)
 
+SELF_APPROVAL_MESSAGE = (
+    'You submitted this separation request, so you cannot also approve, clear or finalise it. '
+    'Another approver has to take this step.'
+)
+
+
+def segregation_problem(user, sep_request, step: str):
+    """Requester != approver, at every step and on the server (not only in the UI).
+
+    Returns an error response when `user` raised this request, else None. A small team that genuinely has one person doing
+    everything can switch the rule off with settings.SEPARATION_ALLOW_REQUESTER_APPROVAL (env SEPARATION_ALLOW_REQUESTER_APPROVAL=true);
+    while it is on, every such step is still allowed but recorded as a `separation_self_approval_override` audit entry."""
+    from django.conf import settings
+
+    from apps.accounts.models import AuditLog
+
+    if sep_request.created_by_id != user.id:
+        return None
+    if not getattr(settings, 'SEPARATION_ALLOW_REQUESTER_APPROVAL', False):
+        return error(SELF_APPROVAL_MESSAGE, data={'requester': SELF_APPROVAL_MESSAGE}, http_status=status.HTTP_403_FORBIDDEN)
+    AuditLog.objects.create(
+        user=user, action='separation_self_approval_override', module='separation', object_id=str(sep_request.id),
+        changes={'step': step, 'request_number': sep_request.request_number}, branch=sep_request.employee.branch or '',
+    )
+    return None
+
 
 def _get_visible_request(request_id: str, user):
     try:
@@ -94,12 +120,18 @@ class SeparationApprovalStageActionView(APIView):
             return error('An earlier approval stage is still pending.')
         if not _can_action_stage(request.user, sep_request, stage):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        blocked = segregation_problem(request.user, sep_request, stage.stage)
+        if blocked:
+            return blocked
 
         action = request.data.get('action')
         if action not in ('approve', 'reject'):
             return error('Action must be "approve" or "reject".')
 
         remarks = (request.data.get('remarks') or '').strip()
+        if action == 'reject' and not remarks:
+            # The employee is told why; a rejection with no reason is not allowed at any stage.
+            return error('A reason is required to reject a separation request.', data={'remarks': 'A reason is required.'})
         stage.status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
         stage.approver     = request.user  # records who actually acted, even for an unresolved/fallback stage
         stage.remarks      = remarks
@@ -270,6 +302,9 @@ class SeparationClearanceActionView(APIView):
             can_action = bool(chief and chief.id == user.id)
         if not can_action:
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        blocked = segregation_problem(user, sep_request, f'clearance:{clearance.clearance_type}')
+        if blocked:
+            return blocked
 
         action = request.data.get('action')
         if action not in ('approve', 'reject'):
@@ -352,6 +387,9 @@ class SeparationSettlementFinalizeView(APIView):
             return error('Only Payroll/Finance can finalize a settlement.', http_status=status.HTTP_403_FORBIDDEN)
         if not hasattr(sep_request, 'settlement'):
             return error('Compute the settlement before finalizing it.', http_status=status.HTTP_400_BAD_REQUEST)
+        blocked = segregation_problem(request.user, sep_request, 'settlement_finalize')
+        if blocked:
+            return blocked
 
         settlement = sep_request.settlement
         if settlement.status == SEP_SETTLEMENT_FINALIZED:

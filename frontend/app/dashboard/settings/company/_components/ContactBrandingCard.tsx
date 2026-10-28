@@ -80,7 +80,7 @@ export default function ContactBrandingCard({
                 {displayLogo ? "Change logo" : "Upload logo"}
               </button>
               {displayLogo && (
-                <button className="btn btn-ghost btn-sm" type="button" onClick={onLogoRemove}>
+                <button className="btn btn-ghost btn-sm" type="button" onClick={onLogoRemove} aria-label="Delete">
                   <i className="ti ti-trash" />
                 </button>
               )}

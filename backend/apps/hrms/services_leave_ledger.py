@@ -82,6 +82,22 @@ def is_unpaid_lwp(leave_type_code: str) -> bool:
     return leave_type_code == LEAVE_LWP
 
 
+def pending_leave_days(employee, leave_type: str, year: int) -> float:
+    """Days of `leave_type` already asked for in `year` by requests still waiting for a decision (manager or HR stage).
+
+    A pending request reserves its days: available = entitlement - used - pending. Nothing is stored: the figure is computed from
+    the requests' status, so rejecting or cancelling a request releases its days automatically. Days that were converted to
+    Leave Without Pay (lop_days) never came from this balance and are not held."""
+    from django.db.models import F
+
+    from apps.hrms.models import REQ_L2_PENDING, REQ_PENDING, LeaveRequest
+
+    held = LeaveRequest.objects.filter(
+        employee=employee, leave_type=leave_type, start_date__year=year, status__in=(REQ_PENDING, REQ_L2_PENDING),
+    ).aggregate(total=Sum(F('total_days') - F('lop_days')))['total']
+    return float(held or 0)
+
+
 def employee_matches_policy_gender(employee, policy) -> bool:
     """Return whether an employee's recorded profile gender satisfies a policy."""
     required_gender = (policy.applicable_gender or 'all').strip().lower()

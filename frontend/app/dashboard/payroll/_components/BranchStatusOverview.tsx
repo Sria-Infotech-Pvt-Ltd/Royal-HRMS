@@ -118,9 +118,9 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
         borderBottom: "1px solid var(--outline-v)",
       }}>
         {[
-          { label: "Paid / Closed",   count: paidCount,       color: "var(--success)", icon: "ti-circle-check" },
-          { label: "In Progress",      count: inProgressCount, color: "var(--primary)", icon: "ti-loader-2"     },
-          { label: "Not Started",      count: pendingCount,    color: "var(--on-variant)", icon: "ti-clock"     },
+          { label: "Paid / closed this cycle",   count: paidCount,       color: "var(--success)", icon: "ti-circle-check" },
+          { label: "In progress this cycle",      count: inProgressCount, color: "var(--primary)", icon: "ti-loader-2"     },
+          { label: "Not started this cycle",      count: pendingCount,    color: "var(--on-variant)", icon: "ti-clock"     },
         ].map(item => (
           <div key={item.label} style={{
             padding: "14px 20px", background: "var(--bg)",

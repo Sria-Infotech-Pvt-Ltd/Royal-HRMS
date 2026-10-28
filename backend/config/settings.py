@@ -298,6 +298,14 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
 # 1s backoff sleep) to bound a dead broker to a single retry.
 CELERY_BROKER_CONNECTION_MAX_RETRIES = 1
 
+# Who decides a request when the person's own approver is missing, first to last. Names: reporting_manager,
+# reporting_approver, branch_hr, company_admin. Override with APPROVER_FALLBACK_ORDER=a,b,c in the environment.
+APPROVER_FALLBACK_ORDER = env.list('APPROVER_FALLBACK_ORDER', default=['reporting_manager', 'reporting_approver', 'branch_hr', 'company_admin'])
+
+# Separation: the person who raised a request may not approve, clear or finalise it. Off-switch for a team too small to
+# separate the roles; while it is on, each such step is still recorded as a `separation_self_approval_override` audit entry.
+SEPARATION_ALLOW_REQUESTER_APPROVAL = env.bool('SEPARATION_ALLOW_REQUESTER_APPROVAL', default=False)
+
 # Hire-wizard drafts untouched for this many days are discarded by the daily expire-stale-hire-drafts task.
 HIRE_DRAFT_EXPIRY_DAYS = env.int('HIRE_DRAFT_EXPIRY_DAYS', default=30)
 

@@ -60,14 +60,24 @@ class ExpenseSerializer(serializers.ModelSerializer):
     branch_name    = serializers.SerializerMethodField()
     receipts       = ExpenseReceiptSerializer(many=True, read_only=True)
     expense_ref    = serializers.SerializerMethodField()
+    employee_code  = serializers.SerializerMethodField()
+    employee_email = serializers.SerializerMethodField()
 
     class Meta:
         model  = Expense
         fields = [
             'expense_number', 'expense_ref', 'title', 'category', 'amount', 'expense_date',
             'description', 'status', 'receipts',
-            'employee_name', 'branch_name', 'created_at',
+            'employee_name', 'employee_code', 'employee_email', 'branch_name', 'created_at',
         ]
+
+    def get_employee_code(self, obj: Expense) -> str:
+        return (obj.employee.employee_id or '') if obj.employee_id else ''
+
+    def get_employee_email(self, obj: Expense) -> str:
+        # Shown in the approval dialog's email preview: masked, the full address is not needed on screen.
+        from core.masking import mask_email
+        return mask_email(obj.employee.email) if obj.employee_id else ''
 
     def get_expense_ref(self, obj: Expense) -> str:
         if obj.expense_number is None:
@@ -254,6 +264,21 @@ class LeavePolicyCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError('Annual days cannot be negative.')
         return value
 
+    def validate_applicable_employment_types(self, value):
+        # One master list for employment types: what is typed ("Full-time") is stored as the canonical value ("Permanent"),
+        # because eligibility compares it with the employee's own employment type.
+        from apps.accounts.employment_types import invalid_employment_type_message, normalize_employment_type
+        canonical = []
+        for raw in value:
+            if not (raw or '').strip():
+                continue
+            matched = normalize_employment_type(raw)
+            if matched is None:
+                raise serializers.ValidationError(invalid_employment_type_message())
+            if matched not in canonical:
+                canonical.append(matched)
+        return canonical
+
     def validate(self, data):
         max_dur = data.get('maximum_leave_duration', 0)
         min_dur = float(data.get('minimum_leave_duration', 0.5))
@@ -285,6 +310,20 @@ class LeavePolicyUpdateSerializer(serializers.ModelSerializer):
              'policy_note', 'is_active']
             + _POLICY_RULE_FIELDS
         )
+
+    def validate_applicable_employment_types(self, value):
+        # Same rule as the full policy serializer: store the master-list value ("Permanent"), whatever was typed ("Full-time").
+        from apps.accounts.employment_types import invalid_employment_type_message, normalize_employment_type
+        canonical = []
+        for raw in value:
+            if not (raw or '').strip():
+                continue
+            matched = normalize_employment_type(raw)
+            if matched is None:
+                raise serializers.ValidationError(invalid_employment_type_message())
+            if matched not in canonical:
+                canonical.append(matched)
+        return canonical
 
     def validate_annual_days(self, value):
         if value < 0:
@@ -322,6 +361,7 @@ class LeavePolicyUpdateSerializer(serializers.ModelSerializer):
 class LeaveBalanceSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
     available_days = serializers.SerializerMethodField()
+    pending_days = serializers.SerializerMethodField()
     leave_type_display = serializers.CharField(source='get_leave_type_display', read_only=True)
     annual_entitlement = serializers.SerializerMethodField()
 
@@ -330,14 +370,19 @@ class LeaveBalanceSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'employee_name', 'leave_type', 'leave_type_display',
             'year', 'total_days', 'used_days', 'carried_forward',
-            'carry_forward_expiry_date', 'available_days', 'annual_entitlement',
+            'carry_forward_expiry_date', 'available_days', 'pending_days', 'annual_entitlement',
         ]
 
     def get_employee_name(self, obj):
         return obj.employee.full_name if obj.employee_id else ''
 
+    def get_pending_days(self, obj):
+        from .services_leave_ledger import pending_leave_days
+        return pending_leave_days(obj.employee, obj.leave_type, obj.year)
+
     def get_available_days(self, obj):
-        return float(obj.total_days - obj.used_days)
+        # entitlement - used - pending: days asked for but not yet decided are already spoken for
+        return float(obj.total_days - obj.used_days) - self.get_pending_days(obj)
 
     def get_annual_entitlement(self, obj):
         """The policy's full-year entitlement for this leave type (0 for event-based types such as LOP)."""
@@ -353,6 +398,8 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
     leave_type_display = serializers.CharField(source='get_leave_type_display', read_only=True)
     duration_display   = serializers.CharField(source='get_duration_display', read_only=True)
     l1_approver_name   = serializers.SerializerMethodField()
+    l1_skipped         = serializers.SerializerMethodField()
+    employee_email     = serializers.SerializerMethodField()
     l2_approver_name   = serializers.SerializerMethodField()
     document_url       = serializers.SerializerMethodField()
     can_approve        = serializers.SerializerMethodField()
@@ -366,7 +413,7 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             'id', 'leave_type', 'leave_type_display', 'duration', 'duration_display',
             'start_date', 'end_date', 'total_days', 'lop_days', 'reason', 'status', 'is_lwp',
             'employee_name', 'employee_code', 'employee_dept', 'employee_branch',
-            'l1_approver_name', 'l1_status', 'l1_remarks', 'l1_actioned_at',
+            'employee_email', 'l1_approver_name', 'l1_skipped', 'l1_status', 'l1_remarks', 'l1_actioned_at',
             'l2_approver_name', 'l2_status', 'l2_remarks', 'l2_actioned_at',
             'contact_during_leave', 'handover_to', 'handover_notes',
             'document_url', 'created_at',
@@ -388,6 +435,14 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
 
     def get_l1_approver_name(self, obj):
         return obj.l1_approver.full_name if obj.l1_approver_id else ''
+
+    def get_employee_email(self, obj):
+        from core.masking import mask_email
+        return mask_email(obj.employee.email) if obj.employee_id else ''
+
+    def get_l1_skipped(self, obj):
+        # No manager stage at all for this request (no manager, or the employee is a manager): it was skipped on purpose.
+        return obj.l1_approver_id is None
 
     def get_l2_approver_name(self, obj):
         return obj.l2_approver.full_name if obj.l2_approver_id else ''
@@ -445,6 +500,8 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
     employee_dept    = serializers.SerializerMethodField()
     employee_branch  = serializers.SerializerMethodField()
     l1_approver_name = serializers.SerializerMethodField()
+    l1_skipped = serializers.SerializerMethodField()
+    employee_email = serializers.SerializerMethodField()
     l2_approver_name = serializers.SerializerMethodField()
     can_approve      = serializers.SerializerMethodField()
     can_cancel       = serializers.SerializerMethodField()
@@ -455,7 +512,7 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
             'id', 'start_date', 'end_date', 'reason', 'location_label',
             'latitude', 'longitude', 'status',
             'employee_name', 'employee_code', 'employee_dept', 'employee_branch',
-            'l1_approver_name', 'l1_status', 'l1_remarks', 'l1_actioned_at',
+            'employee_email', 'l1_approver_name', 'l1_skipped', 'l1_status', 'l1_remarks', 'l1_actioned_at',
             'l2_approver_name', 'l2_status', 'l2_remarks', 'l2_actioned_at',
             'created_at',
             'can_approve', 'can_cancel',
@@ -475,6 +532,14 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
 
     def get_l1_approver_name(self, obj):
         return obj.l1_approver.full_name if obj.l1_approver_id else ''
+
+    def get_employee_email(self, obj):
+        from core.masking import mask_email
+        return mask_email(obj.employee.email) if obj.employee_id else ''
+
+    def get_l1_skipped(self, obj):
+        # No manager stage at all for this request (no manager, or the employee is a manager): it was skipped on purpose.
+        return obj.l1_approver_id is None
 
     def get_l2_approver_name(self, obj):
         return obj.l2_approver.full_name if obj.l2_approver_id else ''
@@ -797,6 +862,7 @@ class SeparationApprovalStageSerializer(serializers.ModelSerializer):
 
 class SeparationRequestSerializer(serializers.ModelSerializer):
     request_ref             = serializers.SerializerMethodField()
+    is_stale                = serializers.SerializerMethodField()
     employee_name           = serializers.SerializerMethodField()
     employee_code           = serializers.SerializerMethodField()
     employee_department     = serializers.SerializerMethodField()
@@ -817,7 +883,7 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model  = SeparationRequest
         fields = [
-            'id', 'request_ref', 'separation_type', 'separation_type_display', 'reason', 'reason_display', 'reason_note',
+            'id', 'request_ref', 'is_stale', 'separation_type', 'separation_type_display', 'reason', 'reason_display', 'reason_note',
             'request_date', 'proposed_last_working_day', 'notice_period_days', 'comments',
             'status', 'status_display',
             'employee_name', 'employee_code', 'employee_department', 'employee_designation', 'reporting_manager',
@@ -827,6 +893,12 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
 
     def get_request_ref(self, obj):
         return f'SEP-{obj.request_number}' if obj.request_number else ''
+
+    def get_is_stale(self, obj):
+        """Still waiting for a decision although the last working day has already passed: flagged for HR, never auto-closed."""
+        from datetime import date
+        from .models import SEP_PENDING, SEP_STAGE2_PENDING
+        return obj.status in (SEP_PENDING, SEP_STAGE2_PENDING) and obj.proposed_last_working_day < date.today()
 
     def get_employee_name(self, obj):
         return obj.employee.full_name if obj.employee_id else ''

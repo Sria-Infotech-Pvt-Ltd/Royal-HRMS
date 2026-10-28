@@ -42,6 +42,8 @@ export interface ApprovalStage {
 export interface SeparationRequest {
   id:                         string;
   request_ref:                string;
+  /** Still waiting for a decision although the last working day has passed: HR should act on it. */
+  is_stale:                   boolean;
   separation_type:            string;
   separation_type_display:    string;
   reason:                     string;

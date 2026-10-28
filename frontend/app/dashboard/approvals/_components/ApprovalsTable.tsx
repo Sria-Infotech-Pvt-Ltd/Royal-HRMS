@@ -186,7 +186,7 @@ export default function ApprovalsTable({
                         <td><StatusChip status={item.displayStatus} /></td>
                         <td onClick={e => e.stopPropagation()}>
                           <div className="ta-actions" style={{ justifyContent: "flex-end" }}>
-                            <button className="ta-icon-btn view" title="View" onClick={() => onView(item)} suppressHydrationWarning>
+                            <button className="ta-icon-btn view" title="View" onClick={() => onView(item)} suppressHydrationWarning aria-label="View">
                               <i className="ti ti-eye" />
                             </button>
                             <button
@@ -195,7 +195,7 @@ export default function ApprovalsTable({
                               disabled={!item.canAction}
                               onClick={() => onApprove(item)}
                               suppressHydrationWarning
-                            >
+                             aria-label="Approve">
                               <i className="ti ti-check" />
                             </button>
                             <button
@@ -204,7 +204,7 @@ export default function ApprovalsTable({
                               disabled={!item.canAction}
                               onClick={() => onReject(item)}
                               suppressHydrationWarning
-                            >
+                             aria-label="Reject">
                               <i className="ti ti-x" />
                             </button>
                           </div>

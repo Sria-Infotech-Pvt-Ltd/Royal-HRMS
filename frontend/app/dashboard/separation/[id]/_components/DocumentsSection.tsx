@@ -103,7 +103,7 @@ export default function DocumentsSection({ r, access }: Props) {
                   </div>
                 </div>
                 {canManage && (
-                  <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteDocument(d)} suppressHydrationWarning>
+                  <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteDocument(d)} suppressHydrationWarning aria-label="Delete">
                     <i className="ti ti-trash" />
                   </button>
                 )}

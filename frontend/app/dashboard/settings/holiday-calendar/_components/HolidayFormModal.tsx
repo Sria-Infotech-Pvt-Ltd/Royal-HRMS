@@ -90,7 +90,7 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
           <span className="text-sm font-bold text-[var(--on-bg)]">
             {mode === "add" ? "Add Holiday" : `Edit: ${editing?.name}`}
           </span>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--outline)] transition-colors">
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--outline)] transition-colors" aria-label="Close">
             <i className="ti ti-x text-sm" />
           </button>
         </div>

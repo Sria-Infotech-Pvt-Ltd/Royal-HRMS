@@ -11,6 +11,7 @@ import type { BasicPayDraft } from "./BasicPayStep";
 import type { StatutoryDraft } from "./StatutoryAccountsStep";
 import { REQUIRED_DOC_LABELS } from "./DocumentsChecklistStep";
 import { maritalStatusLabel } from "@/lib/maritalStatus";
+import { formatDateSlash } from "@/lib/formatDate";
 
 interface Props {
   reservedEmployeeId: string;
@@ -64,6 +65,11 @@ export default function ReviewStep(props: Props) {
   const { isMandatory: faceIdMandatory, registrationMode: faceIdMode, fallbackActive: faceFallbackActive } = useFaceVerificationStatus();
 
   const missingRequiredDocs = requiredDocTypes.filter(t => !uploadedDocTypes.has(t));
+  // "Uploaded" used to count every file against the REQUIRED total (11 of 7): required and optional are counted apart.
+  const optionalUploadedCount = [...uploadedDocTypes].filter(type => !requiredDocTypes.includes(type)).length;
+  // A blank row left in the list is not a qualification / employer: only completed rows are counted.
+  const completedEducation = educationEntries.filter(entry => entry.institution?.trim()).length;
+  const completedExperience = experienceEntries.filter(entry => entry.employer_name?.trim()).length;
   const nomineeTotals: Record<string, number> = {};
   for (const n of nomineeEntries) {
     const scheme = n.scheme || "epf_eps";
@@ -168,11 +174,11 @@ export default function ReviewStep(props: Props) {
           <h4>PERSONAL</h4>
           <div className="kvlist">
             <Row label="Legal name" value={`${firstName} ${lastName}`.trim()} />
-            <Row label="Date of birth" value={form.date_of_birth} />
+            <Row label="Date of birth" value={formatDateSlash(form.date_of_birth)} />
             <Row label="Gender" value={form.gender ? form.gender[0].toUpperCase() + form.gender.slice(1) : ""} />
             <Row label="Marital status" value={maritalStatusLabel(form.marital_status)} />
             <Row label="Father/mother" value={form.father_name} />
-            <Row label="Current address" value={[form.current_village, form.current_state].filter(Boolean).join(", ")} />
+            <Row label="Current address" value={[form.current_address, form.current_address_line2, form.current_village, form.current_district, form.current_state, form.current_pin_code].filter(Boolean).join(", ")} />
             <Row
               label="Emergency contacts"
               value={emergencyContactCount > 0 ? `${emergencyContactCount} added` : "None added"}
@@ -188,7 +194,7 @@ export default function ReviewStep(props: Props) {
             <Row label="Org unit" value={orgUnitName} />
             <Row label="Grade / band" value={grade} />
             <Row label="Employment type" value={employment.employment_type} />
-            <Row label="Date of joining" value={effectiveFrom} />
+            <Row label="Date of joining" value={formatDateSlash(effectiveFrom)} />
             <Row label="Work location" value={employment.work_location || "From the Company Code address"} />
             <Row label="Annual CTC" value={employment.annual_ctc ? `₹${Number(employment.annual_ctc).toLocaleString("en-IN")}` : ""} />
           </div>
@@ -221,8 +227,8 @@ export default function ReviewStep(props: Props) {
         <div className="rvcard">
           <h4>EDUCATION &amp; EXPERIENCE</h4>
           <div className="kvlist">
-            <Row label="Qualifications" value={String(educationEntries.length)} warn={educationEntries.length === 0} />
-            <Row label="Employers" value={String(experienceEntries.length)} />
+            <Row label="Qualifications" value={String(completedEducation)} warn={completedEducation === 0} />
+            <Row label="Employers" value={String(completedExperience)} />
           </div>
         </div>
       </div>
@@ -231,7 +237,8 @@ export default function ReviewStep(props: Props) {
         <div className="rvcard">
           <h4>DOCUMENTS</h4>
           <div className="kvlist">
-            <Row label="Uploaded" value={`${uploadedDocTypes.size} of ${requiredDocTypes.length}`} />
+            <Row label="Required uploaded" value={`${requiredDocTypes.length - missingRequiredDocs.length} of ${requiredDocTypes.length}`} />
+            {optionalUploadedCount > 0 && <Row label="Optional uploaded" value={String(optionalUploadedCount)} />}
             {missingRequiredDocs.length > 0 && (
               <Row label="Missing required" value={missingRequiredDocs.map(k => REQUIRED_DOC_LABELS[k] ?? k).join(", ")} warn />
             )}

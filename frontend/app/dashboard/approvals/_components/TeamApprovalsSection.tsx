@@ -183,7 +183,7 @@ export default function TeamApprovalsSection() {
       const r = item.raw as LeaveRequest;
       setModal({
         id: item.id, action, label: `${item.employeeName}'s leave`, kind: "leave",
-        employeeName: item.employeeName, employeeEmail: "", autoVars: leaveAutoVars(r),
+        employeeName: item.employeeName, employeeEmail: r.employee_email ?? "", autoVars: leaveAutoVars(r),
       });
     } else {
       const r = item.raw as ExpenseRequest;

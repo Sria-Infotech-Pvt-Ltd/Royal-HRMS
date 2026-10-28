@@ -202,13 +202,13 @@ export default function EmployeeMonthView({ initialEmployee, initialMonth }: Pro
 
         {/* Month navigator */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setMonth(m => shiftMonth(m, -1))}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setMonth(m => shiftMonth(m, -1))} aria-label="Previous">
             <i className="ti ti-chevron-left" />
           </button>
           <span style={{ fontWeight: 600, fontSize: 14, minWidth: 120, textAlign: "center" }}>
             {formatMonthLabel(month)}
           </span>
-          <button className="btn btn-ghost btn-sm" onClick={() => setMonth(m => shiftMonth(m, 1))} disabled={month >= currentMonthISO()}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setMonth(m => shiftMonth(m, 1))} disabled={month >= currentMonthISO()} aria-label="Next">
             <i className="ti ti-chevron-right" />
           </button>
         </div>
@@ -330,7 +330,7 @@ export default function EmployeeMonthView({ initialEmployee, initialMonth }: Pro
           <div className="drawer open" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
             <div className="drawer-header">
               <span className="drawer-title">Mark Attendance — {marking.date}</span>
-              <button className="drawer-close" onClick={() => setMarking(null)}><i className="ti ti-x" /></button>
+              <button className="drawer-close" onClick={() => setMarking(null)} aria-label="Close"><i className="ti ti-x" /></button>
             </div>
             <div className="drawer-body">
               <div style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 16 }}>

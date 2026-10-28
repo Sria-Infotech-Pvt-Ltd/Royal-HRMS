@@ -87,7 +87,9 @@ function ProofRow({ item, proofs, isLoading, isLocked, onUpload }: {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>{item.label}</div>
-          <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Claimed {formatInr(item.declared)} · Proof: {item.proof}</div>
+          <div style={{ fontSize: 12, color: "var(--on-variant)" }}>{item.eligible < item.declared
+              ? `Declared ${formatInr(item.declared)} · eligible ${formatInr(item.eligible)}`
+              : `Claimed ${formatInr(item.declared)}`} · Proof: {item.proof}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {proofs.length > 0

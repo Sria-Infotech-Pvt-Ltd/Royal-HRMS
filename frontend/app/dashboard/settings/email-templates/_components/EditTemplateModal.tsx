@@ -508,7 +508,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                           <button type="button" suppressHydrationWarning
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { setCatSearch(""); setForm(p => ({ ...p, template_type: "" })); setCatOpen(false); }}
-                            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--outline)", padding: 2, lineHeight: 1 }}>
+                            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--outline)", padding: 2, lineHeight: 1 }} aria-label="Close">
                             <i className="ti ti-x" style={{ fontSize: 13 }} />
                           </button>
                         ) : (
@@ -785,7 +785,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                       title="Remove attachment"
                       style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, color: "var(--outline)", flexShrink: 0 }}
                       onMouseEnter={e => (e.currentTarget.style.color = "var(--error)")}
-                      onMouseLeave={e => (e.currentTarget.style.color = "var(--outline)")}>
+                      onMouseLeave={e => (e.currentTarget.style.color = "var(--outline)")} aria-label="Remove attachment">
                       <i className="ti ti-x" style={{ fontSize: 11 }} />
                     </button>
                   </div>
@@ -821,7 +821,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                       onClick={() => removeFile(i)}
                       style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, color: "var(--outline)", flexShrink: 0 }}
                       onMouseEnter={e => (e.currentTarget.style.color = "var(--error)")}
-                      onMouseLeave={e => (e.currentTarget.style.color = "var(--outline)")}>
+                      onMouseLeave={e => (e.currentTarget.style.color = "var(--outline)")} aria-label="Close">
                       <i className="ti ti-x" style={{ fontSize: 11 }} />
                     </button>
                   </div>
@@ -900,7 +900,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
             <span style={{ fontWeight: 600, fontSize: 14 }}>Crop Image</span>
             <span style={{ fontSize: 12, color: "var(--on-variant)", marginLeft: 4 }}>— drag to select area</span>
             <button type="button" onClick={() => setCropState(null)} suppressHydrationWarning
-              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "var(--outline)", lineHeight: 1 }}>
+              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "var(--outline)", lineHeight: 1 }} aria-label="Close">
               <i className="ti ti-x" />
             </button>
           </div>

@@ -190,6 +190,55 @@ const EMPTY_PERSONAL: PersonalIdentityDraft = {
   personalEmail: "", mobileNumber: "", alternateMobile: "",
 };
 
+// ── Local drafts ────────────────────────────────────────────────────────
+// Lets HR save in-progress edits without submitting, and come back to them
+// later — local-only (localStorage), per employee, no backend model. Note:
+// loading a draft that had removed a family/nominee/education/experience/
+// asset entry won't re-send the delete for that entry on save (the
+// deletedXIds refs that drive those deletes aren't part of the snapshot) —
+// acceptable for a "resume my edits" draft, not a full undo history.
+interface EditRecordDraftState {
+  values: DetailValues;
+  addressExtras: AddressExtras;
+  personal: PersonalIdentityDraft;
+  emergencyContacts: EmergencyContactEntry[];
+  guardian: { name: string; relationship: string; address: string };
+  accessCard: { cardNumber: string; validFrom: string; validTill: string };
+  employment: EmploymentDraft;
+  basicPay: BasicPayDraft;
+  statutory: StatutoryDraft;
+  familyEntries: FamilyEntry[];
+  nomineeEntries: NomineeEntry[];
+  educationEntries: EducationEntry[];
+  experienceEntries: ExperienceEntry[];
+  coreSkills: string;
+  certifications: string;
+  assetEntries: AssetEntry[];
+}
+interface EditRecordDraft {
+  id: string;
+  savedAt: string; // ISO
+  state: EditRecordDraftState;
+}
+const MAX_DRAFTS = 10;
+const draftsStorageKey = (employeeId: string) => `editRecordDrafts:${employeeId}`;
+
+function loadDrafts(employeeId: string): EditRecordDraft[] {
+  try {
+    const raw = localStorage.getItem(draftsStorageKey(employeeId));
+    return raw ? (JSON.parse(raw) as EditRecordDraft[]) : [];
+  } catch {
+    return [];
+  }
+}
+function persistDrafts(employeeId: string, drafts: EditRecordDraft[]) {
+  try {
+    localStorage.setItem(draftsStorageKey(employeeId), JSON.stringify(drafts));
+  } catch {
+    // Storage unavailable/full — the draft just won't persist, not fatal.
+  }
+}
+
 export default function EditRecordModal({ employee, onClose }: { employee: Employee; onClose: () => void }) {
   // The shared Modal component doesn't lock body scroll on its own — with
   // tall content (this modal has a lot), the page behind it could also
@@ -200,6 +249,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previousOverflow; };
   }, []);
+
+  useEffect(() => () => { if (draftSavedTimer.current) clearTimeout(draftSavedTimer.current); }, []);
 
   const [uuid, setUuid] = useState("");
   const [loading, setLoading] = useState(true);
@@ -292,6 +343,96 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState(false);
 
+  // Dirty-tracking for the close (X) confirmation — baselineRef is captured
+  // once all the record's data has finished loading, and again after every
+  // successful save, so "unsaved changes?" only fires on edits actually made
+  // since the record was last known to match the server.
+  const [coreLoaded, setCoreLoaded] = useState(false);
+  const [listsLoaded, setListsLoaded] = useState(false);
+  const [baselineTick, setBaselineTick] = useState(0);
+  const baselineRef = useRef<string | null>(null);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  const [showDrafts, setShowDrafts] = useState(false);
+  const [drafts, setDrafts] = useState<EditRecordDraft[]>([]);
+  const [draftSavedMsg, setDraftSavedMsg] = useState(false);
+  const draftSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function openDrafts() {
+    setDrafts(loadDrafts(employee.id));
+    setDraftSavedMsg(false);
+    setShowDrafts(true);
+  }
+
+  function buildSnapshot(): EditRecordDraftState {
+    return {
+      values, addressExtras, personal, emergencyContacts, guardian, accessCard,
+      employment, basicPay, statutory, familyEntries, nomineeEntries,
+      educationEntries, experienceEntries, coreSkills, certifications, assetEntries,
+    };
+  }
+
+  function saveCurrentAsDraft() {
+    const draft: EditRecordDraft = { id: nextTempId(), savedAt: new Date().toISOString(), state: buildSnapshot() };
+    const next = [draft, ...loadDrafts(employee.id)].slice(0, MAX_DRAFTS);
+    persistDrafts(employee.id, next);
+    setDrafts(next);
+    setDraftSavedMsg(true);
+    if (draftSavedTimer.current) clearTimeout(draftSavedTimer.current);
+    draftSavedTimer.current = setTimeout(() => setDraftSavedMsg(false), 2500);
+  }
+
+  // Always holds this render's buildSnapshot — read from the effect below
+  // instead of listing it as a dependency, so the baseline capture only
+  // re-runs on coreLoaded/listsLoaded/baselineTick (load complete, or a
+  // save just succeeded), never on every keystroke the user makes.
+  const buildSnapshotRef = useRef(buildSnapshot);
+  useEffect(() => { buildSnapshotRef.current = buildSnapshot; });
+
+  // Captures the "known saved" snapshot once on initial load, and again
+  // after baselineTick is bumped by a successful save — see onSaveChanges.
+  useEffect(() => {
+    if (!coreLoaded || !listsLoaded) return;
+    baselineRef.current = JSON.stringify(buildSnapshotRef.current());
+  }, [coreLoaded, listsLoaded, baselineTick]);
+
+  function isDirty(): boolean {
+    if (!baselineRef.current) return false; // nothing loaded yet to compare against
+    return JSON.stringify(buildSnapshot()) !== baselineRef.current;
+  }
+
+  function requestClose() {
+    if (isDirty()) setShowCloseConfirm(true);
+    else onClose();
+  }
+
+  function loadDraft(draft: EditRecordDraft) {
+    const s = draft.state;
+    setValues(s.values);
+    setAddressExtras(s.addressExtras);
+    setPersonal(s.personal);
+    setEmergencyContacts(s.emergencyContacts);
+    setGuardian(s.guardian);
+    setAccessCard(s.accessCard);
+    setEmployment(s.employment);
+    setBasicPay(s.basicPay);
+    setStatutory(s.statutory);
+    setFamilyEntries(s.familyEntries);
+    setNomineeEntries(s.nomineeEntries);
+    setEducationEntries(s.educationEntries);
+    setExperienceEntries(s.experienceEntries);
+    setCoreSkills(s.coreSkills);
+    setCertifications(s.certifications);
+    setAssetEntries(s.assetEntries);
+    setShowDrafts(false);
+  }
+
+  function deleteDraft(id: string) {
+    const next = loadDrafts(employee.id).filter(d => d.id !== id);
+    persistDrafts(employee.id, next);
+    setDrafts(next);
+  }
+
   const refreshDocs = useCallback((raw: ApiEmployee) => {
     setHireDocs((raw.documents ?? []).map(d => ({
       id: String(d.id), document_type: d.document_type, document_type_display: d.document_type_display,
@@ -380,25 +521,28 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       setAccessCard(c => ({ ...c, validFrom: c.validFrom || emp.details.dateOfJoining || "" }));
 
       setLoading(false);
-    }).catch(() => setLoading(false));
+      setCoreLoaded(true);
+    }).catch(() => { setLoading(false); setCoreLoaded(true); });
   }, [employee.id, refreshDocs]);
 
   useEffect(() => {
     if (!uuid) return;
-    clientApi.get<{ data: FamilyEntry[] }>(API.onboarding.employees.family(uuid)).then(r => setFamilyEntries(r.data?.data ?? [])).catch(() => {});
-    clientApi.get<{ data: NomineeEntry[] }>(API.onboarding.employees.nominees(uuid)).then(r => setNomineeEntries(r.data?.data ?? [])).catch(() => {});
-    clientApi.get<{ data: AssetEntry[] }>(API.onboarding.employees.assets(uuid)).then(r => setAssetEntries(r.data?.data ?? [])).catch(() => {});
-    clientApi.get<{ data: EducationEntry[] }>(API.onboarding.employees.education(uuid)).then(r => setEducationEntries(r.data?.data ?? [])).catch(() => {});
-    clientApi.get<{ data: ExperienceEntry[] }>(API.onboarding.employees.experience(uuid)).then(r => setExperienceEntries(r.data?.data ?? [])).catch(() => {});
-    clientApi.get<{ data: EducationExperienceFieldConfigResponse }>(API.onboarding.educationExperienceFieldConfig)
-      .then(r => setEduExpFieldConfig(r.data?.data ?? { education: [], experience: [] })).catch(() => {});
-    clientApi.get<{ data: EmployeeSalaryConfig[] }>(API.payroll.employeeSalaryHistory(uuid)).then(r => {
-      const current = (r.data?.data ?? []).find(h => h.is_active) ?? null;
-      const annualCtc = current ? String(Math.round(Number(current.annual_ctc))) : "";
-      const salaryStructure = current?.salary_structure ?? "";
-      baselineCtc.current = { annualCtc, salaryStructure };
-      setEmployment(e => ({ ...e, annual_ctc: annualCtc, salary_structure: salaryStructure }));
-    }).catch(() => {});
+    Promise.allSettled([
+      clientApi.get<{ data: FamilyEntry[] }>(API.onboarding.employees.family(uuid)).then(r => setFamilyEntries(r.data?.data ?? [])),
+      clientApi.get<{ data: NomineeEntry[] }>(API.onboarding.employees.nominees(uuid)).then(r => setNomineeEntries(r.data?.data ?? [])),
+      clientApi.get<{ data: AssetEntry[] }>(API.onboarding.employees.assets(uuid)).then(r => setAssetEntries(r.data?.data ?? [])),
+      clientApi.get<{ data: EducationEntry[] }>(API.onboarding.employees.education(uuid)).then(r => setEducationEntries(r.data?.data ?? [])),
+      clientApi.get<{ data: ExperienceEntry[] }>(API.onboarding.employees.experience(uuid)).then(r => setExperienceEntries(r.data?.data ?? [])),
+      clientApi.get<{ data: EducationExperienceFieldConfigResponse }>(API.onboarding.educationExperienceFieldConfig)
+        .then(r => setEduExpFieldConfig(r.data?.data ?? { education: [], experience: [] })),
+      clientApi.get<{ data: EmployeeSalaryConfig[] }>(API.payroll.employeeSalaryHistory(uuid)).then(r => {
+        const current = (r.data?.data ?? []).find(h => h.is_active) ?? null;
+        const annualCtc = current ? String(Math.round(Number(current.annual_ctc))) : "";
+        const salaryStructure = current?.salary_structure ?? "";
+        baselineCtc.current = { annualCtc, salaryStructure };
+        setEmployment(e => ({ ...e, annual_ctc: annualCtc, salary_structure: salaryStructure }));
+      }),
+    ]).then(() => setListsLoaded(true));
   }, [uuid]);
 
   const saveFamilyAndNominees = useCallback(async () => {
@@ -525,7 +669,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     }
   }
 
-  async function onSaveChanges() {
+  async function onSaveChanges(closeAfter = false) {
     setSaving(true);
     setSaveError(null);
     setSavedMsg(false);
@@ -643,8 +787,14 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       const assetsOk = await saveAssets();
       const eduExpOk = await saveEducationAndExperience();
 
-      setSavedMsg(familyOk && assetsOk && eduExpOk && ctcOk);
-      if (!familyOk || !assetsOk || !eduExpOk || !ctcOk) setSaveError(prev => prev ?? "Some sections could not be saved — see the errors above.");
+      const allOk = familyOk && assetsOk && eduExpOk && ctcOk;
+      setSavedMsg(allOk);
+      if (!allOk) {
+        setSaveError(prev => prev ?? "Some sections could not be saved — see the errors above.");
+      } else {
+        setBaselineTick(t => t + 1);
+        if (closeAfter) onClose();
+      }
     } catch (err: unknown) {
       const parsed = parseApiError(err, "Failed to save changes. Please try again.");
       setContactErrors({ email: parsed.fieldErrors.email, phone: parsed.fieldErrors.phone });
@@ -654,15 +804,11 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     }
   }
 
-  function onDiscard() {
-    setSaveError(null);
-    setSavedMsg(false);
-  }
-
   const totalExperienceYears = useMemo(() => null, []); // no server-computed total for an existing employee in this pass
   const personalAge = ageFromDateOfBirth(personal.dateOfBirth);
 
   return (
+    <>
     <Modal
       title={
         <div>
@@ -672,20 +818,59 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
           </div>
         </div>
       }
-      onClose={onClose}
+      onClose={requestClose}
       size="lg"
       maxWidth={1100}
       scrollBody
       bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
       footer={
-        <div className="flex items-center gap-3 w-full justify-end">
+        <div className="flex items-center gap-3 w-full justify-end" style={{ position: "relative" }}>
           {savedMsg && <span style={{ fontSize: 12, color: "var(--ok)", marginRight: "auto" }}>All changes saved</span>}
           {saveError && <span style={{ fontSize: 12, color: "var(--crit)", marginRight: "auto" }}>{saveError}</span>}
-          <button onClick={onDiscard} disabled={saving} className="btn btn-ghost">Discard</button>
-          <button onClick={onClose} className="btn btn-ghost">Cancel</button>
-          <button onClick={onSaveChanges} disabled={saving} className="btn btn-filled">
-            {saving ? "Saving…" : "Save changes"}
+          <button onClick={openDrafts} disabled={saving} className="btn btn-ghost">Drafts{drafts.length > 0 ? ` (${drafts.length})` : ""}</button>
+          <button onClick={() => onSaveChanges(false)} disabled={saving} className="btn btn-ghost">
+            {saving ? "Saving…" : "Save"}
           </button>
+          <button onClick={() => onSaveChanges(true)} disabled={saving} className="btn btn-filled">
+            {saving ? "Saving…" : "Save & close"}
+          </button>
+
+          {showDrafts && (
+            <div style={{
+              position: "absolute", bottom: "calc(100% + 8px)", right: 0, zIndex: 50,
+              width: 320, maxHeight: 360, overflowY: "auto",
+              background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: 8,
+              boxShadow: "var(--shadow-md)", padding: 10,
+            }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--on-variant)" }}>Drafts</span>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowDrafts(false)}>
+                  <i className="ti ti-x" />
+                </button>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" style={{ width: "100%", marginBottom: 8 }} onClick={saveCurrentAsDraft}>
+                <i className="ti ti-device-floppy" /> Save current as draft
+              </button>
+              {draftSavedMsg && (
+                <div style={{ fontSize: 12, color: "var(--ok)", marginBottom: 8 }}>
+                  <i className="ti ti-circle-check" /> Draft saved
+                </div>
+              )}
+              {drafts.length === 0 ? (
+                <div style={{ fontSize: 12, color: "var(--on-variant)", padding: "8px 0" }}>No saved drafts yet.</div>
+              ) : (
+                drafts.map(d => (
+                  <div key={d.id} className="flex items-center gap-2" style={{ padding: "6px 0", borderTop: "1px solid var(--outline-v)" }}>
+                    <span style={{ fontSize: 12, flex: 1 }}>{new Date(d.savedAt).toLocaleString()}</span>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => loadDraft(d)}>Load</button>
+                    <button type="button" className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteDraft(d.id)}>
+                      <i className="ti ti-trash" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       }
     >
@@ -1250,5 +1435,29 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         </div>
       )}
     </Modal>
+
+    {showCloseConfirm && (
+      <Modal
+        title="Unsaved changes"
+        onClose={() => setShowCloseConfirm(false)}
+        footer={
+          <div className="flex items-center gap-3 w-full justify-end">
+            <button className="btn btn-ghost" onClick={() => setShowCloseConfirm(false)}>Keep editing</button>
+            <button
+              className="btn btn-filled"
+              style={{ background: "var(--error)" }}
+              onClick={() => { setShowCloseConfirm(false); onClose(); }}
+            >
+              Discard changes
+            </button>
+          </div>
+        }
+      >
+        <p style={{ fontSize: 13, color: "var(--on-variant)" }}>
+          You have unsaved changes to this record. Closing now will discard them — save, or save as a draft to come back to later, first.
+        </p>
+      </Modal>
+    )}
+    </>
   );
 }

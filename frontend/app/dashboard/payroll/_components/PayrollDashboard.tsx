@@ -92,7 +92,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
       onClick: pending.length > 0 ? scrollToPendingCycles : undefined,
       title: pending.length > 0 ? "Jump to pending cycles" : undefined,
     },
-    { label: "Paid This Year",       value: String(paid.length),                   sub: "Completed payroll runs",  icon: "ti-circle-check",  cls: "si-success"  },
+    { label: "Cycles paid this year",   value: String(paid.length),                   sub: "Completed payroll runs, all Company Codes",  icon: "ti-circle-check",  cls: "si-success"  },
     { label: "Next Pay Day",         value: payDay ? `${payDay} ${MONTHS_LONG[nowMonth]}` : "—", sub: settings ? `Cycle ${settings.cycle_start_day}–${settings.cycle_end_day}` : "Not configured", icon: "ti-calendar-event", cls: "si-info" },
     { label: "Total Payroll Runs",   value: String(cycles.length),                 sub: "All time",                icon: "ti-history",       cls: "si-primary"  },
   ];

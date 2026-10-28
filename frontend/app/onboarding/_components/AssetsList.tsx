@@ -12,6 +12,7 @@ const ASSET_TYPES: { value: string; label: string }[] = [
   { value: "monitor",      label: "Monitor" },
   { value: "headset",      label: "Headset" },
   { value: "sim_card",     label: "SIM Card" },
+  { value: "access_card",  label: "Access Card" },
 ];
 const CONDITIONS: { value: string; label: string }[] = [
   { value: "new",         label: "New" },

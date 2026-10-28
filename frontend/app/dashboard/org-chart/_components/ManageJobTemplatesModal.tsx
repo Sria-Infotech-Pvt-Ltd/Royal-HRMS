@@ -151,7 +151,7 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
                       onClick={() => remove(j)}
                       disabled={busyId === j.id}
                       title="Delete job template"
-                    >
+                     aria-label="Delete job template">
                       <i className="ti ti-trash" style={{ fontSize: 13 }} />
                     </button>
                   </td>

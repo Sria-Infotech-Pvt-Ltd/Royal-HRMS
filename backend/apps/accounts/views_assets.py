@@ -88,7 +88,11 @@ def update_asset(target_user: 'User', pk: str, data: dict):
     if 'tag_number' in data:
         record.tag_number = (data.get('tag_number') or '').strip()
     if 'issued_at' in data:
-        record.issued_at = data.get('issued_at') or None
+        new_issued_at = data.get('issued_at') or None
+        # A pending asset only becomes "Assigned" once HR records both the asset tag and the issue date.
+        if new_issued_at and record.issued_at is None and not record.tag_number:
+            return None, 'Enter the asset tag to issue this asset.'
+        record.issued_at = new_issued_at
     if 'returned_at' in data:
         record.returned_at = data.get('returned_at') or None
     record.save()
@@ -175,12 +179,20 @@ class HREmployeeAssetDetailView(APIView):
         target, err = _resolve_onboarding_target(request, user_id)
         if err:
             return err
+        was_pending = CompanyAsset.objects.filter(pk=pk, employee=target, issued_at__isnull=True, returned_at__isnull=True).exists()
         record, save_err = update_asset(target, pk, request.data)
         if save_err == 'not_found':
             return error('Asset not found.', http_status=status.HTTP_404_NOT_FOUND)
         if save_err:
-            return error(save_err)
-        _audit_hr_onboarding(request, target, 'onboarding_asset_updated_by_hr', {})
+            return error(save_err, data={'tag_number': save_err} if 'tag' in save_err else None)
+        if was_pending and record.issued_at:
+            # Issuing a pending asset is its own audit event: what, which tag, which date, what condition.
+            _audit_hr_onboarding(request, target, 'asset_issued', {
+                'asset_type': record.asset_type, 'tag_number': record.tag_number,
+                'issued_at': str(record.issued_at), 'condition': record.condition,
+            })
+        else:
+            _audit_hr_onboarding(request, target, 'onboarding_asset_updated_by_hr', {})
         return success('Asset updated.', data=asset_dict(record))
 
     def delete(self, request: Request, user_id: str, pk: str) -> Response:

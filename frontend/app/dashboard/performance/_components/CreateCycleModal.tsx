@@ -41,7 +41,7 @@ export default function CreateCycleModal({ onClose, onCreated }: Props) {
       <div className="modal" style={{ width: "min(480px, 95vw)" }}>
         <div className="modal-header">
           <div className="modal-title">New review cycle</div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+          <button className="modal-close" onClick={onClose} aria-label="Close"><i className="ti ti-x" /></button>
         </div>
         <div className="modal-body">
           {err && <div className="alert alert-error mb-16">{err}</div>}

@@ -180,7 +180,7 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
             <i className="ti ti-logout" style={{ marginRight: 8 }} />
             {mode === "create" ? "Request Separation" : "Edit Separation Request"}
           </div>
-          <button className="modal-close" onClick={onClose} suppressHydrationWarning>
+          <button className="modal-close" onClick={onClose} suppressHydrationWarning aria-label="Close">
             <i className="ti ti-x" />
           </button>
         </div>

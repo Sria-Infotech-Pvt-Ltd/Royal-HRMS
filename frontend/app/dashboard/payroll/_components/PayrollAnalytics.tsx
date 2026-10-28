@@ -4,6 +4,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle } from "@/types/payroll";
 import { cyclePeriodLabel } from "./payrollDashboardShared";
+import { formatDate } from "@/lib/formatDate";
 
 interface PagedResponse<T> { results: T[]; count: number; }
 
@@ -217,9 +218,9 @@ export default function PayrollAnalytics() {
                     <td style={{ fontWeight: 600 }}>
                       {cyclePeriodLabel(c)}
                     </td>
-                    <td style={{ fontSize: 13 }}>{c.cycle_start}</td>
-                    <td style={{ fontSize: 13 }}>{c.cycle_end}</td>
-                    <td style={{ fontWeight: 500 }}>{c.pay_date}</td>
+                    <td style={{ fontSize: 13 }}>{formatDate(c.cycle_start)}</td>
+                    <td style={{ fontSize: 13 }}>{formatDate(c.cycle_end)}</td>
+                    <td style={{ fontWeight: 500 }}>{formatDate(c.pay_date)}</td>
                     <td style={{ textAlign: "right", fontWeight: 600 }}>{c.payslip_count}</td>
                     <td>
                       <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: `${STATUS_COLOR[c.status] ?? "var(--outline)"}22`, color: STATUS_COLOR[c.status] ?? "var(--on-variant)" }}>

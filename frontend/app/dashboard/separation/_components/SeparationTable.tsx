@@ -53,25 +53,28 @@ export default function SeparationTable({ requests, onView, onEdit, onCancel, on
               <td>{fmtDate(r.request_date)}</td>
               <td>{fmtDate(r.proposed_last_working_day)}</td>
               <td>{r.notice_period_days} days</td>
-              <td><span className={`badge ${statusBadgeClass(r.status)}`}>{r.status_display}</span></td>
+              <td>
+                <span className={`badge ${statusBadgeClass(r.status)}`}>{r.status_display}</span>
+                {r.is_stale && <span className="badge badge-warn" style={{ marginLeft: 6 }} title="The last working day has passed but no decision was made">Last day passed</span>}
+              </td>
               <td style={{ color: "var(--on-variant)" }}>{r.reporting_manager?.name ?? "Not assigned"}</td>
               <td onClick={e => e.stopPropagation()}>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => onView(r)} title="View" suppressHydrationWarning>
+                  <button className="btn btn-ghost btn-sm" onClick={() => onView(r)} title="View" suppressHydrationWarning aria-label="View">
                     <i className="ti ti-eye" />
                   </button>
                   {r.can_edit && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => onEdit(r)} title="Edit" suppressHydrationWarning>
+                    <button className="btn btn-ghost btn-sm" onClick={() => onEdit(r)} title="Edit" suppressHydrationWarning aria-label="Edit">
                       <i className="ti ti-edit" />
                     </button>
                   )}
                   {r.can_cancel && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => onCancel(r)} title="Cancel Request" suppressHydrationWarning>
+                    <button className="btn btn-ghost btn-sm" onClick={() => onCancel(r)} title="Cancel Request" suppressHydrationWarning aria-label="Cancel Request">
                       <i className="ti ti-ban" />
                     </button>
                   )}
                   {r.can_delete && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => onReject(r)} title="Reject" style={{ color: "var(--error)" }} suppressHydrationWarning>
+                    <button className="btn btn-ghost btn-sm" onClick={() => onReject(r)} title="Reject" style={{ color: "var(--error)" }} suppressHydrationWarning aria-label="Reject">
                       <i className="ti ti-x" />
                     </button>
                   )}

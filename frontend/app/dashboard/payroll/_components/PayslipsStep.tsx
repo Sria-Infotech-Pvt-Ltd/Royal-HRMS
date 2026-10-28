@@ -89,7 +89,7 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
                   : <><i className="ti ti-send" /> Dispatch All</>}
               </button>
             )}
-            <button className="btn btn-ghost btn-sm" onClick={refetch}><i className="ti ti-refresh" /></button>
+            <button className="btn btn-ghost btn-sm" onClick={refetch} aria-label="Refresh"><i className="ti ti-refresh" /></button>
           </div>
         </div>
 

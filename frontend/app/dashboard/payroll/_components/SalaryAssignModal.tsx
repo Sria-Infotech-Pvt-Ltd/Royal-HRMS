@@ -8,6 +8,7 @@ import Modal from "@/components/Modal";
 import DateInput from "@/components/shared/DateInput";
 import type { SalaryStructureListItem } from "@/types/payroll";
 import type { SalarySetupRow } from "@/types/salarySetup";
+import { formatDate } from "@/lib/formatDate";
 
 interface Props {
   employee: SalarySetupRow;
@@ -64,7 +65,7 @@ export default function SalaryAssignModal({ employee, structures, onClose, onSav
         {current && (
           <div className="alert alert-info" style={{ marginBottom: 0 }}>
             <i className="ti ti-info-circle" />
-            <span>Current CTC: <strong>{formatRupees(current.annual_ctc)}/year</strong> (effective {current.effective_from}). Saving a different amount adds a new record; saving the same amount changes nothing.</span>
+            <span>Current CTC: <strong>{formatRupees(current.annual_ctc)}/year</strong> (effective {formatDate(current.effective_from)}). Saving a different amount adds a new record; saving the same amount changes nothing.</span>
           </div>
         )}
         <div className="form-row cols-2">

@@ -168,7 +168,7 @@ export default function OrgDetail({
                   }
                 }}
                 title="Delete org unit — only possible if it has no sub-units and no position in it has ever had a holder"
-              >
+               aria-label="Delete org unit — only possible if it has no sub-units and no position in it has ever had a holder">
                 <i className="ti ti-trash" style={{ fontSize: 13 }} />
               </button>
             )}
@@ -288,7 +288,7 @@ export default function OrgDetail({
                   }
                 }}
                 title="Delete position — only possible if it has no placement history"
-              >
+               aria-label="Delete position — only possible if it has no placement history">
                 <i className="ti ti-trash" style={{ fontSize: 13 }} />
               </button>
             )}

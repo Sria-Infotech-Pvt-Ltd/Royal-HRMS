@@ -42,7 +42,7 @@ export default function ReviewActionModal({ review, onClose, onSaved }: Props) {
       <div className="modal" style={{ width: "min(560px, 95vw)" }}>
         <div className="modal-header">
           <div className="modal-title">Manager review — {review.employee_name}</div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+          <button className="modal-close" onClick={onClose} aria-label="Close"><i className="ti ti-x" /></button>
         </div>
         <div className="modal-body">
           {err && <div className="alert alert-error mb-16">{err}</div>}

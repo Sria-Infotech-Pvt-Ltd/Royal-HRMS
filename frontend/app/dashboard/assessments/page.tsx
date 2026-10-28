@@ -232,7 +232,7 @@ export default function AssessmentsPage() {
           <button
             onClick={() => setDeleteErr("")}
             style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "inherit" }}
-          >
+           aria-label="Close">
             <i className="ti ti-x" style={{ fontSize: 14 }} />
           </button>
         </div>
@@ -282,12 +282,12 @@ export default function AssessmentsPage() {
                       </button>
                     )}
                     {canEdit && (
-                      <button className="btn btn-ghost btn-sm" title="Edit assessment" onClick={() => openEdit(a)}>
+                      <button className="btn btn-ghost btn-sm" title="Edit assessment" onClick={() => openEdit(a)} aria-label="Edit assessment">
                         <i className="ti ti-pencil" />
                       </button>
                     )}
                     {canDelete && (
-                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title="Delete assessment" onClick={() => deleteAssessment(a.id)}>
+                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title="Delete assessment" onClick={() => deleteAssessment(a.id)} aria-label="Delete assessment">
                         <i className="ti ti-trash" />
                       </button>
                     )}

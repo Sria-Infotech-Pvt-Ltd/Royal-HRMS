@@ -53,7 +53,7 @@ function GoalRow({ goal, onStatusChange, onRemove }: RowProps) {
         >
           {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <button className="btn btn-ghost btn-sm" onClick={() => onRemove(goal)} title="Remove goal">
+        <button className="btn btn-ghost btn-sm" onClick={() => onRemove(goal)} title="Remove goal" aria-label="Remove goal">
           <i className="ti ti-trash" />
         </button>
       </div>
@@ -129,7 +129,7 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
       </div>
       <div style={{ padding: "4px 20px 0" }}>
         <p style={{ margin: 0, fontSize: 12.5, color: "var(--on-variant)" }}>
-          Current goals are read-only until the review cycle opens for edits.
+          {cycleName ? "Current goals are read-only until the review cycle opens for edits." : "No review cycle is open right now."}
         </p>
       </div>
 
@@ -142,7 +142,7 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
           <div className="empty-state">
             <i className="ti ti-target-arrow" />
             <h3>No goals yet</h3>
-            <p>Add a goal below for the active review cycle.</p>
+            <p>{cycleName ? "Add a goal below for the active review cycle." : "No review cycle is open right now, so goals can't be added yet. They can be added once HR opens a cycle."}</p>
           </div>
         ) : (
           goals.map(g => (

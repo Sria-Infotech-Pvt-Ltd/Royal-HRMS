@@ -225,7 +225,7 @@ export default function WeeklyOffPatternsCard() {
                         {p.assigned_employee_count} employee{p.assigned_employee_count !== 1 ? "s" : ""}
                       </td>
                       <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                        <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => openEdit(p)} suppressHydrationWarning>
+                        <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => openEdit(p)} suppressHydrationWarning aria-label="Edit">
                           <i className="ti ti-edit" />
                         </button>
                         <button
@@ -235,7 +235,7 @@ export default function WeeklyOffPatternsCard() {
                           onClick={() => setDeleteTarget(p)}
                           disabled={!!deleteBlockedReason}
                           suppressHydrationWarning
-                        >
+                         aria-label="Delete">
                           <i className="ti ti-trash" />
                         </button>
                       </td>
@@ -255,7 +255,7 @@ export default function WeeklyOffPatternsCard() {
               disabled={page <= 1}
               onClick={() => setPage(p => Math.max(p - 1, 1))}
               suppressHydrationWarning
-            >
+             aria-label="Previous">
               <i className="ti ti-chevron-left" />
             </button>
             <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
@@ -266,7 +266,7 @@ export default function WeeklyOffPatternsCard() {
               disabled={page >= pageData.total_pages}
               onClick={() => setPage(p => Math.min(p + 1, pageData.total_pages))}
               suppressHydrationWarning
-            >
+             aria-label="Next">
               <i className="ti ti-chevron-right" />
             </button>
           </div>

@@ -2270,7 +2270,9 @@ class MyProfileUpdateSerializer(serializers.Serializer):
         return value
 
     def validate_phone(self, value: str) -> str:
-        return self._validate_phone_value(value, 'phone number')
+        # The person's own mobile follows the one shared rule (10-digit Indian mobile); emergency contacts may be landlines.
+        from apps.accounts.validators import validate_mobile_number
+        return validate_mobile_number(value)
 
     def validate_emergency_phone(self, value: str) -> str:
         return self._validate_phone_value(value, 'emergency contact phone number')
@@ -2392,12 +2394,8 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
         return canonical
 
     def validate_phone(self, value: str) -> str:
-        value = value.strip()
-        if value and not _EMP_PHONE_RE.match(value):
-            raise serializers.ValidationError(
-                'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
-            )
-        return value
+        from apps.accounts.validators import validate_mobile_number
+        return validate_mobile_number(value)
 
     def validate_uan_number(self, value: str) -> str:
         value = value.strip()

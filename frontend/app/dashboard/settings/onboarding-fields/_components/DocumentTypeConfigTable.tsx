@@ -93,7 +93,7 @@ export default function DocumentTypeConfigTable({ types, canEdit, onChanged }: P
                       onClick={() => move(t, "up")}
                       disabled={!canEdit || idx === 0 || busyKey === t.type_key}
                       title="Move up"
-                    >
+                     aria-label="Move up">
                       <i className="ti ti-chevron-up" style={{ fontSize: 12 }} />
                     </button>
                     <button
@@ -102,7 +102,7 @@ export default function DocumentTypeConfigTable({ types, canEdit, onChanged }: P
                       onClick={() => move(t, "down")}
                       disabled={!canEdit || idx === types.length - 1 || busyKey === t.type_key}
                       title="Move down"
-                    >
+                     aria-label="Move down">
                       <i className="ti ti-chevron-down" style={{ fontSize: 12 }} />
                     </button>
                   </div>
@@ -149,7 +149,7 @@ export default function DocumentTypeConfigTable({ types, canEdit, onChanged }: P
                     onClick={() => remove(t)}
                     disabled={!canEdit || !t.is_custom || busyKey === t.type_key}
                     title={t.is_custom ? "Delete custom document type" : "Built-in document types can't be deleted — hide them instead"}
-                  >
+                   aria-label="Delete">
                     <i className="ti ti-trash" style={{ fontSize: 13 }} />
                   </button>
                 </td>

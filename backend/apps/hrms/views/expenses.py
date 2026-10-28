@@ -247,6 +247,12 @@ class ExpenseDetailView(APIView):
         template_name = request.data.get('template_name')
         if template_name:
             self._send_decision_email(expense, template_name, request.data.get('extra_context') or {}, request.user)
+        else:
+            from apps.accounts.models import AuditLog
+            AuditLog.objects.create(
+                user=request.user, action='approval_without_notification', module='expenses', object_id=str(expense.pk),
+                changes={'kind': 'expense', 'decision': status_val}, branch=expense.employee.branch or '',
+            )
 
         return success(f'Expense {status_val}.', self._fresh(expense.pk, request))
 

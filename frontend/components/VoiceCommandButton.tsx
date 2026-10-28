@@ -226,13 +226,15 @@ export default function VoiceCommandButton() {
 
   return (
     <div
+      className="voice-fab"
       onMouseEnter={() => { if (!isDragging) setIsHovered(true); }}
       onMouseLeave={() => setIsHovered(false)}
       style={{
         position: "fixed", zIndex: 1000,
         ...(dragPos
           ? { left: dragPos.x, top: dragPos.y }
-          : { right: 4, bottom: 4 }),
+          // safe-area insets keep it clear of a phone's home indicator and rounded corners
+          : { right: "max(4px, env(safe-area-inset-right))", bottom: "max(4px, env(safe-area-inset-bottom))" }),
         display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8,
       }}
     >

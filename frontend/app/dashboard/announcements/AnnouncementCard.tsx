@@ -61,7 +61,7 @@ export default function AnnouncementCard({ ann, onOpen, onEdit, onDelete, onTogg
 
           {ann.can_edit && (
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-              <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => onEdit(ann)} suppressHydrationWarning>
+              <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => onEdit(ann)} suppressHydrationWarning aria-label="Edit">
                 <i className="ti ti-pencil" />
               </button>
               <button
@@ -70,7 +70,7 @@ export default function AnnouncementCard({ ann, onOpen, onEdit, onDelete, onTogg
                 style={{ color: "var(--error)" }}
                 onClick={() => onDelete(ann.id)}
                 suppressHydrationWarning
-              >
+               aria-label="Delete">
                 <i className="ti ti-trash" />
               </button>
             </div>

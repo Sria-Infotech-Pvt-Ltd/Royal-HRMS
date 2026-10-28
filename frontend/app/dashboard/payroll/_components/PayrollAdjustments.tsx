@@ -232,7 +232,7 @@ export default function PayrollAdjustments() {
                   <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{row.created_by_name}</td>
                   {canEdit && (
                     <td>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => handleDelete(row.id)}>
+                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => handleDelete(row.id)} aria-label="Delete">
                         <i className="ti ti-trash" />
                       </button>
                     </td>

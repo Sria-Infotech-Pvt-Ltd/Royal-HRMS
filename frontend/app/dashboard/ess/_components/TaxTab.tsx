@@ -169,7 +169,7 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
               <div style={{ fontWeight: 600 }}>Other tax documents</div>
               <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Upload anything else under Documents → Tax proof.</div>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={onNavigateToDocuments}>
+            <button className="btn btn-ghost btn-sm" onClick={onNavigateToDocuments} aria-label="Next">
               <i className="ti ti-chevron-right" />
             </button>
           </div>

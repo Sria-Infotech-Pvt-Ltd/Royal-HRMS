@@ -11,6 +11,7 @@ import { fmtDate } from "../../_workflow";
 import EmployeePickerField, { type PickedEmployee } from "../../_components/EmployeePickerField";
 import DateInput from "@/components/shared/DateInput";
 import { confirmDialog } from "@/components/DialogProvider";
+import FieldError from "@/components/shared/FieldError";
 
 interface Props {
   r:      SeparationRequest;
@@ -31,6 +32,7 @@ export default function KtHandoverSection({ r, access }: Props) {
   const [form, setForm] = useState<NewTaskForm>(EMPTY_FORM);
   const [assignee, setAssignee] = useState<PickedEmployee | null>(null);
   const [saving, setSaving] = useState(false);
+  const [taskError, setTaskError] = useState("");
 
   const canManage = access.canApprove && !r.is_own;
   const rows = tasks ?? [];
@@ -42,7 +44,7 @@ export default function KtHandoverSection({ r, access }: Props) {
   }
 
   async function submitTask() {
-    if (!form.task.trim()) return;
+    if (!form.task.trim()) { setTaskError("Enter a task name."); return; }  // was silently ignored
     setSaving(true);
     try {
       await clientApi.post(API.separation.tasks(r.id), {
@@ -96,7 +98,8 @@ export default function KtHandoverSection({ r, access }: Props) {
       <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {showAdd && (
           <div style={{ border: "1px solid var(--outline-v)", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-            <input className="field-input" placeholder="Task name" value={form.task} onChange={e => setForm(f => ({ ...f, task: e.target.value }))} />
+            <input className="field-input" placeholder="Task name" value={form.task} onChange={e => { setForm(f => ({ ...f, task: e.target.value })); setTaskError(""); }} />
+            <FieldError message={taskError} />
             <input className="field-input" placeholder="Description (optional)" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             <div className="form-row cols-2">
               <EmployeePickerField value={assignee} onChange={setAssignee} />
@@ -131,7 +134,7 @@ export default function KtHandoverSection({ r, access }: Props) {
                   <button className={`btn btn-sm ${t.is_completed ? "btn-outline" : "btn-success"}`} onClick={() => toggleComplete(t)} suppressHydrationWarning>
                     {t.is_completed ? "Mark Incomplete" : "Mark Complete"}
                   </button>
-                  <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteTask(t)} suppressHydrationWarning>
+                  <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteTask(t)} suppressHydrationWarning aria-label="Delete">
                     <i className="ti ti-trash" />
                   </button>
                 </div>
