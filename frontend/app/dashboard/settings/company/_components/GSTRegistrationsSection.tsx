@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import type { GSTRegistration } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import { GST_REGISTRATION_TYPE_OPTIONS, STATES, gstinLiveStatus } from "../_data";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface Row {
   key: string; // real id once saved, a local temp key before that
@@ -70,7 +71,7 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
 
   async function removeRow(row: Row) {
     if (row.id) {
-      if (!window.confirm(`Remove the GST registration for ${row.state} (${row.gstin})?`)) return;
+      if (!(await confirmDialog(`Remove the GST registration for ${row.state} (${row.gstin})?`))) return;
       try {
         await clientApi.delete(API.settings.gstRegistrations.detail(row.id));
       } catch (err: unknown) {

@@ -15,6 +15,7 @@ import AddSectionModal from "./_components/AddSectionModal";
 import DocumentTypeConfigTable from "./_components/DocumentTypeConfigTable";
 import AddDocumentTypeModal from "./_components/AddDocumentTypeModal";
 import EducationExperienceFieldConfigTable from "./_components/EducationExperienceFieldConfigTable";
+import { confirmDialog } from "@/components/DialogProvider";
 
 // Steps 0-3 are OnboardingFieldConfig (built-in); DOCUMENTS_STEP is a UI-only
 // sentinel for the last tab, backed by the separate DocumentTypeConfig model.
@@ -94,7 +95,7 @@ export default function OnboardingFieldsPage() {
   const sortedDocTypes = (docTypes ?? []).slice().sort((a, b) => a.order - b.order);
 
   async function handleDeleteSection(section: OnboardingSection) {
-    if (!window.confirm(`Delete the "${section.label}" section? This can't be undone.`)) return;
+    if (!(await confirmDialog(`Delete the "${section.label}" section? This can't be undone.`))) return;
     setSectionActionError(null);
     setDeletingSectionId(section.id);
     try {

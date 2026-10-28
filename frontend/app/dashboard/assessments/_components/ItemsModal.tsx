@@ -6,6 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import type { Assessment, AssessmentItem, AssessmentSection } from "../page";
+import { confirmDialog } from "@/components/DialogProvider";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -124,7 +125,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
     finally { setSaving(false); }
   }
   async function deleteSection(id: string) {
-    if (!confirm("Delete this section? Items will become unsectioned.")) return;
+    if (!(await confirmDialog("Delete this section? Items will become unsectioned."))) return;
     setFormErr("");
     try { await clientApi.delete(API.assessments.sectionDetail(assessment.id, id)); refetchSections(); refetchItems(); }
     catch (e) { setFormErr(apiErr(e)); }
@@ -174,7 +175,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
     finally { setSaving(false); }
   }
   async function deleteItem(id: string) {
-    if (!confirm("Remove this item?")) return;
+    if (!(await confirmDialog("Remove this item?"))) return;
     setFormErr("");
     try { await clientApi.delete(API.assessments.itemDetail(id)); refetchItems(); }
     catch (e) { setFormErr(apiErr(e)); }

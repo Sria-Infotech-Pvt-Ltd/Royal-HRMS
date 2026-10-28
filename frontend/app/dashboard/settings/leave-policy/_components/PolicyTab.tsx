@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { LEAVE_NAME_RE, sanitizeLeaveName } from "@/lib/leaveValidation";
 import Modal from "@/components/Modal";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface LeavePolicy {
   id: number;
@@ -135,7 +136,7 @@ export default function PolicyTab() {
   }
 
   async function deletePolicy(p: LeavePolicy) {
-    if (!window.confirm(`Delete "${p.leave_type_display}"? This cannot be undone.`)) return;
+    if (!(await confirmDialog(`Delete "${p.leave_type_display}"? This cannot be undone.`))) return;
     setBusyType(p.leave_type);
     setRowError(null);
     try {

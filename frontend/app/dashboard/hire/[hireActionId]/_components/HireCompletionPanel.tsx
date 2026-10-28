@@ -10,10 +10,12 @@ interface Props {
   employeeName: string;
   employeeCode: string;
   faceId: FaceIdHireSummary;
+  /** Who the new hire reports to: `source` "none" means nobody could be resolved and HR must assign one. */
+  reportingManager?: { name: string | null; source: string } | null;
   onDone: () => void;
 }
 
-export default function HireCompletionPanel({ employeeName, employeeCode, faceId, onDone }: Props) {
+export default function HireCompletionPanel({ employeeName, employeeCode, faceId, reportingManager, onDone }: Props) {
   return (
     <Modal
       title={<div className="text-[18px] font-bold">Employee <span style={{ color: "var(--primary)", fontStyle: "italic" }}>hired</span></div>}
@@ -25,6 +27,20 @@ export default function HireCompletionPanel({ employeeName, employeeCode, faceId
         <div className="alert alert-success" role="status">
           <i className="ti ti-circle-check" /> <b>{employeeName}</b>{employeeCode ? ` (${employeeCode})` : ""} has been hired. A welcome email with the login details has been sent.
         </div>
+
+        {reportingManager && (
+          reportingManager.name ? (
+            <div style={{ fontSize: 13 }}>
+              <b>Reports to:</b> {reportingManager.name}
+              {reportingManager.source === "org_chart" ? " (the head of their org unit)" : ""}
+            </div>
+          ) : (
+            <div className="alert alert-warning" role="alert">
+              <i className="ti ti-alert-triangle" /> No reporting manager could be found for {employeeName.split(" ")[0] || "this employee"}, so
+              leave and other requests have nobody to go to until one is assigned. Use <b>Assign managers</b> in the Employee Directory.
+            </div>
+          )
+        )}
 
         <section aria-label="Face ID">
           <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}><i className="ti ti-face-id" style={{ marginRight: 6 }} />Face ID</h3>

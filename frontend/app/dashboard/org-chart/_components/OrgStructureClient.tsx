@@ -15,6 +15,7 @@ import EndPlacementModal from "./EndPlacementModal";
 import DeactivatePositionModal from "./DeactivatePositionModal";
 import PositionPermissionsModal from "./PositionPermissionsModal";
 import ManageJobTemplatesModal from "./ManageJobTemplatesModal";
+import { confirmDialog } from "@/components/DialogProvider";
 
 export interface EmployeeOption {
   id: string;
@@ -340,7 +341,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
                   // resubmit with confirm_department_change so it's an
                   // informed choice, not a silent block.
                   if (field === "is_department_level" && e.status === 409 && e.message) {
-                    if (window.confirm(`${e.message}\n\nProceed anyway?`)) {
+                    if (await confirmDialog({ title: "Proceed anyway?", body: e.message, confirmLabel: "Proceed" })) {
                       try {
                         await clientApi.put(API.orgStructure.units.detail(unitId), { [field]: value, confirm_department_change: true });
                         await load();

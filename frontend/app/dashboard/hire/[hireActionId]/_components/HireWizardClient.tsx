@@ -152,7 +152,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [eduExpFieldConfig, setEduExpFieldConfig] = useState<EducationExperienceFieldConfigResponse>({ education: [], experience: [] });
 
   const [hiring, setHiring] = useState(false);
-  const [completedHire, setCompletedHire] = useState<{ faceId: FaceIdHireSummary; code: string } | null>(null);
+  const [completedHire, setCompletedHire] = useState<{ faceId: FaceIdHireSummary; code: string; reportingManager: { name: string | null; source: string } | null } | null>(null);
   const [hireError, setHireError] = useState<string | null>(null);
 
   // QA report #37 — the error banner rendered at the top of the step, so
@@ -588,10 +588,10 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       // happened without going through handleNext/goToStep (e.g. the last
       // real save site missed in some future change to this file).
       await patchAction(buildFullDraftPayload()).catch(() => {});
-      const response = await clientApi.post<{ data?: { face_id?: FaceIdHireSummary; reserved_employee_id?: string } }>(API.hireActions.complete(hireActionId));
+      const response = await clientApi.post<{ data?: { face_id?: FaceIdHireSummary; reserved_employee_id?: string; reporting_manager?: { name: string | null; source: string } } }>(API.hireActions.complete(hireActionId));
       const faceId = response.data?.data?.face_id;
       // Show the completion screen (with the Face ID next step); closing the wizard happens from there.
-      if (faceId) setCompletedHire({ faceId, code: response.data?.data?.reserved_employee_id ?? "" });
+      if (faceId) setCompletedHire({ faceId, code: response.data?.data?.reserved_employee_id ?? "", reportingManager: response.data?.data?.reporting_manager ?? null });
       else onHired();
     } catch (e) {
       setHireError((e as { message?: string })?.message || "Could not hire this employee.");
@@ -672,6 +672,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         employeeName={[firstName, lastName].filter(Boolean).join(" ") || "The new hire"}
         employeeCode={completedHire.code}
         faceId={completedHire.faceId}
+        reportingManager={completedHire.reportingManager}
         onDone={onHired}
       />
     );

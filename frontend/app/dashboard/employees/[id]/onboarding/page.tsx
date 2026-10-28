@@ -18,6 +18,7 @@ import FamilyNominationStep, { type FamilyEntry, type NomineeEntry } from "@/app
 import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/AssetsList";
 import HireWizardSidebar from "@/app/dashboard/hire/[hireActionId]/_components/HireWizardSidebar";
 import { EMPTY, PAN_RE, BUILTIN_STEPS, DOCUMENTS_STEP, type WizardStep } from "./_wizardSteps";
+import { confirmDialog } from "@/components/DialogProvider";
 
 // HR/Admin-side onboarding wizard — fills in an employee's onboarding profile
 // on their behalf (walk-in hires, or anyone who can't complete it themselves).
@@ -656,7 +657,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
   }
 
   async function handleApproveNow() {
-    if (!window.confirm(`Approve and activate ${employeeName || "this employee"}'s account? They'll get full access immediately.`)) return;
+    if (!(await confirmDialog(`Approve and activate ${employeeName || "this employee"}'s account? They'll get full access immediately.`))) return;
     setApproving(true);
     try {
       await clientApi.post(API.onboarding.approve(employeeUuid), { decision: "approve" });

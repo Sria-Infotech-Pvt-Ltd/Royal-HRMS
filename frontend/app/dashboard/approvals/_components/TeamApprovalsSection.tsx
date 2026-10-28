@@ -18,6 +18,7 @@ import ApprovalsToolbar from "./ApprovalsToolbar";
 import ApprovalsTable from "./ApprovalsTable";
 import RequestDetailDrawer from "./RequestDetailDrawer";
 import BulkConfirmModal from "./BulkConfirmModal";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface ModalState {
   id:            string;
@@ -147,7 +148,7 @@ export default function TeamApprovalsSection() {
   function handleApproveClick(item: ApprovalItem) { dispatchAction(item, "approve"); }
   function handleRejectClick(item: ApprovalItem)  { dispatchAction(item, "reject"); }
 
-  function dispatchAction(item: ApprovalItem, action: "approve" | "reject") {
+  async function dispatchAction(item: ApprovalItem, action: "approve" | "reject") {
     setDrawerItem(null);
     // Separation approval is per-stage (Manager, then HR/Branch Admin) rather
     // than a single yes/no decision, so it's actioned on its own detail page
@@ -157,11 +158,11 @@ export default function TeamApprovalsSection() {
       return;
     }
     if (item.kind === "attendance_correction") {
-      if (!window.confirm(
+      if (!(await confirmDialog(
         action === "approve"
           ? `Approve this correction? ${item.employeeName}'s attendance record will be updated immediately.`
           : `Reject this correction request for ${item.employeeName}?`,
-      )) return;
+      ))) return;
       runCorrectionAction(item.id, action);
       return;
     }
@@ -170,11 +171,11 @@ export default function TeamApprovalsSection() {
     // rather than forcing it through ApprovalModal's leave/expense template
     // picker with nothing relevant to select.
     if (item.kind === "wfh") {
-      if (!window.confirm(
+      if (!(await confirmDialog(
         action === "approve"
           ? `Approve ${item.employeeName}'s work-from-home request?`
           : `Reject ${item.employeeName}'s work-from-home request?`,
-      )) return;
+      ))) return;
       runWfhAction(item.id, action);
       return;
     }

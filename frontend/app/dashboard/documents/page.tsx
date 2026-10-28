@@ -13,6 +13,7 @@ import {
   type DocUploadErrors, type DocUploadForm,
 } from "./_data";
 import DateInput from "@/components/shared/DateInput";
+import { confirmDialog } from "@/components/DialogProvider";
 
 // ─── Filter tabs ──────────────────────────────────────────────────────────────
 
@@ -177,7 +178,7 @@ export default function DocumentCenterPage() {
 
   // ── Delete ─────────────────────────────────────────────────────────────────
   async function handleDelete(doc: ApiDocument) {
-    if (!confirm(`Delete "${doc.title}"? This cannot be undone.`)) return;
+    if (!(await confirmDialog(`Delete "${doc.title}"? This cannot be undone.`))) return;
     setDeleting(true);
     try {
       await clientApi.delete(documentDetail(doc.id));

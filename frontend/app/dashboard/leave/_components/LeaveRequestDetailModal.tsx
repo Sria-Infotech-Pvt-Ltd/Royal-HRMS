@@ -3,6 +3,7 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { LeaveRequest, STATUS_BADGE, STATUS_LABEL, fmtDate } from "../_data";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface Props {
   requestId:        string;
@@ -191,8 +192,13 @@ export default function LeaveRequestDetailModal({
               a safe stand-in on rows the backend hasn't attached can_cancel to. */}
           {onCancelRequest && (r.can_cancel ?? (r.status === "pending" || r.status === "l2_pending")) && (
             <button
-              onClick={() => {
-                if (window.confirm("Are you sure you want to cancel this leave request?")) {
+              onClick={async () => {
+                if (await confirmDialog({
+                  title: "Cancel this leave request?",
+                  body: "The request is withdrawn and any days held for it go back to your balance.",
+                  confirmLabel: "Cancel request",
+                  danger: true,
+                })) {
                   onCancelRequest();
                   onClose();
                 }

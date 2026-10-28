@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import type { JobTemplate, JobTemplatePayload } from "@/types/orgStructure";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface Props {
   jobs: JobTemplate[];
@@ -57,7 +58,7 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
   }
 
   async function remove(template: JobTemplate) {
-    if (!window.confirm(`Delete the job template "${template.name}"? This can't be undone.`)) return;
+    if (!(await confirmDialog(`Delete the job template "${template.name}"? This can't be undone.`))) return;
     setBusyId(template.id);
     setRowError(null);
     try {

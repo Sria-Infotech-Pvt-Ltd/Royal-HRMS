@@ -141,7 +141,6 @@ def _auto_assign_managers(employee: 'User') -> list:
     from apps.branch.models import Branch
 
     emp_branch = (employee.branch or '').strip()
-    emp_dept   = (employee.department or '').strip()
 
     changed = []
 
@@ -183,9 +182,8 @@ def _auto_assign_managers(employee: 'User') -> list:
     # for a future hire into the vacant chief seat to resolve naturally)
     # is correct here, not a bug, when no unit in the chain has an active
     # chief.
-    if not emp_dept:
-        return changed
-
+    # (No longer requires the legacy `department` text: it is blank for everyone hired onto a Position, which is why
+    # "Auto-assign" used to leave nobody. The chief is found from the employee's seat in the org chart.)
     from apps.accounts.services_approval import resolve_employee_org_unit_chief
     chief = resolve_employee_org_unit_chief(employee)
     if (
@@ -367,7 +365,9 @@ def _employee_dict(user: User) -> dict:
         custom_file_fields = [_custom_field_file_dict(v) for v in user.custom_field_files.all()]
     except Exception:
         custom_file_fields = []
-    mgr = getattr(user, 'reporting_manager', None)
+    from apps.accounts.services_reporting_line import SOURCE_ORG_CHART, resolve_manager_with_source
+    manager_resolution = resolve_manager_with_source(user)
+    mgr = manager_resolution.user
     _hr = getattr(user, 'hr', None)
     approver = getattr(user, 'reporting_approver', None)
 
@@ -475,7 +475,7 @@ def _employee_dict(user: User) -> dict:
             'name': mgr.full_name   if mgr else None,
             # True only when resolved from an actual placed chief in this
             # employee's Org Unit chain — see User.reporting_manager_from_org_chart.
-            'from_org_chart': bool(mgr) and user.reporting_manager_from_org_chart,
+            'from_org_chart': bool(mgr) and (user.reporting_manager_from_org_chart or manager_resolution.source == SOURCE_ORG_CHART),
         }
 
     return result
@@ -1239,7 +1239,8 @@ def _resolve_rule_approver(kind, employee):
     Validates the assigned person still holds the expected capability.
     """
     if kind == 'reporting_manager':
-        rm = getattr(employee, 'reporting_manager', None)
+        from apps.accounts.services_reporting_line import resolve_manager
+        rm = resolve_manager(employee)
         if rm and can_manage_team(rm):
             return rm
         return None

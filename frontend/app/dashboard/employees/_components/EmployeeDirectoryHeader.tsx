@@ -14,10 +14,13 @@ interface Props {
   onOpenAiAssist: () => void;
   onExport: () => void;
   onHireEmployee: () => void;
+  /** employees.edit: opens the bulk "Assign managers" action. */
+  canAssignManagers?: boolean;
+  onAssignManagers?: () => void;
 }
 
 export default function EmployeeDirectoryHeader({
-  totalHeadcount, canCreate, canUseAiAssist, canExport, exporting, onResumeDraft, onOpenAiAssist, onExport, onHireEmployee,
+  totalHeadcount, canCreate, canUseAiAssist, canExport, exporting, onResumeDraft, onOpenAiAssist, onExport, onHireEmployee, canAssignManagers, onAssignManagers,
 }: Props) {
   return (
     <div className="pagehead">
@@ -45,6 +48,11 @@ export default function EmployeeDirectoryHeader({
             >
               <i className={`ti ${exporting ? "ti-loader-2 animate-spin" : "ti-download"}`} style={{ fontSize: 15 }} />
               {exporting ? "Exporting…" : "Export"}
+            </button>
+          )}
+          {canAssignManagers && onAssignManagers && (
+            <button className="btn btn-ghost" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={onAssignManagers} suppressHydrationWarning>
+              <i className="ti ti-users-group" style={{ fontSize: 15 }} /> Assign managers
             </button>
           )}
           {canCreate && (

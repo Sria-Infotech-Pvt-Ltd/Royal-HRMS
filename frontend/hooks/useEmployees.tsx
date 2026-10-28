@@ -9,6 +9,7 @@ import {
 } from "@/app/dashboard/employees/_data";
 import type { EmployeeStatCard } from "@/app/dashboard/employees/_components/EmployeeStatCards";
 import { downloadCsv, employeesToCsv } from "@/lib/exportEmployeesCsv";
+import { confirmDialog } from "@/components/DialogProvider";
 
 // total == active + onboarding + notice_period; probation is a subset of active (see backend services_headcount).
 interface EmployeeStats {
@@ -191,7 +192,7 @@ export function useEmployees() {
   async function toggleStatus(employee: Employee) {
     const isCurrentlyActive = employee.status !== "inactive";
     const label = isCurrentlyActive ? "deactivate" : "activate";
-    if (!window.confirm(`Are you sure you want to ${label} ${fullName(employee)}?`)) return;
+    if (!(await confirmDialog(`Are you sure you want to ${label} ${fullName(employee)}?`))) return;
     setToggling(employee.id);
     try {
       await clientApi.patch(API.employees.detail(employee.id), { is_active: !isCurrentlyActive });

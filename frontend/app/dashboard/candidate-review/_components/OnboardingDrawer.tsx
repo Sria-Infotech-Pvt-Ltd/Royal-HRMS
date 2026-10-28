@@ -10,6 +10,7 @@ import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import { usePermission } from "@/hooks/usePermission";
 import { maritalStatusLabel } from "@/lib/maritalStatus";
 import { SectionCard, Row } from "@/app/dashboard/employees/_components/EmployeeDrawerParts";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface OnboardingDocument {
   id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number;
@@ -201,7 +202,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   // already-assigned one — never forced re-entry of what hiring already set.
   const positionRequiredHere = !alreadyPositioned;
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (positionRequiredHere && !selPosition) {
       setAssignErr("Select a Position before confirming.");
       return;
@@ -216,7 +217,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       setShowAssessment(true);
       return;
     }
-    if (!window.confirm(`Approve and activate ${user.full_name}'s account? They'll get full access immediately.`)) return;
+    if (!(await confirmDialog(`Approve and activate ${user.full_name}'s account? They'll get full access immediately.`))) return;
     onAction(user.id, "approve", {
       position: positionRequiredHere ? selPosition : undefined,
       uanNumber: uanNumber || undefined, aadharName: aadharName || undefined,
@@ -224,7 +225,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
     });
   }
 
-  function handleAssessmentConfirm() {
+  async function handleAssessmentConfirm() {
     // The Position/UAN/PAN inputs stay visible (and editable) after the
     // Confirm click that advances to this step, so re-check here too —
     // without this, clearing the position after passing that first check
@@ -239,7 +240,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       setAssignErr(fieldErr);
       return;
     }
-    if (!window.confirm(`Approve and activate ${user.full_name}'s account? They'll get full access immediately.`)) return;
+    if (!(await confirmDialog(`Approve and activate ${user.full_name}'s account? They'll get full access immediately.`))) return;
     onAction(user.id, "approve", {
       position:     positionRequiredHere ? selPosition : undefined,
       assessmentId: selAssessment || undefined,
@@ -269,16 +270,16 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
           <button
             className="btn btn-ghost"
             style={{ color: "var(--error)", borderColor: "var(--error)" }}
-            onClick={() => {
+            onClick={async () => {
               if (!remarks.trim()) {
                 setRejectErr("Describe what needs to be corrected — the candidate only sees this exact text, so it can't be sent blank.");
                 return;
               }
               setRejectErr(null);
-              if (!window.confirm(
+              if (!(await confirmDialog(
                 `Send ${user.full_name}'s onboarding back for corrections? They'll see your remarks and need to ` +
                 `resubmit before this can be reviewed again.`,
-              )) return;
+              ))) return;
               onAction(user.id, "reject");
             }}
             disabled={acting}

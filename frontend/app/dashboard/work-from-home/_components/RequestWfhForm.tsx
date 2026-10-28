@@ -8,6 +8,7 @@ import { useToast } from "@/components/ToastProvider";
 import type { WorkFromHomeRequest, WFHSavedLocation } from "@/types/workFromHome";
 import { formatDate } from "@/lib/formatDate";
 import DateInput from "@/components/shared/DateInput";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface Coords { latitude: number; longitude: number; accuracy: number | null }
 
@@ -146,7 +147,7 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
   }
 
   async function deleteSavedLocation(id: string, label: string) {
-    if (!window.confirm(`Remove saved location "${label}"?`)) return;
+    if (!(await confirmDialog(`Remove saved location "${label}"?`))) return;
     setDeletingId(id);
     try {
       await clientApi.delete(API.workFromHome.savedLocationDetail(id));

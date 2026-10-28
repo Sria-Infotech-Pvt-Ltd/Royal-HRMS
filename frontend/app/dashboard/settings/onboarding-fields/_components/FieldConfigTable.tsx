@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { OnboardingFieldConfig } from "@/types/onboardingFieldConfig";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface Props {
   fields: OnboardingFieldConfig[]; // already filtered to one step, sorted by order
@@ -60,7 +61,7 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
   }
 
   async function remove(field: OnboardingFieldConfig) {
-    if (!window.confirm(`Delete the custom field "${field.label}"? Any values employees already entered will be lost.`)) return;
+    if (!(await confirmDialog(`Delete the custom field "${field.label}"? Any values employees already entered will be lost.`))) return;
     setBusyKey(field.field_key);
     setRowError(null);
     try {

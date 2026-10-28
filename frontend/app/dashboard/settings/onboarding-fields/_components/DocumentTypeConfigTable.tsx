@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface Props {
   types: DocumentTypeConfig[]; // already sorted by order
@@ -49,7 +50,7 @@ export default function DocumentTypeConfigTable({ types, canEdit, onChanged }: P
   }
 
   async function remove(type: DocumentTypeConfig) {
-    if (!window.confirm(`Delete the custom document type "${type.label}"? Any files employees already uploaded will be lost.`)) return;
+    if (!(await confirmDialog(`Delete the custom document type "${type.label}"? Any files employees already uploaded will be lost.`))) return;
     setBusyKey(type.type_key);
     setRowError(null);
     try {

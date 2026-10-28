@@ -10,6 +10,7 @@ import type { SeparationAccess } from "../../_access";
 import { fmtDate } from "../../_workflow";
 import EmployeePickerField, { type PickedEmployee } from "../../_components/EmployeePickerField";
 import DateInput from "@/components/shared/DateInput";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface Props {
   r:      SeparationRequest;
@@ -72,7 +73,7 @@ export default function KtHandoverSection({ r, access }: Props) {
   }
 
   async function deleteTask(task: KtHandoverTask) {
-    if (!window.confirm(`Delete the handover task "${task.task}"?`)) return;
+    if (!(await confirmDialog(`Delete the handover task "${task.task}"?`))) return;
     try {
       await clientApi.delete(API.separation.taskDetail(r.id, task.id));
       showToast("Handover task deleted.", "success");

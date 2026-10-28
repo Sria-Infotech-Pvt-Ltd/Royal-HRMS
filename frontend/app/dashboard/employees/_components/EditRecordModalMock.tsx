@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { useMemo, useState, type ReactNode } from "react";
+import { confirmDialog } from "@/components/DialogProvider";
 
 const PURPLE = "#6D28D9";
 
@@ -444,8 +445,8 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
     return months < 12 ? `${months} mo` : `${Math.floor(months / 12)} yr ${months % 12} mo`;
   }, [r.experiences, r.dateOfJoining]);
 
-  function handleClose() {
-    if (dirty && !window.confirm("Discard unsaved changes?")) return;
+  async function handleClose() {
+    if (dirty && !(await confirmDialog("Discard unsaved changes?"))) return;
     onClose();
   }
 

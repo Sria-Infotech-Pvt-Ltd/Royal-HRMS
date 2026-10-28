@@ -438,4 +438,12 @@ class HireActionCompleteView(APIView):
             logger.error('Welcome-credentials email failed for %s: %s', email, exc)
 
         logger.info('Employee %s (%s) hired via HireAction %s by %s', action.reserved_employee_id, email, action.id, request.user.email)
-        return success('Employee hired.', {**_hire_action_dict(action), 'face_id': face_id}, http_status=201)
+        # Tell HR plainly whether the new hire has a manager, instead of leaving it to be discovered later.
+        from apps.accounts.services_reporting_line import resolve_manager_with_source
+        manager = resolve_manager_with_source(user)
+        reporting_manager = {'name': manager.user.full_name if manager.user else None, 'source': manager.source}
+        return success(
+            'Employee hired.',
+            {**_hire_action_dict(action), 'face_id': face_id, 'reporting_manager': reporting_manager},
+            http_status=201,
+        )

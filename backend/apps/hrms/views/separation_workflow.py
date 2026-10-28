@@ -265,8 +265,8 @@ class SeparationClearanceActionView(APIView):
 
         can_action = _has_perm(user, 'separation.approve')
         if not can_action and clearance.clearance_type == SEP_CLEARANCE_MANAGER:
-            from apps.accounts.services_approval import resolve_employee_org_unit_chief
-            chief = resolve_employee_org_unit_chief(sep_request.employee)
+            from apps.accounts.services_reporting_line import resolve_manager
+            chief = resolve_manager(sep_request.employee)
             can_action = bool(chief and chief.id == user.id)
         if not can_action:
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)

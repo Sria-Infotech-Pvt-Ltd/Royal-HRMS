@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import type { Director } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import type { PeopleConfig } from "../_data";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface Row {
   key: string;
@@ -84,7 +85,7 @@ export default function DirectorsSection({ canEdit, config, collapsed, onToggleC
 
   async function removeRow(row: Row) {
     if (row.id) {
-      if (!window.confirm(`Remove director "${row.name}"?`)) return;
+      if (!(await confirmDialog(`Remove director "${row.name}"?`))) return;
       try {
         await clientApi.delete(API.settings.directors.detail(row.id));
       } catch (err: unknown) {

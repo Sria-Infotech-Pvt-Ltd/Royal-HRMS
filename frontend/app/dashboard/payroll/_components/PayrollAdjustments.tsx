@@ -6,6 +6,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface Adjustment {
   id: string;
@@ -89,7 +90,7 @@ export default function PayrollAdjustments() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this adjustment?")) return;
+    if (!(await confirmDialog("Delete this adjustment?"))) return;
     setErrMsg("");
     try {
       await clientApi.delete(API.payroll.adjustmentDetail(id));

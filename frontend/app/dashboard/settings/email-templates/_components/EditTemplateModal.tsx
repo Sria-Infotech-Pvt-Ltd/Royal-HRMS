@@ -11,6 +11,7 @@ import {
   EMAIL_TEMPLATE_CATEGORIES, emailTemplateDetail, emailTemplateAttachmentDetail, parseAvailableVars,
   type ApiAttachment, type ApiEmailTemplate, type ApiTemplateCategory, type TemplateForm, type TemplateFormErrors,
 } from "../_data";
+import { promptDialog } from "@/components/DialogProvider";
 
 interface Props {
   template: ApiEmailTemplate | null;   // null = add mode
@@ -139,13 +140,18 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
     if (editorRef.current) setForm(p => ({ ...p, body: editorRef.current!.innerHTML }));
   }
 
-  function execCmd(cmd: string) {
+  async function execCmd(cmd: string) {
     if (cmd === "insertImage") {
       imageInputRef.current?.click();
       return;
     }
     if (cmd === "createLink") {
-      const url = window.prompt("Enter URL:");
+      // The dialog takes focus away from the editor, so remember the selected text and put it back before linking it.
+      const selection = window.getSelection();
+      const savedRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+      const url = await promptDialog({ title: "Insert link", inputLabel: "URL", confirmLabel: "Insert" });
+      editorRef.current?.focus();
+      if (savedRange && selection) { selection.removeAllRanges(); selection.addRange(savedRange); }
       if (url) document.execCommand("createLink", false, url);
     } else {
       document.execCommand(cmd, false);

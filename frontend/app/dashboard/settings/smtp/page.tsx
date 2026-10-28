@@ -13,6 +13,7 @@ import {
   formToPayload,
   type ApiSmtpEntry, type ApiSmtpResponse, type SmtpForm,
 } from "./_data";
+import { confirmDialog } from "@/components/DialogProvider";
 
 export default function SmtpSettingsPage() {
   const router = useRouter();
@@ -94,7 +95,7 @@ export default function SmtpSettingsPage() {
   // ── Activate ─────────────────────────────────────────────────────────────────
 
   async function handleActivate(entry: ApiSmtpEntry) {
-    if (!window.confirm(`Make "${entry.name}" the active SMTP configuration? Every company email will be sent through it from now on.`)) return;
+    if (!(await confirmDialog(`Make "${entry.name}" the active SMTP configuration? Every company email will be sent through it from now on.`))) return;
     setActivating(entry.id);
     try {
       await clientApi.post(smtpActivate(entry.id));

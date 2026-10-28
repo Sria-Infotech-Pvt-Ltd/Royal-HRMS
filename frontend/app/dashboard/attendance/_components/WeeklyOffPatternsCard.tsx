@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import { useToast } from "@/components/ToastProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ function daysSummary(p: Pattern): string {
 const PAGE_SIZE = 3;
 
 export default function WeeklyOffPatternsCard() {
+  const { showToast } = useToast();
   const [pageData, setPageData] = useState<PageData | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -160,7 +162,7 @@ export default function WeeklyOffPatternsCard() {
       fetchPatterns(nextPage);
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } };
-      alert(err.response?.data?.message ?? err.message ?? "Delete failed.");
+      showToast(err.response?.data?.message ?? err.message ?? "Delete failed.", "error");
     } finally {
       setDeleting(false);
     }

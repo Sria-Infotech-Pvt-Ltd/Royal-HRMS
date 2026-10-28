@@ -62,6 +62,7 @@ export const API = {
     headcount: "/employees/headcount/",
     hrList: "/employees/hrs/",
     managerList: "/employees/managers/",
+    bulkAssignManager: "/employees/bulk-assign-manager/",
     me: "/employees/me/",
     myPhoto: "/employees/me/photo/",
     myEmploymentLetterPdf: "/employees/me/employment-letter/",

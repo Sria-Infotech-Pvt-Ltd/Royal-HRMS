@@ -167,7 +167,8 @@ class ManagerListView(APIView):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         department = (request.query_params.get('department') or '').strip()
         branch     = (request.query_params.get('branch') or '').strip()
-        if not department and not branch:
+        is_all = (request.query_params.get('all') or '').strip().lower() == 'true'
+        if not department and not branch and not is_all:
             return error('department or branch query parameter is required.')
         managers = (
             User.objects
@@ -175,13 +176,17 @@ class ManagerListView(APIView):
             
         )
         if department:
-            managers = managers.filter(department__iexact=department)
+            # The org unit (what every screen shows as the department), not the legacy text that is blank for most people.
+            from apps.accounts.services_approval import filter_queryset_by_department_name
+            managers = filter_queryset_by_department_name(managers, department)
         if branch:
             managers = managers.filter(branch__iexact=branch)
         managers = managers.order_by('full_name')
+        from apps.accounts.services_placement import org_unit_names_for
+        org_unit_names = org_unit_names_for([u.pk for u in managers])
         data = [
             {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
-             'department': u.department, 'branch': u.branch}
+             'department': org_unit_names.get(u.pk) or u.department, 'branch': u.branch}
             for u in managers
         ]
         return success('Managers retrieved.', data=data)

@@ -8,6 +8,7 @@ import { useEmployees } from "@/hooks/useEmployees";
 import Pagination from "@/components/shared/Pagination";
 import type { Employee, EmployeeStatusFilter } from "./_data";
 import EmployeeDirectoryHeader from "./_components/EmployeeDirectoryHeader";
+import BulkAssignManagerModal from "./_components/BulkAssignManagerModal";
 import EmployeeStatCards from "./_components/EmployeeStatCards";
 import EmployeeToolbar from "./_components/EmployeeToolbar";
 import EmployeeTable from "./_components/EmployeeTable";
@@ -51,6 +52,7 @@ function EmployeesPageInner() {
   const [showModal, setShowModal] = useState(false);
   const [resumeDraftId, setResumeDraftId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [showAssignManagers, setShowAssignManagers] = useState(false);
   const [showAiAssist, setShowAiAssist] = useState(false);
   const [drawerEmployee, setDrawerEmployee] = useState<Employee | null>(null);
 
@@ -82,6 +84,8 @@ function EmployeesPageInner() {
         onOpenAiAssist={() => setShowAiAssist(true)}
         onExport={emp.handleExport}
         onHireEmployee={() => setShowModal(true)}
+        canAssignManagers={canEdit}
+        onAssignManagers={() => setShowAssignManagers(true)}
       />
 
       {/* Section spacing comes from .emp-fit's gap (directory-theme.css) — the stats, banner and panel are
@@ -154,6 +158,10 @@ function EmployeesPageInner() {
           onClose={() => setShowAiAssist(false)}
           onApply={result => emp.applyFilters({ status: result.status, branch: result.branch, dept: result.department, search: result.search })}
         />
+      )}
+
+      {showAssignManagers && (
+        <BulkAssignManagerModal onClose={() => setShowAssignManagers(false)} onDone={emp.refetchAll} />
       )}
 
       {showImport && (

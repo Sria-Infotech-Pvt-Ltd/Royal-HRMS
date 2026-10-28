@@ -11,6 +11,7 @@ import "@tabler/icons-webfont/dist/tabler-icons.min.css";
 import SessionExpiredOverlay from "@/components/SessionExpiredOverlay";
 import VoiceCommandButton from "@/components/VoiceCommandButton";
 import { ToastProvider } from "@/components/ToastProvider";
+import { DialogProvider } from "@/components/DialogProvider";
 
 // style: ["normal", "italic"] combined with 5 weights used to be here for a
 // real italic cut on the highlighted title word (em.hl) — combining multiple
@@ -49,6 +50,7 @@ export default function RootLayout({
       </head>
       <body className={inter.className} style={{ minHeight: "100vh" }} suppressHydrationWarning>
         <ToastProvider>
+          <DialogProvider>
           {children}
           {/* Global floating action button — every authenticated page and
               every role. Disabled+tooltip when logged out elsewhere, hidden
@@ -56,6 +58,7 @@ export default function RootLayout({
               Lives here, not inside DashboardShell, so it isn't tied to the
               dashboard route tree or duplicated per role. */}
           <VoiceCommandButton />
+          </DialogProvider>
         </ToastProvider>
         <SessionExpiredOverlay />
       </body>

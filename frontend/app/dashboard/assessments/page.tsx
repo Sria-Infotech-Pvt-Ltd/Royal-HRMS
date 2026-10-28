@@ -15,6 +15,7 @@ import {
   type AssessmentSettings, type Assessment, type AssignEmployee,
   type EmailTemplateOption, type AssessmentForm,
 } from "./_types";
+import { confirmDialog } from "@/components/DialogProvider";
 
 export type { AssessmentSection, AssessmentItem, AssessmentCandidate, Assessment } from "./_types";
 
@@ -132,7 +133,7 @@ export default function AssessmentsPage() {
   }
 
   async function deleteAssessment(id: string) {
-    if (!confirm("Delete this assessment? This cannot be undone.")) return;
+    if (!(await confirmDialog("Delete this assessment? This cannot be undone."))) return;
     setDeleteErr("");
     try { await clientApi.delete(API.assessments.detail(id)); refetch(); }
     catch (e) { setDeleteErr(apiErr(e)); }

@@ -1012,8 +1012,8 @@ class SeparationClearanceSerializer(serializers.ModelSerializer):
         if has_perm(user, 'separation.approve'):
             return True
         if obj.clearance_type == SEP_CLEARANCE_MANAGER:
-            from apps.accounts.services_approval import resolve_employee_org_unit_chief
-            chief = resolve_employee_org_unit_chief(obj.request.employee)
+            from apps.accounts.services_reporting_line import resolve_manager
+            chief = resolve_manager(obj.request.employee)
             return bool(chief and chief.id == user.id)
         return False
 

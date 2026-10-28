@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 def resolve_approver(kind: str, employee: 'User') -> 'User | None':
     """Resolve an approver kind ('reporting_manager' | 'hr' | '') to the actual User for an employee."""
     if kind == 'reporting_manager':
-        return getattr(employee, 'reporting_manager', None)
+        from apps.accounts.services_reporting_line import resolve_manager
+        return resolve_manager(employee)
     if kind == 'hr':
         return getattr(employee, 'hr', None)
     return None

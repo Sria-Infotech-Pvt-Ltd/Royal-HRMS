@@ -122,9 +122,8 @@ def _resolve_separation_chain(employee):
     if is_hr_tier:
         return [(SEP_STAGE_BRANCH_ADMIN, None)]
 
-    from apps.accounts.services_approval import resolve_employee_org_unit_chief
-    chief = resolve_employee_org_unit_chief(employee)
-    manager_approver = chief if (chief and chief.id != employee.id) else None
+    from apps.accounts.services_reporting_line import resolve_manager
+    manager_approver = resolve_manager(employee)  # same answer as the directory, profile and leave
     return [(SEP_STAGE_MANAGER, manager_approver), (SEP_STAGE_HR, employee.hr)]
 
 

@@ -5,6 +5,7 @@ import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStruc
 import type { BranchOption, Selected } from "./OrgStructureClient";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import SearchableSelect from "@/components/SearchableSelect";
+import { confirmDialog } from "@/components/DialogProvider";
 
 interface Props {
   selected: Selected;
@@ -161,8 +162,8 @@ export default function OrgDetail({
               <button
                 className="btn btn-ghost"
                 style={{ width: 32, height: 32, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, color: "var(--error)" }}
-                onClick={() => {
-                  if (window.confirm(`Permanently delete "${unit.name}"? This can't be undone, and only works if none of its positions have ever been held by anyone — if any have, this will be rejected; deactivate the unit instead.`)) {
+                onClick={async () => {
+                  if (await confirmDialog(`Permanently delete "${unit.name}"? This can't be undone, and only works if none of its positions have ever been held by anyone — if any have, this will be rejected; deactivate the unit instead.`)) {
                     onDeleteUnit(unit.id);
                   }
                 }}
@@ -281,8 +282,8 @@ export default function OrgDetail({
               <button
                 className="btn btn-ghost"
                 style={{ width: 32, height: 32, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, color: "var(--error)" }}
-                onClick={() => {
-                  if (window.confirm(`Permanently delete "${p.title}"? This can't be undone, and only works if it has never had a holder — if it has any placement history, this will be rejected; deactivate it instead.`)) {
+                onClick={async () => {
+                  if (await confirmDialog(`Permanently delete "${p.title}"? This can't be undone, and only works if it has never had a holder — if it has any placement history, this will be rejected; deactivate it instead.`)) {
                     onDelete(p.id);
                   }
                 }}
