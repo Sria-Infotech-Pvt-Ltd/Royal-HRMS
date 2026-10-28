@@ -732,22 +732,22 @@ class EmployeeCodeSettings(models.Model):
 
     @classmethod
     def _initials(cls, first_name: str, last_name: str) -> str:
-        """First letter of first_name + first letter of last_name, uppercased.
+        """First letter of the first word + first letter of the LAST word of
+        the whole name, uppercased — middle names are ignored, so
+        'Mary Jane Smith' is MS however it was split into first/last
+        (form fields, or onboarding's full_name.split(' ', 1)).
 
-        last_name blank (single-word name — e.g. a Branch Admin quick-add,
-        or a one-word onboarding full_name) repeats the first initial
-        instead of a filler letter, so a real person's ID never contains a
-        character that didn't come from their own name. Both blank (fully
-        degenerate data) falls back to 'XX' so this never returns a blank
-        or single-character segment.
+        Single-word name (e.g. a Branch Admin quick-add, or a one-word
+        onboarding full_name) repeats the one initial instead of a filler
+        letter, so a real person's ID never contains a character that
+        didn't come from their own name. Blank name (fully degenerate data)
+        falls back to 'XX' so this never returns a blank or
+        single-character segment.
         """
-        first_initial = (first_name or '').strip()[:1].upper()
-        last_initial  = (last_name or '').strip()[:1].upper()
-        if not last_initial:
-            last_initial = first_initial
-        if not first_initial and not last_initial:
+        words = f'{first_name or ""} {last_name or ""}'.split()
+        if not words:
             return 'XX'
-        return f'{first_initial}{last_initial}'
+        return f'{words[0][:1].upper()}{words[-1][:1].upper()}'
 
     @classmethod
     def generate_employee_id(

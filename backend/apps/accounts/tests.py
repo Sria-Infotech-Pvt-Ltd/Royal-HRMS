@@ -535,9 +535,8 @@ class EmployeeCodeGenerationTests(TestCase):
     def test_multi_word_onboarding_approval_style_split(self):
         # Mirrors OnboardingApprovalView.post()'s exact existing split:
         # full_name.split(' ', 1) -> first_name = first word, last_name =
-        # everything after. Only the first letter of each is used, same
-        # rule as every other call site — not re-parsed into a "real"
-        # surname, matching "preserve existing name fields" from the brief.
+        # everything after. Initials are first word + LAST word, so the
+        # middle name never leaks into the ID.
         from apps.accounts.models import EmployeeCodeSettings
         full_name = 'Mary Jane Smith'
         parts = full_name.split(' ', 1)
@@ -545,7 +544,15 @@ class EmployeeCodeGenerationTests(TestCase):
             first_name=parts[0], last_name=parts[1] if len(parts) > 1 else '',
             date_of_joining=date(2026, 4, 12),
         )
-        self.assertEqual(emp_id, 'RSS1204MJ')  # 'J' from "Jane Smith", not "Smith"
+        self.assertEqual(emp_id, 'RSS1204MS')  # 'S' from "Smith", not "Jane"
+
+    def test_middle_name_ignored_however_name_is_split(self):
+        # Create/bulk-import pass separate first/last fields; a middle name
+        # can sit on either side. Both must give the same initials.
+        from apps.accounts.models import EmployeeCodeSettings
+        self.assertEqual(EmployeeCodeSettings._initials('Mary Jane', 'Smith'), 'MS')
+        self.assertEqual(EmployeeCodeSettings._initials('Mary', 'Jane Smith'), 'MS')
+        self.assertEqual(EmployeeCodeSettings._initials('', 'Kumar'), 'KK')
 
     def test_prefix_is_configurable(self):
         from apps.accounts.models import EmployeeCodeSettings
