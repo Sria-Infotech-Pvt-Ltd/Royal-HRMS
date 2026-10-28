@@ -4,6 +4,7 @@ import { EMPLOYMENT_TYPES } from "@/lib/employmentType";
 import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { rowsOf } from "@/lib/listResponse";
 import SearchableSelect from "@/components/SearchableSelect";
 
 export interface EmploymentDraft {
@@ -46,12 +47,14 @@ export const EMPTY_EMPLOYMENT: EmploymentDraft = {
 const EMPLOYMENT_LOOKUPS_CACHE_TTL_MS = 5 * 60 * 1000;
 let employmentLookupsCache: { data: EmploymentLookups; expiresAt: number } | null = null;
 
+interface SalaryStructureOption { id: string; name: string; is_default?: boolean; is_active?: boolean }
+
 interface EmploymentLookups {
   branches: { id: number; branch_name: string }[];
   people: { id: string; full_name: string; employee_id: string }[];
   weeklyPolicies: { id: string; name: string }[];
   shiftPolicies: { id: string; name: string }[];
-  structures: { id: string; name: string }[];
+  structures: SalaryStructureOption[];
 }
 
 const EMP_TYPES = EMPLOYMENT_TYPES;
@@ -78,7 +81,7 @@ export default function EmploymentStep({
   const [people, setPeople] = useState<{ id: string; full_name: string; employee_id: string }[]>([]);
   const [weeklyPolicies, setWeeklyPolicies] = useState<{ id: string; name: string }[]>([]);
   const [shiftPolicies, setShiftPolicies] = useState<{ id: string; name: string }[]>([]);
-  const [structures, setStructures] = useState<{ id: string; name: string }[]>([]);
+  const [structures, setStructures] = useState<SalaryStructureOption[]>([]);
 
   useEffect(() => {
     if (employmentLookupsCache && employmentLookupsCache.expiresAt > Date.now()) {
@@ -96,14 +99,15 @@ export default function EmploymentStep({
       clientApi.get<{ data: { results: typeof people } }>(API.employees.list, { params: { page_size: 200 } }),
       clientApi.get<{ data: { results: typeof weeklyPolicies } }>(API.attendance.weeklyDayPolicies, { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: typeof shiftPolicies } }>(API.attendance.workingHoursPolicies, { params: { page_size: 100 } }),
-      clientApi.get<{ data: { results: typeof structures } }>(API.payroll.structures, { params: { page_size: 100 } }),
+      clientApi.get<{ data: unknown }>(API.payroll.structures),
     ]).then(([b, p, w, s, st]) => {
       const resolved: EmploymentLookups = {
         branches:       b.status === "fulfilled" ? (b.value.data.data.results ?? []) : [],
         people:         p.status === "fulfilled" ? (p.value.data.data.results ?? []) : [],
         weeklyPolicies: w.status === "fulfilled" ? (w.value.data.data.results ?? []) : [],
         shiftPolicies:  s.status === "fulfilled" ? (s.value.data.data.results ?? []) : [],
-        structures:     st.status === "fulfilled" ? (st.value.data.data.results ?? []) : [],
+        // /payroll/structures/ answers with a plain list (same source as Salary Setup); only active structures are offered
+        structures:     st.status === "fulfilled" ? rowsOf<SalaryStructureOption>(st.value.data.data).filter(s => s.is_active !== false) : [],
       };
       setBranches(resolved.branches);
       setPeople(resolved.people);
@@ -124,6 +128,13 @@ export default function EmploymentStep({
       }
     });
   }, []);
+
+  // Pre-select the default structure until HR picks another one.
+  useEffect(() => {
+    if (value.salary_structure) return;
+    const defaultStructure = structures.find(s => s.is_default);
+    if (defaultStructure) onChange({ ...value, salary_structure: defaultStructure.id });
+  }, [structures, value, onChange]);
 
   function set<K extends keyof EmploymentDraft>(key: K, v: EmploymentDraft[K]) {
     onChange({ ...value, [key]: v });

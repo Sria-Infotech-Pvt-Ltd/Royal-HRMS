@@ -14,6 +14,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from apps.accounts.services_placement import org_unit_names_for
 from core.responses import error, first_error, success
 
 from apps.attendance.serializers_hr import (
@@ -90,7 +91,8 @@ class WeeklyOffAssignmentListView(APIView):
 
         qs = build_weekly_off_assignment_queryset(filters)
         page_obj, paginator = paginate(qs, request)
-        rows = [serialize_weekly_off_assignment_row(u) for u in page_obj]
+        org_unit_names = org_unit_names_for([u.pk for u in page_obj])
+        rows = [serialize_weekly_off_assignment_row(u, org_unit_names) for u in page_obj]
         return success(
             'Weekly off assignments retrieved.',
             paginated_data(paginator, page_obj, rows),

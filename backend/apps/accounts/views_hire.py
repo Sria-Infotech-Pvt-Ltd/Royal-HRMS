@@ -28,6 +28,7 @@ from apps.accounts.models import (
 from apps.accounts.serializers import HireActionDocumentSerializer
 from apps.accounts.serializers_profile_photo import ProfilePhotoUploadSerializer
 from apps.accounts.services_hire_drafts import discard_draft, existing_employee_match
+from apps.accounts.services_hire_duplicates import blocking_message, check_hire_duplicates
 from apps.accounts.services_placement import assign_position
 from apps.accounts.views.shared import _get_document_type_config
 
@@ -221,13 +222,23 @@ class HireActionDetailView(APIView):
         if uan and (len(uan) != 12 or not uan.isdigit()):
             return error('UAN must be 12 digits', data={'uan_number': 'UAN must be 12 digits'})
 
+        # Same email or mobile as an existing employee / another open draft: caught here (every Next) and again at completion.
+        warnings = []
+        if 'email' in data or 'phone' in data:
+            merged = {**action.draft_data, **data}
+            hits = check_hire_duplicates(str(merged.get('email') or ''), str(merged.get('phone') or ''), exclude_action=action)
+            message, field_errors = blocking_message(hits)
+            if message:
+                return error(message, data=field_errors)
+            warnings = [hit.as_dict() for hit in hits]  # only warnings remain (an exited person: a possible rehire)
+
         if data:
             action.draft_data = {**action.draft_data, **data}
             update_fields.append('draft_data')
 
         if update_fields:
             action.save(update_fields=[*update_fields, 'updated_at'])
-        return success('Hire action updated.', _hire_action_dict(action, request))
+        return success('Hire action updated.', {**_hire_action_dict(action, request), 'warnings': warnings})
 
     def delete(self, request, pk):
         """Discard a draft — the Stage 1 modal's "Discard" action."""

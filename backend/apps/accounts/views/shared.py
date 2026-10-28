@@ -421,7 +421,8 @@ def _employee_dict(user: User) -> dict:
         # public-by-design and already returns an absolute CDN URL, so no
         # request.build_absolute_uri() wrapping is needed here.
         'profile_photo_url': user.profile_photo.url if user.profile_photo else None,
-        'department':     user.department,
+        # Org unit of the seat held today; the legacy `department` text (blank for everyone hired onto a Position) is the fallback.
+        'department':     org_unit_name or user.department,
         'designation':    user.designation,
         'position_id':    str(current_placement.position_id) if current_placement else None,
         'org_unit_id':    str(current_placement.position.org_unit_id) if current_placement else None,

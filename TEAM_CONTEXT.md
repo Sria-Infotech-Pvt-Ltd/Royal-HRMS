@@ -4665,6 +4665,19 @@ Decisions: (1) permissions are attached to each **Position** (seat); whoever hol
 
 ---
 
+### 24. Second UAT batch (prompts 22-55): what is done and what is NOT
+**Done (4 of 34 prompts), tested on the private DB `test_neondb_uat3040`:**
+| Prompt / ticket | What changed | Tests |
+|---|---|---|
+| 22 + 26 (UAT-041 / UAT-046) Department / org unit | "Department" is the org unit of the seat held today (`services_placement.org_unit_names_for`, one query per page; legacy `User.department` only as a fallback). Used by the attendance list/detail, weekly-off screen, the employee API `department` (profile, drawer, directory now agree) and the attendance Department filter (any org unit by name, with sub-units). Profile shows "Not assigned" for manager/approver/HR instead of a dash. State/District are pre-filled from the PIN code at hire completion (`views_pincode.fill_state_and_district`, offline `indiapins`), never overwriting what HR typed. "Company Code HR" from branch configuration was NOT done. | `accounts/tests_department_source.py` (8) |
+| 46 (UAT-005) Salary structure dropdown | Root cause: the hire form and `useEmploymentLookups` read `data.results`, but `/payroll/structures/` returns a plain list. New `lib/listResponse.ts rowsOf()`; active structures only; the default is pre-selected. Hire completion already saves the chosen structure on the salary record. | `lib/listResponse.test.ts` |
+| 49 (UAT-010) Duplicate email/mobile at hire | `services_hire_duplicates.py`: checked on every wizard Next (PATCH) and again at completion. Active/onboarding/notice employees and other open drafts are errors ("This email already belongs to EMP... (active)", shown inline under the field); an EXITED employee is only a warning (possible rehire). Login email was already unique in the database but case-sensitive: `python manage.py report_duplicate_login_emails` (read-only) lists case-only duplicates by employee id; add a case-insensitive constraint only when it reports zero. The old completion-only test was updated to the earlier rejection. | `accounts/tests_hire_duplicates.py` (8), full `tests_hire_wizard` (52) green |
+
+**NOT started (30 prompts):** 23 leave policy report + employment-type master + carry-forward job; 24 separation segregation of duties + activity log; 25 complete-exit action; 27 pending-leave reservation; 28 eligibility enforcement; 29 approver resolution; 30 tax declaration; 31 assets/IFSC; 32 tax HR queue; 33 document verification; 34 hire review UX; 35 email logs; 36 attendance tabs; 37 leave SLA; 38 separation minor; 39 payroll minor; 40 accessibility; 41 growth page; 42 mobile validator; 43 approvals quirks; 44 console errors; 45 reporting manager (High; 24/26/29 depend on it); 47 UAT-006 email model (needs the user's A/B decision first); 48 hire data audit; 50 professional tax; 51 F&F basis (needs finance); 52 separation reject/numbering; 53 payroll month naming (needs the user's confirmation); 54 education/experience on profile; 55 leave cancel confirm.
+**Decisions waiting on the user:** UAT-006 (login email = work email, or always personal email); payroll month naming rule; meaning of `allow_probation_leave`; F&F calculation basis and PT slabs (finance); who may override separation self-approval.
+
+---
+
 ## Session Log — 2026-10-28 — Merged teammate branch `origin/28-oct-2026` into `New-AI`
 
 Her branch chain (26-oct-safura -> 27-oct-2026 -> 28-oct-2026) brought 4 commits: attendance Not-joined/Pending, F&F PF/PT recovery + numbering, 2026 holiday calendar, ESS/onboarding UI, requirements bump. Six files conflicted; how each was resolved:

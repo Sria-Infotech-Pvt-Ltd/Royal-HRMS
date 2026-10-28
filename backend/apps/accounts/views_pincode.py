@@ -70,6 +70,38 @@ def _locality_from_office_name(name: str) -> str:
     return _smart_title(_OFFICE_SUFFIX_RE.sub('', name or '').strip())
 
 
+def lookup_pincode(pincode: str) -> dict | None:
+    """{locality, district, state} for a valid Indian PIN code, or None when it is malformed or unknown. Never raises."""
+    if not PINCODE_RE.match(pincode or ''):
+        return None
+    try:
+        match = indiapins.matching(pincode)[0]
+    except (ValueError, IndexError):
+        return None
+    except Exception as exc:
+        logger.warning('Pincode lookup failed pincode=%s: %s', pincode, exc)
+        return None
+    raw_state = (match.get('State') or '').strip()
+    return {
+        'locality': _locality_from_office_name(match.get('Name', '')),
+        'district': _smart_title(match.get('District', '')),
+        'state': STATE_LOOKUP.get(raw_state.upper(), _smart_title(raw_state)),
+    }
+
+
+def fill_state_and_district(profile_fields: dict) -> None:
+    """Hire completion: where an address has a PIN code but no State/District, derive them from the PIN. Anything the person
+    entered is left alone (pre-fill only), and an unknown PIN changes nothing."""
+    for prefix in ('current', 'permanent'):
+        location = lookup_pincode(str(profile_fields.get(f'{prefix}_pin_code') or '').strip())
+        if not location:
+            continue
+        if not profile_fields.get(f'{prefix}_state') and location['state']:
+            profile_fields[f'{prefix}_state'] = location['state']
+        if not profile_fields.get(f'{prefix}_district') and location['district']:
+            profile_fields[f'{prefix}_district'] = location['district']
+
+
 class PincodeLookupView(APIView):
     """GET /onboarding/pincode-lookup/<pincode>/ — {locality, district, state} for a valid Indian PIN code."""
     permission_classes = [IsAuthenticated]

@@ -34,6 +34,28 @@ def current_placement(position: 'Position', as_of=None) -> 'Placement | None':
     )
 
 
+def org_unit_names_for(employee_ids) -> dict:
+    """{employee pk: name of the org unit they sit in today}, for many employees in ONE query.
+
+    This is the single source of truth for the "Department" / "Org unit" shown on screens (profile, drawer, attendance, weekly
+    off): the unit of the seat the person holds. The legacy `User.department` text is only a fallback for people with no seat,
+    because it is blank for everyone hired onto a Position."""
+    from apps.accounts.models import Placement
+
+    today = timezone.localdate()
+    rows = (
+        Placement.objects.filter(employee_id__in=list(employee_ids), effective_from__lte=today)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+        .values_list('employee_id', 'position__org_unit__name')
+    )
+    return {employee_id: name for employee_id, name in rows}
+
+
+def org_unit_name_for(employee: 'User') -> str:
+    """One employee's org unit name (see org_unit_names_for); falls back to the legacy department text."""
+    return org_unit_names_for([employee.pk]).get(employee.pk) or employee.department or ''
+
+
 def sync_from_position(position: 'Position', *, force: bool = False, as_of=None) -> None:
     """Push the Position's effective title onto its current holder's (as of
     today, via the current Placement) User.designation, and the nearest

@@ -433,9 +433,11 @@ class HireCompletionRequiredFieldTests(HireWizardTestCase):
 
     def test_duplicate_email_blocks_hire(self):
         make_user('arjun.mehta@test.com', role=self.plain_role, password='TestPass123!')
-        resp = self._complete_with({})
+        # UAT-010: caught as soon as the email is entered (every Next), not only at final submit. The completion-time check is
+        # covered by tests_hire_duplicates.HireDuplicateTests.test_completion_checks_again_on_the_server.
+        resp = self._patch(self.action, {'email': 'arjun.mehta@test.com'})
         self.assertEqual(resp.status_code, 400)
-        self.assertIn('already exists', resp.data['message'].lower())
+        self.assertIn('already belongs to', resp.data['message'])
 
     def test_full_access_position_cannot_be_filled_via_hire(self):
         PositionPermission.objects.create(position=self.position, permission=make_permission('settings.edit'))

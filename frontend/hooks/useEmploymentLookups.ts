@@ -6,17 +6,19 @@
 import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { rowsOf } from "@/lib/listResponse";
 
 export interface PositionOption { id: string; title: string; org_unit_name: string; grade: string; job_template_name: string | null; is_active: boolean }
 export interface PersonOption { id: string; full_name: string; employee_id: string; work_location?: string }
 export interface NamedOption { id: string; name: string }
+export interface StructureOption extends NamedOption { is_default?: boolean; is_active?: boolean }
 
 export interface EmploymentLookups {
   positions: PositionOption[];
   people: PersonOption[];
   weeklyPolicies: NamedOption[];
   shiftPolicies: NamedOption[];
-  structures: NamedOption[];
+  structures: StructureOption[];
 }
 
 const EMPTY: EmploymentLookups = { positions: [], people: [], weeklyPolicies: [], shiftPolicies: [], structures: [] };
@@ -36,7 +38,7 @@ export function useEmploymentLookups(): EmploymentLookups {
       clientApi.get<Paged<PersonOption>>(API.employees.list, { params }),
       clientApi.get<Paged<NamedOption>>(API.attendance.weeklyDayPolicies, { params }),
       clientApi.get<Paged<NamedOption>>(API.attendance.workingHoursPolicies, { params }),
-      clientApi.get<Paged<NamedOption>>(API.payroll.structures, { params }),
+      clientApi.get<{ data: unknown }>(API.payroll.structures),
     ]).then(([positions, people, weekly, shifts, structures]) => {
       const rows = <T,>(result: PromiseSettledResult<{ data: Paged<T> }>): T[] =>
         result.status === "fulfilled" ? (result.value.data.data.results ?? []) : [];
@@ -45,7 +47,7 @@ export function useEmploymentLookups(): EmploymentLookups {
         people: rows(people),
         weeklyPolicies: rows(weekly),
         shiftPolicies: rows(shifts),
-        structures: rows(structures),
+        structures: structures.status === "fulfilled" ? rowsOf<StructureOption>(structures.value.data.data).filter(s => s.is_active !== false) : [],
       };
       setLookups(resolved);
       if ([positions, people, weekly, shifts, structures].every(result => result.status === "fulfilled")) {

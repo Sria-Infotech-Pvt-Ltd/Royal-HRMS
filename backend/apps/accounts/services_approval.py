@@ -125,7 +125,10 @@ def filter_queryset_by_department_name(qs, department_name: str, *, department_l
     """
     from apps.accounts.models import OrgUnit, User
 
-    unit = OrgUnit.objects.filter(name__iexact=department_name, is_department_level=True).first()
+    # A department-level unit wins; otherwise ANY org unit with that name, since the Department column/filter now shows the
+    # org unit (the legacy `department` text is blank for everyone hired onto a Position).
+    units = OrgUnit.objects.filter(name__iexact=department_name)
+    unit = units.filter(is_department_level=True).first() or units.first()
     if unit is None:
         return qs.filter(**{f'{department_lookup}__iexact': department_name})
 

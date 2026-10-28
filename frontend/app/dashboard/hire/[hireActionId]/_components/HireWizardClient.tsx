@@ -17,6 +17,8 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useApiErrors } from "@/hooks/useApiErrors";
 import { useHireDraftActions } from "@/hooks/useHireDraftActions";
+import { parseApiError } from "@/lib/apiError";
+import FieldError from "@/components/shared/FieldError";
 import ConfirmModal from "@/components/ConfirmModal";
 import Modal from "@/components/Modal";
 import PhoneInput, { nationalDigitCount, isPlausibleNationalNumber } from "@/components/PhoneInput";
@@ -74,6 +76,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [placeOfBirth, setPlaceOfBirth] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  // Server messages for the two fields it checks for duplicates (email / mobile already belong to someone), shown inline.
+  const [contactErrors, setContactErrors] = useState<{ email?: string; phone?: string }>({});
   const [identityExtras, setIdentityExtras] = useState<IdentityExtras>(EMPTY_IDENTITY_EXTRAS);
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContactEntry[]>([emptyEmergencyContact("temp-ec-1", true)]);
   const [addressExtras, setAddressExtras] = useState<AddressExtras>(EMPTY_ADDRESS_EXTRAS);
@@ -569,7 +573,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       setHighestSaved(h => Math.max(h, tab));
       setTab(t => Math.min(t + 1, STEPS.length - 1));
     } catch (e) {
-      setStepErr((e as { message?: string })?.message || "Could not save this step.");
+      const parsed = parseApiError(e, "Could not save this step.");
+      setContactErrors({ email: parsed.fieldErrors.email, phone: parsed.fieldErrors.phone });
+      setStepErr(parsed.message);
     }
   }
 
@@ -897,11 +903,13 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Personal email <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" className="field-input" />
+                  <input type="email" value={email} onChange={e => { setEmail(e.target.value); setContactErrors(c => ({ ...c, email: undefined })); }} placeholder="name@example.com" className="field-input" />
+                  <FieldError message={contactErrors.email} />
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Mobile number <span style={{ color: "var(--error)" }}>*</span></label>
-                  <PhoneInput value={phone} onChange={setPhone} placeholder="90000 00000" />
+                  <PhoneInput value={phone} onChange={value => { setPhone(value); setContactErrors(c => ({ ...c, phone: undefined })); }} placeholder="90000 00000" />
+                  <FieldError message={contactErrors.phone} />
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Alternate mobile <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>

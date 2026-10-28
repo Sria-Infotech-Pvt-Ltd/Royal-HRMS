@@ -3,6 +3,9 @@
 
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import { formatDate } from "@/lib/formatDate";
+
+/** Shown for a manager / approver / HR nobody is assigned to, instead of a bare dash. */
+const NOT_ASSIGNED = "Not assigned";
 import {
   PROFILE_SECTIONS,
   applyDocumentTypeConfig,
@@ -114,7 +117,7 @@ export function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeCo
       department:    u.department || "",
       designation:   u.designation || "",
       branch:              u.branch || "",
-      reportingManager:    u.reporting_manager?.name ?? "",
+      reportingManager:    u.reporting_manager?.name ?? NOT_ASSIGNED,
       // .uuid, not .id — reporting_manager.id is the display employee code
       // (e.g. "RSS000183"), not a real primary key. Echoing that back as
       // reporting_manager_id on save fails UUID parsing on the backend and
@@ -125,9 +128,9 @@ export function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeCo
       // "true"/"false" string, not boolean — DetailValues is a plain string
       // bag (see _data.ts), same convention every other field here follows.
       reportingManagerFromOrgChart: u.reporting_manager?.from_org_chart ? "true" : "false",
-      reportingApprover:   u.reporting_approver?.name ?? "",
+      reportingApprover:   u.reporting_approver?.name ?? NOT_ASSIGNED,
       reportingApproverId: u.reporting_approver?.uuid ?? "",
-      hr:                  u.hr?.name ?? "",
+      hr:                  u.hr?.name ?? NOT_ASSIGNED,
       hrId:                u.hr?.uuid ?? "",
       category:          "General",
       esiLocation:   "Corporate",

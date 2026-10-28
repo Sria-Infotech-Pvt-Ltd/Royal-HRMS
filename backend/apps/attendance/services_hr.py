@@ -13,6 +13,7 @@ from django.db import transaction
 from django.db.models import Count, OuterRef, Subquery, Q
 
 from apps.accounts.services_headcount import current_workforce
+from apps.accounts.services_placement import org_unit_name_for, org_unit_names_for
 from apps.attendance.models import AttendanceRecord, AttendancePunch, EmployeeWeeklyOffAssignment
 
 logger = logging.getLogger(__name__)
@@ -319,7 +320,9 @@ def get_attendance_list(filters: dict) -> list[dict]:
     employee_qs = employee_qs.order_by(order_field)
 
     rows = []
-    for user in employee_qs:
+    users = list(employee_qs)
+    org_unit_names = org_unit_names_for([user.pk for user in users])  # one query, not one per row
+    for user in users:
         if user._status:
             status_key = user._status
         elif user.date_of_joining and target_date < user.date_of_joining:
@@ -334,7 +337,7 @@ def get_attendance_list(filters: dict) -> list[dict]:
             'employee_id': user.employee_id or '',
             'name':        user.full_name or '',
             'initials':    _initials(user.full_name or ''),
-            'department':  user.department or '',
+            'department':  org_unit_names.get(user.pk) or user.department or '',
             'branch':      user.branch or '',
             'clock_in':    _fmt_time(user._clock_in),
             'clock_out':   _fmt_time(user._clock_out),
@@ -398,7 +401,7 @@ def get_attendance_detail(
         'record_id':     str(record.id),
         'employee_id':   user.employee_id or '',
         'name':          user.full_name or '',
-        'department':    user.department or '',
+        'department':    org_unit_name_for(user),
         'branch':        user.branch or '',
         'date':          record.date,
         'status':        record.status_display,
@@ -504,12 +507,14 @@ def build_weekly_off_assignment_queryset(filters: dict):
     return qs.order_by('full_name')
 
 
-def serialize_weekly_off_assignment_row(user) -> dict:
-    """Build one list row from a User instance annotated by build_weekly_off_assignment_queryset()."""
+def serialize_weekly_off_assignment_row(user, org_unit_names: dict | None = None) -> dict:
+    """Build one list row from a User instance annotated by build_weekly_off_assignment_queryset().
+    `org_unit_names` is the batch map from org_unit_names_for(); without it the single-employee lookup is used."""
+    department = (org_unit_names or {}).get(user.pk) or (org_unit_name_for(user) if org_unit_names is None else user.department) or ''
     return {
         'employee_id':    user.employee_id or '',
         'employee_name':  user.full_name or '',
-        'department':     user.department or '',
+        'department':     department,
         'branch':         user.branch or '',
         'pattern_id':     str(user._woa_policy_id) if user._woa_policy_id else None,
         'pattern_name':   user._woa_policy_name or None,

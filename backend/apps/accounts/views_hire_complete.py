@@ -24,7 +24,9 @@ from core.permissions import has_perm as _has_perm
 from core.responses import error, success, get_client_ip
 from apps.accounts.models import AuditLog, Company, EmployeeDocument, HireAction, HireActionDocument, User
 from apps.accounts.services_placement import assign_position
+from apps.accounts.services_hire_duplicates import blocking_message, check_hire_duplicates
 from apps.accounts.services_work_location import work_location_for_branch
+from apps.accounts.views_pincode import fill_state_and_district
 from apps.accounts.utils import send_template_email
 from apps.attendance.services_face_policy import hire_summary
 from apps.accounts.views_hire import _hire_action_dict, _DENIED
@@ -211,6 +213,7 @@ def _apply_wizard_records(user, draft):
     # reaching _PROFILE_FIELDS at all.
     if draft.get('bank_branch_address'):
         profile_fields['bank_branch_name'] = draft['bank_branch_address']
+    fill_state_and_district(profile_fields)  # State/District pre-filled from the PIN code when HR left them blank
     if 'pf_covered' in draft:
         profile_fields['pf_covered'] = str(draft['pf_covered']).lower() == 'true'
     if 'esi_covered' in draft:
@@ -297,6 +300,10 @@ class HireActionCompleteView(APIView):
         branch     = (draft.get('branch')     or '').strip()
         if not all([first_name, last_name, email, branch]):
             return error('First name, last name, email and company code are required before hiring.')
+
+        message, field_errors = blocking_message(check_hire_duplicates(email, str(draft.get('phone') or ''), exclude_action=action))
+        if message:
+            return error(message, data=field_errors)
 
         missing = _missing_hire_requirements(action, draft)
         if missing:
