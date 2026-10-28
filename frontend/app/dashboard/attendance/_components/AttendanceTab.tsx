@@ -8,7 +8,9 @@ import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
-import { attendanceExportFilename, attendanceExportParams, type AttendanceExportMode } from "@/lib/attendanceExport";
+import {
+  attendanceExportFilename, attendanceExportParams, exportRangeProblem, type AttendanceExportMode,
+} from "@/lib/attendanceExport";
 import { useToast } from "@/components/ToastProvider";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import type { DashboardData, PaginatedAttendance } from "@/types/attendance";
@@ -76,6 +78,8 @@ export default function AttendanceTab({ onMutated }: Props) {
   const [exporting, setExporting]       = useState(false);
   const [exportMode, setExportMode]     = useState<AttendanceExportMode>("day");
   const [exportMonth, setExportMonth]   = useState(todayISO().slice(0, 7));
+  const [exportFrom, setExportFrom]     = useState(`${todayISO().slice(0, 8)}01`);
+  const [exportTo, setExportTo]         = useState(todayISO());
 
   // hr_admin never gets to choose a branch — it's always their own, locked.
   const branch = unrestricted ? branchInput : effectiveBranch;
@@ -105,10 +109,14 @@ export default function AttendanceTab({ onMutated }: Props) {
     onMutated?.();
   }
 
+  const rangeProblem = exportMode === "range" ? exportRangeProblem(exportFrom, exportTo, todayISO()) : null;
+
   async function handleExport() {
     setExporting(true);
     try {
-      const exportInput = { mode: exportMode, date, month: exportMonth, branch, department };
+      const exportInput = {
+        mode: exportMode, date, month: exportMonth, fromDate: exportFrom, toDate: exportTo, branch, department,
+      };
       const url = `${API.attendance.export}${toQuery(attendanceExportParams(exportInput))}`;
       const response = await clientApi.get(url, { responseType: "blob" });
       const blobUrl = URL.createObjectURL(new Blob([response.data]));
@@ -171,16 +179,20 @@ export default function AttendanceTab({ onMutated }: Props) {
         </select>
         <div style={{ flex: 1 }} />
         {canExport && (
-          <select
-            className="field-input"
-            style={{ width: 110 }}
-            aria-label="Export range"
-            value={exportMode}
-            onChange={e => setExportMode(e.target.value as AttendanceExportMode)}
-          >
-            <option value="day">Day</option>
-            <option value="month">Month</option>
-          </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--on-variant)" }}>
+            Export:
+            <select
+              className="field-input"
+              style={{ width: 160 }}
+              aria-label="Export period"
+              value={exportMode}
+              onChange={e => setExportMode(e.target.value as AttendanceExportMode)}
+            >
+              <option value="day">Single Day</option>
+              <option value="month">Month</option>
+              <option value="range">Custom Date Range</option>
+            </select>
+          </label>
         )}
         {canExport && exportMode === "month" && (
           <input
@@ -193,10 +205,43 @@ export default function AttendanceTab({ onMutated }: Props) {
             onChange={e => setExportMonth(e.target.value)}
           />
         )}
+        {canExport && exportMode === "range" && (
+          <>
+            <input
+              type="date"
+              className="field-input"
+              style={{ width: 150 }}
+              aria-label="Export from date"
+              title="From date"
+              value={exportFrom}
+              max={exportTo || todayISO()}
+              onChange={e => setExportFrom(e.target.value)}
+            />
+            <input
+              type="date"
+              className="field-input"
+              style={{ width: 150 }}
+              aria-label="Export to date"
+              title="To date"
+              value={exportTo}
+              min={exportFrom}
+              max={todayISO()}
+              onChange={e => setExportTo(e.target.value)}
+            />
+          </>
+        )}
         {canExport && (
-          <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={exporting || (exportMode === "month" && !exportMonth)}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={handleExport}
+            disabled={exporting || (exportMode === "month" && !exportMonth) || !!rangeProblem}
+            title={rangeProblem ?? undefined}
+          >
             <i className="ti ti-download" /> {exporting ? "Exporting…" : "Export CSV"}
           </button>
+        )}
+        {canExport && rangeProblem && (
+          <span role="alert" style={{ fontSize: 11.5, color: "var(--error)" }}>{rangeProblem}</span>
         )}
         {canImport && (
           <button className="btn btn-filled btn-sm" onClick={() => setShowImport(true)}>

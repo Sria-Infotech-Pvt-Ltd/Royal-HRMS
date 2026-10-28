@@ -935,10 +935,11 @@ def _write_attendance_csv(rows: list[dict], locations: dict) -> str:
     return output.getvalue()
 
 
-def export_attendance_month_csv(filters: dict) -> str:
+def export_attendance_range_csv(filters: dict) -> str:
     """
-    CSV for every in-scope employee for every day from month_start to
-    month_end (one row per employee per day), same columns as the daily export.
+    CSV for every in-scope employee for every day from range_start to
+    range_end (a month or a custom date range; one row per employee per day),
+    same columns as the daily export.
 
     A day with an AttendanceRecord exports that record, exactly like the daily
     export. A day without one follows the employee calendar's rules
@@ -950,7 +951,7 @@ def export_attendance_month_csv(filters: dict) -> str:
     from apps.hrms.models import STATUS_APPROVED, LeaveRequest
     from core.cache_service import HolidayCacheService
 
-    start, end = filters['month_start'], filters['month_end']
+    start, end = filters['range_start'], filters['range_end']
     status_f = filters.get('status', '')
     employees = list(filtered_employees(filters).order_by('full_name', 'employee_id'))
 

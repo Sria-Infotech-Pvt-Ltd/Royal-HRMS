@@ -54,7 +54,7 @@ from apps.attendance.services_hr_audit import (
 from apps.attendance.services_hr_ops import (
     create_overtime,
     export_attendance_csv,
-    export_attendance_month_csv,
+    export_attendance_range_csv,
     import_attendance_csv,
     list_overtime,
 )
@@ -808,9 +808,9 @@ class HRAttendanceExportView(APIView):
         filters = ser.validated_data
         filters['branch'] = _branch_scope(request.user, filters.get('branch', ''))
         filters['employee_ids'] = _manager_scope_employee_ids(request.user)
-        if 'month_start' in filters:
-            csv_content = export_attendance_month_csv(filters)
-            filename = f"attendance_{filters['month_start'].strftime('%Y-%m')}.csv"
+        if 'range_start' in filters:
+            csv_content = export_attendance_range_csv(filters)
+            filename = f"attendance_{filters['range_label']}.csv"
         else:
             csv_content = export_attendance_csv(filters)
             filename = f"attendance_{filters['date'].strftime('%Y-%m-%d')}.csv"

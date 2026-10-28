@@ -40,30 +40,53 @@ class AttendanceListFilterSerializer(serializers.Serializer):
 
 
 class AttendanceExportFilterSerializer(AttendanceListFilterSerializer):
-    """Export filters: the list filters for one `date`, or `month=YYYY-MM` for
-    the whole month (never both). A month export adds month_start / month_end,
-    with month_end capped at today for the current month."""
+    """Export filters: the list filters for one `date`, `month=YYYY-MM` for the
+    whole month, or `from_date` + `to_date` (at most MAX_RANGE_DAYS) — exactly
+    one of the three. Month and date-range exports add range_start / range_end
+    (a month's end capped at today) and range_label for the file name."""
+    MAX_RANGE_DAYS = 31
+
     month = serializers.RegexField(r'^\d{4}-\d{2}$', required=False, allow_blank=True, default='',
                                    error_messages={'invalid': 'month must be in YYYY-MM format.'})
+    from_date = serializers.DateField(required=False)
+    to_date   = serializers.DateField(required=False)
 
     def validate(self, attrs: dict) -> dict:
         import calendar
 
         month = attrs.pop('month', '')
+        from_date = attrs.pop('from_date', None)
+        to_date = attrs.pop('to_date', None)
+        has_range = from_date is not None or to_date is not None
+        if sum(map(bool, (attrs.get('date'), month, has_range))) > 1:
+            raise serializers.ValidationError('Use only one of date, month, or from_date / to_date.')
+        today = datetime.date.today()
+
+        if has_range:
+            if from_date is None or to_date is None:
+                raise serializers.ValidationError('Both from_date and to_date are required.')
+            if from_date > to_date:
+                raise serializers.ValidationError('from_date must be on or before to_date.')
+            if to_date > today:
+                raise serializers.ValidationError('to_date cannot be in the future.')
+            if (to_date - from_date).days + 1 > self.MAX_RANGE_DAYS:
+                raise serializers.ValidationError(f'Date range cannot exceed {self.MAX_RANGE_DAYS} days.')
+            attrs['range_start'], attrs['range_end'] = from_date, to_date
+            attrs['range_label'] = f'{from_date:%Y-%m-%d}_to_{to_date:%Y-%m-%d}'
+            return attrs
+
         if not month:
             return super().validate(attrs)
-        if attrs.get('date'):
-            raise serializers.ValidationError('Use either date or month, not both.')
         year, mon = (int(x) for x in month.split('-'))
         if not 1 <= mon <= 12 or year < 2000:
             raise serializers.ValidationError('month must be in YYYY-MM format.')
-        today = datetime.date.today()
         month_start = datetime.date(year, mon, 1)
         if month_start > today:
             raise serializers.ValidationError('Cannot export a future month.')
         month_end = datetime.date(year, mon, calendar.monthrange(year, mon)[1])
-        attrs['month_start'] = month_start
-        attrs['month_end'] = min(month_end, today)
+        attrs['range_start'] = month_start
+        attrs['range_end'] = min(month_end, today)
+        attrs['range_label'] = month
         return attrs
 
 

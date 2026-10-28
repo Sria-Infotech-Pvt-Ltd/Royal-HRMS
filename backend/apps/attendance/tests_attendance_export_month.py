@@ -1,10 +1,11 @@
 """
-Attendance CSV export, month-wise: GET /api/attendance/export/?month=YYYY-MM.
+Attendance CSV export, month-wise and custom date range: GET /api/attendance/export
+?month=YYYY-MM or ?from_date=…&to_date=… (at most 31 days).
 
 One row per in-scope employee per day, same columns as the daily export.
 Days with an AttendanceRecord export the record; days without one follow the
 employee calendar: Holiday, then Weekly Off, then approved leave, else Absent.
-Both daily and monthly export require attendance.export.
+Daily, monthly and date-range exports all require attendance.export.
 """
 from __future__ import annotations
 
@@ -200,3 +201,83 @@ class MonthExportTests(TestCase):
         self.assertEqual(by_id['MEX001']['clock_in_location'], 'Office')
         self.assertEqual(by_id['MEX002']['status'], 'Absent')
         self.assertNotIn('MEX009', by_id)
+
+    # ── Custom date range (from_date / to_date) ───────────────────────────────
+
+    def test_range_within_a_month(self):
+        Holiday.objects.create(name='Range Holiday', date=date(2026, 9, 15))
+        self._work(self.emp, date(2026, 9, 14), 'Range Office')
+        resp = self._export(from_date='2026-09-10', to_date='2026-09-20')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Disposition'],
+                         'attachment; filename="attendance_2026-09-10_to_2026-09-20.csv"')
+        mine = self._by(_rows(resp), 'MEX001')
+        self.assertEqual(len(mine), 11)
+        self.assertNotIn('09-09-2026', mine)
+        self.assertNotIn('21-09-2026', mine)
+        self.assertEqual(mine['14-09-2026']['status'], 'Present')
+        self.assertEqual(mine['14-09-2026']['clock_in_location'], 'Range Office')
+        self.assertEqual(mine['15-09-2026']['status'], 'Holiday')
+        self.assertEqual(mine['13-09-2026']['status'], 'Weekly Off')
+
+    def test_range_across_months(self):
+        self._work(self.emp, date(2026, 9, 30), 'End Sep')
+        self._work(self.emp, date(2026, 10, 1), 'Start Oct')
+        mine = self._by(_rows(self._export(from_date='2026-09-25', to_date='2026-10-05')), 'MEX001')
+        self.assertEqual(len(mine), 11)
+        self.assertEqual(mine['30-09-2026']['clock_in_location'], 'End Sep')
+        self.assertEqual(mine['01-10-2026']['clock_in_location'], 'Start Oct')
+        self.assertNotIn('24-09-2026', mine)
+        self.assertNotIn('06-10-2026', mine)
+
+    def test_one_day_range_matches_daily_export(self):
+        self._work(self.emp, date(2026, 9, 1), 'Office')
+        ranged = _rows(self._export(from_date='2026-09-01', to_date='2026-09-01'))
+        daily = _rows(self._export(date='2026-09-01'))
+        key = lambda r: r['employee_id']
+        self.assertEqual(sorted(ranged, key=key), sorted(daily, key=key))
+
+    def test_range_of_exactly_31_days_allowed(self):
+        resp = self._export(from_date='2026-08-01', to_date='2026-08-31')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(self._by(_rows(resp), 'MEX001')), 31)
+
+    def test_invalid_ranges_rejected(self):
+        tomorrow = (date.today() + datetime.timedelta(days=1)).isoformat()
+        today = date.today().isoformat()
+        for params in (
+            {'from_date': '2026-09-01'},                                   # to_date missing
+            {'to_date': '2026-09-01'},                                     # from_date missing
+            {'from_date': '2026-09-10', 'to_date': '2026-09-01'},          # reversed
+            {'from_date': today, 'to_date': tomorrow},                     # future to_date
+            {'from_date': '2026-08-01', 'to_date': '2026-09-01'},          # 32 days
+            {'from_date': 'bad', 'to_date': '2026-09-01'},                 # not a date
+            {'from_date': '2026-09-01', 'to_date': '2026-09-02', 'date': '2026-09-01'},
+            {'from_date': '2026-09-01', 'to_date': '2026-09-02', 'month': '2026-09'},
+        ):
+            self.assertEqual(self._export(**params).status_code, 400, params)
+
+    def test_range_respects_access_restrictions(self):
+        rng = {'from_date': '2026-09-01', 'to_date': '2026-09-05'}
+        ids = {r['employee_id'] for r in _rows(self._export(branch=OTHER_BRANCH, **rng))}
+        self.assertIn('MEX001', ids)
+        self.assertNotIn('MEX009', ids)
+        ids = {r['employee_id'] for r in _rows(self._export(department='Sales', **rng))}
+        self.assertEqual(ids, {'MEX002'})
+
+        manager = make_user('mex.rmgr@test.com',
+                            role=make_role('mex_rmgr', can_manage_team=True, permission_codenames=EXPORT_PERMS),
+                            employee_id='MEXRMGR', full_name='Range Mgr', branch=BRANCH)
+        self.emp.reporting_manager = manager
+        self.emp.save(update_fields=['reporting_manager'])
+        ids = {r['employee_id'] for r in _rows(self._export(manager, **rng))}
+        self.assertEqual(ids, {'MEX001'})
+
+        viewer = make_user('mex.rview@test.com', role=make_role('mex_rview', permission_codenames=['attendance.view']),
+                           employee_id='MEXRVW', full_name='Range Viewer', branch=BRANCH)
+        self.assertEqual(self._export(viewer, **rng).status_code, 403)
+
+    def test_month_export_unchanged_by_range_support(self):
+        resp = self._export(month='2026-09')
+        self.assertEqual(resp['Content-Disposition'], 'attachment; filename="attendance_2026-09.csv"')
+        self.assertEqual(len(self._by(_rows(resp), 'MEX001')), 30)
