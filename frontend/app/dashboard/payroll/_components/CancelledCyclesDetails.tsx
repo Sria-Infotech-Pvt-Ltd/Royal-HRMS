@@ -2,6 +2,7 @@
 
 import type { PayrollCycle } from "@/types/payroll";
 import { formatDate } from "@/lib/formatDate";
+import { cyclePeriodLabel } from "./payrollDashboardShared";
 
 export default function CancelledCyclesDetails({ cycles }: { cycles: PayrollCycle[] }) {
   const cancelled = cycles.filter(c => c.status === "cancelled");
@@ -18,7 +19,7 @@ export default function CancelledCyclesDetails({ cycles }: { cycles: PayrollCycl
             {cancelled.map(c => (
               <tr key={c.id}>
                 <td style={{ fontWeight: 600, fontSize: 13 }}>
-                  {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
+                  {cyclePeriodLabel(c)}
                 </td>
                 <td style={{ fontSize: 13 }}>{c.cancelled_by_name ?? "—"}</td>
                 <td style={{ fontSize: 13, color: "var(--on-variant)" }}>

@@ -53,6 +53,10 @@
 // stated in-code at the save call, not silently dropped without a trace.
 
 import { matchEmploymentType } from "@/lib/employmentType";
+import { parseApiError } from "@/lib/apiError";
+import { usePermission } from "@/hooks/usePermission";
+import EditRecordContactFields from "./EditRecordContactFields";
+import { buildContactChanges } from "./editRecordContact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -76,6 +80,7 @@ import { type FamilyEntry, type NomineeEntry } from "@/app/onboarding/_component
 import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/AssetsList";
 import EducationChecklist, { type EducationEntry } from "@/app/onboarding/_components/EducationChecklist";
 import ExperienceList, { type ExperienceEntry } from "@/app/onboarding/_components/ExperienceList";
+import { todayDateString } from "@/lib/candidateValidation";
 import type { EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
 import type { EmployeeSalaryConfig } from "@/types/payroll";
 
@@ -205,6 +210,12 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   const [addressExtras, setAddressExtras] = useState<AddressExtras>(EMPTY_ADDRESS_EXTRAS);
 
   const [personal, setPersonal] = useState<PersonalIdentityDraft>(EMPTY_PERSONAL);
+  // HR (employees.edit) may correct the mobile and personal/login email; others see them read-only. savedContact is
+  // what the server holds, so only a real change is sent, and a login-email change needs the explicit tick.
+  const canEditContact = usePermission("employees.edit");
+  const [savedContact, setSavedContact] = useState({ email: "", mobile: "" });
+  const [isLoginChangeConfirmed, setIsLoginChangeConfirmed] = useState(false);
+  const [contactErrors, setContactErrors] = useState<{ email?: string; phone?: string }>({});
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContactEntry[]>([]);
   // Guardian (Family & nomination step) — local-only, same as Personal
   // identity's extra fields: no backend column exists for this today, so
@@ -319,6 +330,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         languagesKnown: raw.profile?.languages_known ?? "",
         personalEmail: emp.email ?? "", mobileNumber: emp.phone ?? "",
       }));
+      setSavedContact({ email: emp.email ?? "", mobile: emp.phone ?? "" });
 
       const legacyEmergency: EmergencyContactEntry = {
         id: nextTempId(), name: emp.details.emergencyName ?? "", relationship: emp.details.emergencyRelationship ?? "",
@@ -436,8 +448,15 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       deletedAssetIds.current.clear();
       const saved: AssetEntry[] = [];
       for (const entry of assetEntries) {
-        const payload = { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition };
         const isNew = entry.id.startsWith("temp-");
+        // No "issue later" toggle here (see AssetsList.tsx) — adding an
+        // entry means it's issued now, so the new row must be stamped
+        // issued_at immediately. Without this issued_at stayed blank
+        // forever and the ESS asset card showed a tag/date-less row under
+        // an ASSIGNED badge.
+        const payload = isNew
+          ? { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition, issued_at: todayDateString() }
+          : { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition };
         const res = isNew
           ? await clientApi.post<{ data: AssetEntry }>(API.onboarding.employees.assets(uuid), payload)
           : await clientApi.patch<{ data: AssetEntry }>(API.onboarding.employees.assetDetail(uuid, entry.id), payload);
@@ -505,6 +524,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     setSaving(true);
     setSaveError(null);
     setSavedMsg(false);
+    setContactErrors({});
+    const contactChanges = buildContactChanges(personal, savedContact, canEditContact, isLoginChangeConfirmed);
     try {
       const primaryEmergency = emergencyContacts.find(c => c.is_primary) ?? emergencyContacts[0];
       const payload = {
@@ -523,6 +544,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         work_mode: employment.work_mode || '',
         probation_period_months: employment.probation_period_months || null,
         notice_period_days: employment.notice_period_days || null,
+        ...contactChanges,
         // Personal identity
         salutation: personal.salutation || "",
         display_name: personal.displayName || "",
@@ -579,6 +601,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         certifications: certifications || "",
       };
       await clientApi.put(API.employees.detail(employee.id), payload);
+      setSavedContact({ email: personal.personalEmail, mobile: personal.mobileNumber });
+      setIsLoginChangeConfirmed(false);
 
       // Basic pay — only create a new EmployeeSalaryConfig revision if the
       // CTC/structure actually changed from what was loaded, so opening
@@ -613,8 +637,9 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       setSavedMsg(familyOk && assetsOk && eduExpOk && ctcOk);
       if (!familyOk || !assetsOk || !eduExpOk || !ctcOk) setSaveError(prev => prev ?? "Some sections could not be saved — see the errors above.");
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setSaveError(msg ?? "Failed to save changes. Please try again.");
+      const parsed = parseApiError(err, "Failed to save changes. Please try again.");
+      setContactErrors({ email: parsed.fieldErrors.email, phone: parsed.fieldErrors.phone });
+      setSaveError(parsed.message);
     } finally {
       setSaving(false);
     }
@@ -858,14 +883,18 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
 
                   <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Contact</div>
                   <div className="grid grid-cols-3 gap-3 mb-5">
-                    <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Personal email <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>read-only here</span></label>
-                      <input value={personal.personalEmail} readOnly className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} />
-                    </div>
-                    <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Mobile number <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>read-only here</span></label>
-                      <PhoneInput value={personal.mobileNumber} onChange={() => {}} placeholder="90000 00000" />
-                    </div>
+                    <EditRecordContactFields
+                      canEdit={canEditContact}
+                      email={personal.personalEmail}
+                      mobile={personal.mobileNumber}
+                      savedEmail={savedContact.email}
+                      isLoginChangeConfirmed={isLoginChangeConfirmed}
+                      emailError={contactErrors.email}
+                      mobileError={contactErrors.phone}
+                      onEmailChange={value => { setContactErrors(previous => ({ ...previous, email: undefined })); setPersonal(p => ({ ...p, personalEmail: value })); }}
+                      onMobileChange={value => { setContactErrors(previous => ({ ...previous, phone: undefined })); setPersonal(p => ({ ...p, mobileNumber: value })); }}
+                      onLoginChangeConfirmed={setIsLoginChangeConfirmed}
+                    />
                     <div>
                       <label className="block text-[12.5px] font-semibold mb-1.5">Alternate mobile <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL, not yet stored post-hire</span></label>
                       <PhoneInput value={personal.alternateMobile} onChange={v => setPersonal(p => ({ ...p, alternateMobile: v }))} placeholder="Optional" />

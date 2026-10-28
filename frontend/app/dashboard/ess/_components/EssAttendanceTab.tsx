@@ -44,6 +44,7 @@ function dayClass(status: string | undefined): string {
   if (value === "weekly off") return "weekly-off";
   if (value === "holiday") return "holiday";
   if (value === "incomplete" || value === "missing clock out") return "incomplete";
+  if (value === "not joined") return "not-joined";
   return "unrecorded";
 }
 
@@ -178,6 +179,7 @@ export default function EssAttendanceTab() {
               ["leave", "On leave"],
               ["unrecorded", "Week off / Holiday"],
               ["incomplete", "Incomplete"],
+              ["not-joined", "Not joined"],
             ].map(([className, label]) => (
               <span key={className}>
                 <i className={`ess-status-dot ${className}`} />

@@ -3,7 +3,8 @@ from core.access import can_manage_team
 import logging
 
 from django.db import transaction
-from django.db.models import Max, Q
+from django.db.models import Q
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -13,13 +14,15 @@ from core.pagination import paginate, paginated_data
 from core.responses import error, first_error, success
 
 from ..models import (
-    SEP_APPROVED, SEP_PENDING, SEP_STAGE2_PENDING,
+    APPROVAL_PENDING, APPROVAL_REJECTED,
+    SEP_APPROVED, SEP_PENDING, SEP_REJECTED, SEP_STAGE2_PENDING,
     SEP_STAGE_HR, SEP_CLEARANCE_TYPE_CHOICES,
     SEPARATION_NOTICE_PERIOD_APPLICABLE_TYPES, SEPARATION_REASON_APPLICABLE_TYPES,
     SEPARATION_REASON_CHOICES, SEPARATION_SELF_SERVICE_TYPES, SEPARATION_TYPE_CHOICES,
     SeparationActivity, SeparationApprovalStage, SeparationClearance, SeparationRequest,
+    SeparationRequestNumberSequence,
 )
-from ..serializers import SeparationRequestCreateSerializer, SeparationRequestSerializer
+from ..serializers import SeparationRequestCreateSerializer, SeparationRequestSerializer, _stage_actionable
 
 logger = logging.getLogger(__name__)
 
@@ -197,12 +200,9 @@ class SeparationRequestListCreateView(APIView):
             return error('This employee already has an active separation request.')
 
         with transaction.atomic():
-            last_num = (
-                SeparationRequest.objects.select_for_update().aggregate(n=Max('request_number'))['n'] or 0
-            )
             sep_request = SeparationRequest.objects.create(
                 employee=target_employee,
-                request_number=last_num + 1,
+                request_number=SeparationRequestNumberSequence.next_number(),
                 created_by=request.user,
                 **serializer.validated_data,
             )
@@ -269,12 +269,47 @@ class SeparationRequestDetailView(APIView):
         # web app's own edit form never sends it (see SeparationFormModal.tsx).
         raw_action = request.data.get('action')
         action = 'update' if raw_action is None else str(raw_action).strip().lower()
-        if action not in ('cancel', 'update'):
+        if action not in ('cancel', 'reject', 'update'):
             return error(
-                f'Unrecognized action "{raw_action}" — expected "cancel" or "update".',
+                f'Unrecognized action "{raw_action}" — expected "cancel", "reject", or "update".',
                 http_status=status.HTTP_400_BAD_REQUEST,
             )
         editable_statuses = (SEP_PENDING, SEP_STAGE2_PENDING)
+
+        if action == 'reject':
+            # UAT-018 — the list view's quick "Reject" action used to hard-
+            # DELETE the row (see the now-removed .delete() call below): no
+            # reason captured, the row gone so it could never be viewed
+            # again, and request_number (derived from Max() over surviving
+            # rows) silently reused on the next request. This does what the
+            # per-stage approval decision (SeparationApprovalStageActionView)
+            # already does correctly — set status, keep the row, require a
+            # reason — just reachable directly from the list without first
+            # opening the detail page and finding the right approval stage.
+            if sep_request.status not in editable_statuses:
+                return error(f'This separation request is already {sep_request.status}.')
+            # Same check the "Reject" button's own visibility already promises
+            # (SeparationRequestSerializer.get_can_delete) — reused directly
+            # rather than a cruder blanket permission check, so a user who
+            # can't actually act on any pending stage can't reject just
+            # because they hold separation.approve somewhere else.
+            pending_stages = sep_request.approval_stages.filter(status=APPROVAL_PENDING)
+            if not any(_stage_actionable(request.user, sep_request, s) for s in pending_stages):
+                return error('You are not able to act on this separation request.', http_status=status.HTTP_403_FORBIDDEN)
+            reason = (request.data.get('reason') or '').strip()
+            if not reason:
+                return error('A reason is required to reject a separation request.')
+            sep_request.status = SEP_REJECTED
+            sep_request.save(update_fields=['status', 'updated_at'])
+            sep_request.approval_stages.filter(status=APPROVAL_PENDING).update(
+                status=APPROVAL_REJECTED, approver=request.user, remarks=reason, actioned_at=timezone.now(),
+            )
+            _log(sep_request, request.user, f'Request rejected by {request.user.full_name} — "{reason}"')
+            logger.info('Separation request %s rejected by %s', sep_request.id, request.user.email)
+            return success(
+                'Separation request rejected.',
+                SeparationRequestSerializer(sep_request, context={'request': request}).data,
+            )
 
         if action == 'cancel':
             if sep_request.employee_id != request.user.id:

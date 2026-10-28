@@ -34,28 +34,70 @@ _MAX_ITERATIONS = 8
 _CONVERGENCE_TOLERANCE = Decimal('0.01')
 
 
-def _compute_from_gross_basis(monthly_gross_basis, structure, is_metro, branch_config, eps_rate, gratuity_rate, statutory):
+def _resolve_override(overrides, component):
+    """overrides is keyed by SalaryComponent id (new convention) or a legacy
+    fixed-breakup code (basic/hra/...) matched by component name — see
+    EmployeeSalaryConfigSerializer.validate_earnings_override. Returns None
+    when nothing overrides this component."""
+    if not overrides:
+        return None
+    by_id = overrides.get(str(component.id))
+    if by_id is not None:
+        return by_id
+    legacy_key = {
+        'basic': 'basic', 'hra': 'hra', 'special allowance': 'special',
+        'conveyance allowance': 'conv', 'medical allowance': 'med',
+        'leave travel allowance': 'lta', 'dearness allowance': 'da',
+    }.get(component.name.lower())
+    return overrides.get(legacy_key) if legacy_key else None
+
+
+def _compute_from_gross_basis(
+    monthly_gross_basis, structure, is_metro, branch_config, eps_rate, gratuity_rate, statutory,
+    overrides=None, basic_percent=None,
+):
     """One forward pass: given a monthly gross-earnings basis, returns every
     earnings/employer-contribution figure this module produces. Pure
     function of monthly_gross_basis — used both for the final real answer
-    and repeatedly during the reverse-solve below."""
+    and repeatedly during the reverse-solve below.
+
+    `overrides` (optional, see _resolve_override) lets HR's Basic pay dialog
+    override an individual component's amount without changing the
+    structure itself — resolved per component, in structure `order`, so a
+    CALC_BALANCE_CTC component downstream still balances AROUND an
+    upstream override exactly as it would around that component's normal
+    computed amount."""
     basic = Decimal('0')
     hra = Decimal('0')
     special_allowance = Decimal('0')
     other_earnings: dict[str, float] = {}
     other_earnings_total = Decimal('0')
+    component_breakdown: list[dict] = []
+    component_deductions_total = Decimal('0')
 
     components = list(structure.components.filter(is_active=True).order_by('order')) if structure else []
     if not components:
-        # No structure picked yet — the same 40%/metro-HRA/remainder split
+        # No structure picked yet — the same metro-HRA/remainder split
         # _compute_employee_payslip's own CALC_METRO_HRA formula uses, so
         # the preview isn't just a blank table before a structure exists.
-        basic = monthly_gross_basis * Decimal('40') / 100
+        # basic_percent (the Basic pay dialog's own "Basic as % of CTC"
+        # field, 40/45/50) drives Basic here — it has no effect once a real
+        # structure's own components take over, same as it never did.
+        pct = Decimal(str(basic_percent)) if basic_percent else Decimal('40')
+        basic = monthly_gross_basis * pct / 100
         hra = basic * (Decimal('50') if is_metro else Decimal('40')) / 100
         special_allowance = monthly_gross_basis - basic - hra
     else:
+        # Balance-to-CTC components are resolved in a second pass (they need
+        # every other earning/allowance component's amount first); non-balance
+        # components are computed in order below exactly as before.
+        balance_components = []
+        earning_allowance_total = Decimal('0')
         for component in components:
-            if component.calculation_type == SalaryComponent.CALC_PCT_CTC:
+            override = _resolve_override(overrides, component)
+            if override is not None:
+                amount = Decimal(str(override))
+            elif component.calculation_type == SalaryComponent.CALC_PCT_CTC:
                 # Despite the name, this is a % of the resolved GROSS basis,
                 # not of the raw entered CTC figure — CALC_PCT_CTC components
                 # are computed the same way _compute_employee_payslip's real
@@ -68,19 +110,64 @@ def _compute_from_gross_basis(monthly_gross_basis, structure, is_metro, branch_c
             elif component.calculation_type == SalaryComponent.CALC_METRO_HRA:
                 metro_pct = Decimal('50') if is_metro else Decimal('40')
                 amount = basic * metro_pct / 100
+            elif component.calculation_type == SalaryComponent.CALC_BALANCE_CTC:
+                balance_components.append(component)
+                continue
             else:
                 amount = component.value
 
-            name_lower = component.name.lower()
-            if name_lower == 'basic':
-                basic = amount
-            elif name_lower == 'hra':
-                hra = amount
-            elif name_lower == 'special allowance':
-                special_allowance = amount
+            # A structure's deduction-type component (e.g. a loan recovery
+            # line) is not part of earnings/gross — it reduces net pay the
+            # same way PF/ESI/PT already do, via component_deductions_total,
+            # never via other_earnings (which would otherwise have silently
+            # inflated gross by a component that's supposed to shrink net).
+            if component.component_type == SalaryComponent.TYPE_DEDUCTION:
+                component_deductions_total += amount
             else:
-                other_earnings[component.name] = float(amount)
-                other_earnings_total += amount
+                name_lower = component.name.lower()
+                if name_lower == 'basic':
+                    basic = amount
+                elif name_lower == 'hra':
+                    hra = amount
+                elif name_lower == 'special allowance':
+                    special_allowance = amount
+                else:
+                    other_earnings[component.name] = float(amount)
+                    other_earnings_total += amount
+                earning_allowance_total += amount
+            component_breakdown.append({
+                'id': str(component.id), 'name': component.name,
+                'component_type': component.component_type, 'is_taxable': component.is_taxable,
+                'calculation_type': component.calculation_type, 'amount': float(amount),
+            })
+
+        if balance_components:
+            # Split the remainder evenly across every balance component in
+            # this structure — in practice there is exactly one (the
+            # Special-Allowance-equivalent "soaks up what's left" role), but
+            # nothing stops an admin defining more than one.
+            remainder = max(Decimal('0'), monthly_gross_basis - earning_allowance_total)
+            share = remainder / len(balance_components)
+            for component in balance_components:
+                override = _resolve_override(overrides, component)
+                amount = Decimal(str(override)) if override is not None else share
+                name_lower = component.name.lower()
+                if name_lower == 'special allowance':
+                    special_allowance = amount
+                else:
+                    other_earnings[component.name] = float(amount)
+                    other_earnings_total += amount
+                component_breakdown.append({
+                    'id': str(component.id), 'name': component.name,
+                    'component_type': component.component_type, 'is_taxable': component.is_taxable,
+                    'calculation_type': component.calculation_type, 'amount': float(amount),
+                })
+
+        # Balance components were appended last regardless of their own
+        # `order` relative to the others — restore the structure's real order.
+        if balance_components:
+            order_by_id = {str(c.id): i for i, c in enumerate(components)}
+            component_breakdown.sort(key=lambda row: order_by_id[row['id']])
 
     gross = basic + hra + special_allowance + other_earnings_total
 
@@ -117,7 +204,7 @@ def _compute_from_gross_basis(monthly_gross_basis, structure, is_metro, branch_c
 
     pt = Decimal(str(statutory.compute_pt(gross))) if statutory else Decimal('0')
 
-    total_deductions = pf_employee + esi_employee + pt
+    total_deductions = pf_employee + esi_employee + pt + component_deductions_total
     net_pay = gross - total_deductions
     total_employer_contributions = pf_employer + employer_eps + gratuity_provision + esi_employer
     monthly_cost_to_company = gross + total_employer_contributions
@@ -132,16 +219,19 @@ def _compute_from_gross_basis(monthly_gross_basis, structure, is_metro, branch_c
         'total_deductions': total_deductions, 'net_pay': net_pay,
         'total_employer_contributions': total_employer_contributions,
         'monthly_cost_to_company': monthly_cost_to_company,
+        'component_breakdown': component_breakdown,
     }
 
 
-def estimate_salary_breakdown(annual_ctc, structure, branch, statutory) -> dict:
+def estimate_salary_breakdown(annual_ctc, structure, branch, statutory, overrides=None, basic_percent=None) -> dict:
     """annual_ctc: Decimal-able, the TRUE cost-to-company ceiling (already
     includes employer PF/EPS/gratuity/ESI — never treated as gross
     earnings). structure: SalaryStructure or None (falls back to a flat 40%
     Basic / 40% HRA-of-basic / remainder Special Allowance split — the same
     default the mockup itself shows — when no structure is picked yet).
-    branch/statutory: Branch/StatutoryConfig or None."""
+    branch/statutory: Branch/StatutoryConfig or None. overrides: optional
+    dict, see _resolve_override — lets the Basic pay dialog override an
+    individual component's amount without touching the structure itself."""
     annual_ctc = Decimal(str(annual_ctc))
     target_monthly_ctc = annual_ctc / 12
     is_metro = bool(branch and branch.is_metro)
@@ -160,6 +250,7 @@ def estimate_salary_breakdown(annual_ctc, structure, branch, statutory) -> dict:
     for _ in range(_MAX_ITERATIONS):
         result = _compute_from_gross_basis(
             gross_basis_guess, structure, is_metro, branch_config, eps_rate, gratuity_rate, statutory,
+            overrides=overrides, basic_percent=basic_percent,
         )
         actual = result['monthly_cost_to_company']
         if actual == 0:
@@ -189,4 +280,9 @@ def estimate_salary_breakdown(annual_ctc, structure, branch, statutory) -> dict:
         'monthly_cost_to_company':      float(monthly_cost_to_company),
         'annual_cost_to_company':       float(monthly_cost_to_company * 12),
         'net_pay':                      float(result['net_pay']),
+        # Generic per-component list (id/name/type/taxable/calc_type/amount)
+        # for a structure-driven dialog to render arbitrary admin-defined
+        # components — empty when no structure is picked (the flat-split
+        # fallback above has no individual SalaryComponent rows to list).
+        'component_breakdown':          result['component_breakdown'],
     }

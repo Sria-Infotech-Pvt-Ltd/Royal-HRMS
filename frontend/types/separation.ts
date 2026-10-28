@@ -120,6 +120,8 @@ export interface SettlementItem {
   reimbursements_amount:         string;
   advances_recovery_amount:      string;
   tds_amount:                    string;
+  pf_recovery_amount:            string;
+  pt_recovery_amount:            string;
   other_adjustment_amount:       string;
   other_adjustment_note:         string;
   net_payable_amount:            string;

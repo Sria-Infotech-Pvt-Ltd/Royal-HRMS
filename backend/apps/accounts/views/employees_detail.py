@@ -111,6 +111,17 @@ from apps.accounts.serializers import (
     SMTPTestSerializer,
     VerifyOTPSerializer,
 )
+from apps.accounts.services_contact_change import (
+    ContactChangeError,
+    check_email_unique,
+    check_mobile_unique,
+    is_mobile_changed,
+    is_truthy,
+    normalise_email,
+    normalise_mobile,
+    notify_login_email_changed,
+    require_login_email_confirmation,
+)
 from apps.accounts.services_placement import assign_position, sync_from_position
 from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle, ResetPasswordRateThrottle
 from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
@@ -246,17 +257,27 @@ class EmployeeDetailView(APIView):
             except (Position.DoesNotExist, ValueError, ValidationError):
                 return error('Select a valid, active position.', data={'position': 'Position not found.'})
 
-        if 'phone' in data:
-            phone = (data.get('phone') or '').strip()
-            if locked and phone != employee.phone:
-                return error(
-                    'Phone number is locked once onboarding is complete and can no longer be changed here.',
-                    http_status=status.HTTP_409_CONFLICT,
-                )
-            if employee.phone != phone:
+        # Mobile and personal email are HR-correctable after hire (a typo at hire had no other fix). The caller already
+        # holds employees.edit; same validation as the hire wizard plus uniqueness, every change audit-logged below.
+        old_login_email = employee.email
+        try:
+            if 'phone' in data and is_mobile_changed(employee, data.get('phone')):
+                phone = normalise_mobile(data.get('phone'))
+                check_mobile_unique(employee, phone)
                 changes['phone'] = {'from': employee.phone, 'to': phone}
-            employee.phone = phone
-            update_fields.append('phone')
+                employee.phone = phone
+                update_fields.append('phone')
+
+            # The personal email captured at hire is the login email, so this is never applied silently.
+            if 'email' in data and (data.get('email') or '').strip().lower() != old_login_email.lower():
+                new_email = normalise_email(data.get('email'))
+                check_email_unique(employee, new_email)
+                require_login_email_confirmation(old_login_email, new_email, is_truthy(data.get('confirm_login_email_change')))
+                changes['email'] = {'from': old_login_email, 'to': new_email, 'is_login_email': True}
+                employee.email = new_email
+                update_fields.append('email')
+        except ContactChangeError as exc:
+            return error(exc.message, data={exc.field: exc.message})
 
         if 'work_location' in data:
             # "Org assignment" action (Perform an action modal) — a plain
@@ -550,8 +571,16 @@ class EmployeeDetailView(APIView):
                     reason                = reason_raw,
                 )
 
+        message = 'Employee updated successfully.'
+        if 'email' in changes:
+            is_notified = notify_login_email_changed(employee, old_login_email, employee.email, request.user)
+            message += (
+                ' The login email changed; the employee has been notified at both addresses.' if is_notified
+                else ' The login email changed, but the notification email could not be sent. Please tell the employee yourself.'
+            )
+
         employee = _get_employee(employee_id)
-        return success('Employee updated successfully.', data=_employee_dict(employee))
+        return success(message, data=_employee_dict(employee))
 
     def patch(self, request, employee_id: str):
         if not _has_perm(request.user, 'employees.edit'):

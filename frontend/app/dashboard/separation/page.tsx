@@ -12,6 +12,7 @@ import { toQuery } from "./_workflow";
 import SeparationTable from "./_components/SeparationTable";
 import SeparationFormModal from "./_components/SeparationFormModal";
 import ConfirmModal from "./_components/ConfirmModal";
+import DecisionModal from "./_components/DecisionModal";
 
 export default function SeparationPage() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export default function SeparationPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing,    setEditing]    = useState<SeparationRequest | null>(null);
   const [cancelling, setCancelling] = useState<SeparationRequest | null>(null);
-  const [deleting,   setDeleting]   = useState<SeparationRequest | null>(null);
+  const [rejecting,  setRejecting]  = useState<SeparationRequest | null>(null);
   const [working,    setWorking]    = useState(false);
 
   const listUrl = `${API.separation.list}${toQuery({
@@ -54,13 +55,17 @@ export default function SeparationPage() {
     }
   }
 
-  async function handleDeleteConfirm() {
-    if (!deleting) return;
+  async function handleRejectConfirm(reason: string) {
+    if (!rejecting) return;
     setWorking(true);
     try {
-      await clientApi.delete(API.separation.detail(deleting.id));
+      // UAT-018 — this used to be clientApi.delete(...), which permanently
+      // removed the row (no reason captured, request_number freed up for
+      // reuse). This now does the same status-only change the per-stage
+      // approval decision does, just reachable directly from the list.
+      await clientApi.patch(API.separation.detail(rejecting.id), { action: "reject", reason });
       showToast("Separation request rejected.", "success");
-      setDeleting(null);
+      setRejecting(null);
       refetch();
     } catch (err: unknown) {
       showToast(extractError(err, "Failed to reject the request."), "error");
@@ -127,7 +132,7 @@ export default function SeparationPage() {
             onView={r => router.push(`/dashboard/separation/${r.id}`)}
             onEdit={r => setEditing(r)}
             onCancel={r => setCancelling(r)}
-            onDelete={r => setDeleting(r)}
+            onReject={r => setRejecting(r)}
           />
         )}
 
@@ -177,15 +182,13 @@ export default function SeparationPage() {
         />
       )}
 
-      {deleting && (
-        <ConfirmModal
-          title="Reject Separation Request"
-          body={`This will reject the separation request for ${deleting.employee_name}.`}
-          confirmLabel="Yes, Reject"
-          danger
+      {rejecting && (
+        <DecisionModal
+          action="reject"
+          employeeName={rejecting.employee_name}
           saving={working}
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleting(null)}
+          onConfirm={handleRejectConfirm}
+          onClose={() => setRejecting(null)}
         />
       )}
     </div>

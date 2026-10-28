@@ -29,7 +29,7 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
 
   const [decision,   setDecision]   = useState<{ stageId: string; action: "approve" | "reject" } | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  const [deleting,   setDeleting]   = useState(false);
+  const [rejecting,  setRejecting]  = useState(false);
   const [working,    setWorking]    = useState(false);
 
   function extractError(err: unknown, fallback: string): string {
@@ -67,17 +67,23 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
     }
   }
 
-  async function handleDeleteConfirm() {
+  async function handleRejectConfirm(reason: string) {
     if (!r) return;
     setWorking(true);
     try {
-      await clientApi.delete(API.separation.detail(r.id));
+      // UAT-018 — this used to be clientApi.delete(...), which permanently
+      // removed the row (no reason captured, the request could never be
+      // viewed again, and its request_number got silently reused). This now
+      // does the same status-only change the per-stage approval decision
+      // does, just reachable directly from this page's header.
+      await clientApi.patch(API.separation.detail(r.id), { action: "reject", reason });
       showToast("Separation request rejected.", "success");
-      window.location.href = "/dashboard/separation";
+      setRejecting(false);
+      refetch();
     } catch (err: unknown) {
       showToast(extractError(err, "Failed to reject the request."), "error");
+    } finally {
       setWorking(false);
-      setDeleting(false);
     }
   }
 
@@ -122,7 +128,7 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
             </button>
           )}
           {r.can_delete && (
-            <button className="btn btn-danger" onClick={() => setDeleting(true)} suppressHydrationWarning>
+            <button className="btn btn-danger" onClick={() => setRejecting(true)} suppressHydrationWarning>
               <i className="ti ti-x" /> Reject
             </button>
           )}
@@ -160,15 +166,13 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
         />
       )}
 
-      {deleting && (
-        <ConfirmModal
-          title="Reject Separation Request"
-          body={`This will reject the separation request for ${r.employee_name}.`}
-          confirmLabel="Yes, Reject"
-          danger
+      {rejecting && (
+        <DecisionModal
+          action="reject"
+          employeeName={r.employee_name}
           saving={working}
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleting(false)}
+          onConfirm={handleRejectConfirm}
+          onClose={() => setRejecting(false)}
         />
       )}
     </div>

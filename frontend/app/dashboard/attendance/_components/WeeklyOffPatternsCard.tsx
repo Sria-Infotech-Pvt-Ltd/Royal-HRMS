@@ -302,7 +302,7 @@ export default function WeeklyOffPatternsCard() {
           {/* policy_code (e.g. WD-004) is an internal identifier only — the backend
               auto-generates it; it's never shown or editable in this UI. */}
 
-          <div className="field-group">
+          <div className="field-group" style={{ marginTop: 16 }}>
             <label className="field-label">Day Schedule</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: 8 }}>
               {DAYS.map(({ label, key }) => (

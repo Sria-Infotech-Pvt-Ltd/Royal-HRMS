@@ -99,6 +99,8 @@ def compute_net_payable(settlement: SeparationSettlement, overrides: dict | None
         - value('notice_period_recovery_amount')
         - value('advances_recovery_amount')
         - value('tds_amount')
+        - value('pf_recovery_amount')
+        - value('pt_recovery_amount')
     )
 
 

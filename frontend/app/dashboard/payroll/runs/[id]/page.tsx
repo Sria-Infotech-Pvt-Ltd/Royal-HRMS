@@ -8,6 +8,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle, EmployeePayslip } from "@/types/payroll";
 import { formatDate } from "@/lib/formatDate";
+import { cyclePeriodLabel } from "../../_components/payrollDashboardShared";
 
 const STATUS_LABEL: Record<string, string> = {
   draft:                "Draft",
@@ -38,7 +39,7 @@ function fmtDate(d: string | null | undefined) {
 }
 
 function period(cycle: PayrollCycle) {
-  return new Date(cycle.cycle_start).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  return cyclePeriodLabel(cycle);
 }
 
 interface PaginatedPayslips { results: EmployeePayslip[]; count: number; }
@@ -77,7 +78,7 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
       const url  = URL.createObjectURL(response.data as Blob);
       const link = document.createElement("a");
       link.href  = url;
-      const per  = new Date(cycle.cycle_start).toLocaleDateString("en-IN", { month: "short", year: "numeric" }).replace(" ", "_");
+      const per  = cyclePeriodLabel(cycle, "short").replace(" ", "_");
       const branch = (cycle.branch_name ?? "All").replace(/ /g, "_");
       link.download = `ECR_${per}_${branch}.xlsx`;
       document.body.appendChild(link);
@@ -103,7 +104,7 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
       const url  = URL.createObjectURL(response.data as Blob);
       const link = document.createElement("a");
       link.href  = url;
-      const per  = new Date(cycle.cycle_start).toLocaleDateString("en-IN", { month: "short", year: "numeric" }).replace(" ", "_");
+      const per  = cyclePeriodLabel(cycle, "short").replace(" ", "_");
       const branch = (cycle.branch_name ?? "All").replace(/ /g, "_");
       link.download = `ECR_${per}_${branch}.txt`;
       document.body.appendChild(link);
@@ -140,7 +141,7 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
       const url  = URL.createObjectURL(response.data as Blob);
       const link = document.createElement("a");
       link.href  = url;
-      const per  = new Date(cycle.cycle_start).toLocaleDateString("en-IN", { month: "2-digit", year: "numeric" }).replace("/", "_");
+      const per  = cyclePeriodLabel(cycle, "2-digit").replace("/", "_");
       link.download = `ESIC_Challan_${per}.xlsx`;
       document.body.appendChild(link);
       link.click();

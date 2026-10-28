@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { directoryStatusLabel, fullName, initials, personAvatarTint, type DirectoryStatusLabel, type Employee } from "../_data";
+import { directoryStatusLabel, fullName, initials, personAvatarTint, reportingManagerDisplay, type DirectoryStatusLabel, type Employee } from "../_data";
 import type { StatusPillTone } from "@/components/employees/StatusPill";
 import Avatar from "./Avatar";
 import EmployeeRowActionsMenu, { type RowAction } from "./EmployeeRowActionsMenu";
@@ -109,7 +109,7 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
           ? <span className="mgr" style={{ color: "var(--crit)", fontStyle: "italic" }}>Last day {slashDate(e.lastWorkingDay)}</span>
           : e.reportingManagerName
             ? <span className="mgr" style={{ color: "var(--ink)" }}>{e.reportingManagerName}</span>
-            : <span className="mgr none">CEO Office</span>
+            : <span className="mgr none">{reportingManagerDisplay(e.reportingManagerName, e.noManagerByDesign)}</span>
         }
       </div>
       <div onClick={ev => ev.stopPropagation()}>

@@ -19,11 +19,15 @@ interface HomePayslipRow {
 }
 
 interface Props {
-  payslips:  HomePayslipRow[];
-  onViewAll: () => void;
+  payslips:   HomePayslipRow[];
+  // Whether a previous-FY payslip actually exists — see HomeTab's hasForm16.
+  // Hidden rather than shown unconditionally: a fresh joiner with no closed
+  // FY behind them has no Form 16 to link to yet.
+  showForm16: boolean;
+  onViewAll:  () => void;
 }
 
-export default function HomePayslipsPanel({ payslips, onViewAll }: Props) {
+export default function HomePayslipsPanel({ payslips, showForm16, onViewAll }: Props) {
   return (
     <div className="card">
       <div className="card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
@@ -62,9 +66,11 @@ export default function HomePayslipsPanel({ payslips, onViewAll }: Props) {
       )}
 
       <div style={{ display: "flex", gap: 10, padding: "14px 20px", borderTop: "1px solid var(--outline-v)" }}>
-        <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
-          <i className="ti ti-file-invoice" /> Form 16
-        </a>
+        {showForm16 && (
+          <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
+            <i className="ti ti-file-invoice" /> Form 16
+          </a>
+        )}
         <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
           <i className="ti ti-mail" /> Employment letter
         </a>

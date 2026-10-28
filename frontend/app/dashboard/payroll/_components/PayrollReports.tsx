@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import type { PayrollCycle } from "@/types/payroll";
+import { cyclePeriodLabel } from "./payrollDashboardShared";
 
 interface PagedResponse<T> { results: T[]; count: number; }
 interface Branch { id: string; branch_name: string; branch_code: string; }
@@ -71,7 +72,7 @@ export default function PayrollReports() {
       const blobUrl = URL.createObjectURL(response.data as Blob);
       const link = document.createElement("a");
       link.href  = blobUrl;
-      const per    = new Date(cycle.cycle_start).toLocaleDateString("en-IN", { month: "short", year: "numeric" }).replace(" ", "_");
+      const per    = cyclePeriodLabel(cycle, "short").replace(" ", "_");
       const branch = (cycle.branch_name ?? "All").replace(/ /g, "_");
       link.download = `ECR_${per}_${branch}.${format}`;
       document.body.appendChild(link);
@@ -112,7 +113,7 @@ export default function PayrollReports() {
             <option value="">All Periods</option>
             {cycles.map(c => (
               <option key={c.id} value={c.id}>
-                {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
+                {cyclePeriodLabel(c)}
               </option>
             ))}
           </select>

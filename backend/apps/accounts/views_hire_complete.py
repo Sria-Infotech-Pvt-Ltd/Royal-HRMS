@@ -262,9 +262,15 @@ def _apply_wizard_records(user, draft):
     for i, entry in enumerate(draft.get('asset_entries') or []):
         if not entry.get('asset_type'):
             continue
+        # issue_when defaults to 'later' (see AssetsList.tsx) — only an
+        # explicit 'now' means IT handed the asset over at hire time, so
+        # only that case stamps issued_at. Previously neither case ever
+        # set it, so an "Issue now" asset still showed a blank tag/date
+        # under an ASSIGNED badge in the employee's own ESS view.
+        issued_at = timezone.localdate() if entry.get('issue_when') == 'now' else None
         CompanyAsset.objects.create(
             employee=user, asset_type=entry['asset_type'], tag_number=entry.get('tag_number') or '',
-            condition=entry.get('condition') or 'new', order=i,
+            condition=entry.get('condition') or 'new', order=i, issued_at=issued_at,
         )
 
 

@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.shortcuts import get_object_or_404
@@ -127,16 +128,21 @@ class PayrollCycleListView(APIView):
                     http_status=400,
                 )
 
-        # Prevent overlapping cycles within the same branch (branch-scoped uniqueness)
+        # Prevent overlapping cycles within the same branch (branch-scoped
+        # uniqueness) — AND against a global (no-branch) cycle in either
+        # direction, since a global cycle covers every branch's employees.
+        # UAT-020 — this used to only match branch_obj exactly (or both-null),
+        # so a global cycle and a branch-specific cycle for overlapping dates
+        # never saw each other and both got created.
         overlap_qs = PayrollCycle.objects.filter(
             cycle_start__lte=cycle_end,
             cycle_end__gte=cycle_start,
         ).exclude(status=PayrollCycle.STATUS_CANCELLED)
 
         if branch_obj is not None:
-            overlap_qs = overlap_qs.filter(branch=branch_obj)
-        else:
-            overlap_qs = overlap_qs.filter(branch__isnull=True)
+            overlap_qs = overlap_qs.filter(Q(branch=branch_obj) | Q(branch__isnull=True))
+        # else: a new global cycle conflicts with ANY existing cycle in the
+        # date range, branch-specific or not — no further filter needed.
 
         if overlap_qs.exists():
             branch_label = f' in {branch_obj.branch_name}' if branch_obj else ''

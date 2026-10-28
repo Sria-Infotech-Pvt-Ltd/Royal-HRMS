@@ -42,6 +42,21 @@ export function getCalendarDates(year: number, month: number) {
   };
 }
 
+// UAT-020 — every call site used to independently derive a cycle's "Month
+// Year" label from cycle_start, which for a 25th-to-24th cycle (e.g.
+// Nov-selected: 25-Oct → 24-Nov) displays the PREVIOUS calendar month —
+// matching neither what the admin picked in the wizard nor the month it's
+// actually paid in. pay_date's calendar month always equals the wizard's
+// own selected Payroll Month (see PayrollPeriodStep.tsx's computeDates()),
+// so it's the one field that already carries the intended label — this is
+// the single naming rule every display of a cycle's period must use.
+export function cyclePeriodLabel(
+  cycle: Pick<PayrollCycle, "pay_date">,
+  month: Intl.DateTimeFormatOptions["month"] = "long",
+): string {
+  return new Date(cycle.pay_date).toLocaleDateString("en-IN", { month, year: "numeric" });
+}
+
 /** Returns the cycle (non-cancelled) whose period covers the given month/year, or null. */
 export function cycleForMonth(cycles: PayrollCycle[], calYear: number, calMonth: number): PayrollCycle | null {
   return cycles.find(c => {

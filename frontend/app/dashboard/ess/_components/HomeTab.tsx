@@ -17,6 +17,7 @@ import type { AttendanceStatus } from "@/types/employeeDashboard";
 import type { PayrollSettings } from "@/types/payroll";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import { LeaveRequest } from "../../leave/_data";
+import { useLeaveBalances } from "../../leave/_components/LeaveDashboard";
 import type { Expense } from "../../expenses/_components/ExpenseClaims";
 import {
   MyCorrectionRequest, PaginatedResponse,
@@ -27,9 +28,11 @@ import HomeQuickActions from "./HomeQuickActions";
 import HomeTodayPanel from "./HomeTodayPanel";
 import HomeRequestsList from "./HomeRequestsList";
 import HomePayslipsPanel from "./HomePayslipsPanel";
+import { currentFinancialYearStart } from "@/app/dashboard/my-payslip/_components/types";
 
 interface ApiPayslip {
   cycle:       string;
+  cycle_start: string;
   pay_date:    string;
   net_pay:     string;
   status:      string;
@@ -65,7 +68,9 @@ export default function HomeTab({ onNavigate, status }: Props) {
   const { month, year } = todayMonthYear();
 
   const { data: attStats } = useFetch<AttendanceStats>(`${API.attendance.stats}?month=${month}&year=${year}`);
-  const { data: balances } = useFetch<{ available_days: number }[]>(`${API.leave.balance}?year=${year}`);
+  // Same cached hook the Leave tab's balance cards read — the two can never
+  // disagree, and whichever tab mounts second reuses the first one's fetch.
+  const { data: balances } = useLeaveBalances();
   const { data: payslips }   = useFetch<PaginatedResponse<ApiPayslip>>(API.payroll.myPayslips);
   const { data: payrollSettings } = useFetch<PayrollSettings>(API.payroll.settings);
 
@@ -95,6 +100,19 @@ export default function HomeTab({ onNavigate, status }: Props) {
   );
 
   const latestPayslip = payslips?.results?.[0];
+
+  // Same "previous FY, only if it actually has payslips" rule as the Tax
+  // tab's Form 16 row (see TaxTab.tsx) — a fresh joiner with no prior-FY
+  // payslips gets no Form 16 quick link at all, rather than one that leads
+  // nowhere. Defaults to an April FY start (same fallback TaxTab/
+  // EssPayslipsTab use before their own financial-year fetch resolves)
+  // rather than adding a second settings round trip just for this link.
+  const fyStart = currentFinancialYearStart("April");
+  const prevFyStart = new Date(fyStart.getFullYear() - 1, fyStart.getMonth(), 1);
+  const hasForm16 = (payslips?.results ?? []).some(p => {
+    const cycleStart = new Date(p.cycle_start);
+    return cycleStart >= prevFyStart && cycleStart < fyStart;
+  });
 
   const tiles = [
     {
@@ -157,6 +175,7 @@ export default function HomeTab({ onNavigate, status }: Props) {
         <HomeRequestsList items={requestItems.slice(0, 5)} onViewAll={() => onNavigate("requests")} />
         <HomePayslipsPanel
           payslips={payslips?.results ?? []}
+          showForm16={hasForm16}
           onViewAll={() => onNavigate("payslips")}
         />
       </div>

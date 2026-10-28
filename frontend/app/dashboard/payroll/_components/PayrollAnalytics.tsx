@@ -3,6 +3,7 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle } from "@/types/payroll";
+import { cyclePeriodLabel } from "./payrollDashboardShared";
 
 interface PagedResponse<T> { results: T[]; count: number; }
 
@@ -214,7 +215,7 @@ export default function PayrollAnalytics() {
                 {cycles.map(c => (
                   <tr key={c.id}>
                     <td style={{ fontWeight: 600 }}>
-                      {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
+                      {cyclePeriodLabel(c)}
                     </td>
                     <td style={{ fontSize: 13 }}>{c.cycle_start}</td>
                     <td style={{ fontSize: 13 }}>{c.cycle_end}</td>
