@@ -1036,7 +1036,7 @@ class SeparationSettlementSerializer(serializers.ModelSerializer):
             'gratuity_amount', 'statutory_bonus_amount', 'reimbursements_amount',
             'advances_recovery_amount', 'tds_amount',
             'other_adjustment_amount', 'other_adjustment_note',
-            'net_payable_amount',
+            'net_payable_amount', 'is_recovery',
             'status', 'status_display', 'finalized_by_name', 'finalized_at',
             'can_edit', 'can_finalize',
             'created_at', 'updated_at',
@@ -1088,6 +1088,13 @@ class SeparationSettlementSerializer(serializers.ModelSerializer):
     def validate(self, data):
         if self.instance and self.instance.status == SEP_SETTLEMENT_FINALIZED:
             raise serializers.ValidationError('This settlement is already finalized and can no longer be edited.')
+        if self.instance:
+            from .services_settlement import compute_net_payable, negative_net_message
+
+            net = compute_net_payable(self.instance, data)
+            is_recovery = data.get('is_recovery', self.instance.is_recovery)
+            if net < 0 and not is_recovery:
+                raise serializers.ValidationError({'is_recovery': negative_net_message(net)})
         return data
 
 

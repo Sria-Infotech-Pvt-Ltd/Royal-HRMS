@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
-import { useToast } from "@/components/ToastProvider";
+import { useApiErrors } from "@/hooks/useApiErrors";
 import { getLeaveYear } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
@@ -23,6 +23,12 @@ const DURATION_OPTIONS: { value: DurationKey; label: string }[] = [
   { value: "half_afternoon", label: "Afternoon half" },
 ];
 
+// The server names fields start_date / end_date / document; this form calls them from_date / to_date / doc.
+const SERVER_FIELD_TO_FORM_FIELD: Record<string, string> = {
+  leave_type: "leave_type", start_date: "from_date", end_date: "to_date", reason: "reason", document: "doc",
+};
+const LEAVE_FIELD_LABELS: Record<string, string> = { start_date: "From date", end_date: "To date", document: "Supporting document" };
+
 /** Small uppercase field label — this compact layout's own style, distinct
  *  from the bold-sentence-case Lbl() the optional sections below still use. */
 function SmallLbl({ text }: { text: string }) {
@@ -34,8 +40,8 @@ function SmallLbl({ text }: { text: string }) {
 }
 
 export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
-  const { showToast } = useToast();
-  const [form,          setForm]          = useState<LeaveForm>(BLANK);
+  const { formError, handleError, clearAll } = useApiErrors(LEAVE_FIELD_LABELS);
+  const [form,         setForm]          = useState<LeaveForm>(BLANK);
   const [errors,        setErrors]        = useState<Record<string, string>>({});
   const [submitting,    setSubmitting]    = useState(false);
   const [submitted,     setSubmitted]     = useState<LeaveRequest | null>(null);
@@ -128,6 +134,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
   async function handleSubmit() {
     if (!validate()) return;
+    clearAll();
     setSubmitting(true);
     try {
       const fd = new FormData();
@@ -144,8 +151,14 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
       const res = await clientApi.post(API.leave.requests, fd);
       setSubmitted(res.data.data as LeaveRequest);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || "Failed to submit leave request. Please try again.", "error");
+      // The server's reason (e.g. insufficient balance) goes beside the field it is about, and in the alert above
+      // the buttons when it names no field of this form.
+      const { fieldErrors } = handleError(err, "Failed to submit leave request. Please try again.");
+      const mapped: Record<string, string> = {};
+      for (const [serverKey, formKey] of Object.entries(SERVER_FIELD_TO_FORM_FIELD)) {
+        if (fieldErrors[serverKey]) mapped[formKey] = fieldErrors[serverKey];
+      }
+      setErrors(mapped);
     } finally {
       setSubmitting(false);
     }
@@ -248,6 +261,10 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
       <LeaveSupportingDocument file={docFile} isRequired={ltConfig.requiresDoc} error={errors.doc} onChange={setDocFile} />
 
       <LeaveHandoverFields form={form} onChange={setField} />
+
+      {formError && Object.keys(errors).length === 0 && (
+        <div className="alert alert-error mt-4" role="alert"><i className="ti ti-alert-circle" /> {formError}</div>
+      )}
 
       <div className="mt-6 flex items-center justify-between gap-2.5 border-t border-[var(--outline-v)] pt-4">
         <p className="text-xs text-[var(--on-variant)]">Submissions are routed for approval and retained in My Requests.</p>

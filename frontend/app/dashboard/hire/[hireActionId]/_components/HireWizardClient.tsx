@@ -15,6 +15,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useApiErrors } from "@/hooks/useApiErrors";
 import Modal from "@/components/Modal";
 import PhoneInput, { nationalDigitCount, isPlausibleNationalNumber } from "@/components/PhoneInput";
 import LanguagesSelect from "@/components/LanguagesSelect";
@@ -89,6 +90,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [documents, setDocuments] = useState<HireDocument[]>([]);
   const [docUploading, setDocUploading] = useState<string | null>(null);
   const [docError, setDocError] = useState("");
+  const { handleError: handleApiError } = useApiErrors();
   const [verification, setVerification] = useState<VerificationDraft>(EMPTY_VERIFICATION);
 
   async function uploadDocument(documentType: string, file: File, entryRef?: string) {
@@ -108,8 +110,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         saved,
       ]);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setDocError(msg ?? "Failed to upload document.");
+      // Shows the server's reason (wrong type, over 5 MB, too small ...) on whichever step the upload came from.
+      setDocError(handleApiError(err, "Failed to upload document.").message);
     } finally {
       setDocUploading(null);
     }
@@ -122,10 +124,15 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       await clientApi.delete(API.hireActions.documentDetail(hireActionId, doc.id));
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setDocError(msg ?? "Failed to remove document.");
+      setDocError(handleApiError(err, "Failed to remove document.").message);
     }
   }
+
+  // Step 5 (certificates / experience letters) has no alert of its own, so a failed upload there is shown above it.
+  const educationErrorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (docError) educationErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [docError]);
 
   const [fieldConfig, setFieldConfig] = useState<OnboardingFieldConfigByStep>({});
   const [eduExpFieldConfig, setEduExpFieldConfig] = useState<EducationExperienceFieldConfigResponse>({ education: [], experience: [] });
@@ -968,6 +975,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
           {tab === 5 && (
             <div className="mstep on">
+              {docError && (
+                <div ref={educationErrorRef} className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{docError}</div></div>
+              )}
               <EducationChecklist
                 entries={educationEntries} fieldConfig={eduExpFieldConfig.education}
                 onAdd={() => setEducationEntries(p => [...p, { id: nextTempId(), level: "", custom_level_label: "", institution: "", specialization: "", percentage: "", start_date: "", end_date: "", is_highest: false }])}
