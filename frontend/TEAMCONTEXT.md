@@ -6078,3 +6078,89 @@ All 5 UAT tickets (011–015) are resolved — fixed or verified-already-fixed, 
 
 - **UAT-012's full `apps.accounts` regression run** — the fix itself and its own 5 new tests are solid; this was the broader "did this touch anything else nearby" safety check, still running in the background (long suite, ~15–60 min depending on contention with other concurrent test runs today). Re-run `apps.accounts --keepdb` and check for a clean pass if this entry predates that confirmation.
 - **A separate, unrelated test failure found during merge verification** (not from any UAT ticket): `apps.payroll.tests_allowance_catalogue.test_default_allowances_are_listed_for_payroll_configuration` fails — `GET /api/payroll/allowances/` returns an empty set instead of the 6 default allowances (Dearness Allowance, HRA, Conveyance, Medical, LTA, Special Allowance). The seed migration (`0037_company_allowance_catalogue.py`, from the New-AI merge) and the view's filter (`PayComponent.objects.filter(is_company_allowance=True)`) both look correct on inspection — the seed data exists and is confirmed applied on the real dev database (`showmigrations` shows `0037` as `[X]`). Not yet confirmed whether the *test* database specifically has it seeded, or whether this is another instance of the same `--keepdb` staleness pattern documented above (the test DB's migration history could differ from the dev DB's). Needs a direct query against `test_neondb` to settle — was blocked by Postgres lock contention with the concurrent `apps.accounts` regression run at the time of writing. Pick up by checking `PayComponent.objects.filter(is_company_allowance=True).count()` inside a test against the kept test database.
+
+---
+
+# Team Context — UAT-021 through UAT-030, Edit Employee Save/Save & Close
+
+**Author:** Safura Samreen
+**Date:** 28 October 2026
+
+## Stuck merge, root cause of UAT-021 and UAT-025
+
+UAT-021 (Audit Log 500) led to a bigger discovery: a stuck, unrelated git merge (`MERGE_HEAD 513ffacf...` into branch `28-oct-2026`) had left literal unresolved `<<<<<<<`/`=======`/`>>>>>>>` conflict markers in `backend/apps/hrms/serializers.py` — a `SyntaxError` there was crashing the *entire* Django app's URL resolution, not just the audit endpoint. Resolved all 6 conflicted files (confirmed via user sign-off first):
+- `serializers.py` / `services_settlement.py` — `SeparationSettlementSerializer.is_recovery` changed from read-only to a real writable field; merged both sides' validation (my TDS+PF+PT-vs-gross-earnings check plus their negative-net-requires-`is_recovery` check).
+- `services_attendance.py` (10 conflict blocks) — my earlier ESS "not joined/pending" fix collided with an independently-built, more complete equivalent on the incoming branch (`AttendanceRecord.STATUS_NOT_EMPLOYED`, a real model constant, plus `cls._employment_window()`/`cls._today_shift_end()`). Adopted theirs throughout; deleted my now-dead constants and superseded test file.
+- `SalarySetupTab.tsx` — adopted the incoming branch's version wholesale (new `useSalarySetup()` hook, dedicated summary endpoint) — this is also what fixes UAT-019's pagination/KPI mismatch.
+- `SettlementSection.tsx`, `types/separation.ts` — minor, resolved cleanly.
+- Found and fixed a resulting migration-graph split (`makemigrations --merge` → `0050_merge_20261028_1458.py`).
+- Verified: Django imports cleanly, `GET /api/settings/audit/` returns 200 with real data.
+
+## UAT-021 — Audit Log 500
+
+Entirely caused by the stuck merge above. Confirmed fixed with no code changes beyond resolving it — both `/settings/audit/` and the employee audit-trail endpoint (UAT-025, same root cause) return 200 with real data once the merge was resolved.
+
+## UAT-022 — Hire Wizard employees never got Education/Experience synced to the Profile tab
+
+Root cause: `_apply_wizard_records()` (`views_hire_complete.py`) creates `EducationRecord`/`WorkExperienceRecord` rows directly but never calls `sync_legacy_education_experience_fields()` afterward, unlike every other write path. The Profile tab's API (`_employee_dict()`) only ever reads the legacy flat `EmployeeProfile` summary fields, never the real tables — so a Hire Wizard employee (e.g. EMP00057) had correct data in the real tables (which is why the Edit-record modal showed it fine) but a permanently blank Profile tab. Fixed by adding the missing sync call. Added a new idempotent `backfill_legacy_education_experience` management command to repair already-affected employees — **not yet run against the real database**, needs the user to run `python manage.py backfill_legacy_education_experience` directly (blocked here as a shared-resource write).
+
+## UAT-023 — Bank/EPF fields not returned by the employee-detail API
+
+Two bugs: `_employee_dict()` never included `uan_number`/`esi_number`/`name_as_per_aadhar` in its response at all (captured and stored correctly at hire, just never surfaced on read); and the frontend (`EmployeeFullRecordBody.tsx`, `EditRecordModal.tsx`) had no UI for Account Type/Bank Branch/UAN/ESI/Name-as-per-Aadhaar at all. `account_number`/`ifsc_code` masking was already correct from the earlier bank-masking work. Fixed both sides; 3 new tests pass.
+
+## UAT-024 — Attendance/LOP counted before date of joining
+
+Fully resolved as a side effect of the merge resolution above (`AttendanceRecord.STATUS_NOT_EMPLOYED`). Verified live with the ticket's exact scenario (DOJ 2026-10-27, October 2026): Oct 1–26 show "Not Employed," not "Absent." Payroll's own LOP engine already clipped to `date_of_joining` independently and needed no changes.
+
+## UAT-025 — Employee Audit Trail 500
+
+Same root cause as UAT-021 (the stuck merge). No separate fix needed.
+
+## UAT-026 — Regularize attendance "Submit Request" did nothing
+
+Already fixed on 26 October (commit `f721800c`, the `Modal`-renders-via-portal/`id`+`form`-attribute fix). Re-audited all 69 files importing `Modal` for the same anti-pattern — found zero new instances. Confirmed the fix commit is present on `origin/New-AI`'s current HEAD. Conclusion: a stale UAT deployment or browser cache, not a remaining code defect.
+
+## UAT-027 — Leave Cancel Request relied on native `window.confirm()`
+
+QA itself flagged this as "not a confirmed defect" (automated browsers silently suppress native `confirm()`) — the underlying cancel logic was always correctly wired. Still implemented the UX recommendation: replaced `window.confirm()` in `LeaveRequestDetailModal.tsx` with the shared `ConfirmModal` component, with a specific confirmation message instead of a generic one.
+
+## UAT-028 — Leave policy rules not enforced to match the written policy
+
+Four claims, different verdicts:
+- `maximum_consecutive_days`/`minimum_notice_period` showing 0/0 for Casual Leave despite its own note promising "Max 3 consecutive days, 1 day notice" — a **data** issue, not a code bug (enforcement in `_validate_leave_policy` was already correct; the seed defaults in `LeavePolicyView._ensure_policies()` just never set the matching numeric fields). Fixed the seed defaults and added migration `0051_fix_casual_earned_notice_consecutive_days.py` to correct existing rows.
+- `applicable_gender='all'` on Maternity/Paternity — also a **data/environment-sync** issue; the enforcement and the correct seed data (migration `0046`) already existed and were confirmed correct in the dev DB. The ticket's environment just hadn't had that migration applied/synced.
+- `allow_probation_leave=false` not honoured — a **real code bug**: the field was pure metadata, never actually read anywhere in the apply-leave path. Added real enforcement to both the apply and preview endpoints.
+- Flagged to the user before shipping: every leave type currently has `allow_probation_leave=False`, so real enforcement blocks probationary employees from every leave type until HR opts a type in. User confirmed this is the intended policy. Fixed 8 pre-existing tests whose fixtures assumed a fresh (and therefore probationary) employee could freely apply for leave.
+
+## UAT-029 — Clock-in blocked for every new-hire scenario (geofence + Face ID)
+
+Two unrelated issues: (1) Kondapur's branch had no GPS coordinates configured at all — the same open business-data gap flagged in the 27 Oct entries above. User supplied the real coordinates (17.4624361407143, 78.36960222209018, 150m radius); applied to the dev database via the existing `set_branch_location` management command — **user still needs to run the same command against UAT/production**. (2) Face ID "conflicting instructions" — traced the full message pipeline (`services_face_policy.py`) and confirmed both the punch error and the Admin's Face ID Registrations page already pull from one consistent, mode-aware source. Most likely the same stale-deployment pattern as UAT-026, unconfirmed.
+
+## UAT-030 — Personal email/mobile read-only after hire, no way for HR to fix a typo
+
+The "Personal email" field in `EditRecordModal.tsx` is actually bound to `User.email` (the login email), and `phone` already had a hard lock once onboarding is complete with no override at all — not even for HR. Added a `confirm_contact_change` override flag: without it, the existing 409 lock behaves exactly as before; with it, HR can correct the typo and the change is written to the existing audit trail with an `hr_override: true` marker. Added real email format/uniqueness validation (editing it here never existed before). Frontend: both fields are now genuinely editable, gated behind a confirmation checkbox that only appears when either value actually changed. 7 new tests pass.
+
+## Edit Employee panel — "Save" / "Save & Close" (direct feature spec, not a UAT ticket)
+
+Split the single "Save changes" button into "Save" (persists, toast, stays open) and "Save & Close" (persists, closes) — both call identical save/validation logic, differing only in what happens after success. Since every step's draft already lives in one shared parent state, data was never actually lost moving between steps even before this change.
+
+User's own live/code review caught 5 more real issues, all fixed in the same pass:
+1. Sidebar's "required fields" check only tested 3 of the 5 fields actually marked `*` on Personal identity (missing DOB, Gender, Nationality) — could say "Nothing outstanding" with Date of birth empty.
+2. "All changes saved" stayed in the footer after the user resumed editing — added an effect that clears it (and any stale error) the moment anything actually changes.
+3. A pure network failure showed the raw string "Network Error" instead of a friendly message. Root cause was systemic, in the shared `clientApi.ts::normaliseError()`, not local to this modal — fixed at the source so every caller in the app benefits, not just this one. Added `lib/clientApi.test.ts` (4 tests).
+4. `saveEducationAndExperience()` had no error handling at all, unlike its two sibling save helpers — a failure there threw uncaught. Added a try/catch and a dedicated error banner, matching the existing pattern.
+5. **Partial-save risk**: the big combined employee PUT used to fire *before* family/assets/education/CTC, so a later failure left the main record's fields already committed. Reordered so the smaller per-section saves all attempt first, and the main PUT only fires last, and only once everything else has already succeeded.
+
+Also fixed a genuine `react-hooks/refs` lint error caught along the way (a ref was being read during render) by converting `baselineContact` from `useRef` to `useState`.
+
+## Full regression sweep
+
+`apps.hrms` (106 tests) and `apps.attendance` (159 tests) both clean — no regressions from the merge resolution or any fix above. `apps.accounts`'s full suite had ~40 pre-existing failures, verified via multiple isolated re-runs to be unrelated to anything touched today (root cause: `permissions_registry.CODE_DEFINED_PERMISSIONS` is missing 62 codenames actually used in `has_perm()` calls across unrelated modules — a long-standing registry gap, not a regression). None of today's own new/changed tests are among the failures.
+
+## Still open for the user
+
+- Run `python manage.py backfill_legacy_education_experience` against the real database (UAT-022).
+- Run `set_branch_location` for Kondapur against UAT/production, not just dev (UAT-029).
+- UAT-016 through UAT-020 were also completed today (28 October), per the user — see the root `TEAM_CONTEXT.md`'s sections 16-20 and 22 (bug 6 Face ID, bug 7 Holiday import, bug 8 Salary Setup, bug 9 Bank masking, and the UAT-016 form-errors section). Only UAT-016 is explicitly labeled with its ticket number in that record; the exact 017/018/019/020 mapping to those 4 bug sections isn't independently pinned down beyond the user's confirmation that the whole 016-030 range was done today. UAT-011, 013, 014, 015 are the entries above, dated 27 October.
+- Manually click through the Save/Save & Close feature in a browser — not verified live this session (no browser-automation tool was available).
+- Confirm on UAT/production whether UAT-026 and UAT-029's Face ID messaging are actually fixed once the latest deploy runs — both look like stale-deployment issues from here, not remaining code bugs.

@@ -1,10 +1,14 @@
-from django.core.paginator import Paginator
+from django.core.paginator import Page, Paginator
 
 
-def paginate(queryset, request, default_page_size: int = 20, max_page_size: int = 100):
+def paginate(queryset, request, default_page_size: int = 20, max_page_size: int = 100, *, strict_pages: bool = False):
     """
     Paginate a queryset or list using ?page and ?page_size query params.
     Returns (page_obj, paginator).
+
+    By default a page number past the last page quietly returns the LAST page (Django's get_page). With
+    strict_pages=True it returns an EMPTY page for that number instead (count and total_pages still describe the whole
+    list), so a client that asks for page 4 of 3 is never handed page 3 as if it were page 4.
     """
     try:
         page_num  = max(1, int(request.query_params.get('page', 1)))
@@ -16,6 +20,8 @@ def paginate(queryset, request, default_page_size: int = 20, max_page_size: int 
         page_num, page_size = 1, default_page_size
 
     paginator = Paginator(queryset, page_size)
+    if strict_pages and page_num > paginator.num_pages:
+        return Page([], page_num, paginator), paginator
     return paginator.get_page(page_num), paginator
 
 

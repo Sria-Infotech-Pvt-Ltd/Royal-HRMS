@@ -42,6 +42,29 @@ def _resolve_structure_for_employee(employee):
     return SalaryStructure.objects.filter(is_default=True, is_active=True).values_list('id', flat=True).first()
 
 
+# The values that make one salary record different from another. (effective_from alone does not: the same pay, dated
+# differently, is still the same pay.)
+_COMPARED_FIELDS = ('annual_ctc', 'salary_structure', 'pay_scale_group', 'pay_scale_level', 'basic_percent', 'earnings_override')
+
+
+def _is_unchanged(current, validated) -> bool:
+    """True when saving `validated` would just repeat `current`. Only fields actually sent are compared."""
+    for field in _COMPARED_FIELDS:
+        if field not in validated:
+            continue
+        new_value = validated[field]
+        old_value = getattr(current, field)
+        if field == 'salary_structure':
+            # An omitted/blank structure means "use the default", which is what the record already resolves to.
+            if new_value is None:
+                continue
+            if getattr(new_value, 'pk', new_value) != current.salary_structure_id:
+                return False
+        elif new_value != old_value:
+            return False
+    return True
+
+
 class EmployeeSalaryConfigListView(APIView):
     """List active salary configs (all employees) / assign CTC to an employee."""
 
@@ -73,7 +96,7 @@ class EmployeeSalaryConfigListView(APIView):
                     http_status=400,
                 )
 
-        page_obj, paginator = paginate(configs, request)
+        page_obj, paginator = paginate(configs, request, strict_pages=True)
         serializer = EmployeeSalaryConfigSerializer(page_obj.object_list, many=True)
         return success(
             'Employee salary configs retrieved.',
@@ -104,6 +127,15 @@ class EmployeeSalaryConfigListView(APIView):
             return error(first_error(serializer.errors))
 
         employee = serializer.validated_data['employee']
+
+        # Saving the salary the employee already has changes nothing, so it must not add a revision: the history would
+        # fill with identical copies of the same record.
+        current = EmployeeSalaryConfig.objects.filter(employee=employee, is_active=True).order_by('-effective_from', '-created_at').first()
+        if current and _is_unchanged(current, serializer.validated_data):
+            return success(
+                'No change — this salary is already set, so nothing was saved.',
+                {**EmployeeSalaryConfigSerializer(current).data, 'unchanged': True},
+            )
 
         # Deactivate any existing active config for this employee
         EmployeeSalaryConfig.objects.filter(

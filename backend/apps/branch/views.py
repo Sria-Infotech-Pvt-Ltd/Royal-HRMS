@@ -13,7 +13,8 @@ from core.responses import error, first_error, get_client_ip, success
 from apps.accounts.models import AuditLog, User
 from apps.branch.models import Branch, City, State
 from apps.branch.serializers import BranchSerializer, CitySerializer, StateSerializer
-from apps.branch.utils import generate_branch_code
+from apps.branch.geo import coordinate_errors, location_warnings
+from apps.branch.utils import branch_employee_counts, generate_branch_code
 
 logger = logging.getLogger(__name__)
 
@@ -136,18 +137,7 @@ class BranchListCreateView(APIView):
         paginator = Paginator(qs, page_size)
         page_obj  = paginator.get_page(page_num)
 
-        # Keyed by branch_fk_id (the real Branch PK), not the legacy branch
-        # name string — see User.branch_fk's docstring (apps/accounts/models.py).
-        # The string comparison this replaced silently missed any employee
-        # whose branch string didn't exactly match a real Branch.branch_name
-        # (confirmed via the 0133 backfill migration: 13 users in this exact
-        # dataset have branch='Hyderabad', which matches no real branch).
-        branch_counts = dict(
-            User.objects.filter(is_active=True, branch_fk__isnull=False)
-            .values('branch_fk_id')
-            .annotate(count=Count('id'))
-            .values_list('branch_fk_id', 'count')
-        )
+        branch_counts = branch_employee_counts()
 
         return success('Company Codes retrieved successfully.', data={
             'count':       paginator.count,
@@ -376,10 +366,9 @@ class BranchGeofencingView(APIView):
             def validate(self, attrs):
                 lat = attrs.get('latitude')
                 lon = attrs.get('longitude')
-                if (lat is None) != (lon is None):
-                    raise drf_serializers.ValidationError(
-                        'Both latitude and longitude must be provided together.'
-                    )
+                problems = coordinate_errors(lat, lon)
+                if problems:
+                    raise drf_serializers.ValidationError(problems)
                 return attrs
 
         serializer = GeofencingSerializer(data=request.data)
@@ -415,7 +404,9 @@ class BranchGeofencingView(APIView):
         )
         logger.info('Branch "%s" geofencing updated by %s', branch.branch_code, request.user.email)
 
+        warnings = location_warnings(branch.latitude, branch.longitude, branch.state.name, branch.city.name)
         return success('Geofencing configuration updated successfully.', data={
+            'location_warnings':     warnings,
             'id':                    branch.pk,
             'branch_name':           branch.branch_name,
             'branch_code':           branch.branch_code,
@@ -466,15 +457,7 @@ class BranchDistributionView(APIView):
         if not _has_perm(request.user, 'branches.view'):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
-        # Keyed by branch_fk_id (the real Branch PK), not the legacy branch
-        # name string — see User.branch_fk's docstring (apps/accounts/models.py)
-        # and BranchListCreateView.get's identical fix just above in this file.
-        branch_counts = dict(
-            User.objects.filter(is_active=True, branch_fk__isnull=False)
-            .values('branch_fk_id')
-            .annotate(count=Count('id'))
-            .values_list('branch_fk_id', 'count')
-        )
+        branch_counts = branch_employee_counts()
 
         branches = (
             Branch.objects
@@ -494,3 +477,38 @@ class BranchDistributionView(APIView):
             reverse=True,
         )
         return success('Employee distribution by Company Code retrieved successfully.', data=data)
+
+
+class BranchLocationCheckView(APIView):
+    """
+    POST /api/branch/branches/check-location/  {latitude, longitude, state, city}
+
+    Used by the branch form while the admin types coordinates: says whether they are valid at all and, if so,
+    whether they look wrong for the chosen state / city. Saves nothing.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not _has_perm(request.user, 'branches.view'):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+
+        def _number(key):
+            raw = request.data.get(key)
+            if raw in (None, ''):
+                return None
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return 'invalid'
+
+        latitude, longitude = _number('latitude'), _number('longitude')
+        if 'invalid' in (latitude, longitude):
+            return error('Latitude and longitude must be numbers.', http_status=status.HTTP_400_BAD_REQUEST)
+
+        errors = coordinate_errors(latitude, longitude)
+        state = State.objects.filter(pk=request.data.get('state')).first() if request.data.get('state') else None
+        city = City.objects.filter(pk=request.data.get('city')).first() if request.data.get('city') else None
+        warnings = [] if errors else location_warnings(
+            latitude, longitude, state.name if state else None, city.name if city else None,
+        )
+        return success('Location checked.', data={'is_valid': not errors, 'errors': errors, 'warnings': warnings})

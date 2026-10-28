@@ -5,7 +5,10 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import { useToast } from "@/components/ToastProvider";
+import { useApiErrors } from "@/hooks/useApiErrors";
 import ConfirmModal from "@/components/ConfirmModal";
+import FieldError from "@/components/shared/FieldError";
+import { formatRupees } from "@/lib/formatMoney";
 import type { SeparationRequest, SettlementItem } from "@/types/separation";
 import { fmtDateTime } from "../../_workflow";
 
@@ -13,17 +16,9 @@ interface Props {
   r: SeparationRequest;
 }
 
-const INR = (n: string | number) =>
-  `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-
-// A minus sign glued straight onto the currency symbol ("₹-1,50,000", UAT-016)
-// reads as a rendering bug, not a number. Parentheses are the standard
-// accounting convention for a negative amount — same fix already applied to
-// BasicPayStep's deduction lines (see its INR_DEDUCTION, QA report #49).
-const INR_SIGNED = (n: string | number) => {
-  const value = Number(n);
-  return value < 0 ? `(${INR(Math.abs(value))})` : INR(value);
-};
+// formatRupees already renders a negative amount as "-Rs 1,50,000" (not the
+// glued "₹-1,50,000" UAT-016 flagged), matching the backend's own format_inr().
+const INR = formatRupees;
 
 // Manual line items HR/Finance enters by hand — see SettlementItem's own
 // comment for why these (unlike pro-rata salary/leave encashment/notice
@@ -47,14 +42,18 @@ export default function SettlementSection({ r }: Props) {
   const [saving, setSaving] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
+  const [isRecovery, setIsRecovery] = useState(false);
+  const { fieldErrors, formError, handleError, clearAll, clearField } = useApiErrors();
 
-  function extractError(err: unknown, fallback: string): string {
-    return (err as { response?: { data?: { message?: string } }; message?: string })
-      ?.response?.data?.message ?? (err as { message?: string })?.message ?? fallback;
+  function setFormField(key: string, value: string) {
+    setForm(prev => ({ ...prev, [key]: value }));
+    clearField(key);
   }
 
   function startEdit() {
     if (!settlement) return;
+    clearAll();
+    setIsRecovery(settlement.is_recovery);
     setForm({
       gratuity_amount: settlement.gratuity_amount,
       statutory_bonus_amount: settlement.statutory_bonus_amount,
@@ -71,13 +70,15 @@ export default function SettlementSection({ r }: Props) {
 
   async function save() {
     setSaving(true);
+    clearAll();
     try {
-      await clientApi.patch(API.separation.settlement(r.id), form);
+      await clientApi.patch(API.separation.settlement(r.id), { ...form, is_recovery: isRecovery });
       showToast("Settlement updated.", "success");
       setEditing(false);
       refetch();
     } catch (err: unknown) {
-      showToast(extractError(err, "Failed to update the settlement."), "error");
+      // Stay in edit mode: the person fixes the field the message points at and saves again.
+      handleError(err, "Failed to update the settlement.");
     } finally {
       setSaving(false);
     }
@@ -86,12 +87,13 @@ export default function SettlementSection({ r }: Props) {
   async function finalize() {
     setConfirmFinalize(false);
     setFinalizing(true);
+    clearAll();
     try {
       await clientApi.post(API.separation.settlementFinalize(r.id), {});
       showToast("Settlement finalized.", "success");
       refetch();
     } catch (err: unknown) {
-      showToast(extractError(err, "Failed to finalize the settlement."), "error");
+      handleError(err, "Failed to finalize the settlement.");
     } finally {
       setFinalizing(false);
     }
@@ -116,6 +118,7 @@ export default function SettlementSection({ r }: Props) {
         </span>
       </div>
       <div className="card-body">
+        {formError && <div className="alert alert-error" style={{ marginBottom: 12 }}><i className="ti ti-alert-circle" /> {formError}</div>}
         <p style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 0, marginBottom: 16 }}>
           Pro-rated salary, leave encashment, and notice-period shortfall are computed automatically
           (CTC ÷ 30, Earned Leave balance) — a starting estimate to review, not a final figure.
@@ -165,7 +168,7 @@ export default function SettlementSection({ r }: Props) {
                   {settlement.is_recovery ? "Net Recoverable from Employee" : "Net Payable"}
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: settlement.is_recovery ? "var(--error)" : undefined }}>
-                  {INR_SIGNED(settlement.net_payable_amount)}
+                  {INR(settlement.net_payable_amount)}
                 </div>
                 {settlement.is_recovery && (
                   <div style={{ fontSize: 11, color: "var(--error)", marginTop: 2 }}>
@@ -197,28 +200,38 @@ export default function SettlementSection({ r }: Props) {
                 <div className="field-group" key={f.key}>
                   <label className="field-label">{f.label}</label>
                   <input
-                    className="field-input" type="number" min="0"
+                    className={`field-input${fieldErrors[f.key] ? " field-error" : ""}`} type="number" min="0"
                     value={form[f.key] ?? ""}
-                    onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                    onChange={e => setFormField(f.key, e.target.value)}
                   />
+                  <FieldError message={fieldErrors[f.key]} />
                 </div>
               ))}
             </div>
             <div className="field-group">
               <label className="field-label">Other Adjustment (+/−)</label>
               <input
-                className="field-input" type="number"
+                className={`field-input${fieldErrors.other_adjustment_amount ? " field-error" : ""}`} type="number"
                 value={form.other_adjustment_amount ?? ""}
-                onChange={e => setForm(prev => ({ ...prev, other_adjustment_amount: e.target.value }))}
+                onChange={e => setFormField("other_adjustment_amount", e.target.value)}
               />
+              <FieldError message={fieldErrors.other_adjustment_amount} />
             </div>
             <div className="field-group">
               <label className="field-label">Other Adjustment Note</label>
               <input
-                className="field-input" placeholder="What this adjustment is for"
+                className={`field-input${fieldErrors.other_adjustment_note ? " field-error" : ""}`} placeholder="What this adjustment is for"
                 value={form.other_adjustment_note ?? ""}
-                onChange={e => setForm(prev => ({ ...prev, other_adjustment_note: e.target.value }))}
+                onChange={e => setFormField("other_adjustment_note", e.target.value)}
               />
+              <FieldError message={fieldErrors.other_adjustment_note} />
+            </div>
+            <div className="field-group">
+              <label className="module-check">
+                <input type="checkbox" checked={isRecovery} onChange={e => { setIsRecovery(e.target.checked); clearField("is_recovery"); }} />
+                <span>This is a recovery — the employee owes the company (net payable may be negative)</span>
+              </label>
+              <FieldError message={fieldErrors.is_recovery} />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)} disabled={saving} suppressHydrationWarning>
@@ -235,7 +248,7 @@ export default function SettlementSection({ r }: Props) {
       {confirmFinalize && (
         <ConfirmModal
           title="Finalize this settlement?"
-          body={`This locks the full & final settlement at a net ${settlement.is_recovery ? "recoverable from the employee" : "payable"} of ${INR_SIGNED(settlement.net_payable_amount)}. Once finalized, no field on this settlement — gratuity, bonus, reimbursements, advances, TDS, or adjustments — can be edited again. This cannot be undone.`}
+          body={`This locks the full & final settlement at a net ${settlement.is_recovery ? "recoverable from the employee" : "payable"} of ${INR(settlement.net_payable_amount)}. Once finalized, no field on this settlement — gratuity, bonus, reimbursements, advances, TDS, or adjustments — can be edited again. This cannot be undone.`}
           confirmLabel="Finalize"
           danger
           saving={finalizing}

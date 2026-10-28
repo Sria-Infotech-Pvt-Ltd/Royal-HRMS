@@ -5,6 +5,7 @@ from apps.branch.views import (
     BranchDistributionView,
     BranchGeofencingView,
     BranchListCreateView,
+    BranchLocationCheckView,
     BranchPreviewCodeView,
     BranchStatsView,
     CityListView,
@@ -21,6 +22,7 @@ urlpatterns = [
     path('states/<int:state_id>/cities/', CityListView.as_view(), name='city-list'),
 
     # Branch utilities (declared before <int:pk> for clarity; <int:pk> only matches integers anyway)
+    path('branches/check-location/', BranchLocationCheckView.as_view(), name='branch-check-location'),
     path('branches/preview-code/', BranchPreviewCodeView.as_view(), name='branch-preview-code'),
     path('branches/stats/', BranchStatsView.as_view(), name='branch-stats'),
     path('branches/distribution/', BranchDistributionView.as_view(), name='branch-distribution'),

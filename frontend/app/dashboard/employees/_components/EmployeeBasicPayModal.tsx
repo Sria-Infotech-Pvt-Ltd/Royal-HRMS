@@ -26,7 +26,7 @@ export default function EmployeeBasicPayModal({ employee, onClose }: { employee:
   const editor = useBasicPayEditor(employee, onClose);
   const { form, current, rows, breakup } = editor;
   const orgUnit = editor.detail?.org_unit_name || employee.orgUnitName || employee.department || "Corporate";
-  const hasBank = !!editor.detail?.profile?.account_number;
+  const hasBank = !!editor.detail?.profile?.account_number_masked;
 
   const subtitle = current
     ? `${fullName(employee)} · ${employee.code} — record valid from ${formatDateSlash(current.effective_from)} to 31/12/9999.`

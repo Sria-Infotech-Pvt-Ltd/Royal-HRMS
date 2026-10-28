@@ -42,7 +42,7 @@ interface DetailBits {
   position_grade?: string | null;
   work_location?: string;
   org_unit_name?: string | null;
-  profile?: { account_number?: string };
+  profile?: { account_number_masked?: string };
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);

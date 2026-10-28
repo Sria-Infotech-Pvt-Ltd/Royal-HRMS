@@ -7,17 +7,19 @@ import DateInput from "@/components/shared/DateInput";
 import { useIfscLookup } from "@/hooks/useIfscLookup";
 
 export interface StatutoryDraft {
-  pan_number: string; aadhaar_number: string; passport_number: string; passport_expiry: string;
+  pan_number: string; aadhaar_number: string; name_as_per_aadhar: string; passport_number: string; passport_expiry: string;
   passport_issue_date: string; passport_place_of_issue: string; passport_country_of_issue: string;
   uan_number: string; esi_number: string; pf_covered: string; esi_covered: string;
   account_number: string; ifsc_code: string; bank_name: string; bank_branch_address: string; account_holder_name: string;
+  account_type: string;
 }
 
 export const EMPTY_STATUTORY: StatutoryDraft = {
-  pan_number: "", aadhaar_number: "", passport_number: "", passport_expiry: "",
+  pan_number: "", aadhaar_number: "", name_as_per_aadhar: "", passport_number: "", passport_expiry: "",
   passport_issue_date: "", passport_place_of_issue: "", passport_country_of_issue: "",
   uan_number: "", esi_number: "", pf_covered: "true", esi_covered: "false",
   account_number: "", ifsc_code: "", bank_name: "", bank_branch_address: "", account_holder_name: "",
+  account_type: "savings",
 };
 
 function Toggle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -111,6 +113,10 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
           </div>
         </div>
         <div className="f">
+          <label>Name as per Aadhaar <span className="tag">OPTIONAL</span></label>
+          <input value={value.name_as_per_aadhar} onChange={e => set("name_as_per_aadhar", e.target.value)} placeholder="As printed on the Aadhaar card" className="finput" />
+        </div>
+        <div className="f">
           <label>Passport <span className="tag">OPTIONAL</span></label>
           <input value={value.passport_number} onChange={e => set("passport_number", e.target.value)} placeholder="Optional" className="finput" />
           <div style={{ marginTop: 6 }}>
@@ -150,7 +156,11 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
         <div className="f">
           <label>UAN <span className="tag">OPTIONAL</span></label>
           <input value={value.uan_number} onChange={e => set("uan_number", e.target.value.replace(/\D/g, ""))} placeholder="12 digits, if available" maxLength={12} className="finput" />
-          <div className="hint">Leave blank for a first job — EPFO will allot one.</div>
+          {value.uan_number && value.uan_number.length !== 12 ? (
+            <div className="hint" style={{ color: "var(--error)" }}>UAN must be exactly 12 digits.</div>
+          ) : (
+            <div className="hint">Leave blank for a first job — EPFO will allot one.</div>
+          )}
         </div>
       </div>
 
@@ -179,6 +189,13 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
         <div className="f">
           <label>Account number <span className="req">*</span></label>
           <input value={value.account_number} onChange={e => set("account_number", e.target.value.replace(/\D/g, ""))} className="finput" />
+        </div>
+        <div className="f">
+          <label>Account type <span className="tag">OPTIONAL</span></label>
+          <select value={value.account_type} onChange={e => set("account_type", e.target.value)} className="finput">
+            <option value="savings">Savings</option>
+            <option value="current">Current</option>
+          </select>
         </div>
         <div className="f">
           <label>IFSC code <span className="req">*</span></label>

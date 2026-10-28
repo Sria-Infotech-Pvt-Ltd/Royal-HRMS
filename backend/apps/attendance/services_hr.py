@@ -88,6 +88,17 @@ def get_dashboard_stats(
         from apps.accounts.services_approval import filter_queryset_by_department_name
         employee_qs = filter_queryset_by_department_name(employee_qs, department)
 
+    # Only count someone as expected-to-be-present on target_date if they
+    # had actually joined by then (and hadn't already left) -- otherwise a
+    # new joiner with no AttendanceRecord yet for days before their DOJ (or
+    # a leaver's days after their last working day) got silently counted
+    # as Absent below, the exact "new joiners flagged Absent" bug.
+    employee_qs = employee_qs.filter(
+        Q(date_of_joining__isnull=True) | Q(date_of_joining__lte=target_date)
+    ).filter(
+        Q(alumni_record__isnull=True) | Q(alumni_record__last_working_day__gte=target_date)
+    )
+
     total_employees = employee_qs.count()
 
     # Single aggregation query — no Python-side counting
@@ -265,6 +276,9 @@ def get_attendance_list(filters: dict) -> list[dict]:
 
     rec_qs = AttendanceRecord.objects.filter(date=target_date)
 
+    from apps.hrms.models_separation_v2 import AlumniRecord
+    alumni_qs = AlumniRecord.objects.filter(employee=OuterRef('pk'))
+
     employee_qs = employee_qs.annotate(
         _rec_id   = Subquery(rec_qs.filter(employee=OuterRef('pk')).values('id')[:1]),
         _status   = Subquery(rec_qs.filter(employee=OuterRef('pk')).values('status')[:1]),
@@ -273,12 +287,22 @@ def get_attendance_list(filters: dict) -> list[dict]:
         _minutes  = Subquery(rec_qs.filter(employee=OuterRef('pk')).values('total_working_minutes')[:1]),
         _ot_min   = Subquery(rec_qs.filter(employee=OuterRef('pk')).values('overtime_minutes')[:1]),
         _is_late  = Subquery(rec_qs.filter(employee=OuterRef('pk')).values('is_late')[:1]),
+        _lwd      = Subquery(alumni_qs.values('last_working_day')[:1]),
     )
 
     if status_f:
         if status_f == 'absent':
+            # Implicitly-absent (no record at all) only counts if the
+            # employee had actually joined by target_date and hadn't
+            # already left -- otherwise this filter pulled in every new
+            # joiner/leaver outside their employment window too.
             employee_qs = employee_qs.filter(
-                Q(_status='absent') | Q(_status__isnull=True)
+                Q(_status='absent')
+                | (
+                    Q(_status__isnull=True)
+                    & (Q(date_of_joining__isnull=True) | Q(date_of_joining__lte=target_date))
+                    & (Q(_lwd__isnull=True) | Q(_lwd__gte=target_date))
+                )
             )
         else:
             employee_qs = employee_qs.filter(_status=status_f)
@@ -295,7 +319,15 @@ def get_attendance_list(filters: dict) -> list[dict]:
 
     rows = []
     for user in employee_qs:
-        status_key = user._status or 'absent'
+        if user._status:
+            status_key = user._status
+        elif user.date_of_joining and target_date < user.date_of_joining:
+            # New joiner -- the UAT-041 "flags new joiners as Absent" bug.
+            status_key = AttendanceRecord.STATUS_NOT_EMPLOYED
+        elif user._lwd and target_date > user._lwd:
+            status_key = AttendanceRecord.STATUS_NOT_EMPLOYED
+        else:
+            status_key = AttendanceRecord.STATUS_ABSENT
         rows.append({
             'record_id':   str(user._rec_id) if user._rec_id else None,
             'employee_id': user.employee_id or '',
@@ -355,6 +387,7 @@ def get_attendance_detail(
             'mode':        p.attendance_mode,
             'is_geofence': p.is_inside_geofence,
             'distance_m':  float(p.calculated_distance) if p.calculated_distance else None,
+            'face_fallback': p.face_fallback,
         }
         for p in punches
     ]

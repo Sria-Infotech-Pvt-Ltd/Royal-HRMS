@@ -63,6 +63,13 @@ export default function BranchCard({ branch, canEdit, onEdit, onDelete }: Props)
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Geofencing</div>
             <span className={`badge ${geofenceBadge(branch).cls}`}>{geofenceBadge(branch).label}</span>
+            {!!branch.location_warnings?.length && (
+              <div style={{ marginTop: "4px" }}>
+                <span className="badge badge-warn" title={branch.location_warnings.join(" ")}>
+                  <i className="ti ti-alert-triangle" /> Check location
+                </span>
+              </div>
+            )}
             {branch.geofencing_enabled && branch.has_coordinates && (
               <div style={{ fontSize: "11px", color: "var(--on-variant)", marginTop: "4px" }}>
                 {branch.allowed_radius_meters} m radius<br />

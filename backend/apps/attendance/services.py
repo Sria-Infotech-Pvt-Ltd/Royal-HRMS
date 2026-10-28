@@ -79,6 +79,9 @@ DEFAULT_SETTINGS: dict = {
     },
     'face_verification': {
         'is_mandatory': False,
+        'registration_mode': 'self_service_hr_approval',
+        'fallback_policy': 'none',
+        'fallback_days': 7,
     },
 }
 

@@ -1440,6 +1440,12 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Year of passing must be between 1950 and 2099.')
         return value
 
+    def validate_uan_number(self, value: str) -> str:
+        value = (value or '').strip()
+        if value and (len(value) != 12 or not value.isdigit()):
+            raise serializers.ValidationError('UAN must be exactly 12 digits.')
+        return value
+
     def validate_ifsc_code(self, value: str) -> str:
         if not value:
             return value
@@ -2001,13 +2007,13 @@ class OnboardingPipelineSerializer(serializers.ModelSerializer):
 
 class OnboardingApprovalSerializer(serializers.ModelSerializer):
     # NOT a plain nested EmployeeProfileSerializer — that serializer is the
-    # self-service one (/onboarding/, /employees/me/) and legitimately
-    # returns your OWN full pan_number/aadhaar_number/account_number/
-    # ifsc_code/pf_number/passport_number. Reused directly here it would
-    # leak all of those, in full, to ANY user holding onboarding.approve —
-    # bypassing the employees.view_sensitive gate and the AuditLog trail
-    # every other read of these fields goes through (see
-    # EmployeeRevealSensitiveView, _mask_bank_fields). get_profile below
+    # self-service write path (/onboarding/) and leaves pan_number/
+    # aadhaar_number/account_number/ifsc_code/pf_number/passport_number
+    # writable in full. Reused directly here it would leak all of those, in
+    # full, to ANY user holding onboarding.approve — bypassing the
+    # employees.view_sensitive gate and the AuditLog trail every other read
+    # of these fields goes through (see EmployeeRevealSensitiveView).
+    # get_profile below
     # masks them the same way _employee_dict()'s pan_masked/aadhaar_masked/
     # pf_masked previews already do, unless the requester actually holds
     # employees.view_sensitive.
@@ -2038,13 +2044,12 @@ class OnboardingApprovalSerializer(serializers.ModelSerializer):
     _SENSITIVE_PROFILE_FIELDS = ('pan_number', 'aadhaar_number', 'name_as_per_aadhar', 'pf_number', 'passport_number', 'account_number', 'ifsc_code')
 
     def get_profile(self, obj):
-        from core.permissions import has_perm
-
+        # Always masked here, regardless of employees.view_sensitive — the
+        # real values only ever come from EmployeeRevealSensitiveView (which
+        # OnboardingDrawer.tsx's own "Reveal" button already calls), so every
+        # access is audited. Previously a view_sensitive holder got the raw
+        # values straight from this endpoint with no AuditLog entry at all.
         data = EmployeeProfileSerializer(obj.profile).data if obj.profile else {}
-        request = self.context.get('request')
-        if request and has_perm(request.user, 'employees.view_sensitive'):
-            return data
-
         data = dict(data)
         pan = data.get('pan_number') or ''
         aadhaar = data.get('aadhaar_number') or ''
@@ -2198,6 +2203,27 @@ class MyProfileSerializer(serializers.ModelSerializer):
 
         # Portal candidate with no pending candidate assignments
         return 'complete'
+
+    def to_representation(self, instance):
+        # GET /employees/me/ ("Profile" page) previously echoed the real
+        # account_number/ifsc_code/pan_number/aadhaar_number straight through
+        # EmployeeProfileSerializer -- those fields stay writable there for
+        # the onboarding wizard's own self-entry flow, but this is the
+        # read-only "Profile > Bank Details" surface, so mask here the same
+        # way _employee_dict() masks them for the admin-facing employee
+        # record; real values only ever come from EmployeeRevealSensitiveView.
+        data = super().to_representation(instance)
+        profile = data.get('profile')
+        if profile:
+            acct = profile.pop('account_number', '') or ''
+            ifsc = profile.pop('ifsc_code', '') or ''
+            pan = profile.pop('pan_number', '') or ''
+            aadhaar = profile.pop('aadhaar_number', '') or ''
+            profile['account_number_masked'] = f'••••{acct[-4:]}' if len(acct) >= 4 else ''
+            profile['ifsc_code_masked']      = '•' * len(ifsc) if ifsc else ''
+            profile['pan_masked']            = f'{pan[:3]}••••{pan[-1]}' if len(pan) >= 6 else ''
+            profile['aadhaar_masked']        = f'XXXX XXXX {aadhaar[-4:]}' if len(aadhaar) >= 4 else ''
+        return data
 
 
 class MyProfileUpdateSerializer(serializers.Serializer):

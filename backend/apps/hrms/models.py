@@ -727,6 +727,8 @@ class SeparationSettlement(models.Model):
     other_adjustment_note    = models.CharField(max_length=200, blank=True)
 
     net_payable_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # A negative net payable means the employee owes the company. That is only valid when HR says so on purpose.
+    is_recovery = models.BooleanField(default=False)
 
     status       = models.CharField(max_length=20, choices=SEP_SETTLEMENT_STATUS_CHOICES, default=SEP_SETTLEMENT_DRAFT)
     finalized_by = models.ForeignKey(

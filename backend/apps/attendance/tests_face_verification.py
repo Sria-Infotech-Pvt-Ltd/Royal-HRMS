@@ -111,7 +111,8 @@ class FaceVerificationPunchTests(TestCase):
         _set_face_verification_mandatory(True)
         resp = self._punch()
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertIn('mandatory', resp.data['message'].lower())
+        # One instruction for the organisation's Face ID mode (default: employee registers, HR approves).
+        self.assertIn('register your face id', resp.data['message'].lower())
         self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
 
     def test_approved_registration_without_embedding_is_rejected(self):
@@ -161,7 +162,7 @@ class FaceVerificationPunchTests(TestCase):
         )
         resp = self._punch()
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertIn('mandatory', resp.data['message'].lower())
+        self.assertIn('waiting for hr approval', resp.data['message'].lower())
 
     def test_voice_source_is_gated_the_same_as_web_when_mandatory(self):
         # Voice runs through the same browser tab as web (see AttendancePunch's

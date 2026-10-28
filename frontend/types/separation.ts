@@ -125,6 +125,7 @@ export interface SettlementItem {
   other_adjustment_amount:       string;
   other_adjustment_note:         string;
   net_payable_amount:            string;
+  /** True when a negative net payable was marked on purpose: the employee owes the company. */
   is_recovery:                   boolean;
   status:                        "draft" | "finalized";
   status_display:                string;

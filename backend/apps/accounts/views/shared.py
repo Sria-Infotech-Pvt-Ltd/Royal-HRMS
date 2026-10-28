@@ -299,11 +299,30 @@ def _employee_dict(user: User) -> dict:
         # Bank
         'account_holder_name': p.account_holder_name if p else '',
         'account_type':        p.account_type        if p else '',
-        'account_number':      p.account_number      if p else '',
-        'ifsc_code':           p.ifsc_code           if p else '',
+        # account_number/ifsc_code are PII-tier, same as PAN/Aadhaar below —
+        # masked previews only; real values come back exclusively from
+        # EmployeeRevealSensitiveView, gated by employees.view_sensitive,
+        # and every reveal is written to the audit log.
+        'account_number_masked': (
+            f'••••{p.account_number[-4:]}'
+            if (p and p.account_number and len(p.account_number) >= 4) else ''
+        ),
+        'ifsc_code_masked': (
+            '•' * len(p.ifsc_code) if (p and p.ifsc_code) else ''
+        ),
         'bank_name':           p.bank_name           if p else '',
         'bank_branch_name':    p.bank_branch_name    if p else '',
         'bank_change_status':       p.bank_change_status       if p else '',
+        # EPF/ESI statutory identifiers — same tier as bank_branch_name/
+        # account_holder_name (identifiers, not secrets like PAN/Aadhaar/
+        # account_number), so shown plainly rather than masked. Captured at
+        # hire by the Statutory & Accounts step (see _PROFILE_FIELDS in
+        # views_hire_complete.py) but were missing from this dict entirely,
+        # so the Profile page's EPF/Statutory card could never show them
+        # regardless of what was actually stored.
+        'uan_number':         p.uan_number         if p else '',
+        'esi_number':         p.esi_number         if p else '',
+        'name_as_per_aadhar': p.name_as_per_aadhar if p else '',
         'bank_change_requested_at': p.bank_change_requested_at if p else None,
         # PAN is otherwise write-only (never surfaced on any read view) —
         # this masked preview is always safe to include regardless of
@@ -536,22 +555,6 @@ def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
                 employee_branch = candidate.branch.branch_name
         return employee_branch != requesting_user.branch
     return False
-
-
-def _mask_bank_fields(data: dict) -> dict:
-    """Masks profile.account_number/profile.ifsc_code in place (e.g.
-    '••••7734') — used when one user views another's record without
-    employees.view_sensitive. Never applied to a user's own profile view or
-    to the response of an edit they just performed themselves (see
-    EmployeeDetailView.get()'s call site) — those legitimately need the real
-    values. Bank fields live under the nested 'profile' dict, not top-level
-    (see _employee_dict()'s profile_data/result split)."""
-    profile = data.get('profile') or {}
-    acct = profile.get('account_number') or ''
-    ifsc = profile.get('ifsc_code') or ''
-    profile['account_number'] = f'••••{acct[-4:]}' if len(acct) >= 4 else ('••••' if acct else '')
-    profile['ifsc_code'] = '•' * len(ifsc) if ifsc else ''
-    return data
 
 
 # The 5 built-in step numbers (0-3 field steps + 4/Documents) are structural
@@ -836,12 +839,12 @@ def _submit_onboarding(target_user):
         )
 
     # Face ID registration — only required when the admin's org-wide
-    # "Face ID Verification" toggle (Attendance Settings) is mandatory.
-    # Approval isn't required at this point, only that a request was
-    # submitted — same "uploaded, not yet approved, is enough" bar as
-    # the documents check above.
-    from apps.attendance.services_face_matching import is_face_verification_mandatory
-    if is_face_verification_mandatory():
+    # "Face ID Verification" toggle (Attendance Settings) is mandatory AND employees may register it themselves.
+    # When HR registers Face ID in person (registration mode "hr_in_person") the new hire cannot do it, so it must not
+    # block their onboarding; HR registers it afterwards. Approval isn't required at this point, only that a request
+    # was submitted — same "uploaded, not yet approved, is enough" bar as the documents check above.
+    from apps.attendance.services_face_policy import can_employee_self_register
+    if can_employee_self_register():
         from apps.attendance.models import FaceRegistrationRequest
         has_face_registration = FaceRegistrationRequest.objects.filter(employee=target_user).exists()
         if not has_face_registration:
@@ -1404,7 +1407,6 @@ __all__ = [
     '_parse_as_of',
     '_get_employee',
     '_employee_out_of_branch_scope',
-    '_mask_bank_fields',
     '_valid_steps',
     '_custom_field_steps',
     '_step_labels',

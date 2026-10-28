@@ -25,6 +25,7 @@ export const API = {
     stats: "/branch/branches/stats/",
     distribution: "/branch/branches/distribution/",
     previewCode: "/branch/branches/preview-code/",
+    checkLocation: "/branch/branches/check-location/",
     detail: (id: string | number) => `/branch/branches/${id}/`,
     states: "/branch/states/",
     cities: (stateId: string | number) => `/branch/states/${stateId}/cities/`,
@@ -341,6 +342,8 @@ export const API = {
     calendar: "/leave/calendar/",
     holidays: "/leave/holidays/",
     holidayDetail: (id: string) => `/leave/holidays/${id}/`,
+    holidayBulkImport: "/leave/holidays/bulk-import/",
+    holidayBulkImportSample: "/leave/holidays/bulk-import/sample/",
     carryForward: {
       years:   "/leave/carry-forward/years/",
       preview: "/leave/carry-forward/preview/",
@@ -476,6 +479,8 @@ export const API = {
     branchConfigByBranch: (branchId: string) => `/payroll/branch-config/by-branch/${branchId}/`,
 
     // Employee salary config (CTC)
+    salarySetup: "/payroll/salary-setup/",
+    salarySetupSummary: "/payroll/salary-setup/summary/",
     employeeSalary: "/payroll/employee-salary/",
     employeeSalaryDetail: (id: string) => `/payroll/employee-salary/${id}/`,
     employeeSalaryHistory: (employeeId: string) => `/payroll/employee-salary/history/${employeeId}/`,

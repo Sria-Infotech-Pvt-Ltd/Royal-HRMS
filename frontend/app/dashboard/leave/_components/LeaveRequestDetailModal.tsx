@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import ConfirmModal from "@/components/ConfirmModal";
 import { LeaveRequest, STATUS_BADGE, STATUS_LABEL, fmtDate } from "../_data";
 
 interface Props {
@@ -57,6 +59,12 @@ export default function LeaveRequestDetailModal({
   // then supplies the current state in case it changed since the list loaded.
   const { data, loading, error } = useFetch<LeaveRequest>(API.leave.requestDetail(requestId));
   const r = data ?? initialData;
+
+  // UAT-027 — this used to be window.confirm(), which a headless/automated
+  // browser silently suppresses (so the button looked dead in QA) and which
+  // doesn't match the app's own confirmation pattern used elsewhere (draft
+  // delete, document remove, etc.) — swapped for the shared ConfirmModal.
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
@@ -191,12 +199,7 @@ export default function LeaveRequestDetailModal({
               a safe stand-in on rows the backend hasn't attached can_cancel to. */}
           {onCancelRequest && (r.can_cancel ?? (r.status === "pending" || r.status === "l2_pending")) && (
             <button
-              onClick={() => {
-                if (window.confirm("Are you sure you want to cancel this leave request?")) {
-                  onCancelRequest();
-                  onClose();
-                }
-              }}
+              onClick={() => setConfirmingCancel(true)}
               className="px-5 py-2.5 rounded-xl border border-[var(--error)] text-sm font-medium text-[var(--error)] hover:bg-[var(--error-c)] transition-colors"
             >
               Cancel Request
@@ -222,6 +225,21 @@ export default function LeaveRequestDetailModal({
           )}
         </div>
       </div>
+
+      {confirmingCancel && (
+        <ConfirmModal
+          title="Cancel this leave request?"
+          body={`This cancels the ${r.leave_type_display} request for ${fmtDate(r.start_date)} → ${fmtDate(r.end_date)} and releases any balance held against it. This cannot be undone.`}
+          confirmLabel="Cancel Request"
+          danger
+          onConfirm={() => {
+            setConfirmingCancel(false);
+            onCancelRequest?.();
+            onClose();
+          }}
+          onCancel={() => setConfirmingCancel(false)}
+        />
+      )}
     </div>
   );
 }

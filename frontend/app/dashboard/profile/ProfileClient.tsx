@@ -50,7 +50,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
   const [correctionSubmitted, setCorrectionSubmitted] = useState(false);
 
   const [showFaceRegistration, setShowFaceRegistration] = useState(false);
-  const { state: faceCardState, loading: faceCardLoading, notes: faceRejectionNotes, refetch: refetchFaceStatus } = useFaceRegistrationCard();
+  const { state: faceCardState, message: faceMessage, canSelfRegister: faceCanSelfRegister, loading: faceCardLoading, notes: faceRejectionNotes, refetch: refetchFaceStatus } = useFaceRegistrationCard();
   const faceTabHidden = !faceCardLoading && faceCardState === "disabled";
 
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -231,6 +231,8 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       {!faceTabHidden && (
         <ProfileFaceIdCard
           faceCardState={faceCardState}
+          message={faceMessage}
+          canSelfRegister={faceCanSelfRegister}
           faceRejectionNotes={faceRejectionNotes}
           onRegister={() => setShowFaceRegistration(true)}
         />

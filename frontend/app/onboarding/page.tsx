@@ -7,6 +7,7 @@ import { API } from "@/lib/api/endpoints";
 import { getStoredUser, setOnboardingStatus, clearAuth } from "@/lib/auth";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
+import type { FaceIdGuidance, FaceIdMode } from "@/types/faceId";
 import type { OnboardingFieldConfigByStep, CustomFieldFileValue, OnboardingSection, EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import type { ProfileForm } from "./_types";
@@ -83,7 +84,10 @@ export default function OnboardingPage() {
   const [uploadingFileKey, setUploadingFileKey] = useState<string | null>(null);
   const [fileUploadError, setFileUploadError] = useState<string | null>(null);
 
+  // The Face ID step is only required of the employee when the organisation lets them register it themselves; when HR
+  // registers it in person there is nothing for them to do here and it must not block submitting the profile.
   const [faceMandatory, setFaceMandatory] = useState(false);
+  const [faceMode, setFaceMode] = useState<FaceIdMode>("self_service_hr_approval");
   const [faceRegistration, setFaceRegistration] = useState<Partial<FaceRegistrationRequest> | null>(null);
   const [showFaceCapture, setShowFaceCapture] = useState(false);
 
@@ -513,7 +517,9 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     clientApi.get(API.attendance.faceVerification.status).then(r => {
-      setFaceMandatory(Boolean(r.data?.data?.is_mandatory));
+      const status = r.data?.data as Partial<FaceIdGuidance> | undefined;
+      setFaceMandatory(Boolean(status?.is_mandatory) && status?.registration_mode !== "hr_in_person");
+      if (status?.registration_mode) setFaceMode(status.registration_mode);
     }).catch(() => {});
     refetchFaceRegistration();
   }, [refetchFaceRegistration]);
@@ -1095,6 +1101,7 @@ export default function OnboardingPage() {
           {steps[tab].kind === "face" && (
             <TabFaceId
               registration={faceRegistration}
+              mode={faceMode}
               onRegister={() => setShowFaceCapture(true)}
             />
           )}

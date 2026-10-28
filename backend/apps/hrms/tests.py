@@ -106,6 +106,13 @@ class LeaveRequestFlowTests(TestCase):
             'applicant@test.com', role=employee_role, password='TestPass123!',
             reporting_manager=self.manager,
         )
+        # Confirmed, not probation — this class tests the approval/balance
+        # flow, not UAT-028's probation-eligibility rule (covered by
+        # ProbationLeaveEligibilityTests), and make_user() defaults to
+        # probation, which would otherwise block every leave type here.
+        from apps.accounts.models import User
+        self.employee.employment_status = User.EMPLOYMENT_STATUS_CONFIRMED
+        self.employee.save(update_fields=['employment_status'])
 
         # A migration already seeds a default rule for 'leave' — update it in
         # place rather than colliding with the unique workflow_type constraint.
@@ -244,6 +251,10 @@ class LeaveRequestPolicyValidationTests(TestCase):
         self.client = APIClient()
         employee_role = make_role('employee_policy_test')
         self.employee = make_user('policyemp@test.com', role=employee_role, password='TestPass123!')
+        # Confirmed, not probation — see LeaveRequestFlowTests.setUp's comment.
+        from apps.accounts.models import User
+        self.employee.employment_status = User.EMPLOYMENT_STATUS_CONFIRMED
+        self.employee.save(update_fields=['employment_status'])
         self.leave_date = _future_monday()
         LeavePolicy.objects.update_or_create(
             leave_type='casual',
@@ -289,9 +300,19 @@ class LeaveRequestPolicyValidationTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn('work-from-home', resp.data['message'])
 
+    def _recent_past_weekday(self, max_days_back=4):
+        """A date within the last `max_days_back` days that isn't a Sat/Sun —
+        a fixed `today - 2` can land on a weekly off depending on when the
+        suite runs, which these backdated-leave tests aren't testing for."""
+        for offset in range(2, max_days_back + 1):
+            candidate = datetime.date.today() - datetime.timedelta(days=offset)
+            if candidate.weekday() < 5:
+                return candidate
+        raise AssertionError('No weekday found in range — widen max_days_back.')
+
     def test_backdated_leave_rejected_when_policy_disallows(self):
         LeavePolicy.objects.filter(leave_type='casual').update(allow_backdated_leave=False)
-        past_date = datetime.date.today() - datetime.timedelta(days=2)
+        past_date = self._recent_past_weekday()
         resp = self._apply(start_date=past_date.isoformat(), end_date=past_date.isoformat())
         self.assertEqual(resp.status_code, 400)
         self.assertIn('backdated', resp.data['message'].lower())
@@ -300,7 +321,7 @@ class LeaveRequestPolicyValidationTests(TestCase):
         LeavePolicy.objects.filter(leave_type='casual').update(
             allow_backdated_leave=True, maximum_backdated_days=5,
         )
-        past_date = datetime.date.today() - datetime.timedelta(days=2)
+        past_date = self._recent_past_weekday()
         resp = self._apply(start_date=past_date.isoformat(), end_date=past_date.isoformat())
         self.assertEqual(resp.status_code, 201, resp.data)
 
@@ -361,6 +382,14 @@ class ParentalLeaveEligibilityTests(TestCase):
             role=make_role('employee'),
             password='TestPass123!',
         )
+        # Confirmed, not probation — these tests isolate the gender
+        # restriction; UAT-028's probation check is a separate concern
+        # covered by ProbationLeaveEligibilityTests, and make_user()'s
+        # employment_status defaults to probation, which would otherwise
+        # confound these tests via allow_probation_leave=False's own model default.
+        from apps.accounts.models import User
+        self.employee.employment_status = User.EMPLOYMENT_STATUS_CONFIRMED
+        self.employee.save(update_fields=['employment_status'])
         self.profile = EmployeeProfile.objects.create(user=self.employee, gender='male')
         self.leave_date = _future_monday()
         LeavePolicy.objects.update_or_create(
@@ -458,6 +487,83 @@ class ParentalLeaveEligibilityTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn('gender restriction', response.data['message'])
+
+
+class ProbationLeaveEligibilityTests(TestCase):
+    """UAT-028 — allow_probation_leave was present on every LeavePolicy row
+    and exposed in every API response, but nothing in the leave-apply path
+    ever actually read it or checked the employee's probation status, so a
+    probationary employee could always apply for a leave type whose policy
+    said they couldn't."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        from apps.accounts.models import User
+        self.probation_employee = make_user(
+            'probation_leave_employee@test.com', role=make_role('employee_probation'), password='TestPass123!',
+        )
+        self.probation_employee.employment_status = User.EMPLOYMENT_STATUS_PROBATION
+        self.probation_employee.save(update_fields=['employment_status'])
+        EmployeeProfile.objects.create(user=self.probation_employee, gender='male')
+
+        self.confirmed_employee = make_user(
+            'confirmed_leave_employee@test.com', role=make_role('employee_confirmed'), password='TestPass123!',
+        )
+        self.confirmed_employee.employment_status = User.EMPLOYMENT_STATUS_CONFIRMED
+        self.confirmed_employee.save(update_fields=['employment_status'])
+        EmployeeProfile.objects.create(user=self.confirmed_employee, gender='male')
+
+        self.leave_date = _future_monday()
+        LeavePolicy.objects.update_or_create(
+            leave_type='casual',
+            defaults={'annual_days': Decimal('12'), 'is_active': True, 'allow_probation_leave': False},
+        )
+        for employee in (self.probation_employee, self.confirmed_employee):
+            LeaveBalance.objects.create(
+                employee=employee, leave_type='casual', year=self.leave_date.year, total_days=Decimal('12'),
+            )
+
+    def _apply(self, email):
+        _login(self.client, email, password='TestPass123!')
+        return self.client.post(
+            reverse('leave-request-list'),
+            {
+                'leave_type': 'casual', 'duration': 'full_day',
+                'start_date': self.leave_date.isoformat(), 'end_date': self.leave_date.isoformat(),
+                'reason': 'Personal work.',
+            },
+            format='json',
+        )
+
+    def _preview(self, email):
+        _login(self.client, email, password='TestPass123!')
+        return self.client.get(
+            reverse('leave-request-list'),
+            {
+                'action': 'preview', 'leave_type': 'casual',
+                'start_date': self.leave_date.isoformat(), 'end_date': self.leave_date.isoformat(),
+            },
+        )
+
+    def test_probation_employee_cannot_submit_when_policy_disallows_it(self):
+        response = self._apply('probation_leave_employee@test.com')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('probation', response.data['message'].lower())
+
+    def test_probation_employee_blocked_in_preview_too(self):
+        response = self._preview('probation_leave_employee@test.com')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('probation', response.data['message'].lower())
+
+    def test_confirmed_employee_can_still_submit(self):
+        response = self._apply('confirmed_leave_employee@test.com')
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_probation_employee_can_submit_when_policy_allows_it(self):
+        LeavePolicy.objects.filter(leave_type='casual').update(allow_probation_leave=True)
+        response = self._apply('probation_leave_employee@test.com')
+        self.assertEqual(response.status_code, 201, response.data)
 
 
 class ExpenseSelfApprovalTests(TestCase):

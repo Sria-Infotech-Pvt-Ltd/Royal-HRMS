@@ -93,8 +93,12 @@ class LeavePolicyView(APIView):
     def _ensure_policies(self):
         existing = set(LeavePolicy.objects.values_list('leave_type', flat=True))
         defaults = {
-            'casual':    {'annual_days': 12, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Max 3 consecutive days. Apply 1 day in advance.'},
-            'earned':    {'annual_days': 15, 'can_carry_forward': True,  'max_carry_forward_days': 30, 'policy_note': 'Min 3 days notice. Carry-forward up to 30 days.'},
+            # UAT-028 — maximum_consecutive_days/minimum_notice_period used to be
+            # left at the model default (0 = unlimited/no notice required) even
+            # though each policy_note below promises a specific limit, so the
+            # written policy and what the server actually enforced disagreed.
+            'casual':    {'annual_days': 12, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'maximum_consecutive_days': 3, 'minimum_notice_period': 1, 'policy_note': 'Max 3 consecutive days. Apply 1 day in advance.'},
+            'earned':    {'annual_days': 15, 'can_carry_forward': True,  'max_carry_forward_days': 30, 'minimum_notice_period': 3, 'policy_note': 'Min 3 days notice. Carry-forward up to 30 days.'},
             'sick':      {'annual_days': 12, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Medical certificate required for 3+ consecutive days.'},
             'lwp':       {'annual_days': 0,  'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Salary deducted. Requires HR approval. No carry-forward.'},
             'maternity': {'annual_days': 90, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'applicable_gender': 'female', 'policy_note': 'Set the entitlement in Leave Policy settings. HR approval required.'},

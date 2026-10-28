@@ -1,6 +1,7 @@
 "use client";
 
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
+import type { FaceIdMode } from "@/types/faceId";
 
 // ── Tab: Face ID ──────────────────────────────────────────────────────────────
 // Only rendered when the admin's org-wide Face ID Verification toggle
@@ -13,18 +14,21 @@ import type { FaceRegistrationRequest } from "@/types/faceRegistration";
 // HR-completes-onboarding wizard.
 
 export default function TabFaceId({
-  registration, onRegister,
+  registration, mode, onRegister,
 }: {
   registration: Partial<FaceRegistrationRequest> | null;
+  /** How the organisation handles Face ID: decides whether HR approval is mentioned. */
+  mode: FaceIdMode;
   onRegister: () => void;
 }) {
   const status = registration?.status;
+  const needsApproval = mode === "self_service_hr_approval";
 
   return (
     <div>
       <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
         Your organisation requires a registered face ID for web clock-in/out. Register once here —
-        we run a quick liveness check to confirm it&apos;s really you, then send it to HR for approval.
+        we run a quick liveness check to confirm it&apos;s really you{needsApproval ? ", then send it to HR for approval" : ", and it takes effect immediately"}.
         You won&apos;t be able to submit your onboarding profile until this step is complete.
       </p>
       <div style={{
@@ -39,7 +43,7 @@ export default function TabFaceId({
           </div>
           <div>
             <div style={{ fontWeight: 600, fontSize: ".9rem", color: "var(--on-bg)" }}>
-              {status === "approved" && "Face ID approved"}
+              {status === "approved" && (needsApproval ? "Face ID approved" : "Face ID registered")}
               {status === "pending" && "Face ID submitted — pending HR approval"}
               {status === "rejected" && "Face ID rejected — please register again"}
               {!status && "Face ID not yet registered"}

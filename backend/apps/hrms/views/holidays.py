@@ -1,16 +1,23 @@
+import csv
+import io
 import logging
 
+from django.http import HttpResponse
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.permissions import has_perm as _has_perm
-from core.responses import error, first_error, success
+from core.responses import error, first_error, get_client_ip, success
 
 from ..models import Holiday
 from ..serializers import HolidayCreateSerializer, HolidaySerializer
 
 logger = logging.getLogger(__name__)
+
+_IMPORT_MAX_ROWS  = 500
+_IMPORT_MAX_BYTES = 5 * 1024 * 1024
 
 
 def _is_unrestricted(user) -> bool:
@@ -130,3 +137,154 @@ class HolidayDetailView(APIView):
         logger.info('Holiday "%s" on %s deleted by %s', holiday.name, holiday.date, request.user.email)
         holiday.delete()
         return success('Holiday deleted.')
+
+
+# ─── Holiday Calendar — Bulk Import (CSV) ─────────────────────────────────────
+
+_IMPORT_HEADERS = ['Holiday Name', 'Date', 'Holiday Type', 'Optional', 'Company Code', 'Description']
+
+
+def _can_manage_holidays(user) -> bool:
+    return _has_perm(user, 'settings.edit') or _has_perm(user, 'leave.approve')
+
+
+def _parse_holiday_csv_rows(file_obj) -> tuple:
+    try:
+        text = file_obj.read().decode('utf-8-sig')
+        reader = csv.DictReader(io.StringIO(text))
+        rows = []
+        for row in reader:
+            normalized = {(k or '').strip().lower(): (v or '').strip() for k, v in row.items()}
+            if all(v == '' for v in normalized.values()):
+                continue
+            rows.append(normalized)
+        return rows, None
+    except Exception as exc:
+        return [], f'Could not parse CSV file: {exc}'
+
+
+class HolidayBulkImportView(APIView):
+    """
+    POST /api/leave/holidays/bulk-import/
+
+    HR uploads a CSV of a year's holiday list per branch. This endpoint only
+    imports rows the business actually supplies — it never invents dates
+    itself; see HolidayBulkImportSampleView for the blank template.
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser]
+
+    def post(self, request):
+        if not _can_manage_holidays(request.user):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
+            return error('No file uploaded. Please attach a CSV file.',
+                         http_status=status.HTTP_400_BAD_REQUEST)
+        if uploaded_file.size > _IMPORT_MAX_BYTES:
+            return error('File too large. Maximum allowed size is 5 MB.',
+                         http_status=status.HTTP_400_BAD_REQUEST)
+        if not (uploaded_file.name or '').lower().endswith('.csv'):
+            return error('Unsupported file format. Please upload a CSV file.',
+                         http_status=status.HTTP_400_BAD_REQUEST)
+
+        rows, parse_error = _parse_holiday_csv_rows(uploaded_file)
+        if parse_error:
+            return error(parse_error, http_status=status.HTTP_400_BAD_REQUEST)
+        if not rows:
+            return error('The file contains no data rows.', http_status=status.HTTP_400_BAD_REQUEST)
+        if len(rows) > _IMPORT_MAX_ROWS:
+            return error(
+                f'File contains {len(rows)} rows. Maximum allowed per import is {_IMPORT_MAX_ROWS}.',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from apps.branch.models import Branch
+        branch_map = {}
+        for b in Branch.objects.only('branch_name', 'branch_code'):
+            branch_map[b.branch_name.strip().lower()] = b
+            if b.branch_code:
+                branch_map[b.branch_code.strip().lower()] = b
+
+        created_count = 0
+        skipped_rows  = []
+        row_errors    = []
+
+        for idx, row in enumerate(rows, start=2):
+            name_raw   = row.get('holiday name') or row.get('name') or ''
+            date_raw   = row.get('date') or ''
+            type_raw   = (row.get('holiday type') or row.get('type') or 'national').strip().lower()
+            opt_raw    = (row.get('optional') or '').strip().lower()
+            branch_raw = (row.get('company code') or row.get('branch') or '').strip()
+            desc_raw   = row.get('description') or ''
+
+            branch_obj = None
+            if branch_raw:
+                branch_obj = branch_map.get(branch_raw.lower())
+                if branch_obj is None:
+                    row_errors.append({'row': idx, 'field': 'branch',
+                                        'message': f'Company Code "{branch_raw}" not found.'})
+                    continue
+
+            payload = {
+                'name':         name_raw,
+                'date':         date_raw,
+                'holiday_type': type_raw if type_raw in ('national', 'regional', 'company') else 'national',
+                'is_optional':  opt_raw in ('true', 'yes', '1'),
+                'description':  desc_raw,
+                'branch':       branch_obj.id if branch_obj else None,
+            }
+            serializer = HolidayCreateSerializer(data=payload)
+            if not serializer.is_valid():
+                for field, msgs in serializer.errors.items():
+                    msg = msgs[0] if isinstance(msgs, list) else str(msgs)
+                    if 'already exists' in msg:
+                        skipped_rows.append({'row': idx, 'identifier': name_raw, 'reason': msg})
+                        break
+                else:
+                    row_errors.append({'row': idx, 'field': field, 'message': msg})
+                continue
+
+            holiday = serializer.save()
+            created_count += 1
+            logger.info('Holiday "%s" on %s imported by %s', holiday.name, holiday.date, request.user.email)
+
+        from apps.accounts.models import AuditLog
+        AuditLog.objects.create(
+            user       = request.user,
+            action     = 'holiday_bulk_import',
+            module     = 'hrms',
+            changes    = {'total_rows': len(rows), 'created': created_count,
+                          'skipped': len(skipped_rows), 'failed': len(row_errors)},
+            ip_address = get_client_ip(request),
+        )
+
+        return success('Holiday import completed.', data={
+            'total_rows':   len(rows),
+            'created':      created_count,
+            'skipped':      len(skipped_rows),
+            'failed':       len(row_errors),
+            'skipped_rows': skipped_rows,
+            'errors':       row_errors,
+        })
+
+
+class HolidayBulkImportSampleView(APIView):
+    """
+    GET /api/leave/holidays/bulk-import/sample/
+
+    Ships a blank CSV template with headers only — no invented holiday
+    dates. HR fills in the actual business-supplied dates per branch.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _can_manage_holidays(request.user):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+
+        from core.file_utils import build_sample_csv
+        content = build_sample_csv(_IMPORT_HEADERS, [])
+        response = HttpResponse(content, content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="holiday_import_template.csv"'
+        return response

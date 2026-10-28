@@ -43,7 +43,9 @@ from apps.attendance.serializers_face_registration import (
     FaceRegistrationReadSerializer,
     FaceRegistrationSubmitSerializer,
 )
+from apps.attendance.models import AttendanceFaceVerificationRules as FaceRules
 from apps.attendance.services_face_matching import activate_registration, is_face_verification_mandatory
+from apps.attendance.services_face_policy import guidance, registration_mode
 
 _FEATURE_DISABLED_MESSAGE = (
     'Face ID verification is currently disabled. Contact your administrator to use this feature.'
@@ -73,6 +75,10 @@ class FaceRegistrationSubmitView(APIView):
     def post(self, request: Request) -> Response:
         if not is_face_verification_mandatory():
             return error(_FEATURE_DISABLED_MESSAGE, http_status=status.HTTP_403_FORBIDDEN)
+
+        mode = registration_mode()
+        if mode == FaceRules.MODE_HR_IN_PERSON:
+            return error(guidance(request.user)['message'], http_status=status.HTTP_403_FORBIDDEN)
 
         serializer = FaceRegistrationSubmitSerializer(data=request.data)
         if not serializer.is_valid():
@@ -131,6 +137,20 @@ class FaceRegistrationSubmitView(APIView):
             capture_variance=data.get('capture_variance'),
         )
         logger.info('Face registration submitted by %s', request.user.email)
+
+        if mode == FaceRules.MODE_SELF_SERVICE:
+            # No approval step in this mode: the employee's own registration is active straight away.
+            with transaction.atomic():
+                face_request.status = FaceRegistrationRequest.STATUS_APPROVED
+                face_request.approved_at = timezone.now()
+                face_request.notes = 'Self-service registration (no approval step in this mode).'
+                face_request.save(update_fields=['status', 'approved_at', 'notes', 'updated_at'])
+                activate_registration(face_request)
+            return success(
+                'Face ID registered. You can use it right away.',
+                FaceRegistrationReadSerializer(face_request).data,
+                http_status=status.HTTP_201_CREATED,
+            )
 
         return success(
             'Face registration request submitted for approval.',
@@ -260,7 +280,4 @@ class FaceVerificationStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        return success(
-            'Face verification status retrieved.',
-            {'is_mandatory': is_face_verification_mandatory()},
-        )
+        return success('Face verification status retrieved.', guidance(request.user))

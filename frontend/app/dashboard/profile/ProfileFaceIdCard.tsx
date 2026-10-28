@@ -4,11 +4,26 @@ import type { FaceRegistrationCardState } from "@/hooks/useFaceRegistrationCard"
 
 interface ProfileFaceIdCardProps {
   faceCardState: FaceRegistrationCardState;
+  /** The server's one instruction for this person under the organisation's Face ID mode. */
+  message: string;
+  /** Employees may register their own Face ID in this organisation (it is not HR-in-person only). */
+  canSelfRegister: boolean;
   faceRejectionNotes: string;
   onRegister: () => void;
 }
 
-export default function ProfileFaceIdCard({ faceCardState, faceRejectionNotes, onRegister }: ProfileFaceIdCardProps) {
+const HEADLINES: Record<Exclude<FaceRegistrationCardState, "disabled">, string> = {
+  approved: "Face ID registered",
+  pending: "Face ID waiting for approval",
+  rejected: "Face ID registration was rejected",
+  not_registered: "Face ID not yet registered",
+};
+
+export default function ProfileFaceIdCard({ faceCardState, message, canSelfRegister, faceRejectionNotes, onRegister }: ProfileFaceIdCardProps) {
+  if (faceCardState === "disabled") return null;
+  const color = faceCardState === "approved" ? "var(--success)" : faceCardState === "rejected" ? "var(--error)" : "var(--on-bg)";
+  const canAct = canSelfRegister && faceCardState !== "pending";
+
   return (
     <div className="card mb-16">
       <div className="card-header">
@@ -17,43 +32,15 @@ export default function ProfileFaceIdCard({ faceCardState, faceRejectionNotes, o
       <div className="card-body" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}>
         <i className="ti ti-face-id" style={{ fontSize: 22, color: "var(--on-variant)" }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          {faceCardState === "approved" && (
-            <>
-              <div style={{ fontSize: 13, color: "var(--success)" }}>
-                <i className="ti ti-circle-check" style={{ marginRight: 4 }} />Face ID registered
-              </div>
-              <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Required for web clock-in/out — already verified.</div>
-            </>
-          )}
-          {faceCardState === "pending" && (
-            <>
-              <div style={{ fontSize: 13, color: "var(--on-bg)" }}>Face ID pending HR approval</div>
-              <div style={{ fontSize: 11, color: "var(--on-variant)" }}>You&apos;ll be able to clock in with it once it&apos;s approved.</div>
-            </>
-          )}
-          {faceCardState === "rejected" && (
-            <>
-              <div style={{ fontSize: 13, color: "var(--error)" }}>Face ID registration was rejected</div>
-              <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{faceRejectionNotes || "Please update and resubmit."}</div>
-            </>
-          )}
-          {faceCardState === "not_registered" && (
-            <>
-              <div style={{ fontSize: 13, color: "var(--on-bg)" }}>Face ID not yet registered</div>
-              <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                Usually done during onboarding — register it below if you missed that step.
-              </div>
-            </>
-          )}
+          <div style={{ fontSize: 13, color }}>{HEADLINES[faceCardState]}</div>
+          <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
+            {message}
+            {faceCardState === "rejected" && faceRejectionNotes ? ` Reason: ${faceRejectionNotes}` : ""}
+          </div>
         </div>
-        {(faceCardState === "approved" || faceCardState === "rejected") && (
+        {canAct && (
           <button type="button" className="btn btn-primary btn-sm" suppressHydrationWarning onClick={onRegister}>
-            <i className="ti ti-camera" /> Update My Face
-          </button>
-        )}
-        {faceCardState === "not_registered" && (
-          <button type="button" className="btn btn-primary btn-sm" suppressHydrationWarning onClick={onRegister}>
-            <i className="ti ti-camera" /> Register My Face
+            <i className="ti ti-camera" /> {faceCardState === "approved" || faceCardState === "rejected" ? "Update My Face" : "Register My Face"}
           </button>
         )}
       </div>

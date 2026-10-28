@@ -44,10 +44,15 @@ interface EmployeeDetailSensitive {
     emergency_name?:         string;
     emergency_relationship?: string;
     emergency_phone?:        string;
-    pan_masked?:     string;
-    aadhaar_masked?: string;
-    account_number?: string;
-    ifsc_code?:      string;
+    pan_masked?:            string;
+    aadhaar_masked?:        string;
+    account_number_masked?: string;
+    ifsc_code_masked?:      string;
+    account_type?:          string;
+    bank_branch_name?:      string;
+    uan_number?:            string;
+    esi_number?:            string;
+    name_as_per_aadhar?:    string;
     personal_email?: string;
     bank_change_status?: string;
   };
@@ -95,7 +100,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
     hasEmployeeId && isAdmin ? API.employees.actionRequests(employee.id) : null,
   );
   const openRequests = (requestsPage?.results ?? []).filter(r => r.status === "pending" || r.status === "failed" || r.status === "rejected").slice(0, 5);
-  const { data: auditTrail, status: auditStatus, loading: auditLoading } = useFetch<AuditTrailRow[]>(hasEmployeeId ? API.employees.auditTrail(employee.id) : null);
+  const { data: auditTrail, status: auditStatus, loading: auditLoading, refetch: refetchAuditTrail } = useFetch<AuditTrailRow[]>(hasEmployeeId ? API.employees.auditTrail(employee.id) : null);
   const p = detail?.profile;
   const directoryStatus = directoryStatusLabel(employee);
 
@@ -127,6 +132,10 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
         { fields: ["pan_number", "account_number", "ifsc_code", "name_as_per_aadhar"] },
       );
       setRevealed(data.data ?? {});
+      // The server logs a sensitive_reveal AuditLog row on every successful
+      // reveal -- without this, that entry never shows up in the drawer's
+      // Audit Trail until the whole page/drawer is reloaded.
+      refetchAuditTrail();
     } catch (err: unknown) {
       setRevealErr((err as { message?: string })?.message ?? "Could not reveal these fields.");
     } finally {
@@ -144,7 +153,8 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
     ? `${formatDateSlash(p.date_of_birth)}${ageYears(p.date_of_birth) !== null ? ` · ${ageYears(p.date_of_birth)} yrs` : ""}`
     : undefined;
   // Show the account number masked until it is explicitly revealed (the card is titled "Masked").
-  const accountValue = revealed?.account_number || (p?.account_number ? `••••${p.account_number.replace(/•/g, "").slice(-4)}` : undefined);
+  const accountValue = revealed?.account_number || p?.account_number_masked;
+  const ifscValue     = revealed?.ifsc_code     || p?.ifsc_code_masked;
   const payScale = detail?.position_grade
     ? `${detail.position_grade} / ${String(salaryHistory?.length ?? 1).padStart(2, "0")}`
     : undefined;
@@ -222,7 +232,13 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
             <>
               <Row mono label="PAN" value={revealed?.pan_number || p?.pan_masked} />
               <Row mono label="Aadhaar" value={p?.aadhaar_masked} />
+              <Row label="Name as per Aadhaar" value={revealed?.name_as_per_aadhar || p?.name_as_per_aadhar} />
               <Row mono label="Bank account" value={accountValue} />
+              <Row mono label="IFSC" value={ifscValue} />
+              <Row label="Account type" value={p?.account_type ? titleCase(p.account_type) : undefined} />
+              <Row label="Bank branch" value={p?.bank_branch_name} />
+              <Row mono label="UAN" value={p?.uan_number} />
+              <Row mono label="ESI number" value={p?.esi_number} />
             </>
           )}
           {isAdmin && p?.bank_change_status === "pending" && (
@@ -292,7 +308,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
         ))}
       </SectionCard>
 
-      {isAdmin && canViewSensitive && (
+      {(isSelf || (isAdmin && canViewSensitive)) && (
         <SectionCard title="Sensitive Data Control" list={false}>
           {revealErr && <div className="alert alert-error mb-8" style={{ fontSize: 12 }}>{revealErr}</div>}
           {!revealed ? (
