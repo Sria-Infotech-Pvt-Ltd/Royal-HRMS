@@ -299,8 +299,17 @@ def _employee_dict(user: User) -> dict:
         # Bank
         'account_holder_name': p.account_holder_name if p else '',
         'account_type':        p.account_type        if p else '',
-        'account_number':      p.account_number      if p else '',
-        'ifsc_code':           p.ifsc_code           if p else '',
+        # account_number/ifsc_code are PII-tier, same as PAN/Aadhaar below —
+        # masked previews only; real values come back exclusively from
+        # EmployeeRevealSensitiveView, gated by employees.view_sensitive,
+        # and every reveal is written to the audit log.
+        'account_number_masked': (
+            f'••••{p.account_number[-4:]}'
+            if (p and p.account_number and len(p.account_number) >= 4) else ''
+        ),
+        'ifsc_code_masked': (
+            '•' * len(p.ifsc_code) if (p and p.ifsc_code) else ''
+        ),
         'bank_name':           p.bank_name           if p else '',
         'bank_branch_name':    p.bank_branch_name    if p else '',
         'bank_change_status':       p.bank_change_status       if p else '',
@@ -536,22 +545,6 @@ def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
                 employee_branch = candidate.branch.branch_name
         return employee_branch != requesting_user.branch
     return False
-
-
-def _mask_bank_fields(data: dict) -> dict:
-    """Masks profile.account_number/profile.ifsc_code in place (e.g.
-    '••••7734') — used when one user views another's record without
-    employees.view_sensitive. Never applied to a user's own profile view or
-    to the response of an edit they just performed themselves (see
-    EmployeeDetailView.get()'s call site) — those legitimately need the real
-    values. Bank fields live under the nested 'profile' dict, not top-level
-    (see _employee_dict()'s profile_data/result split)."""
-    profile = data.get('profile') or {}
-    acct = profile.get('account_number') or ''
-    ifsc = profile.get('ifsc_code') or ''
-    profile['account_number'] = f'••••{acct[-4:]}' if len(acct) >= 4 else ('••••' if acct else '')
-    profile['ifsc_code'] = '•' * len(ifsc) if ifsc else ''
-    return data
 
 
 # The 5 built-in step numbers (0-3 field steps + 4/Documents) are structural
@@ -1404,7 +1397,6 @@ __all__ = [
     '_parse_as_of',
     '_get_employee',
     '_employee_out_of_branch_scope',
-    '_mask_bank_fields',
     '_valid_steps',
     '_custom_field_steps',
     '_step_labels',

@@ -373,7 +373,8 @@ class EmployeeRevealSensitiveView(APIView):
     }
 
     def post(self, request, employee_id: str):
-        if not _has_perm(request.user, 'employees.view_sensitive'):
+        is_self = request.user.employee_id == employee_id
+        if not is_self and not _has_perm(request.user, 'employees.view_sensitive'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         employee = _get_employee(employee_id)
         if employee is None or _employee_out_of_branch_scope(request.user, employee):

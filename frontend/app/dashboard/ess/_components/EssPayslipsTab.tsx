@@ -104,7 +104,7 @@ export default function EssPayslipsTab({ onNavigateToTax }: { onNavigateToTax: (
   const month = fmtMonth(slip.cycle_start);
   const gross = Number(slip.gross_earnings);
   const deductionsTotal = Number(slip.total_deductions);
-  const bankMasked = me?.profile?.account_number ? `A/c ••••${me.profile.account_number.slice(-4)}` : null;
+  const bankMasked = me?.profile?.account_number_masked ? `A/c ${me.profile.account_number_masked}` : null;
   const credited = [`Credited on ${formatDate(slip.pay_date)}`, me?.profile?.bank_name, bankMasked].filter(Boolean).join(" · ");
   const fyStart = currentFinancialYearStart(fyConfig?.financial_year_start_month ?? "April");
   const fyLabel = fyConfig?.current_financial_year ?? financialYearLabel(fyStart);

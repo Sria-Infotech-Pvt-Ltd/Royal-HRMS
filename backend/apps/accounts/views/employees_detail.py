@@ -190,11 +190,6 @@ class EmployeeDetailView(APIView):
         if auto_changed:
             employee.save(update_fields=auto_changed + ['updated_at'])
         data = _employee_dict(employee)
-        # Bank details are only masked when viewing SOMEONE ELSE's record
-        # without employees.view_sensitive — self-view always sees the real
-        # values, matching every other self-service surface in this app.
-        if not is_self and not _has_perm(request.user, 'employees.view_sensitive'):
-            data = _mask_bank_fields(data)
         return success('Employee retrieved.', data=data)
 
     def put(self, request, employee_id: str):

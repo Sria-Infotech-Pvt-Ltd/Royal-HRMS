@@ -79,7 +79,7 @@ export default function MyPayslipPage({ onNavigateToTax }: Props) {
   const deductions = Number(slip.total_deductions);
   const net = Number(slip.net_pay);
   const paidDays = slip.total_working_days - Number(slip.lop_days);
-  const bankMasked = me?.profile?.account_number ? `••••${me.profile.account_number.slice(-4)}` : "—";
+  const bankMasked = me?.profile?.account_number_masked || "—";
   const gratuityRate = settings ? Number(settings.gratuity_rate) : null;
 
   const fyStart = currentFinancialYearStart(fyConfig?.financial_year_start_month ?? "April");

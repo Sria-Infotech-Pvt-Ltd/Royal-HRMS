@@ -51,8 +51,8 @@ export interface ApiMe {
   date_of_joining: string | null;
   profile?: {
     bank_name?: string;
-    account_number?: string;
-    ifsc_code?: string;
+    account_number_masked?: string;
+    ifsc_code_masked?: string;
     pf_number?: string;
   };
 }

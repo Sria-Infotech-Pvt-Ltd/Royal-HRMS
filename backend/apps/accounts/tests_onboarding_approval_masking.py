@@ -1,10 +1,12 @@
 """
-Regression tests for OnboardingApprovalSerializer.get_profile() masking
-PAN/Aadhaar/bank fields for viewers without employees.view_sensitive —
-this serializer used to nest a plain EmployeeProfileSerializer, which
-returns full unmasked values (correct for the self-service /onboarding/
-and /employees/me/ endpoints it's designed for, but a leak when reused
-here to show HR someone ELSE's onboarding submission).
+Regression tests for OnboardingApprovalSerializer.get_profile() always
+masking PAN/Aadhaar/bank fields, regardless of employees.view_sensitive or
+superuser status -- this serializer used to nest a plain
+EmployeeProfileSerializer, which returns full unmasked values (correct for
+the self-service /onboarding/ write path it's designed for, but a leak when
+reused here to show HR someone ELSE's onboarding submission). Real values
+only ever come from the audited EmployeeRevealSensitiveView now, same as
+every other admin-facing read of these fields (AIRA-UAT bug 9).
 """
 from __future__ import annotations
 
@@ -50,7 +52,10 @@ class OnboardingApprovalMaskingTests(TestCase):
         self.assertTrue(profile['pan_number'].endswith('F'))
         self.assertIn('••••', profile['account_number'])
 
-    def test_viewer_with_view_sensitive_sees_real_values(self):
+    def test_viewer_with_view_sensitive_still_sees_masked_values(self):
+        # Previously this returned the raw values with no audit trail at all
+        # (AIRA-UAT bug 9) -- now even employees.view_sensitive holders must
+        # go through EmployeeRevealSensitiveView, which audits every reveal.
         role = make_role('hr_sensitive_test', permission_codenames=['onboarding.approve', 'employees.view_sensitive'])
         hr = make_user('hr-sensitive@test.com', role=role, password='TestPass123!')
         self.client.force_authenticate(user=hr)
@@ -58,15 +63,16 @@ class OnboardingApprovalMaskingTests(TestCase):
         resp = self._get_detail()
         self.assertEqual(resp.status_code, 200, resp.data)
         profile = resp.data['data']['profile']
-        self.assertEqual(profile['pan_number'], 'ABCDE1234F')
-        self.assertEqual(profile['aadhaar_number'], '123456789012')
-        self.assertEqual(profile['account_number'], '9876543210')
+        self.assertNotEqual(profile['pan_number'], 'ABCDE1234F')
+        self.assertNotEqual(profile['aadhaar_number'], '123456789012')
+        self.assertNotEqual(profile['account_number'], '9876543210')
+        self.assertIn('••••', profile['account_number'])
 
-    def test_superuser_sees_real_values(self):
+    def test_superuser_also_sees_masked_values(self):
         role = make_role('no_perms_masking_test')
         admin = make_user('admin-masking@test.com', role=role, is_superuser=True)
         self.client.force_authenticate(user=admin)
 
         resp = self._get_detail()
         self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertEqual(resp.data['data']['profile']['pan_number'], 'ABCDE1234F')
+        self.assertNotEqual(resp.data['data']['profile']['pan_number'], 'ABCDE1234F')

@@ -39,7 +39,10 @@ class EmployeeDetailSelfViewTests(TestCase):
         resp = self.client.get(reverse('employee-detail', args=['EMP90003']))
         self.assertEqual(resp.status_code, 403)
 
-    def test_self_view_shows_real_unmasked_bank_details(self):
+    def test_self_view_shows_masked_bank_details(self):
+        # AIRA-UAT bug 9: account_number/ifsc_code are masked here even for
+        # self-view now -- the real values only ever come from the audited
+        # EmployeeRevealSensitiveView (which self can now call too).
         role = make_role('employee_selfview_test3')
         user = make_user('selfview3@test.com', role=role, employee_id='EMP90004')
         EmployeeProfile.objects.create(user=user, account_number='1234567890', ifsc_code='HDFC0001234')
@@ -47,7 +50,10 @@ class EmployeeDetailSelfViewTests(TestCase):
 
         resp = self.client.get(reverse('employee-detail', args=['EMP90004']))
         self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertEqual(resp.data['data']['profile']['account_number'], '1234567890')
+        profile = resp.data['data']['profile']
+        self.assertNotIn('1234567890', profile['account_number_masked'])
+        self.assertEqual(profile['account_number_masked'], '••••7890')
+        self.assertEqual(profile['ifsc_code_masked'], '•' * len('HDFC0001234'))
 
     def test_hr_with_employees_view_can_still_view_others(self):
         hr_role = make_role('hr_selfview_test', permission_codenames=['employees.view'])

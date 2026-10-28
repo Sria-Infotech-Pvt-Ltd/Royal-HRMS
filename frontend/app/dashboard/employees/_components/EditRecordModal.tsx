@@ -346,8 +346,12 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
 
       setStatutory(s => ({
         ...s,
-        account_holder_name: emp.details.accountHolderName ?? "", account_number: emp.details.accountNumber ?? "",
-        ifsc_code: emp.details.ifscCode ?? "", bank_name: emp.details.bankName ?? "",
+        // account_number/ifsc_code are masked-only from this GET response
+        // (see EmployeeRevealSensitiveView) — left blank here, same as
+        // pan_number/aadhaar_number below, so saving without touching them
+        // doesn't overwrite the real stored value with an empty string.
+        account_holder_name: emp.details.accountHolderName ?? "",
+        bank_name: emp.details.bankName ?? "",
         bank_branch_address: emp.details.bankBranch ?? "",
         uan_number: emp.details.uanNumber ?? "", esi_number: emp.details.esiNumber ?? "",
         pf_covered: typeof rawRecord.pf_covered === "boolean" ? String(rawRecord.pf_covered) : s.pf_covered,
@@ -554,8 +558,6 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         emergency_email: primaryEmergency?.email ?? "",
         // Statutory & accounts
         account_holder_name: statutory.account_holder_name || "",
-        account_number: statutory.account_number || "",
-        ifsc_code: statutory.ifsc_code || "",
         bank_name: statutory.bank_name || "",
         bank_branch_name: statutory.bank_branch_address || "",
         uan_number: statutory.uan_number || "",
@@ -569,6 +571,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         // losing data silently).
         ...(statutory.pan_number ? { pan_number: statutory.pan_number } : {}),
         ...(statutory.aadhaar_number ? { aadhaar_number: statutory.aadhaar_number } : {}),
+        ...(statutory.account_number ? { account_number: statutory.account_number } : {}),
+        ...(statutory.ifsc_code ? { ifsc_code: statutory.ifsc_code } : {}),
         ...(statutory.passport_number ? { passport_number: statutory.passport_number, passport_expiry: statutory.passport_expiry || null } : {}),
         // Education & experience — core skills/certifications
         core_skills: coreSkills || "",

@@ -44,10 +44,10 @@ interface EmployeeDetailSensitive {
     emergency_name?:         string;
     emergency_relationship?: string;
     emergency_phone?:        string;
-    pan_masked?:     string;
-    aadhaar_masked?: string;
-    account_number?: string;
-    ifsc_code?:      string;
+    pan_masked?:            string;
+    aadhaar_masked?:        string;
+    account_number_masked?: string;
+    ifsc_code_masked?:      string;
     personal_email?: string;
     bank_change_status?: string;
   };
@@ -148,7 +148,8 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
     ? `${formatDateSlash(p.date_of_birth)}${ageYears(p.date_of_birth) !== null ? ` · ${ageYears(p.date_of_birth)} yrs` : ""}`
     : undefined;
   // Show the account number masked until it is explicitly revealed (the card is titled "Masked").
-  const accountValue = revealed?.account_number || (p?.account_number ? `••••${p.account_number.replace(/•/g, "").slice(-4)}` : undefined);
+  const accountValue = revealed?.account_number || p?.account_number_masked;
+  const ifscValue     = revealed?.ifsc_code     || p?.ifsc_code_masked;
   const payScale = detail?.position_grade
     ? `${detail.position_grade} / ${String(salaryHistory?.length ?? 1).padStart(2, "0")}`
     : undefined;
@@ -227,6 +228,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
               <Row mono label="PAN" value={revealed?.pan_number || p?.pan_masked} />
               <Row mono label="Aadhaar" value={p?.aadhaar_masked} />
               <Row mono label="Bank account" value={accountValue} />
+              <Row mono label="IFSC" value={ifscValue} />
             </>
           )}
           {isAdmin && p?.bank_change_status === "pending" && (
@@ -296,7 +298,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
         ))}
       </SectionCard>
 
-      {isAdmin && canViewSensitive && (
+      {(isSelf || (isAdmin && canViewSensitive)) && (
         <SectionCard title="Sensitive Data Control" list={false}>
           {revealErr && <div className="alert alert-error mb-8" style={{ fontSize: 12 }}>{revealErr}</div>}
           {!revealed ? (
