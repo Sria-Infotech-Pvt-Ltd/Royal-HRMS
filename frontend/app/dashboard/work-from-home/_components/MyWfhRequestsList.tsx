@@ -90,6 +90,11 @@ export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }
             </div>
             {req.location_label && <div className="text-xs text-[var(--on-variant)]">{req.location_label}</div>}
             {req.reason && <div className="text-xs text-[var(--on-variant)] mt-1">{req.reason}</div>}
+            {req.is_medical && (
+              <div className="text-xs mt-1">
+                Medical WFH{req.supporting_document_url && <> · <a href={req.supporting_document_url} target="_blank" rel="noopener noreferrer">proof</a></>}
+              </div>
+            )}
           </div>
           <div className="text-xs text-[var(--on-variant)] text-right min-w-[160px]">
             {req.l1_approver_name && <div>L1: {req.l1_approver_name}{req.l1_status ? ` (${req.l1_status})` : ""}</div>}

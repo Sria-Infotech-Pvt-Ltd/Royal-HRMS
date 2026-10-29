@@ -148,7 +148,7 @@ def get_unpunch_count(
     department: str,
     employee_ids: list[str] | None = None,
 ) -> int:
-    """Count employees whose AttendanceRecord is STATUS_INCOMPLETE for target_date."""
+    """Count employees still missing a Clock Out for target_date (see missing_clock_out_q)."""
     from apps.attendance.models import AttendanceRecord
 
     employee_qs = User.objects.filter(is_active=True)
@@ -159,10 +159,11 @@ def get_unpunch_count(
     if department:
         employee_qs = employee_qs.filter(department=department)
 
+    from apps.attendance.services_policy import missing_clock_out_q
     return AttendanceRecord.objects.filter(
+        missing_clock_out_q(),
         date=target_date,
         employee__in=employee_qs,
-        status=AttendanceRecord.STATUS_INCOMPLETE,
     ).count()
 
 
@@ -173,7 +174,8 @@ def get_unpunches(
     employee_ids: list[str] | None = None,
 ) -> list[dict]:
     """
-    Return employees marked STATUS_INCOMPLETE for target_date.
+    Return employees still missing a Clock Out for target_date — STATUS_INCOMPLETE,
+    or Half Day / Absent when Attendance Settings → Missing punch says so.
 
     STATUS_INCOMPLETE is set by the Celery task (check_missing_clockouts) only
     after shift_end + missing_punch_grace_minutes has passed.  Employees who are
@@ -191,6 +193,7 @@ def get_unpunches(
     scope to exactly those employees instead of branch/department.
     """
     from apps.attendance.models import AttendanceCorrection, AttendanceRecord
+    from apps.attendance.services_policy import missing_clock_out_q
 
     employee_qs = User.objects.filter(is_active=True)
     if employee_ids is not None:
@@ -203,9 +206,9 @@ def get_unpunches(
     records = (
         AttendanceRecord.objects
         .filter(
+            missing_clock_out_q(),
             date=target_date,
             employee__in=employee_qs,
-            status=AttendanceRecord.STATUS_INCOMPLETE,
         )
         .select_related('employee')
         .order_by('employee__full_name')

@@ -19,6 +19,9 @@ export interface PunchRulesSection {
   min_hours_full_day: string;       // "8.00"
   min_hours_half_day: string;       // "4.00"
   early_exit_grace_minutes: number;
+  missing_punch_action: string;     // "require_regularization" | "mark_half_day" | "mark_absent"
+  early_leave_allowance_per_month: number; // 0 = off
+  wfh_daily_report_required: boolean;
 }
 
 export interface OvertimeRulesSection {
@@ -30,6 +33,7 @@ export interface OvertimeRulesSection {
 export interface LateMarkRulesSection {
   late_marks_per_lop: number;       // 0 = tracking only (no LOP deduction)
   lop_deduction_unit: string;       // "full_day" | "half_day"
+  late_mark_mode: string;           // "every_n" | "after_allowance"
 }
 
 export interface AbsenceAlertSection {

@@ -1,4 +1,12 @@
 export const API = {
+  companyPolicy: {
+    pendingAcknowledgements: "/documents/pending-acknowledgements/",
+    acknowledge:             (id: number) => `/documents/${id}/acknowledge/`,
+    acknowledgements:        (id: number) => `/documents/${id}/acknowledgements/`,
+    contacts:                "/company-contacts/",
+    contactDetail:           (id: number) => `/company-contacts/${id}/`,
+  },
+
   auth: {
     login: "/login/",
     logout: "/logout/",
@@ -278,6 +286,8 @@ export const API = {
     approve:             (id: string) => `/wfh/requests/${id}/approve/`,
     savedLocations:      "/wfh/saved-locations/",
     savedLocationDetail: (id: string) => `/wfh/saved-locations/${id}/`,
+    reports:             "/wfh/reports/",
+    reportReview:        (id: number) => `/wfh/reports/${id}/review/`,
   },
 
   attendance: {

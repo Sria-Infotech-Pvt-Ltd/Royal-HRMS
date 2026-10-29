@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { usePermission } from "@/hooks/usePermission";
 import DocPreviewBody from "./_components/DocPreviewBody";
+import AcknowledgementPanel from "@/components/policy/AcknowledgementPanel";
+import { ackState, initialDocFilter, type AckFields } from "@/lib/policyAck";
 import {
   DOCUMENTS_BASE, DOCUMENTS_STATS, documentDetail,
   CATEGORY_META, DOC_ACCEPT, EMPTY_UPLOAD_FORM, formatUploadedAt,
@@ -29,6 +31,7 @@ const FILTER_TO_CATEGORY: Record<Filter, DocCategory | ""> = {
 export default function DocumentCenterPage() {
   const canUpload = usePermission("documents.create");
   const canDelete = usePermission("documents.delete");
+  const canManageAck = usePermission("documents.edit");
 
   // ── Data state ─────────────────────────────────────────────────────────────
   const [documents,    setDocuments]    = useState<ApiDocument[]>([]);
@@ -114,6 +117,17 @@ export default function DocumentCenterPage() {
 
   useEffect(() => { loadStats(); }, [loadStats]);
 
+  // /dashboard/documents?category=policy (the dashboard "Company Policy" link) opens on that tab.
+  useEffect(() => {
+    const category = new URLSearchParams(window.location.search).get("category");
+    setFilter(initialDocFilter(category, FILTER_TO_CATEGORY, "All Documents"));
+  }, []);
+
+  function applyAckChange(id: number, patch: Partial<AckFields>) {
+    setDocuments(prev => prev.map(d => (d.id === id ? { ...d, ...patch } : d)));
+    setSelected(prev => (prev && prev.id === id ? { ...prev, ...patch } : prev));
+  }
+
   useEffect(() => {
     loadDocuments(FILTER_TO_CATEGORY[filter], debouncedQ);
   }, [filter, debouncedQ, loadDocuments]);
@@ -145,6 +159,7 @@ export default function DocumentCenterPage() {
       fd.append("title",    uploadForm.title.trim());
       fd.append("category", uploadForm.category);
       if (uploadForm.description.trim()) fd.append("description", uploadForm.description.trim());
+      if (uploadForm.requiresAcknowledgement) fd.append("requires_acknowledgement", "true");
       fd.append("file", uploadForm.file!);
 
       const res = await clientApi.post(DOCUMENTS_BASE, fd);
@@ -398,6 +413,16 @@ export default function DocumentCenterPage() {
                     <i className={`ti ${cm.icon}`} style={{ fontSize: 10 }} />
                     {cm.label}
                   </span>
+                  {ackState(doc) === "pending" && (
+                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10, background: "rgba(194,139,0,0.12)", color: "#9a6b00" }}>
+                      <i className="ti ti-signature" style={{ fontSize: 10 }} /> Please acknowledge
+                    </span>
+                  )}
+                  {ackState(doc) === "acknowledged" && (
+                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10, background: "rgba(27,138,107,0.12)", color: "var(--success)" }}>
+                      <i className="ti ti-circle-check" style={{ fontSize: 10 }} /> Acknowledged
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -461,6 +486,12 @@ export default function DocumentCenterPage() {
                   {selected.description}
                 </div>
               )}
+
+              <AcknowledgementPanel
+                doc={selected}
+                canManage={canManageAck}
+                onChanged={patch => applyAckChange(selected.id, patch)}
+              />
             </div>
 
             <div className="modal-footer" style={{ flexShrink: 0 }}>
@@ -657,6 +688,12 @@ export default function DocumentCenterPage() {
                 </select>
                 {uploadErrors.category && <span className="field-error">{uploadErrors.category}</span>}
               </div>
+
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+                <input type="checkbox" checked={!!uploadForm.requiresAcknowledgement}
+                  onChange={e => setUploadForm(p => ({ ...p, requiresAcknowledgement: e.target.checked }))} />
+                Employees must read and acknowledge this document
+              </label>
             </div>
 
             <div className="modal-footer" style={{ flexShrink: 0 }}>

@@ -38,6 +38,8 @@ export interface LeavePolicy {
   maximum_leave_duration:   number;
   maximum_consecutive_days: number;
   minimum_notice_period:    number;
+  long_leave_min_days:      number;
+  long_leave_notice_days:   number;
   allow_half_day:           boolean;
   allow_backdated_leave:    boolean;
   maximum_backdated_days:   number;
@@ -79,6 +81,8 @@ export interface PolicyRuleFields {
   maximum_leave_duration:   number;
   maximum_consecutive_days: number;
   minimum_notice_period:    number;
+  long_leave_min_days:      number;
+  long_leave_notice_days:   number;
   allow_half_day:           boolean;
   allow_backdated_leave:    boolean;
   maximum_backdated_days:   number;
@@ -114,6 +118,7 @@ export interface PolicyRuleFields {
 function defaultRules(): PolicyRuleFields {
   return {
     minimum_leave_duration: 0.5, maximum_leave_duration: 0, maximum_consecutive_days: 0, minimum_notice_period: 0,
+    long_leave_min_days: 0, long_leave_notice_days: 0,
     allow_half_day: true, allow_backdated_leave: false, maximum_backdated_days: 0,
     allow_future_leave: true, maximum_future_days: 0,
     sandwich_leave_enabled: false, count_holidays_as_leave: false, count_weekoffs_as_leave: false,
@@ -133,6 +138,8 @@ function extractRules(p: LeavePolicy): PolicyRuleFields {
     maximum_leave_duration:   Number(p.maximum_leave_duration),
     maximum_consecutive_days: Number(p.maximum_consecutive_days),
     minimum_notice_period:    Number(p.minimum_notice_period),
+    long_leave_min_days:      Number(p.long_leave_min_days ?? 0),
+    long_leave_notice_days:   Number(p.long_leave_notice_days ?? 0),
     allow_half_day:           p.allow_half_day,
     allow_backdated_leave:    p.allow_backdated_leave,
     maximum_backdated_days:   Number(p.maximum_backdated_days),
@@ -384,6 +391,8 @@ export default function LeavePoliciesTab() {
             <NumberRow label="Maximum Leave Duration" suffix="0 = unlimited" value={rules.maximum_leave_duration} onChange={v => setField("maximum_leave_duration", v)} />
             <NumberRow label="Maximum Consecutive Days" suffix="0 = unlimited" value={rules.maximum_consecutive_days} onChange={v => setField("maximum_consecutive_days", v)} />
             <NumberRow label="Minimum Notice Period" suffix="days" value={rules.minimum_notice_period} onChange={v => setField("minimum_notice_period", v)} />
+            <NumberRow label="Long Leave — From" suffix="days or more, 0 = off" value={rules.long_leave_min_days} onChange={v => setField("long_leave_min_days", v)} />
+            <NumberRow label="Long Leave — Notice" suffix="days in advance" value={rules.long_leave_notice_days} onChange={v => setField("long_leave_notice_days", v)} />
             <div style={{ gridColumn: "1 / -1" }}><ToggleRow label="Allow Half-Day Leave" checked={rules.allow_half_day} onChange={v => setField("allow_half_day", v)} /></div>
             <div style={{ gridColumn: "1 / -1" }}><ToggleRow label="Allow Backdated Leave" checked={rules.allow_backdated_leave} onChange={v => setField("allow_backdated_leave", v)} /></div>
             {rules.allow_backdated_leave && (

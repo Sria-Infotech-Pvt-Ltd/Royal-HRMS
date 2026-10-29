@@ -213,10 +213,12 @@ def detect_and_mark_unpunches(
 
     record_ids    = [r.pk for r in overdue_records]
 
-    # ── Bulk mark incomplete ───────────────────────────────────────────────────
+    # ── Bulk mark per Attendance Settings → Missing punch (Incomplete by
+    #    default, or Half Day / Absent) ───────────────────────────────────────
+    from apps.attendance.services_policy import missing_punch_status
     with transaction.atomic():
         marked = AttendanceRecord.objects.filter(pk__in=record_ids).update(
-            status=AttendanceRecord.STATUS_INCOMPLETE,
+            status=missing_punch_status(cfg),
             note='Missing clock-out — shift ended without a punch-out.',
             updated_at=timezone.now(),
         )

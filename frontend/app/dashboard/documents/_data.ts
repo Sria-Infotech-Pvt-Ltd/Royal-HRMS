@@ -29,6 +29,9 @@ export interface ApiDocument {
   uploaded_at:       string;  // ISO 8601
   updated_at:        string;
   is_active:         boolean;
+  requires_acknowledgement?: boolean;
+  version?:          number;
+  my_acknowledged_at?: string | null;
 }
 
 export interface ApiStatsResponse {
@@ -43,10 +46,11 @@ export interface DocUploadForm {
   description: string;
   category:    DocCategory | "";
   file:        File | null;
+  requiresAcknowledgement?: boolean;
 }
 
 export const EMPTY_UPLOAD_FORM: DocUploadForm = {
-  title: "", description: "", category: "", file: null,
+  title: "", description: "", category: "", file: null, requiresAcknowledgement: false,
 };
 
 export type DocUploadErrors = Partial<Record<keyof DocUploadForm, string>>;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { wfhMedicalProofError } from "@/lib/wfhReport";
 import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
@@ -52,6 +53,8 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
   const [startDate,   setStartDate]   = useState("");
   const [endDate,      setEndDate]     = useState("");
   const [reason,       setReason]      = useState("");
+  const [isMedical,    setIsMedical]   = useState(false);
+  const [medicalProof, setMedicalProof] = useState<File | null>(null);
   const [locationLabel, setLocationLabel] = useState("");
   const [coords,       setCoords]      = useState<Coords | null>(null);
   const [locating,     setLocating]    = useState(false);
@@ -164,6 +167,8 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
     if (!startDate) e.startDate = "Start date is required.";
     if (!endDate) e.endDate = "End date is required.";
     if (startDate && endDate && endDate < startDate) e.endDate = "End date must be on or after start date.";
+    const proofProblem = wfhMedicalProofError(isMedical, medicalProof);
+    if (proofProblem) e.medicalProof = proofProblem;
     if (!coords) e.coords = "Select a saved location or capture your current one before submitting — this is what your clock-in will be checked against on WFH days.";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -173,14 +178,24 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
     if (!validate() || !coords) return;
     setSubmitting(true);
     try {
-      const res = await clientApi.post(API.workFromHome.requests, {
+      const fields = {
         start_date: startDate,
         end_date: endDate,
         reason,
         location_label: locationLabel,
         latitude: coords.latitude,
         longitude: coords.longitude,
-      });
+      };
+      let body: FormData | typeof fields = fields;
+      if (isMedical && medicalProof) {
+        // Medical WFH carries its proof as a file, so this one is sent as multipart.
+        const fd = new FormData();
+        Object.entries(fields).forEach(([k, v]) => fd.append(k, String(v)));
+        fd.append("is_medical", "true");
+        fd.append("supporting_document", medicalProof);
+        body = fd;
+      }
+      const res = await clientApi.post(API.workFromHome.requests, body);
       setSubmitted(res.data.data as WorkFromHomeRequest);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -192,6 +207,7 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
 
   function reset() {
     setStartDate(""); setEndDate(""); setReason(""); setLocationLabel("");
+    setIsMedical(false); setMedicalProof(null);
     setCoords(null); setLocationError(""); setErrors({}); setSubmitted(null);
     setSelectedLocationId(locations.length > 0 ? locations[0].id : NEW_LOCATION);
     if (locations.length > 0) applySavedLocation(locations[0]);
@@ -260,6 +276,22 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
             <Lbl text="Reason" />
             <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
               placeholder="Optional — add context for your approver" className={INPUT} />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={isMedical} onChange={e => { setIsMedical(e.target.checked); if (!e.target.checked) setMedicalProof(null); }} />
+              WFH for medical reasons
+            </label>
+            {isMedical && (
+              <div className="mt-2">
+                <Lbl text="Medical proof (report or prescription)" required />
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                  onChange={e => setMedicalProof(e.target.files?.[0] ?? null)} className={INPUT} />
+                <p className="text-xs text-[var(--on-variant)] mt-1">PDF, JPG or PNG, up to 5 MB.</p>
+              </div>
+            )}
+            <Err msg={errors.medicalProof} />
           </div>
 
           <div>

@@ -951,6 +951,11 @@ class Document(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
     is_active   = models.BooleanField(default=True)
+    # Employees must acknowledge and accept this document (e.g. Company
+    # Policy). version goes up whenever the file is replaced, so everyone has
+    # to acknowledge the new version again.
+    requires_acknowledgement = models.BooleanField(default=False)
+    version     = models.PositiveIntegerField(default=1)
 
     class Meta:
         db_table = 'hrms_documents'
@@ -963,6 +968,62 @@ class Document(models.Model):
 
     def __str__(self) -> str:
         return self.title
+
+
+class DocumentAcknowledgement(models.Model):
+    """An employee's own acknowledgement and acceptance of one version of a
+    Document. Only ever created by that employee — never on their behalf."""
+
+    document        = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='acknowledgements')
+    employee        = models.ForeignKey(User, on_delete=models.CASCADE, related_name='document_acknowledgements')
+    version         = models.PositiveIntegerField()
+    acknowledged_at = models.DateTimeField(auto_now_add=True)
+    ip_address      = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'hrms_document_acknowledgements'
+        ordering = ['-acknowledged_at']
+        constraints = [
+            models.UniqueConstraint(fields=['document', 'employee', 'version'], name='doc_ack_unique_version'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.employee_id} acknowledged {self.document_id} v{self.version}'
+
+
+class CompanyContact(models.Model):
+    """One row of the Company Contact Matrix — who to contact (and in what
+    order) for HR matters. Entered by HR; nothing is pre-filled."""
+
+    name             = models.CharField(max_length=150)
+    designation      = models.CharField(max_length=150, blank=True, default='')
+    department       = models.CharField(max_length=100, blank=True, default='')
+    email            = models.EmailField(blank=True, default='')
+    phone            = models.CharField(max_length=20, blank=True, default='')
+    purpose          = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text='What to contact them about, e.g. attendance, WFH, leave, payroll.',
+    )
+    escalation_level = models.PositiveSmallIntegerField(
+        default=1, help_text='1 = first point of contact; higher = escalate to.',
+    )
+    branch           = models.ForeignKey(
+        'branch.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='company_contacts',
+        help_text='Blank = company-wide.',
+    )
+    display_order    = models.PositiveSmallIntegerField(default=0)
+    is_active        = models.BooleanField(default=True)
+    created_by       = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    updated_by       = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    created_at       = models.DateTimeField(auto_now_add=True)
+    updated_at       = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_company_contacts'
+        ordering = ['escalation_level', 'display_order', 'name']
+
+    def __str__(self) -> str:
+        return self.name
 
 
 # ─── Employee Profile (onboarding wizard data) ────────────────────────────────

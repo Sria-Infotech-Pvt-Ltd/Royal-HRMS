@@ -1,4 +1,11 @@
 from django.urls import path
+from apps.accounts.views_policy import (
+    CompanyContactDetailView,
+    CompanyContactListCreateView,
+    DocumentAcknowledgeView,
+    DocumentAcknowledgementListView,
+    MyPendingAcknowledgementsView,
+)
 from apps.accounts.views import (
     ApprovalWorkflowRuleView,
     AuditLogListView,
@@ -152,5 +159,12 @@ urlpatterns = [
     # Document Center (admin)
     path('documents/',           DocumentListCreateView.as_view(), name='document-list-create'),
     path('documents/stats/',     DocumentStatsView.as_view(),      name='document-stats'),
+    path('documents/pending-acknowledgements/', MyPendingAcknowledgementsView.as_view(), name='document-pending-acks'),
+    path('documents/<str:pk>/acknowledge/',      DocumentAcknowledgeView.as_view(),      name='document-acknowledge'),
+    path('documents/<str:pk>/acknowledgements/', DocumentAcknowledgementListView.as_view(), name='document-acknowledgements'),
     path('documents/<str:pk>/',  DocumentDetailView.as_view(),     name='document-detail'),
+
+    # Company Contact Matrix
+    path('company-contacts/',          CompanyContactListCreateView.as_view(), name='company-contact-list'),
+    path('company-contacts/<int:pk>/', CompanyContactDetailView.as_view(),     name='company-contact-detail'),
 ]

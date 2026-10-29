@@ -18,6 +18,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from django.db import connection, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 _IST = ZoneInfo('Asia/Kolkata')
@@ -35,6 +36,12 @@ logger = logging.getLogger(__name__)
 def _get_settings() -> Optional[AttendanceSettings]:
     from core.cache_service import AttendanceSettingsCacheService
     return AttendanceSettingsCacheService.get()
+
+
+def _early_exit_window(cfg) -> int:
+    """Attendance Settings → Early Exit Grace in minutes (30 when not configured)."""
+    rules = getattr(cfg, 'punch_rules', None) if cfg else None
+    return rules.early_exit_grace_minutes if rules is not None else 30
 
 
 def _minutes_to_display(minutes: int) -> str:
@@ -401,8 +408,12 @@ class AttendanceProcessorService:
     _WFH_REQUEST_NOT_RESOLVED = object()
 
     @classmethod
-    def process_day(cls, employee, for_date: date, wfh_request=_WFH_REQUEST_NOT_RESOLVED) -> AttendanceRecord:
-        """Build or update the AttendanceRecord for this employee on this date."""
+    def process_day(cls, employee, for_date: date, wfh_request=_WFH_REQUEST_NOT_RESOLVED,
+                    recheck_month: bool = True) -> AttendanceRecord:
+        """Build or update the AttendanceRecord for this employee on this date.
+
+        recheck_month=False is only for the early-leave re-check itself, which
+        already walks the rest of the month in order."""
         cfg         = _get_settings()
         branch_name = getattr(employee, 'branch', '') or ''
         punches     = list(
@@ -448,13 +459,47 @@ class AttendanceProcessorService:
         record_data['work_mode'] = (
             AttendanceRecord.WORK_MODE_WFH if wfh_request else AttendanceRecord.WORK_MODE_OFFICE
         )
+        record_data.setdefault('early_leave_allowance_applied', False)
+        if wfh_request:
+            from apps.attendance.services_policy import wfh_report_status
+            wfh_status, wfh_note = wfh_report_status(
+                employee, for_date, record_data['status'], cfg, timezone.localdate(),
+            )
+            if wfh_status != record_data['status']:
+                record_data['status'] = wfh_status
+                record_data['note'] = wfh_note
+                record_data['early_leave_allowance_applied'] = False
 
+        # Only read the previous value when the allowance is on — no extra
+        # query on the punch path for companies that don't use it.
+        allowance_on = bool(getattr(getattr(cfg, 'punch_rules', None), 'early_leave_allowance_per_month', 0))
+        previously_applied = bool(
+            AttendanceRecord.objects.filter(employee=employee, date=for_date)
+            .values_list('early_leave_allowance_applied', flat=True).first()
+        ) if allowance_on and recheck_month else False
         record, _ = AttendanceRecord.objects.update_or_create(
             employee=employee,
             date=for_date,
             defaults=record_data,
         )
+        # The monthly early-leave allowance is used by the earliest qualifying
+        # days, so a change here (e.g. an approved correction) can free up or
+        # use up the allowance for later days of the same month.
+        if allowance_on and recheck_month and previously_applied != record_data['early_leave_allowance_applied']:
+            cls._recheck_early_leave_later_in_month(employee, for_date)
         return record
+
+    @classmethod
+    def _recheck_early_leave_later_in_month(cls, employee, for_date: date) -> None:
+        later_days = (
+            AttendanceRecord.objects
+            .filter(employee=employee, date__year=for_date.year, date__month=for_date.month, date__gt=for_date)
+            .filter(Q(status=AttendanceRecord.STATUS_HALF_DAY) | Q(early_leave_allowance_applied=True))
+            .order_by('date').values_list('date', flat=True)
+        )
+        # In date order, so each day sees the allowance used by the days before it.
+        for day in list(later_days):
+            cls.process_day(employee, day, recheck_month=False)
 
     @staticmethod
     def _is_holiday(for_date: date, branch_name: str = '') -> bool:
@@ -549,10 +594,28 @@ class AttendanceProcessorService:
             shift = ShiftCacheService.get_effective(employee, for_date)
 
         is_late             = cls._check_late(_ist_time(first_in), shift)
-        is_early_exit       = cls._check_early_exit(_ist_time(last_out) if last_out else None, shift)
+        is_early_exit       = cls._check_early_exit(
+            _ist_time(last_out) if last_out else None, shift, _early_exit_window(cfg),
+        )
         status              = cls._resolve_status(
             net_minutes, is_late, cfg, has_open_session, has_complete_pair
         )
+
+        # Clock In without a Clock Out on a past day — Attendance Settings →
+        # Missing punch (the un-punch job applies the same rule to today).
+        if has_open_session and for_date < timezone.localdate():
+            from apps.attendance.services_policy import missing_punch_status
+            status = missing_punch_status(cfg)
+
+        # One of the month's permitted early departures: a day that is only
+        # short of a full day because the employee left within the early-exit
+        # window still counts as Present / Late.
+        early_leave_applied = (
+            status == AttendanceRecord.STATUS_HALF_DAY and not has_open_session
+            and cls._early_leave_allowance_applies(employee, for_date, cfg, shift, last_out, net_minutes)
+        )
+        if early_leave_applied:
+            status = AttendanceRecord.STATUS_LATE if is_late else AttendanceRecord.STATUS_PRESENT
 
         # Overtime
         ot_minutes = cls._calc_overtime(net_minutes, cfg)
@@ -561,6 +624,8 @@ class AttendanceProcessorService:
         if is_late:
             grace = shift.grace_period_minutes if shift else 0
             note = 'Grace exceeded' if grace else 'Late arrival'
+        if early_leave_applied:
+            note = f'{note}; permitted early leave' if note else 'Permitted early leave'
 
         return {
             'status':                status,
@@ -570,8 +635,34 @@ class AttendanceProcessorService:
             'overtime_minutes':      ot_minutes,
             'is_late':               is_late,
             'is_early_exit':         is_early_exit,
+            'early_leave_allowance_applied': early_leave_applied,
             'note':                  note,
         }
+
+    @staticmethod
+    def _early_leave_allowance_applies(employee, for_date: date, cfg, shift, last_out, net_minutes: int) -> bool:
+        """
+        True when this day qualifies for, and the month still has, a permitted
+        early departure (AttendancePunchRules.early_leave_allowance_per_month):
+        the Clock Out is within early_exit_grace_minutes before shift end, and
+        adding back those minutes reaches the full-day minimum. Earlier days of
+        the same month use the allowance first.
+        """
+        rules = getattr(cfg, 'punch_rules', None) if cfg else None
+        allowance = getattr(rules, 'early_leave_allowance_per_month', 0) if rules else 0
+        if not allowance or not shift or not last_out:
+            return False
+        shift_end = datetime.combine(for_date, shift.end_time)
+        left_early_by = int((shift_end - datetime.combine(for_date, _ist_time(last_out))).total_seconds() // 60)
+        if not 0 < left_early_by <= rules.early_exit_grace_minutes:
+            return False
+        if net_minutes + left_early_by < int(float(rules.min_hours_full_day) * 60):
+            return False
+        used = AttendanceRecord.objects.filter(
+            employee=employee, date__year=for_date.year, date__month=for_date.month,
+            date__lt=for_date, early_leave_allowance_applied=True,
+        ).count()
+        return used < allowance
 
     @staticmethod
     def _no_punch_record(for_date: date, cfg) -> dict:
@@ -602,17 +693,15 @@ class AttendanceProcessorService:
         return punch_in_time > grace_end
 
     @staticmethod
-    def _check_early_exit(punch_out_time: Optional[time], shift) -> bool:
+    def _check_early_exit(punch_out_time: Optional[time], shift, grace_minutes: int = 30) -> bool:
         """shift is the employee's resolved ShiftCacheService._Shift — see
-        _check_late(). The 30-minute early-exit grace stays hardcoded here,
-        unchanged from before this method resolved a per-employee shift_end —
-        see PunchRulesPolicy.early_exit_grace_minutes, which this still does
-        not read (pre-existing, unrelated to shift support)."""
+        _check_late(). grace_minutes is Attendance Settings → Early Exit Grace
+        (30 when no settings exist, the value this used to hard-code)."""
         if not punch_out_time or not shift:
             return False
         early_threshold = (
             datetime.combine(date.today(), shift.end_time)
-            - timedelta(minutes=30)
+            - timedelta(minutes=grace_minutes)
         ).time()
         return punch_out_time < early_threshold
 

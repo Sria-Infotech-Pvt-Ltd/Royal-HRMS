@@ -906,6 +906,18 @@ class AttendanceWeeklyOff(models.Model):
 class AttendancePunchRules(models.Model):
     """Minimum hours required for full-day / half-day presence, plus early-exit grace."""
 
+    # What a day with a Clock In but no Clock Out becomes once the shift is
+    # over (the un-punch job / re-processing a past day). A day with no punch
+    # at all is always Absent.
+    MISSING_PUNCH_REGULARIZE = 'require_regularization'
+    MISSING_PUNCH_HALF_DAY   = 'mark_half_day'
+    MISSING_PUNCH_ABSENT     = 'mark_absent'
+    MISSING_PUNCH_CHOICES = [
+        (MISSING_PUNCH_REGULARIZE, 'Incomplete — HR / employee regularizes'),
+        (MISSING_PUNCH_HALF_DAY,   'Mark as Half Day'),
+        (MISSING_PUNCH_ABSENT,     'Mark as Absent'),
+    ]
+
     settings = models.OneToOneField(
         AttendanceSettings,
         on_delete=models.CASCADE,
@@ -922,6 +934,25 @@ class AttendancePunchRules(models.Model):
     early_exit_grace_minutes  = models.PositiveSmallIntegerField(
         default=30,
         help_text='Minutes before shift end that an early departure is forgiven.',
+    )
+    missing_punch_action      = models.CharField(
+        max_length=30, choices=MISSING_PUNCH_CHOICES, default=MISSING_PUNCH_REGULARIZE,
+        help_text='Status for a day with Clock In but no Clock Out after the shift ends.',
+    )
+    early_leave_allowance_per_month = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            'Early departures per calendar month (within early_exit_grace_minutes of shift end) '
+            'that still count as a full day when the only shortfall is the early departure. '
+            '0 = off.'
+        ),
+    )
+    wfh_daily_report_required = models.BooleanField(
+        default=False,
+        help_text=(
+            'Apply the WFH work-report rule to attendance: a past WFH day with no report submitted '
+            'on time is Absent; a report reviewed as Half Day / Not accepted makes the day Half Day / Absent.'
+        ),
     )
 
     class Meta:
@@ -969,11 +1000,22 @@ class AttendanceLateMarkRules(models.Model):
         (LOP_UNIT_HALF_DAY, 'Half Day (0.5 day)'),
     ]
 
+    # every_n:         every late_marks_per_lop late marks in a month = one LOP unit.
+    # after_allowance: the first late_marks_per_lop late marks in a month are
+    #                  allowed; each later one = one LOP unit.
+    MODE_EVERY_N        = 'every_n'
+    MODE_AFTER_ALLOWANCE = 'after_allowance'
+    MODE_CHOICES = [
+        (MODE_EVERY_N,         'One LOP for every N late marks'),
+        (MODE_AFTER_ALLOWANCE, 'N late marks allowed, LOP for each one after'),
+    ]
+
     settings           = models.OneToOneField(
         AttendanceSettings,
         on_delete=models.CASCADE,
         related_name='late_mark_rules',
     )
+    late_mark_mode     = models.CharField(max_length=20, choices=MODE_CHOICES, default=MODE_EVERY_N)
     late_marks_per_lop = models.PositiveSmallIntegerField(
         default=3,
         help_text=(
@@ -1317,6 +1359,9 @@ class AttendanceRecord(models.Model):
     overtime_minutes       = models.PositiveIntegerField(default=0)
     is_late                = models.BooleanField(default=False)
     is_early_exit          = models.BooleanField(default=False)
+    # True when this day used one of the month's permitted early departures
+    # (AttendancePunchRules.early_leave_allowance_per_month) to count as a full day.
+    early_leave_allowance_applied = models.BooleanField(default=False)
     note                   = models.CharField(max_length=200, blank=True, default='')
     created_at             = models.DateTimeField(auto_now_add=True)
     updated_at             = models.DateTimeField(auto_now=True)

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import RequestWfhForm from "./_components/RequestWfhForm";
 import MyWfhRequestsList from "./_components/MyWfhRequestsList";
+import WfhDailyReports from "./_components/WfhDailyReports";
 
-type TabId = "request" | "my-requests";
+type TabId = "request" | "my-requests" | "reports";
 
 export default function WorkFromHomeClient() {
   const [active, setActive] = useState<TabId>("request");
@@ -15,6 +16,7 @@ export default function WorkFromHomeClient() {
   const tabs: { id: TabId; label: string }[] = [
     { id: "request",     label: "Request Work From Home" },
     { id: "my-requests", label: "My Requests" },
+    { id: "reports",     label: "Daily Work Report" },
   ];
 
   return (
@@ -48,6 +50,7 @@ export default function WorkFromHomeClient() {
           />
         )}
         {active === "my-requests" && <MyWfhRequestsList refreshKey={refreshKey} />}
+        {active === "reports" && <WfhDailyReports />}
       </div>
     </div>
   );

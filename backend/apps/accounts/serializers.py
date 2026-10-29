@@ -716,6 +716,7 @@ class DocumentSerializer(serializers.ModelSerializer):
     category_display  = serializers.CharField(source='get_category_display', read_only=True)
     uploaded_by_name  = serializers.SerializerMethodField()
     branch_name       = serializers.SerializerMethodField()
+    my_acknowledged_at = serializers.SerializerMethodField()
 
     class Meta:
         model  = Document
@@ -726,14 +727,25 @@ class DocumentSerializer(serializers.ModelSerializer):
             'file_size', 'file_size_display',
             'branch', 'branch_name',
             'uploaded_by_name', 'uploaded_at', 'updated_at', 'is_active',
+            'requires_acknowledgement', 'version', 'my_acknowledged_at',
         )
         read_only_fields = (
             'id', 'file_url', 'file_name', 'file_type', 'file_size',
             'file_size_display', 'category_display',
             'uploaded_by_name', 'branch_name', 'uploaded_at', 'updated_at',
             'is_active',   # managed by the view — never set by the client
+            'version',     # bumped by the view when the file is replaced
+            'my_acknowledged_at',
         )
         extra_kwargs = {'file': {'required': True}}
+
+    def get_my_acknowledged_at(self, obj: Document):
+        """When the requesting user acknowledged the current version (None if not yet)."""
+        request = self.context.get('request')
+        if not obj.requires_acknowledgement or not request or not request.user.is_authenticated:
+            return None
+        ack = obj.acknowledgements.filter(employee=request.user, version=obj.version).first()
+        return ack.acknowledged_at if ack else None
 
     def get_file_url(self, obj: Document) -> str:
         if not obj.file or not obj.file.name:

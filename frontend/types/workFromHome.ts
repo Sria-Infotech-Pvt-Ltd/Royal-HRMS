@@ -24,6 +24,8 @@ export interface WorkFromHomeRequest {
   created_at:       string;
   can_approve:      boolean;
   can_cancel:       boolean;
+  is_medical?:      boolean;
+  supporting_document_url?: string | null;
 }
 
 export interface WFHSavedLocation {

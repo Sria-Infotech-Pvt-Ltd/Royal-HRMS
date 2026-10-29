@@ -155,6 +155,7 @@ export default function AttendanceSettings() {
                 onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, min_hours_full_day: e.target.value } }))}
               >
                 <option value="8.00">8 hours</option>
+                <option value="7.50">7.5 hours</option>
                 <option value="7.00">7 hours</option>
                 <option value="9.00">9 hours</option>
               </select>
@@ -183,6 +184,41 @@ export default function AttendanceSettings() {
                 <option value={45}>45 minutes</option>
               </select>
               {fieldErr("punch_rules", "early_exit_grace_minutes") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("punch_rules", "early_exit_grace_minutes")}</span>}
+            </div>
+          </div>
+          <div className="form-row cols-2">
+            <div className="field-group">
+              <label className="field-label">Missing Clock Out</label>
+              <select className="field-input" style={errStyle("punch_rules", "missing_punch_action")}
+                value={form.punch_rules.missing_punch_action}
+                onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, missing_punch_action: e.target.value } }))}
+              >
+                <option value="require_regularization">Incomplete — regularize</option>
+                <option value="mark_half_day">Mark as Half Day</option>
+                <option value="mark_absent">Mark as Absent</option>
+              </select>
+              <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>Clock In without Clock Out after the shift ends. No punch at all is always Absent.</span>
+              {fieldErr("punch_rules", "missing_punch_action") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("punch_rules", "missing_punch_action")}</span>}
+            </div>
+            <div className="field-group">
+              <label className="field-label">Permitted Early Leaves / Month</label>
+              <select className="field-input" style={errStyle("punch_rules", "early_leave_allowance_per_month")}
+                value={form.punch_rules.early_leave_allowance_per_month}
+                onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, early_leave_allowance_per_month: Number(e.target.value) } }))}
+              >
+                <option value={0}>Off</option>
+                <option value={1}>1 per month</option>
+                <option value={2}>2 per month</option>
+                <option value={3}>3 per month</option>
+              </select>
+              <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>Leaving within the Early Exit Grace still counts as a full day, this many times a month.</span>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, marginTop: 12 }}>
+                <input type="checkbox" checked={form.punch_rules.wfh_daily_report_required}
+                  onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, wfh_daily_report_required: e.target.checked } }))} />
+                Apply WFH daily report rule to attendance
+              </label>
+              <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>Past WFH day without an on-time report = Absent; reviewer&apos;s Half Day / Not accepted applies.</span>
+              {fieldErr("punch_rules", "early_leave_allowance_per_month") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("punch_rules", "early_leave_allowance_per_month")}</span>}
             </div>
           </div>
         </div>
@@ -246,16 +282,31 @@ export default function AttendanceSettings() {
           </div>
         </div>
         <div className="card-body">
-          <div className="form-row cols-2">
+          <div className="form-row cols-3">
             <div className="field-group">
-              <label className="field-label">Late Marks per LOP</label>
+              <label className="field-label">Rule</label>
+              <select className="field-input" style={errStyle("late_mark_rules", "late_mark_mode")}
+                value={form.late_mark_rules.late_mark_mode}
+                onChange={e => setForm(f => ({ ...f, late_mark_rules: { ...f.late_mark_rules, late_mark_mode: e.target.value } }))}
+              >
+                <option value="every_n">1 LOP for every N late marks</option>
+                <option value="after_allowance">N late marks allowed, LOP for each after</option>
+              </select>
+              {fieldErr("late_mark_rules", "late_mark_mode") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("late_mark_rules", "late_mark_mode")}</span>}
+            </div>
+            <div className="field-group">
+              <label className="field-label">Late Marks (N)</label>
               <select className="field-input" style={errStyle("late_mark_rules", "late_marks_per_lop")}
                 value={form.late_mark_rules.late_marks_per_lop}
                 onChange={e => setForm(f => ({ ...f, late_mark_rules: { ...f.late_mark_rules, late_marks_per_lop: Number(e.target.value) } }))}
               >
-                <option value={3}>3 late marks = 1 LOP</option>
-                <option value={2}>2 late marks = 1 LOP</option>
-                <option value={4}>4 late marks = 1 LOP</option>
+                {[1, 2, 3, 4, 5, 6].map(n => (
+                  <option key={n} value={n}>
+                    {form.late_mark_rules.late_mark_mode === "after_allowance"
+                      ? `${n} allowed, then LOP each`
+                      : `${n} late mark${n > 1 ? "s" : ""} = 1 LOP`}
+                  </option>
+                ))}
                 <option value={0}>No LOP (tracking only)</option>
               </select>
               <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>Resets each calendar month</span>

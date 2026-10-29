@@ -62,6 +62,9 @@ DEFAULT_SETTINGS: dict = {
         'min_hours_full_day':       '8.00',
         'min_hours_half_day':       '4.00',
         'early_exit_grace_minutes': 30,
+        'missing_punch_action':     'require_regularization',
+        'early_leave_allowance_per_month': 0,
+        'wfh_daily_report_required': False,
     },
     'overtime_rules': {
         'ot_threshold_hours':    '9.00',
@@ -71,6 +74,7 @@ DEFAULT_SETTINGS: dict = {
     'late_mark_rules': {
         'late_marks_per_lop': 3,
         'lop_deduction_unit': 'full_day',
+        'late_mark_mode':     'every_n',
     },
     'absence_alert': {
         'is_enabled':      True,

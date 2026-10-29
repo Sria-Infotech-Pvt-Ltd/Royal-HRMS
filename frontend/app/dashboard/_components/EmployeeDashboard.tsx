@@ -11,6 +11,7 @@ import EmpActionItems      from "@/components/dashboard/employee/EmpActionItems"
 import EmpRecentRequests   from "@/components/dashboard/employee/EmpRecentRequests";
 import EmpUpdatesCard      from "@/components/dashboard/employee/EmpUpdatesCard";
 import EmpNoticePeriodCard from "@/components/dashboard/employee/EmpNoticePeriodCard";
+import PendingAcknowledgementsBanner from "@/components/policy/PendingAcknowledgementsBanner";
 import type { SessionPayload } from "@/lib/session";
 
 interface Props { session: SessionPayload }
@@ -22,6 +23,8 @@ const QUICK_ACTIONS = [
   { href: "/dashboard/expenses",      icon: "ti-wallet",      bg: "rgba(181,101,29,0.12)", color: "var(--warn)",    label: "My Expenses"  },
   { href: "/dashboard/documents",     icon: "ti-folder",      bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "Documents"    },
   { href: "/dashboard/profile",       icon: "ti-user-circle", bg: "rgba(14,124,134,0.12)", color: "var(--info)",    label: "My Profile"   },
+  { href: "/dashboard/documents?category=policy", icon: "ti-shield-check", bg: "rgba(194,139,0,0.12)", color: "#9a6b00", label: "Company Policy" },
+  { href: "/dashboard/contacts",      icon: "ti-address-book", bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "Contact Matrix" },
 ];
 
 export default function EmployeeDashboard({ session }: Props) {
@@ -49,6 +52,9 @@ export default function EmployeeDashboard({ session }: Props) {
 
       {/* Notice countdown — renders nothing unless the employee's own separation is fully approved */}
       <EmpNoticePeriodCard />
+
+      {/* Company Policy / documents still to acknowledge — renders nothing when none */}
+      <PendingAcknowledgementsBanner />
 
       {/* Row 2.5 — Announcement + today's birthdays, one combined card (renders nothing when both are empty/dismissed) */}
       <EmpUpdatesCard />

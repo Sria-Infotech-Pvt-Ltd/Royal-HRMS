@@ -511,6 +511,12 @@ def _validate_leave_policy(policy, employee, duration, total_days, start, end, d
         # convert_to_lop is enabled — excess days become LOP; preview shows the warning, POST proceeds
     if policy.minimum_notice_period and (start - today).days < policy.minimum_notice_period:
         return f'This leave type requires {policy.minimum_notice_period} day(s) advance notice.'
+    long_min, long_notice = getattr(policy, 'long_leave_min_days', 0), getattr(policy, 'long_leave_notice_days', 0)
+    if long_min and long_notice and total_days >= long_min and (start - today).days < long_notice:
+        return (
+            f'Leave of {long_min} or more days is long leave and must be applied '
+            f'at least {long_notice} days in advance.'
+        )
     if start < today:
         if not policy.allow_backdated_leave:
             return 'Backdated leave applications are not allowed for this leave type.'

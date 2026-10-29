@@ -205,6 +205,8 @@ class WorkFromHomeRequestListCreateView(APIView):
             l1_approver=l1_approver,
             l2_approver=l2_approver,
             status=initial_status,
+            is_medical=data.get('is_medical', False),
+            supporting_document=data.get('supporting_document'),
         )
 
         logger.info('WFH request %s created by %s (%s to %s)', wfh_request.id, request.user.email, start, end)

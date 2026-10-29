@@ -7,6 +7,7 @@ from core.storage import (
     AuthenticatedRawMediaCloudinaryStorage,
     expense_receipt_upload_path,
     leave_document_upload_path,
+    wfh_document_upload_path,
     separation_document_upload_path,
     separation_request_upload_path,
 )
@@ -237,6 +238,10 @@ class LeavePolicy(models.Model):
     maximum_leave_duration   = models.PositiveIntegerField(default=0)   # 0 = unlimited
     maximum_consecutive_days = models.PositiveIntegerField(default=0)   # 0 = unlimited
     minimum_notice_period    = models.PositiveIntegerField(default=0)   # days advance
+    # Long leave: a request of long_leave_min_days or more needs
+    # long_leave_notice_days advance notice (0 = rule off).
+    long_leave_min_days      = models.PositiveIntegerField(default=0)
+    long_leave_notice_days   = models.PositiveIntegerField(default=0)
     allow_half_day           = models.BooleanField(default=True)
     allow_backdated_leave    = models.BooleanField(default=False)
     maximum_backdated_days   = models.PositiveIntegerField(default=0)   # 0 = unlimited
@@ -773,6 +778,13 @@ class WorkFromHomeRequest(models.Model):
     l2_remarks     = models.TextField(blank=True, default='')
     l2_actioned_at = models.DateTimeField(null=True, blank=True)
 
+    # WFH for medical reasons must carry supporting proof (policy section 6).
+    is_medical          = models.BooleanField(default=False)
+    supporting_document = models.FileField(
+        upload_to=wfh_document_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage(),
+        null=True, blank=True,
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -801,6 +813,43 @@ class WorkFromHomeRequest(models.Model):
             .order_by('-created_at')
             .first()
         )
+
+
+class WFHDailyReport(models.Model):
+    """The employee's end-of-day work report for one WFH day (policy section 7),
+    verified by the Senior / Department Head (the request's L1 approver) or HR."""
+
+    REVIEW_PENDING      = 'pending'
+    REVIEW_FULL_DAY     = 'full_day'
+    REVIEW_HALF_DAY     = 'half_day'
+    REVIEW_NOT_ACCEPTED = 'not_accepted'
+    REVIEW_CHOICES = [
+        (REVIEW_PENDING,      'Pending review'),
+        (REVIEW_FULL_DAY,     'Accepted — Full Day'),
+        (REVIEW_HALF_DAY,     'Accepted — Half Day'),
+        (REVIEW_NOT_ACCEPTED, 'Not accepted'),
+    ]
+
+    wfh_request    = models.ForeignKey(WorkFromHomeRequest, on_delete=models.CASCADE, related_name='daily_reports')
+    employee       = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='wfh_daily_reports')
+    date           = models.DateField()
+    completed_work = models.TextField()
+    pending_work   = models.TextField(blank=True, default='')
+    updates        = models.TextField(blank=True, default='')
+    submitted_at   = models.DateTimeField(auto_now_add=True)
+    submitted_late = models.BooleanField(default=False, help_text='Submitted after the end of the WFH day.')
+    review_status  = models.CharField(max_length=20, choices=REVIEW_CHOICES, default=REVIEW_PENDING, db_index=True)
+    reviewed_by    = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    reviewed_at    = models.DateTimeField(null=True, blank=True)
+    review_remarks = models.TextField(blank=True, default='')
+
+    class Meta:
+        db_table = 'hrms_wfh_daily_reports'
+        ordering = ['-date']
+        constraints = [models.UniqueConstraint(fields=['employee', 'date'], name='wfh_report_one_per_day')]
+
+    def __str__(self) -> str:
+        return f'WFH report {self.employee_id} {self.date}'
 
 
 # ─── WFH Saved Location ─────────────────────────────────────────────────────────

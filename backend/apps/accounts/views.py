@@ -2686,6 +2686,8 @@ class DocumentDetailView(APIView):
                 'file_name': new_file.name,
                 'file_type': Document.MIME_TO_TYPE.get(new_file.content_type, 'FILE'),
                 'file_size': new_file.size,
+                # A replaced file is a new version: acknowledgements of the old one no longer count.
+                'version':   doc.version + 1,
             }
         try:
             updated = serializer.save(**file_meta)
@@ -2734,6 +2736,8 @@ class DocumentDetailView(APIView):
                 'file_name': new_file.name,
                 'file_type': Document.MIME_TO_TYPE.get(new_file.content_type, 'FILE'),
                 'file_size': new_file.size,
+                # A replaced file is a new version: acknowledgements of the old one no longer count.
+                'version':   doc.version + 1,
             }
         try:
             updated = serializer.save(**file_meta)

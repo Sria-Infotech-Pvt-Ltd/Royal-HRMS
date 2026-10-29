@@ -29,7 +29,8 @@ from apps.payroll.serializers import (
     ManagerAttendanceApprovalSerializer,
 )
 from apps.accounts.models import AuditLog, User
-from apps.attendance.models import AttendanceRecord, AttendanceSettings, AttendanceLateMarkRules
+from apps.attendance.models import AttendanceRecord, AttendanceSettings
+from apps.attendance.services_policy import late_mark_lop_days
 from apps.branch.models import Branch
 from apps.payroll.services_salary_components import (
     applicable_configs, calculate, specs_for_revision, specs_from_structure,
@@ -357,19 +358,6 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
         .first()
     )
     late_mark_rules = getattr(att_settings, 'late_mark_rules', None) if att_settings else None
-    late_per_lop = (
-        late_mark_rules.late_marks_per_lop
-        if late_mark_rules and late_mark_rules.late_marks_per_lop > 0
-        else 0
-    )
-    # Each late-mark LOP trigger counts as full day or half day per policy.
-    late_lop_unit = Decimal('0')
-    if late_per_lop:
-        late_lop_unit = (
-            Decimal('1')
-            if late_mark_rules.lop_deduction_unit == AttendanceLateMarkRules.LOP_UNIT_FULL_DAY
-            else Decimal('0.5')
-        )
 
     # ── Bulk fetch: ESI coverage earlier in the current contribution period ──
     period_start, _period_end = _esi_contribution_period(cycle.cycle_start)
@@ -389,13 +377,13 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     _NON_WORKING = {AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY}
     absent_count_by_emp:   dict = defaultdict(int)
     half_day_count_by_emp: dict = defaultdict(int)
-    late_count_by_emp:     dict = defaultdict(int)
+    late_dates_by_emp:     dict = defaultdict(list)
     working_days_by_emp:   dict = defaultdict(int)
 
     for rec in AttendanceRecord.objects.filter(
         employee_id__in=employee_ids,
         date__range=(cycle.cycle_start, cycle.cycle_end),
-    ).only('employee_id', 'status'):
+    ).only('employee_id', 'status', 'date'):
         if rec.status not in _NON_WORKING:
             working_days_by_emp[rec.employee_id] += 1
         if rec.status == AttendanceRecord.STATUS_ABSENT:
@@ -403,7 +391,7 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
         elif rec.status == AttendanceRecord.STATUS_HALF_DAY:
             half_day_count_by_emp[rec.employee_id] += 1
         elif rec.status == AttendanceRecord.STATUS_LATE:
-            late_count_by_emp[rec.employee_id] += 1
+            late_dates_by_emp[rec.employee_id].append(rec.date)
 
     # ── Per-distinct-structure / per-distinct-state caches ──────────────────
     # (was: structure.components.filter(...) and StatutoryConfig.objects.filter(...)
@@ -452,9 +440,8 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
 
         absent_days  = Decimal(absent_count_by_emp.get(employee.id, 0))
         half_days    = Decimal(half_day_count_by_emp.get(employee.id, 0))
-        late_count   = late_count_by_emp.get(employee.id, 0)
-        # Late marks → LOP per the configured policy threshold (0 if late-mark LOP is disabled)
-        late_lop     = (Decimal(late_count // late_per_lop) * late_lop_unit) if late_per_lop else Decimal('0')
+        # Late marks → LOP per Attendance Settings → Late Mark Rules (0 if disabled)
+        late_lop     = late_mark_lop_days(late_dates_by_emp.get(employee.id, ()), late_mark_rules)
         emp_lop      = absent_days + (half_days * Decimal('0.5')) + late_lop
         # Use actual working days from attendance records; fall back to
         # PayrollSettings.default_working_days_per_month if no records

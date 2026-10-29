@@ -192,7 +192,8 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
               </div>
 
               {/* Attachments */}
-              {(isLeave(item) && item.raw.document_url) || (isExpense(item) && item.raw.receipts?.length > 0) ? (
+              {(isLeave(item) && item.raw.document_url) || (isExpense(item) && item.raw.receipts?.length > 0)
+                || (isWfh(item) && item.raw.supporting_document_url) ? (
                 <div className="ta-drawer-section">
                   <div className="ta-drawer-label">Attachments</div>
                   {isLeave(item) && item.raw.document_url && (
@@ -202,6 +203,15 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
                     >
                       <i className="ti ti-paperclip" />
                       <span style={{ fontSize: 13, fontWeight: 500 }}>Supporting Document</span>
+                    </div>
+                  )}
+                  {isWfh(item) && item.raw.supporting_document_url && (
+                    <div
+                      className="ta-attachment"
+                      onClick={() => setPreview({ name: "Medical Proof", url: item.raw.supporting_document_url as string, fileName: fileNameFromUrl(item.raw.supporting_document_url as string) })}
+                    >
+                      <i className="ti ti-paperclip" />
+                      <span style={{ fontSize: 13, fontWeight: 500 }}>Medical Proof</span>
                     </div>
                   )}
                   {isExpense(item) && item.raw.receipts.map((r, idx) => r.url && (

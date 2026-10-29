@@ -142,7 +142,8 @@ def _validate_leave_type_label(value: str, exclude_pk=None) -> str:
 _POLICY_RULE_FIELDS = [
     # Application Rules
     'minimum_leave_duration', 'maximum_leave_duration', 'maximum_consecutive_days',
-    'minimum_notice_period', 'allow_half_day', 'allow_backdated_leave',
+    'minimum_notice_period', 'long_leave_min_days', 'long_leave_notice_days',
+    'allow_half_day', 'allow_backdated_leave',
     'maximum_backdated_days', 'allow_future_leave', 'maximum_future_days',
     # Holiday & Week-off Rules
     'sandwich_leave_enabled', 'count_holidays_as_leave', 'count_weekoffs_as_leave',
@@ -212,6 +213,8 @@ class LeavePolicyCreateSerializer(serializers.Serializer):
     maximum_leave_duration   = serializers.IntegerField(min_value=0, default=0, required=False)
     maximum_consecutive_days = serializers.IntegerField(min_value=0, default=0, required=False)
     minimum_notice_period    = serializers.IntegerField(min_value=0, default=0, required=False)
+    long_leave_min_days      = serializers.IntegerField(min_value=0, default=0, required=False)
+    long_leave_notice_days   = serializers.IntegerField(min_value=0, default=0, required=False)
     allow_half_day           = serializers.BooleanField(default=True, required=False)
     allow_backdated_leave    = serializers.BooleanField(default=False, required=False)
     maximum_backdated_days   = serializers.IntegerField(min_value=0, default=0, required=False)
@@ -465,6 +468,7 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
     l2_approver_name = serializers.SerializerMethodField()
     can_approve      = serializers.SerializerMethodField()
     can_cancel       = serializers.SerializerMethodField()
+    supporting_document_url = serializers.SerializerMethodField()
 
     class Meta:
         model  = WorkFromHomeRequest
@@ -476,6 +480,7 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
             'l2_approver_name', 'l2_status', 'l2_remarks', 'l2_actioned_at',
             'created_at',
             'can_approve', 'can_cancel',
+            'is_medical', 'supporting_document_url',
         ]
 
     def get_employee_name(self, obj):
@@ -519,11 +524,33 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
         is_pending = obj.status in ('pending', 'l2_pending')
         return is_own and is_pending
 
+    def get_supporting_document_url(self, obj):
+        # Same approach as leave attachments (LeaveRequestSerializer.get_document_url).
+        if not obj.supporting_document:
+            return None
+        request = self.context.get('request')
+        url = obj.supporting_document.url
+        return request.build_absolute_uri(url) if request else url
+
+
+WFH_DOCUMENT_MAX_BYTES = 5 * 1024 * 1024
+WFH_DOCUMENT_TYPES = {'application/pdf', 'image/jpeg', 'image/png'}
+
 
 class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = WorkFromHomeRequest
-        fields = ['start_date', 'end_date', 'reason', 'location_label', 'latitude', 'longitude']
+        fields = ['start_date', 'end_date', 'reason', 'location_label', 'latitude', 'longitude',
+                  'is_medical', 'supporting_document']
+
+    def validate_supporting_document(self, value):
+        if value is None:
+            return value
+        if value.size > WFH_DOCUMENT_MAX_BYTES:
+            raise serializers.ValidationError('Supporting document must be 5 MB or smaller.')
+        if getattr(value, 'content_type', '') not in WFH_DOCUMENT_TYPES:
+            raise serializers.ValidationError('Supporting document must be a PDF, JPG or PNG file.')
+        return value
 
     def to_internal_value(self, data):
         # The browser's Geolocation API returns far more decimal precision
@@ -533,7 +560,9 @@ class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
         # is a perfectly valid coordinate. Round here so any client's raw
         # GPS precision is accepted; 6 decimal places is already ~0.11m
         # resolution, far tighter than a WFH geofence check needs.
-        data = data.copy()
+        # A plain shallow dict: multipart requests carry an uploaded file, which
+        # QueryDict.copy() would try to deep-copy.
+        data = data.dict() if hasattr(data, 'dict') else dict(data)
         for field in ('latitude', 'longitude'):
             if data.get(field) is not None:
                 try:
@@ -547,6 +576,9 @@ class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
         end   = data.get('end_date')
         if start and end and end < start:
             raise serializers.ValidationError({'end_date': 'End date must be on or after start date.'})
+        if data.get('is_medical') and not data.get('supporting_document'):
+            raise serializers.ValidationError(
+                {'supporting_document': 'WFH for medical reasons needs a medical proof, report or prescription.'})
         return data
 
 

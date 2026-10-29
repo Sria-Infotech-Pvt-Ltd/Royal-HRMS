@@ -105,6 +105,12 @@ class PunchRulesWriteSerializer(serializers.Serializer):
     min_hours_full_day       = serializers.DecimalField(max_digits=4, decimal_places=2, min_value=Decimal('0.50'))
     min_hours_half_day       = serializers.DecimalField(max_digits=4, decimal_places=2, min_value=Decimal('0.25'))
     early_exit_grace_minutes = serializers.IntegerField(min_value=0, max_value=_MAX_EARLY_EXIT_GRACE)
+    # Optional so a client that doesn't send them leaves the stored values alone.
+    missing_punch_action     = serializers.ChoiceField(
+        choices=AttendancePunchRules.MISSING_PUNCH_CHOICES, required=False,
+    )
+    early_leave_allowance_per_month = serializers.IntegerField(min_value=0, max_value=31, required=False)
+    wfh_daily_report_required = serializers.BooleanField(required=False)
 
     def validate(self, attrs: dict) -> dict:
         full = attrs.get('min_hours_full_day')
@@ -133,6 +139,7 @@ class LateMarkRulesWriteSerializer(serializers.Serializer):
 
     late_marks_per_lop = serializers.IntegerField(min_value=0, max_value=_MAX_LATE_MARKS)
     lop_deduction_unit = serializers.ChoiceField(choices=AttendanceLateMarkRules.LOP_UNIT_CHOICES)
+    late_mark_mode     = serializers.ChoiceField(choices=AttendanceLateMarkRules.MODE_CHOICES, required=False)
 
 
 class AbsenceAlertWriteSerializer(serializers.Serializer):
@@ -249,7 +256,8 @@ class WeeklyOffReadSerializer(serializers.ModelSerializer):
 class PunchRulesReadSerializer(serializers.ModelSerializer):
     class Meta:
         model  = AttendancePunchRules
-        fields = ('min_hours_full_day', 'min_hours_half_day', 'early_exit_grace_minutes')
+        fields = ('min_hours_full_day', 'min_hours_half_day', 'early_exit_grace_minutes',
+                  'missing_punch_action', 'early_leave_allowance_per_month', 'wfh_daily_report_required')
         read_only_fields = fields
 
 
@@ -268,7 +276,8 @@ class LateMarkRulesReadSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = AttendanceLateMarkRules
-        fields = ('late_marks_per_lop', 'lop_deduction_unit', 'lop_deduction_unit_display', 'is_lop_enabled')
+        fields = ('late_marks_per_lop', 'lop_deduction_unit', 'lop_deduction_unit_display', 'is_lop_enabled',
+                  'late_mark_mode')
         read_only_fields = fields
 
     def get_is_lop_enabled(self, obj: AttendanceLateMarkRules) -> bool:

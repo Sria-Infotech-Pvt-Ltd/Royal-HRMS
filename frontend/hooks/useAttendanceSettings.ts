@@ -24,6 +24,9 @@ const DEFAULTS: AttendanceSettingsForm = {
     min_hours_full_day: "8.00",
     min_hours_half_day: "4.00",
     early_exit_grace_minutes: 30,
+    missing_punch_action: "require_regularization",
+    early_leave_allowance_per_month: 0,
+    wfh_daily_report_required: false,
   },
   overtime_rules: {
     ot_threshold_hours: "9.00",
@@ -33,6 +36,7 @@ const DEFAULTS: AttendanceSettingsForm = {
   late_mark_rules: {
     late_marks_per_lop: 3,
     lop_deduction_unit: "full_day",
+    late_mark_mode: "every_n",
   },
   absence_alert: {
     is_enabled: true,
@@ -80,6 +84,11 @@ function mergeWithDefaults(api: AttendanceSettingsApiResponse): AttendanceSettin
       min_hours_full_day:       pr.min_hours_full_day       ?? DEFAULTS.punch_rules.min_hours_full_day,
       min_hours_half_day:       pr.min_hours_half_day       ?? DEFAULTS.punch_rules.min_hours_half_day,
       early_exit_grace_minutes: pr.early_exit_grace_minutes ?? DEFAULTS.punch_rules.early_exit_grace_minutes,
+      missing_punch_action:     pr.missing_punch_action     ?? DEFAULTS.punch_rules.missing_punch_action,
+      early_leave_allowance_per_month:
+        pr.early_leave_allowance_per_month ?? DEFAULTS.punch_rules.early_leave_allowance_per_month,
+      wfh_daily_report_required:
+        pr.wfh_daily_report_required ?? DEFAULTS.punch_rules.wfh_daily_report_required,
     },
     overtime_rules: {
       ot_threshold_hours:    ot.ot_threshold_hours    ?? DEFAULTS.overtime_rules.ot_threshold_hours,
@@ -89,6 +98,7 @@ function mergeWithDefaults(api: AttendanceSettingsApiResponse): AttendanceSettin
     late_mark_rules: {
       late_marks_per_lop: lm.late_marks_per_lop ?? DEFAULTS.late_mark_rules.late_marks_per_lop,
       lop_deduction_unit: lm.lop_deduction_unit  ?? DEFAULTS.late_mark_rules.lop_deduction_unit,
+      late_mark_mode:     lm.late_mark_mode      ?? DEFAULTS.late_mark_rules.late_mark_mode,
     },
     absence_alert: {
       is_enabled:       aa.is_enabled       ?? DEFAULTS.absence_alert.is_enabled,
