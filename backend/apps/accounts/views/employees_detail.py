@@ -267,6 +267,11 @@ class EmployeeDetailView(APIView):
 
         # Mobile and personal email are HR-correctable after hire (a typo at hire had no other fix). The caller already
         # holds employees.edit; same validation as the hire wizard plus uniqueness, every change audit-logged below.
+        # (UAT-030 was independently solved on the incoming branch too, with a simpler confirm_contact_change flag —
+        # this richer services_contact_change.py version was already live on New-AI and is kept: it validates
+        # format/uniqueness, requires explicit confirmation specifically for a login-email change, invalidates the
+        # old email's sessions/reset links, and sends the login-email-changed notification — the simpler version did
+        # none of that.)
         old_login_email = employee.email
         try:
             if 'phone' in data and is_mobile_changed(employee, data.get('phone')):

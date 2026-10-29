@@ -205,6 +205,7 @@ def _apply_wizard_records(user, draft):
     nomination/Education & experience/Assets steps collected into draft_data,
     applied to real rows now that a real employee exists to attach them to."""
     from apps.accounts.models import CompanyAsset, EducationRecord, EmployeeProfile, EPFNominee, FamilyMember, WorkExperienceRecord
+    from apps.accounts.services_education_experience import sync_legacy_education_experience_fields
 
     profile_fields = {k: draft[k] for k in _PROFILE_FIELDS if draft.get(k)}
     # The Statutory & Accounts step's "Branch / address" field is sent under
@@ -262,6 +263,15 @@ def _apply_wizard_records(user, draft):
             end_date=entry.get('end_date') or None, reason_for_leaving=entry.get('leaving_reason') or entry.get('reason_for_leaving') or '',
             order=i,
         )
+
+    # Every other write path to EducationRecord/WorkExperienceRecord
+    # (add_education/add_experience in services_education_experience.py)
+    # re-syncs the legacy flat EmployeeProfile summary fields after writing —
+    # the Profile tab reads those flat fields, not these tables directly
+    # (see _employee_dict() in views/shared.py). Without this call, a Hire
+    # Wizard employee's Education & Experience tab stayed blank forever even
+    # though EditRecordModal (which reads the tables directly) showed it fine.
+    sync_legacy_education_experience_fields(user)
 
     for i, entry in enumerate(draft.get('asset_entries') or []):
         if not entry.get('asset_type'):

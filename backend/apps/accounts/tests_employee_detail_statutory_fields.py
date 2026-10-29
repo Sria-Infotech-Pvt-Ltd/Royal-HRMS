@@ -51,6 +51,20 @@ class EmployeeDetailStatutoryFieldsTests(TestCase):
         self.assertTrue(profile.esi_covered)
         self.assertEqual(profile.passport_number, 'P1234567')
 
+    def test_put_saves_account_type_and_name_as_per_aadhar(self):
+        """UAT-023: account_type/name_as_per_aadhar were already whitelisted
+        in _PROFILE_FIELD_KEYS but the Edit-record modal never sent them, so
+        they could be captured at hire yet never corrected afterward."""
+        resp = self.client.put(
+            reverse('employee-detail', args=[self.employee.employee_id]),
+            {'account_type': 'current', 'name_as_per_aadhar': 'Stat Utory Kumar'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        profile = EmployeeProfile.objects.get(user=self.employee)
+        self.assertEqual(profile.account_type, 'current')
+        self.assertEqual(profile.name_as_per_aadhar, 'Stat Utory Kumar')
+
     def test_omitting_statutory_fields_leaves_existing_values_unchanged(self):
         EmployeeProfile.objects.update_or_create(user=self.employee, defaults={'pan_number': 'ZZZZZ9999Z'})
         resp = self.client.put(
@@ -105,6 +119,58 @@ class EmployeeDetailStatutoryFieldsTests(TestCase):
         self.assertEqual(details['father_name'], 'Test Father')
         self.assertEqual(details['mother_name'], 'Test Mother')
         self.assertEqual(details['languages_known'], 'English, Hindi')
+
+
+class EmployeeDetailBankEpfReadTests(TestCase):
+    """UAT-023: GET /api/employees/{id}/ writes uan_number/esi_number/
+    name_as_per_aadhar/account_type/bank_branch_name into the profile at
+    hire (_apply_wizard_records -> _PROFILE_FIELDS already covers all of
+    these) but _employee_dict()'s profile_data never included uan_number,
+    esi_number, or name_as_per_aadhar in its read-side output at all -- so
+    the Profile page's Bank/EPF card showed them blank no matter what was
+    actually stored. account_number/ifsc_code must stay masked on this
+    same endpoint; account_type/bank_branch_name were already correctly
+    returned (not masked, not PII-tier) and must keep working."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.hr_role = make_role('hr_admin_bank_epf_test', permission_codenames=['employees.edit', 'employees.view'])
+        self.hr_user = make_user('hr-bank-epf@test.com', role=self.hr_role, password='TestPass123!')
+        self.employee_role = make_role('employee_bank_epf_test', permission_codenames=[])
+        self.employee = make_user(
+            'employee-bank-epf@test.com', role=self.employee_role, password='TestPass123!',
+            full_name='Bank Epf', employee_id='EMPBANK01',
+        )
+        EmployeeProfile.objects.update_or_create(
+            user=self.employee,
+            defaults={
+                'account_number': '1234567890123', 'ifsc_code': 'HDFC0001234',
+                'account_type': 'current', 'bank_branch_name': 'Chennai',
+                'uan_number': '100200300400', 'esi_number': '1122334455',
+                'name_as_per_aadhar': 'Bank Epf',
+            },
+        )
+        self.client.force_authenticate(user=self.hr_user)
+
+    def test_get_returns_uan_esi_and_name_as_per_aadhar(self):
+        resp = self.client.get(reverse('employee-detail', args=[self.employee.employee_id]))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        profile = resp.data['data']['profile']
+        self.assertEqual(profile['uan_number'], '100200300400')
+        self.assertEqual(profile['esi_number'], '1122334455')
+        self.assertEqual(profile['name_as_per_aadhar'], 'Bank Epf')
+        self.assertEqual(profile['account_type'], 'current')
+        self.assertEqual(profile['bank_branch_name'], 'Chennai')
+
+    def test_account_number_and_ifsc_stay_masked_on_this_endpoint(self):
+        resp = self.client.get(reverse('employee-detail', args=[self.employee.employee_id]))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        profile = resp.data['data']['profile']
+        self.assertEqual(profile['account_number_masked'], '••••0123')
+        self.assertNotIn('1234567890123', str(profile))
+        self.assertEqual(profile['ifsc_code_masked'], '•' * len('HDFC0001234'))
+        self.assertNotIn('HDFC0001234', str(profile))
 
 
 class EmployeeDetailEmploymentFieldsTests(TestCase):

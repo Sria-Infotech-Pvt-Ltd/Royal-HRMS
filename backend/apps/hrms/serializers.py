@@ -1097,6 +1097,14 @@ class SeparationSettlementSerializer(serializers.ModelSerializer):
     finalized_by_name = serializers.SerializerMethodField()
     can_edit           = serializers.SerializerMethodField()
     can_finalize       = serializers.SerializerMethodField()
+    # A negative net_payable_amount is a real, legitimate outcome (e.g. a
+    # large advance or a notice-period shortfall the employee must repay) —
+    # not something to block outright. UAT-016 flagged both that nothing told
+    # the UI this was a recovery (so it rendered a raw negative number,
+    # "Rs-1,50,000") AND that it saved with no confirmation at all. is_recovery
+    # is a real, HR-set field (not computed) — validate() below requires it to
+    # be explicitly true before a negative net_payable_amount can be saved, so
+    # it's a deliberate acknowledgment, not an automatic label.
 
     class Meta:
         model  = SeparationSettlement
@@ -1171,11 +1179,11 @@ class SeparationSettlementSerializer(serializers.ModelSerializer):
         # UAT-016/UAT-017 — TDS (or PF/PT) saved against a much smaller
         # payable produced a nonsensical negative "net payable" with no
         # warning. Unlike advances_recovery/notice_period_recovery_amount
-        # (real debts the employee can legitimately owe back, surfaced
-        # instead via the is_recovery flag below), TDS/PF/PT are all withheld FROM
-        # this payment — together they cannot structurally exceed the
-        # earnings they're withheld from, so a data-entry mistake there is
-        # always worth rejecting, not flagging and allowing.
+        # (real debts the employee can legitimately owe back, acknowledged
+        # via is_recovery below), TDS/PF/PT are all withheld FROM this
+        # payment — together they cannot structurally exceed the earnings
+        # they're withheld from, so this is always a data-entry mistake,
+        # rejected outright rather than something is_recovery can override.
         def merged(name):
             return data[name] if name in data else (getattr(self.instance, name) if self.instance else Decimal('0'))
 
@@ -1195,6 +1203,11 @@ class SeparationSettlementSerializer(serializers.ModelSerializer):
                     f'(₹{gross_earnings}) they are withheld from.'
                 )
 
+        # Any OTHER cause of a negative net (advances recovery, notice-period
+        # shortfall, a negative other_adjustment) is a real, legitimate
+        # outcome — not blocked, but it must be an explicit, acknowledged
+        # choice: is_recovery has to be set True in the same request, not
+        # inferred automatically from the sign of the total.
         if self.instance:
             from .services_settlement import compute_net_payable, negative_net_message
 

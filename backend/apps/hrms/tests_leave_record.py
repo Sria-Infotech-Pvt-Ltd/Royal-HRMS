@@ -37,6 +37,14 @@ class LeaveRecordTests(TestCase):
         self.viewer = make_user('lr_view@test.com', role=plain_role, employee_id='LV1', branch=BRANCH)
         self.employee = make_user('lr_emp@test.com', employee_id='LE1', branch=BRANCH)
         self.other_branch = make_user('lr_other@test.com', employee_id='LO1', branch='Elsewhere')
+        # Confirmed, not probation — this suite isn't testing UAT-028's
+        # probation-eligibility rule, and make_user() defaults to probation,
+        # which _without_application_windows() deliberately does NOT lift
+        # (probation is an eligibility rule, same category as gender/branch/
+        # department, not an application-window rule).
+        from apps.accounts.models import User
+        self.employee.employment_status = User.EMPLOYMENT_STATUS_CONFIRMED
+        self.employee.save(update_fields=['employment_status'])
         LeavePolicy.objects.get_or_create(leave_type='casual', defaults={'annual_days': Decimal('12')})
         self.year = datetime.date.today().year
         self.day = _next_weekday(datetime.date(self.year, 6, 1))

@@ -49,6 +49,11 @@ interface EmployeeDetailSensitive {
     aadhaar_masked?:        string;
     account_number_masked?: string;
     ifsc_code_masked?:      string;
+    account_type?:          string;
+    bank_branch_name?:      string;
+    uan_number?:            string;
+    esi_number?:            string;
+    name_as_per_aadhar?:    string;
     personal_email?: string;
     bank_change_status?: string;
   };
@@ -228,8 +233,13 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
             <>
               <Row mono label="PAN" value={revealed?.pan_number || p?.pan_masked} />
               <Row mono label="Aadhaar" value={p?.aadhaar_masked} />
+              <Row label="Name as per Aadhaar" value={revealed?.name_as_per_aadhar || p?.name_as_per_aadhar} />
               <Row mono label="Bank account" value={accountValue} />
               <Row mono label="IFSC" value={ifscValue} />
+              <Row label="Account type" value={p?.account_type ? titleCase(p.account_type) : undefined} />
+              <Row label="Bank branch" value={p?.bank_branch_name} />
+              <Row mono label="UAN" value={p?.uan_number} />
+              <Row mono label="ESI number" value={p?.esi_number} />
             </>
           )}
           {isAdmin && p?.bank_change_status === "pending" && (

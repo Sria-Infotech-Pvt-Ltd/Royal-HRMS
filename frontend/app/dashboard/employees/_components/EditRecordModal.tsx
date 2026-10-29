@@ -84,6 +84,7 @@ import ExperienceList, { type ExperienceEntry } from "@/app/onboarding/_componen
 import { todayDateString } from "@/lib/candidateValidation";
 import type { EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
 import type { EmployeeSalaryConfig } from "@/types/payroll";
+import { useToast } from "@/components/ToastProvider";
 
 const STEPS = HIRE_STEPS.slice(0, -1); // drop "Review" — not applicable to editing an existing record
 
@@ -240,6 +241,7 @@ function persistDrafts(employeeId: string, drafts: EditRecordDraft[]) {
 }
 
 export default function EditRecordModal({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+  const { showToast } = useToast();
   // The shared Modal component doesn't lock body scroll on its own — with
   // tall content (this modal has a lot), the page behind it could also
   // scroll, showing a second scrollbar at the viewport edge alongside the
@@ -332,6 +334,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
 
   const [familyErr, setFamilyErr] = useState<string | null>(null);
   const [assetErr, setAssetErr] = useState<string | null>(null);
+  const [eduExpErr, setEduExpErr] = useState<string | null>(null);
   const deletedFamilyIds = useRef<Set<string>>(new Set());
   const deletedNomineeIds = useRef<Set<string>>(new Set());
   const deletedAssetIds = useRef<Set<string>>(new Set());
@@ -342,6 +345,17 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState(false);
+
+  // Clears the "All changes saved" footer message (and any stale error) the
+  // moment the user edits anything — it used to stay up after a save even
+  // once new, unsaved edits were on screen, wrongly implying they were saved too.
+  useEffect(() => {
+    setSavedMsg(false);
+    setSaveError(null);
+  }, [
+    personal, employment, statutory, values, familyEntries, nomineeEntries,
+    educationEntries, experienceEntries, assetEntries, coreSkills, certifications, emergencyContacts,
+  ]);
 
   // Dirty-tracking for the close (X) confirmation — baselineRef is captured
   // once all the record's data has finished loading, and again after every
@@ -508,10 +522,12 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         // pan_number/aadhaar_number below, so saving without touching them
         // doesn't overwrite the real stored value with an empty string.
         account_holder_name: emp.details.accountHolderName ?? "",
+        account_type: emp.details.accountType || s.account_type,
         bank_name: emp.details.bankName ?? "",
         bank_branch_address: emp.details.bankBranch ?? "",
         // UAN / ESI number are never returned in full (UAN only masked): blank here means "keep what is on file".
         uan_number: "", esi_number: "",
+        name_as_per_aadhar: emp.details.nameAsPerAadhar ?? "",
         pf_covered: typeof rawRecord.pf_covered === "boolean" ? String(rawRecord.pf_covered) : s.pf_covered,
         esi_covered: typeof rawRecord.esi_covered === "boolean" ? String(rawRecord.esi_covered) : s.esi_covered,
       }));
@@ -621,32 +637,39 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   }, [assetEntries, uuid]);
 
   const saveEducationAndExperience = useCallback(async () => {
-    for (const id of deletedEducationIds.current) await clientApi.delete(API.onboarding.employees.educationDetail(uuid, id));
-    deletedEducationIds.current.clear();
-    const savedEducation: EducationEntry[] = [];
-    for (const entry of educationEntries) {
-      const { id, ...payload } = entry;
-      const isNew = id.startsWith("temp-");
-      const res = isNew
-        ? await clientApi.post<{ data: EducationEntry }>(API.onboarding.employees.education(uuid), payload)
-        : await clientApi.patch<{ data: EducationEntry }>(API.onboarding.employees.educationDetail(uuid, id), payload);
-      savedEducation.push(res.data?.data ?? entry);
-    }
-    setEducationEntries(savedEducation);
+    setEduExpErr(null);
+    try {
+      for (const id of deletedEducationIds.current) await clientApi.delete(API.onboarding.employees.educationDetail(uuid, id));
+      deletedEducationIds.current.clear();
+      const savedEducation: EducationEntry[] = [];
+      for (const entry of educationEntries) {
+        const { id, ...payload } = entry;
+        const isNew = id.startsWith("temp-");
+        const res = isNew
+          ? await clientApi.post<{ data: EducationEntry }>(API.onboarding.employees.education(uuid), payload)
+          : await clientApi.patch<{ data: EducationEntry }>(API.onboarding.employees.educationDetail(uuid, id), payload);
+        savedEducation.push(res.data?.data ?? entry);
+      }
+      setEducationEntries(savedEducation);
 
-    for (const id of deletedExperienceIds.current) await clientApi.delete(API.onboarding.employees.experienceDetail(uuid, id));
-    deletedExperienceIds.current.clear();
-    const savedExperience: ExperienceEntry[] = [];
-    for (const entry of experienceEntries) {
-      const { id, ...payload } = entry;
-      const isNew = id.startsWith("temp-");
-      const res = isNew
-        ? await clientApi.post<{ data: ExperienceEntry }>(API.onboarding.employees.experience(uuid), payload)
-        : await clientApi.patch<{ data: ExperienceEntry }>(API.onboarding.employees.experienceDetail(uuid, id), payload);
-      savedExperience.push(res.data?.data ?? entry);
+      for (const id of deletedExperienceIds.current) await clientApi.delete(API.onboarding.employees.experienceDetail(uuid, id));
+      deletedExperienceIds.current.clear();
+      const savedExperience: ExperienceEntry[] = [];
+      for (const entry of experienceEntries) {
+        const { id, ...payload } = entry;
+        const isNew = id.startsWith("temp-");
+        const res = isNew
+          ? await clientApi.post<{ data: ExperienceEntry }>(API.onboarding.employees.experience(uuid), payload)
+          : await clientApi.patch<{ data: ExperienceEntry }>(API.onboarding.employees.experienceDetail(uuid, id), payload);
+        savedExperience.push(res.data?.data ?? entry);
+      }
+      setExperienceEntries(savedExperience);
+      return true;
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setEduExpErr(msg ?? "Failed to save education & experience details.");
+      return false;
     }
-    setExperienceEntries(savedExperience);
-    return true;
   }, [educationEntries, experienceEntries, uuid]);
 
   async function onUploadDocument(documentType: string, file: File) {
@@ -669,6 +692,11 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     }
   }
 
+  // closeAfter=false is "Save" (stays open, current step, toast on success);
+  // closeAfter=true is "Save & Close" (same save, then returns to the list).
+  // Both run the exact same payload/validation/backend calls below, so
+  // neither can succeed where the other fails — only what happens after a
+  // successful save differs. Nothing closes on any error, from either button.
   async function onSaveChanges(closeAfter = false) {
     setSaving(true);
     setSaveError(null);
@@ -733,8 +761,10 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         emergency_email: primaryEmergency?.email ?? "",
         // Statutory & accounts
         account_holder_name: statutory.account_holder_name || "",
+        account_type: statutory.account_type || "",
         bank_name: statutory.bank_name || "",
         bank_branch_name: statutory.bank_branch_address || "",
+        name_as_per_aadhar: statutory.name_as_per_aadhar || "",
         pf_covered: statutory.pf_covered === "true",
         esi_covered: statutory.esi_covered === "true",
         // Write-only re-entry — blank means "no change" (see
@@ -753,9 +783,17 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         core_skills: coreSkills || "",
         certifications: certifications || "",
       };
-      await clientApi.put(API.employees.detail(employee.id), payload);
-      setSavedContact({ email: personal.personalEmail, mobile: personal.mobileNumber });
-      setIsLoginChangeConfirmed(false);
+
+      // Family/assets/education-experience/CTC go out FIRST, and the single
+      // combined employee PUT (identity/employment/statutory/address) goes
+      // out LAST, only once every one of those has actually succeeded — not
+      // the reverse. These separate REST endpoints can never be one atomic
+      // transaction, but this ordering means a failure here never leaves the
+      // main record's fields changed while a smaller section silently
+      // failed to save; it stops before ever touching the main record.
+      const familyOk = await saveFamilyAndNominees();
+      const assetsOk = await saveAssets();
+      const eduExpOk = await saveEducationAndExperience();
 
       // Basic pay — only create a new EmployeeSalaryConfig revision if the
       // CTC/structure actually changed from what was loaded, so opening
@@ -783,17 +821,25 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         }
       }
 
-      const familyOk = await saveFamilyAndNominees();
-      const assetsOk = await saveAssets();
-      const eduExpOk = await saveEducationAndExperience();
-
       const allOk = familyOk && assetsOk && eduExpOk && ctcOk;
-      setSavedMsg(allOk);
-      if (!allOk) {
-        setSaveError(prev => prev ?? "Some sections could not be saved — see the errors above.");
+      if (allOk) {
+        await clientApi.put(API.employees.detail(employee.id), payload);
+        // Saved values are the new baseline — re-showing the login-email
+        // confirmation checkbox after a successful save (nothing left
+        // pending to confirm) would be stale.
+        setSavedContact({ email: personal.personalEmail, mobile: personal.mobileNumber });
+        setIsLoginChangeConfirmed(false);
       } else {
+        setSaveError(prev => prev ?? "Some sections could not be saved — see the errors above.");
+      }
+      setSavedMsg(allOk);
+      if (allOk) {
         setBaselineTick(t => t + 1);
-        if (closeAfter) onClose();
+        if (closeAfter) {
+          onClose();
+        } else {
+          showToast("Changes saved.", "success");
+        }
       }
     } catch (err: unknown) {
       const parsed = parseApiError(err, "Failed to save changes. Please try again.");
@@ -881,7 +927,19 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         </div>
       ) : (
         <div className="wiz">
-          <EditRecordSidebar currentStep={step} onStepClick={setStep} hasMissing={!personal.firstName.trim() || !personal.lastName.trim() || !statutory.account_holder_name.trim()} />
+          <EditRecordSidebar
+            currentStep={step}
+            onStepClick={setStep}
+            // Every field actually marked required (*) on the Personal
+            // identity step, plus the pre-existing account-holder check —
+            // this used to check only 3 of the 5 asterisked fields, so the
+            // sidebar could say "Nothing outstanding" with Date of birth,
+            // Gender or Nationality still empty.
+            hasMissing={
+              !personal.firstName.trim() || !personal.lastName.trim() || !personal.dateOfBirth.trim()
+              || !personal.gender.trim() || !personal.nationality.trim() || !statutory.account_holder_name.trim()
+            }
+          />
 
           <div className="wiz-main">
             <div className="stephead" style={{ padding: "20px 24px 0" }}>
@@ -1313,6 +1371,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       font-weight: 700;
                     }
                   `}</style>
+                  {eduExpErr && <div className="alert alert-error" style={{ marginBottom: 16 }}>{eduExpErr}</div>}
                   <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg px-3.5 py-2.5 mb-3" style={{ background: "var(--brand-tint)" }}>
                     {[
                       ["Qualifications", String(educationEntries.length)],

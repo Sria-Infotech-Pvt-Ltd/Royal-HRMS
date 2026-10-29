@@ -199,13 +199,18 @@ async function resolveBlobErrorData(err: AxiosError): Promise<AxiosError> {
 }
 
 // ── Normalise error shape for all callers ─────────────────────────────────────
-function normaliseError(err: unknown) {
+export function normaliseError(err: unknown) {
   const e = err as AxiosError<{ message?: string; error?: string; data?: unknown }>;
   const message =
     e?.response?.data?.message ??
     e?.response?.data?.error ??
-    (e as { message?: string })?.message ??
-    "An unexpected error occurred.";
+    // No `response` at all (not merely one without a `message` field) means
+    // the request never got a reply from the server — a dropped connection,
+    // a timeout, offline, CORS, etc. Axios's own `.message` for that case is
+    // a raw, unfriendly string like "Network Error" or "timeout of 10000ms
+    // exceeded" — never something to show a user as if the backend said it.
+    (e?.response ? (e as { message?: string })?.message : undefined) ??
+    (e?.response ? "An unexpected error occurred." : "Could not reach the server. Check your connection and try again.");
   const status = e?.response?.status ?? 500;
   // Preserve field-level validation errors (e.g. 422 responses with data.{field: [msg]})
   const data = e?.response?.data?.data;

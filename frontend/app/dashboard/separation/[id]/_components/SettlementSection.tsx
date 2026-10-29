@@ -16,16 +16,9 @@ interface Props {
   r: SeparationRequest;
 }
 
+// formatRupees already renders a negative amount as "-Rs 1,50,000" (not the
+// glued "₹-1,50,000" UAT-016 flagged), matching the backend's own format_inr().
 const INR = formatRupees;
-
-// A minus sign glued straight onto the currency symbol ("₹-1,50,000", UAT-016)
-// reads as a rendering bug, not a number. Parentheses are the standard
-// accounting convention for a negative amount — same fix already applied to
-// BasicPayStep's deduction lines (see its INR_DEDUCTION, QA report #49).
-const INR_SIGNED = (n: string | number) => {
-  const value = Number(n);
-  return value < 0 ? `(${INR(Math.abs(value))})` : INR(value);
-};
 
 // Manual line items HR/Finance enters by hand — see SettlementItem's own
 // comment for why these (unlike pro-rata salary/leave encashment/notice
@@ -185,11 +178,13 @@ export default function SettlementSection({ r }: Props) {
                 <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--on-variant)" }}>
                   {settlement.is_recovery ? "Net Recoverable from Employee" : "Net Payable"}
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: Number(settlement.net_payable_amount) < 0 ? "var(--error)" : undefined }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: settlement.is_recovery ? "var(--error)" : undefined }}>
                   {INR(settlement.net_payable_amount)}
                 </div>
                 {settlement.is_recovery && (
-                  <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>Recovery from the employee</div>
+                  <div style={{ fontSize: 11, color: "var(--error)", marginTop: 2 }}>
+                    Deductions exceed earnings — this amount is owed back by the employee, not paid to them.
+                  </div>
                 )}
               </div>
               {settlement.status === "finalized" ? (
@@ -264,7 +259,7 @@ export default function SettlementSection({ r }: Props) {
       {confirmFinalize && (
         <ConfirmModal
           title="Finalize this settlement?"
-          body={`This locks the full & final settlement at a net ${settlement.is_recovery ? "recoverable from the employee" : "payable"} of ${INR_SIGNED(settlement.net_payable_amount)}. Once finalized, no field on this settlement — gratuity, bonus, reimbursements, advances, TDS, or adjustments — can be edited again. This cannot be undone.`}
+          body={`This locks the full & final settlement at a net ${settlement.is_recovery ? "recoverable from the employee" : "payable"} of ${INR(settlement.net_payable_amount)}. Once finalized, no field on this settlement — gratuity, bonus, reimbursements, advances, TDS, or adjustments — can be edited again. This cannot be undone.`}
           confirmLabel="Finalize"
           danger
           saving={finalizing}

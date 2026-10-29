@@ -425,6 +425,10 @@ def _validate_leave_policy(policy, employee, duration, total_days, start, end, d
             return 'You are not eligible for this leave type (department restriction).'
     if not employee_matches_policy_gender(employee, policy):
         return 'You are not eligible for this leave type (gender restriction).'
+    if not policy.allow_probation_leave:
+        from apps.accounts.models import User
+        if getattr(employee, 'employment_status', None) == User.EMPLOYMENT_STATUS_PROBATION:
+            return 'Employees on probation are not eligible for this leave type.'
     if policy.minimum_service_period:
         joining = getattr(employee, 'date_of_joining', None) or getattr(employee, 'joining_date', None)
         if joining:
@@ -484,6 +488,10 @@ def _leave_preview(request):
         return error('This leave type is not currently active.')
     if not employee_matches_policy_gender(request.user, policy):
         return error('You are not eligible for this leave type (gender restriction).')
+    if not policy.allow_probation_leave:
+        from apps.accounts.models import User
+        if getattr(request.user, 'employment_status', None) == User.EMPLOYMENT_STATUS_PROBATION:
+            return error('Employees on probation are not eligible for this leave type.')
     actual_days  = _calc_working_days(start, end, duration, policy, request.user)
     branch_name  = (getattr(request.user, 'branch', '') or '')
     holidays     = _get_holidays_with_names(start, end, branch_name)

@@ -484,6 +484,38 @@ class HireCompletionSideEffectTests(HireWizardTestCase):
         self.assertFalse(CandidateAssignment.objects.filter(employee=employee).exists())
         self.assertEqual(employee.assessment_status, User.ASSESSMENT_COMPLETE)
 
+    def test_education_and_experience_populate_the_profile_summary_fields(self):
+        # UAT-022 — _apply_wizard_records() created EducationRecord/
+        # WorkExperienceRecord rows directly without ever calling
+        # sync_legacy_education_experience_fields(), so the Profile &
+        # Experience tab (which reads the flat EmployeeProfile summary
+        # fields, not these tables) stayed blank for every Hire Wizard
+        # employee even though the Edit-record modal (reads the tables
+        # directly) showed the data correctly.
+        self._patch(self.action, {
+            'education_entries': [{
+                'level': 'bachelors', 'institution': 'UAT Institute of Technology',
+                'specialization': 'Computer Science', 'percentage': '8.5',
+                'start_date': '2013-06-01', 'end_date': '2017-05-31',
+            }],
+            'experience_entries': [{
+                'previous_employer': 'Acme Corp', 'previous_designation': 'Analyst',
+                'start_date': '2017-06-01', 'end_date': '2020-01-01',
+                'leaving_reason': 'Better opportunity',
+            }],
+        })
+        resp = self._complete(self.action)
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.action.refresh_from_db()
+        employee = self.action.created_employee
+        profile = employee.profile
+        self.assertIn('UAT Institute of Technology', profile.institution)
+        self.assertEqual(profile.specialization, 'Computer Science')
+        self.assertEqual(profile.year_of_passing, 2017)
+        self.assertEqual(profile.previous_employer, 'Acme Corp')
+        self.assertEqual(profile.previous_designation, 'Analyst')
+        self.assertGreater(profile.total_experience_years, 0)
+
 
 class HireActionEmailValidationTests(HireWizardTestCase):
     """QA report #31 — 'bad-email' was accepted and saved via a direct PATCH
