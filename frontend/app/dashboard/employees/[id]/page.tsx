@@ -6,6 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import { useFetch } from "@/hooks/useFetch";
+import { formatNoticePeriod } from "@/lib/noticePeriod";
 import type { CustomFieldFileValue, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import CustomFieldFileUpload from "@/components/CustomFieldFileUpload";
@@ -67,6 +68,7 @@ interface ApiEmployee {
   department: string; designation: string; branch: string;
   role: string; role_display: string;
   date_of_joining: string; is_active: boolean; status: string;
+  notice_period_days?: number | null;
   onboarding_status: string;
   reporting_manager:  { id: string; uuid: string | null; name: string } | null;
   reporting_approver: { id: string; uuid: string | null; name: string } | null;
@@ -143,6 +145,8 @@ function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeConfig[] 
       reportingApproverId: u.reporting_approver?.uuid ?? "",
       hr:                  u.hr?.name ?? "",
       hrId:                u.hr?.uuid ?? "",
+      // Display only — set on Settings → Notice Period; never sent back on save.
+      noticePeriod:        formatNoticePeriod(u.notice_period_days),
       category:          "General",
       esiLocation:   "Corporate",
       metroTds:      "Metro",

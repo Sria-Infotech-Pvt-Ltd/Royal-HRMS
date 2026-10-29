@@ -162,6 +162,7 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
       { key: "reportingManager",  label: "Reporting Manager",  type: "readonly" },
       { key: "reportingApprover", label: "Reporting Approver", type: "readonly" },
       { key: "hr",                label: "Branch HR",          type: "readonly" },
+      { key: "noticePeriod",      label: "Notice Period",      type: "readonly" },
       // ── personal details ─────────────────────────────────────────
       { key: "dateOfBirth",    label: "Date of Birth",   type: "date",     required: true },
       {
