@@ -3039,3 +3039,6 @@ from apps.accounts.models_asset_v2b import AssetRequest, AssetDepreciationRule  
 # Imported last so Django registers it with the app; kept in its own module
 # because models.py is already far beyond a reasonable file length.
 from .models_personnel_action import PersonnelActionRequest  # noqa: E402,F401
+
+# Edit Record panel drafts (additive) — see models_edit_draft.py.
+from .models_edit_draft import EmployeeEditDraft  # noqa: E402,F401
