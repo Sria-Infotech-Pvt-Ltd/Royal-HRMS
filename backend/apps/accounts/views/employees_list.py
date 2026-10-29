@@ -111,6 +111,7 @@ from apps.accounts.serializers import (
 )
 from apps.accounts.employment_types import invalid_employment_type_message, normalize_employment_type
 from apps.accounts.services_headcount import get_headcount
+from apps.accounts.services_onboarding import fully_onboarded_q, onboarding_q
 from apps.accounts.services_placement import assign_position, sync_from_position
 from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle, ResetPasswordRateThrottle
 from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
@@ -223,17 +224,14 @@ class EmployeeListCreateView(APIView):
             elif status_param == 'active':
                 # Hired and onboarded means Active; probation is a separate
                 # employment label (the 'probation' filter below is a subset).
-                qs = qs.filter(
-                    is_active=True, onboarding_status=User.ONBOARDING_COMPLETE,
-                ).exclude(notice_period_q)
+                qs = qs.filter(is_active=True).filter(fully_onboarded_q()).exclude(notice_period_q)
             elif status_param == 'onboarding':
                 # Same bucket as the Onboarding KPI: not complete and not already on notice.
-                qs = qs.filter(is_active=True).exclude(onboarding_status=User.ONBOARDING_COMPLETE).exclude(notice_period_q)
+                qs = qs.filter(is_active=True).filter(onboarding_q()).exclude(notice_period_q)
             elif status_param == 'probation':
                 qs = qs.filter(
-                    is_active=True, onboarding_status=User.ONBOARDING_COMPLETE,
-                    employment_status=User.EMPLOYMENT_STATUS_PROBATION,
-                ).exclude(notice_period_q)
+                    is_active=True, employment_status=User.EMPLOYMENT_STATUS_PROBATION,
+                ).filter(fully_onboarded_q()).exclude(notice_period_q)
             elif status_param == 'notice_period':
                 qs = qs.filter(is_active=True).filter(notice_period_q).distinct()
             else:

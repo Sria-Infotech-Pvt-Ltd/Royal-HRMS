@@ -22,6 +22,7 @@ from datetime import date
 from django.db.models import Exists, OuterRef, Q, QuerySet
 
 from apps.accounts.models import User
+from apps.accounts.services_onboarding import fully_onboarded_q, onboarding_q
 
 
 def _in_branch(queryset: QuerySet, branch) -> QuerySet:
@@ -64,10 +65,10 @@ def get_headcount(branch=None, as_of: date | None = None, base_queryset: QuerySe
 
     on_notice = current.filter(is_on_notice=True)
     not_on_notice = current.filter(is_on_notice=False)
-    onboarded = not_on_notice.filter(onboarding_status=User.ONBOARDING_COMPLETE)
+    onboarded = not_on_notice.filter(fully_onboarded_q())
 
     active = onboarded.count()
-    onboarding = not_on_notice.exclude(onboarding_status=User.ONBOARDING_COMPLETE).count()
+    onboarding = not_on_notice.filter(onboarding_q()).count()
     notice_period = on_notice.count()
     return {
         'total': active + onboarding + notice_period,

@@ -54,6 +54,7 @@ from core.file_validation import validate_file_content as _validate_file_content
 from core.pagination import paginate, paginated_data
 from core.permissions import HasSettingsPermission, has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
+from apps.accounts.services_onboarding import is_onboarding
 from core.template_context import (
     candidate_context as _candidate_template_context,
     expense_context as _expense_template_context,
@@ -246,7 +247,7 @@ def _employee_dict(user: User) -> dict:
     last  = parts[1] if len(parts) > 1 else ''
     if not user.is_active:
         emp_status = 'inactive'
-    elif user.onboarding_status != User.ONBOARDING_COMPLETE:
+    elif is_onboarding(user):
         emp_status = 'onboarding'
     else:
         emp_status = 'active'

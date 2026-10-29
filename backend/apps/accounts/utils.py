@@ -192,7 +192,7 @@ def _activation_link(token_id) -> str:
     return f'{base.rstrip("/")}{path}' if base else path
 
 
-def send_activation_invite(user, *, created_by=None) -> 'PasswordResetToken':  # noqa: F821 - type-hint only, real import below to avoid a cycle
+def send_activation_invite(user, *, created_by=None, extra_html: str = '') -> 'PasswordResetToken':  # noqa: F821 - type-hint only, real import below to avoid a cycle
     """Issues a fresh single-use activation invite (replacing any
     outstanding one for this user) and emails the link — the credentials-
     delivery path for every newly hired employee, and also what
@@ -223,6 +223,7 @@ def send_activation_invite(user, *, created_by=None) -> 'PasswordResetToken':  #
         f'Set Your Password</a></p>'
         f'<p>This link is valid for <strong>{expiry_hours} hours</strong> and can only be used once. '
         f'If it expires, ask HR to resend your invite.</p>'
+        f'{extra_html}'
         f'<p>If you did not expect this email, please contact your HR team.</p>'
         f'<p style="margin-top:32px;">Regards,<br><strong>HR Team</strong><br>{company_name}</p>'
     )

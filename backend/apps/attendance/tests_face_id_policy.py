@@ -247,14 +247,14 @@ class SettingsValidationTests(TestCase):
 
 
 class HireCompletionTests(wizard.HireWizardTestCase):
-    """The hire completion screen and the welcome email carry the same Face ID instruction."""
+    """The hire completion screen and the onboarding invite email carry the same Face ID instruction."""
 
     def _hire(self):
         action = self._create_draft()
         self._set_employment_type(action, 'Permanent')
         self._patch(action, self._valid_full_draft())
         self._upload_all_required_docs(action)
-        with patch('apps.accounts.views_hire_complete.send_template_email') as send:
+        with patch('apps.accounts.utils.send_activation_invite') as send:
             resp = self._complete(action)
         return resp, send
 
@@ -266,7 +266,7 @@ class HireCompletionTests(wizard.HireWizardTestCase):
         self.assertEqual(face_id['registration_mode'], mode)
         self.assertTrue(face_id['employee_message'])
         self.assertTrue(face_id['hr_next_step'])
-        self.assertIn(face_id['employee_message'], send.call_args.kwargs['context']['face_id_block'])
+        self.assertIn(face_id['employee_message'], send.call_args.kwargs['extra_html'])
 
     def test_response_and_email_agree_for_self_service(self):
         self._assert_response_and_email_agree(SELF)
@@ -285,7 +285,7 @@ class HireCompletionTests(wizard.HireWizardTestCase):
     def test_no_face_id_text_when_face_id_is_off(self):
         set_face_rules(mandatory=False)
         resp, send = self._hire()
-        self.assertEqual(send.call_args.kwargs['context']['face_id_block'], '')
+        self.assertEqual(send.call_args.kwargs['extra_html'], '')
         self.assertFalse(resp.data['data']['face_id']['is_mandatory'])
 
 

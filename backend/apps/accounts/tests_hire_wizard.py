@@ -564,4 +564,6 @@ class HireCompletionOnboardingStatusTests(HireWizardTestCase):
         self.assertEqual(employee.onboarding_status, User.ONBOARDING_COMPLETE)
         self.assertFalse(employee.requires_self_service_onboarding)
         from apps.accounts.views.shared import _employee_dict
-        self.assertEqual(_employee_dict(employee)['status'], 'active')
+        # Nothing left to self-report, but the person only becomes Active after setting a password and logging in once.
+        self.assertTrue(employee.activation_pending)
+        self.assertEqual(_employee_dict(employee)['status'], 'onboarding')

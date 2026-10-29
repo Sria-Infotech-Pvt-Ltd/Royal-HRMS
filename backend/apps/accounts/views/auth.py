@@ -186,6 +186,8 @@ class LoginView(APIView):
 
         ip = get_client_ip(request)
         user.reset_failed_login(ip_address=ip)
+        from apps.accounts.services_onboarding import on_first_login
+        on_first_login(user)
 
         refresh = RoleBasedRefreshToken.for_user(user)
 
@@ -420,6 +422,8 @@ class ResetPasswordView(APIView):
             ])
             token_obj.is_used = True
             token_obj.save(update_fields=['is_used'])
+            from apps.accounts.services_onboarding import on_password_set
+            on_password_set(user)
 
         AuditLog.objects.create(
             user=user, action='account_activated' if is_activation else 'password_reset', module='accounts',
@@ -471,6 +475,8 @@ class InviteCheckView(APIView):
             )
 
         token_obj.mark_opened()
+        from apps.accounts.services_onboarding import on_link_opened
+        on_link_opened(token_obj.user)
         return success('Invite is valid.', data={
             'full_name': token_obj.user.full_name,
             'email':     token_obj.user.email,
@@ -495,6 +501,8 @@ class ChangePasswordView(APIView):
         user.set_password(new_password)
         user.must_change_password = False
         user.save(update_fields=['password', 'must_change_password'])
+        from apps.accounts.services_onboarding import on_password_set
+        on_password_set(user)
 
         # Blacklist the refresh token so the old session cannot be reused
         refresh_str = request.COOKIES.get('royal_refresh_token')

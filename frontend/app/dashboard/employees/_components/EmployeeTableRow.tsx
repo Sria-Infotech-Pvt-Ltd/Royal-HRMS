@@ -6,6 +6,7 @@ import { directoryStatusLabel, fullName, initials, personAvatarTint, reportingMa
 import type { StatusPillTone } from "@/components/employees/StatusPill";
 import Avatar from "./Avatar";
 import EmployeeRowActionsMenu, { type RowAction } from "./EmployeeRowActionsMenu";
+import OnboardingHistoryModal from "./OnboardingHistoryModal";
 import PerformActionModal from "./PerformActionModal";
 import StatusPill from "@/components/employees/StatusPill";
 import { formatDateSlash } from "@/lib/formatDate";
@@ -35,6 +36,8 @@ interface Props {
 export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEdit, toggling, onOpen, onToggleStatus, onActionApplied }: Props) {
   const router = useRouter();
   const rowStatus = directoryStatusLabel(e);
+  const canManageOnboarding = usePermission("employees.reset_password") && canEdit;
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const isExited = e.status === "inactive";
   const tint = personAvatarTint(e.id);
   const [showActionModal, setShowActionModal] = useState(false);
@@ -98,7 +101,19 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
         {e.location || <span style={{ color: "var(--faint)" }}>—</span>}
       </div>
       <div>
-        <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
+        {rowStatus === "Onboarding" && canManageOnboarding && e.uuid ? (
+          <button
+            type="button" onClick={() => setIsHistoryOpen(true)} aria-label={`Onboarding history for ${fullName(e)}`}
+            style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }}
+          >
+            <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
+          </button>
+        ) : (
+          <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
+        )}
+        {isHistoryOpen && e.uuid && (
+          <OnboardingHistoryModal employeeUuid={e.uuid} employeeName={fullName(e)} onClose={() => setIsHistoryOpen(false)} onChanged={onActionApplied} />
+        )}
         {rowStatus === "Active" && e.employmentStatus === "probation" && (
           <div className="text-[11px]" style={{ color: "var(--muted)", marginTop: 2 }}>On probation</div>
         )}

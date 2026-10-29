@@ -4820,6 +4820,30 @@ The 8-step (user's spec said 9; it's actually 8: Personal identity, Employment, 
 
 ---
 
+### 35. Onboarding status until first login and password set (ticket pasted without a bug number)
+
+**Rule.** A hired employee shows **Onboarding** (not Active) from the moment HR completes the hire until they have BOTH set their password and logged in once. Then it flips to Active by itself. Stored as `User.activation_pending` (separate from `must_change_password`, which an admin password reset also sets and must not push a working employee back to Onboarding). `services_onboarding.is_onboarding()` is the single definition; list, filters, stat cards and headcount all use it.
+
+**What changed in behaviour (read this):** the hire now emails the existing **activation invite link** (72h expiry, single use) instead of a plaintext temporary password. The Face ID instruction rides in that email. The editable `hire_welcome_credentials` template is **no longer used by hire** (left in the DB). Mail failure does not fail the hire; it is recorded and can be resent.
+
+| Requirement | Where |
+|---|---|
+| History timeline (initiated, sent, failed + reason, resent by, corrected, link opened, password set, first login, activated) | `OnboardingEvent` (`employee_onboarding_events`), `GET /employees/<uuid>/onboarding-history/`, `OnboardingHistoryModal.tsx` opened from the Onboarding badge in the directory row |
+| Current state message | `services_onboarding.current_state`: "User has not logged in yet", "Onboarding email failed. Please resend.", "Link expired. Please resend the onboarding email.", etc. |
+| Resend | `POST /employees/<uuid>/resend-invite/` (same URL as before); logged in the history and as audit `invite_resent` |
+| Rate limit | `ONBOARDING_RESEND_MAX_PER_HOUR` (default 5 per employee per rolling hour), HTTP 429 |
+| Correct a wrong address, then resend | optional `{"email": ...}` on resend; only while onboarding; unique and format checked; history + audit `onboarding_email_corrected` |
+| Expired link | invite page already returns 410; panel shows "Link expired" with Resend |
+| Filter | existing `status=onboarding` filter now includes pending activation |
+| Migration | `0206` adds the field and the table, and marks people who were sent an invite and never used it as Onboarding |
+
+**Excluded while Onboarding:** headcount "Active" (counted as Onboarding), the absence-marking job and the consecutive-absence alert job.
+**NOT changed, needs a product-owner decision:** payroll runs (`payroll/engine/legacy.py _eligible_employees_qs`) still include them, and leave/attendance self-service is unchanged. Excluding payroll could silently skip someone's pay, so it was not done without sign-off.
+**Not built:** "Copy invite link" (the link id is the credential, so showing it to an admin would let them set the employee's password) and "Cancel onboarding". Bounces that arrive after SMTP accepted the message cannot be seen; only errors raised at send time are captured.
+
+**Tests:** `accounts/tests_onboarding_status.py` (status, filter, headcount, activation order both ways, failed login not counted, failed send and reason, resend logging, rate limit, expired link, email correction, permissions, migration backfill, hire starts onboarding). Updated: `attendance/tests_face_id_policy.py` (hire email now the invite), `tests_hire_wizard.HireCompletionOnboardingStatusTests` (status is onboarding after hire).
+**Ops:** run migration `0206` on UAT.
+
 ## Session Log — 2026-10-29 — Second merge of `origin/28-oct-2026` into `New-AI` (post-divergence)
 
 Both branches had moved on independently since the first `28-oct-2026` → `New-AI` merge (commit `513ffac`, logged above): `New-AI` picked up `030deb3`/`1074f9c`/`1a0be01` (UAT-041..073) plus everything from the "second merge-conflict-resolution" session logged just above (sections 23-34, committed as part of the UAT-021..030 work); `28-oct-2026` picked up 2 more commits of its own. Merged via an isolated worktree (per [[feedback_check_branch_before_commit]] — the shared checkout was on `chore/testing-foundation-2` with unrelated uncommitted work, never touched). 6 files conflicted (git's count — several had multiple separate conflict regions):

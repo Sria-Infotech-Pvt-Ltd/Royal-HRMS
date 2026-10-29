@@ -298,6 +298,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active       = models.BooleanField(default=True)
     is_staff      = models.BooleanField(default=False)
     must_change_password    = models.BooleanField(default=True)
+    # True from the moment HR sends the onboarding invite until the person has both set their password and logged in once;
+    # while True the employee shows as Onboarding (see services_onboarding). Separate from must_change_password, which an
+    # admin password reset also sets and must not push a working employee back to Onboarding.
+    activation_pending      = models.BooleanField(default=False, db_index=True)
     onboarding_status       = models.CharField(
                                   max_length=20,
                                   choices=ONBOARDING_CHOICES,
@@ -3042,3 +3046,6 @@ from .models_personnel_action import PersonnelActionRequest  # noqa: E402,F401
 
 # Edit Record panel drafts (additive) — see models_edit_draft.py.
 from .models_edit_draft import EmployeeEditDraft  # noqa: E402,F401
+
+# New-hire onboarding history (additive) — see models_onboarding_event.py.
+from .models_onboarding_event import OnboardingEvent  # noqa: E402,F401

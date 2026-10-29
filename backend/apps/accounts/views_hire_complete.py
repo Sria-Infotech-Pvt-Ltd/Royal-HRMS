@@ -22,12 +22,11 @@ from rest_framework import status
 
 from core.permissions import has_perm as _has_perm
 from core.responses import error, success, get_client_ip
-from apps.accounts.models import AuditLog, Company, EmployeeDocument, HireAction, HireActionDocument, User
+from apps.accounts.models import AuditLog, EmployeeDocument, HireAction, HireActionDocument, User
 from apps.accounts.services_placement import assign_position
 from apps.accounts.services_hire_duplicates import blocking_message, check_hire_duplicates
 from apps.accounts.services_work_location import work_location_for_branch
 from apps.accounts.views_pincode import fill_state_and_district
-from apps.accounts.utils import send_template_email
 from apps.attendance.services_face_policy import hire_summary
 from apps.accounts.views_hire import _hire_action_dict, _DENIED
 
@@ -324,9 +323,8 @@ class HireActionCompleteView(APIView):
         if action.position.position_permissions.filter(permission__codename='settings.edit').exists():
             return error('Positions with full access cannot be filled through the Hire flow.')
 
-        # Emailed to the new hire below (hire_welcome_credentials template) so
-        # they can log in immediately — must_change_password stays True so
-        # this value is forced to be replaced on first login regardless.
+        # Never emailed: the new hire sets their own password through the onboarding invite link (see
+        # services_onboarding.start_onboarding). This random value only keeps the account unusable until then.
         temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
         full_name = f'{first_name} {last_name}'
 
@@ -424,28 +422,17 @@ class HireActionCompleteView(APIView):
             )
 
         face_id = hire_summary(user)
-        try:
-            company = Company.objects.first()
-            send_template_email(
-                recipient_email=user.email,
-                template_name='hire_welcome_credentials',
-                context={
-                    'employee_name': user.full_name or user.email,
-                    'employee_email': user.email,
-                    'employee_id_line': f' (Employee ID: {user.employee_id})' if user.employee_id else '',
-                    'temp_password': temp_password,
-                    'company_name': company.company_name if company else '',
-                    # One consistent Face ID instruction for the new hire; empty when Face ID is not required.
-                    'face_id_block': (
-                        f'<p><strong>Face ID:</strong> {escape(face_id["employee_message"])}</p>'
-                        if face_id['is_mandatory'] else ''
-                    ),
-                },
-                module='accounts',
-                triggered_by=request.user,
-            )
-        except Exception as exc:
-            logger.error('Welcome-credentials email failed for %s: %s', email, exc)
+        # The new hire shows as Onboarding until they set a password through this link and log in once. A failed send is
+        # recorded in their onboarding history (with the reason) and can be resent from the Onboarding panel.
+        from apps.accounts.services_onboarding import start_onboarding
+        start_onboarding(
+            user, actor=request.user,
+            # One consistent Face ID instruction for the new hire; empty when Face ID is not required.
+            extra_html=(
+                f'<p><strong>Face ID:</strong> {escape(face_id["employee_message"])}</p>'
+                if face_id['is_mandatory'] else ''
+            ),
+        )
 
         logger.info('Employee %s (%s) hired via HireAction %s by %s', action.reserved_employee_id, email, action.id, request.user.email)
         # Tell HR plainly whether the new hire has a manager, instead of leaving it to be discovered later.

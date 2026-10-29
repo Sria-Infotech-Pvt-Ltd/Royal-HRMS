@@ -4,7 +4,10 @@ from apps.accounts.views_email_log import (
     EmailLogListView,
     EmailLogResendView,
 )
-from apps.accounts.views_reset_password import EmployeePasswordResetView, EmployeeInviteStatusView, ResendInviteView
+from apps.accounts.views_reset_password import EmployeePasswordResetView, EmployeeInviteStatusView
+from apps.accounts.views_onboarding_status import (
+    EmployeeOnboardingHistoryView, ResendInviteView,
+)
 from apps.accounts.views_external_api import ExternalEmployeeBasicListView, ExternalEmployeeDetailView
 from apps.accounts.views_personnel_actions import (
     ActionRequestApproveView,
@@ -203,6 +206,7 @@ urlpatterns = [
     path('employees/<uuid:pk>/reset-password/',                   EmployeePasswordResetView.as_view(),    name='employee-reset-password'),
     path('employees/<uuid:pk>/resend-invite/',                    ResendInviteView.as_view(),             name='employee-resend-invite'),
     path('employees/<uuid:pk>/permissions/',                      EmployeePermissionsView.as_view(),      name='employee-permissions'),
+    path('employees/<uuid:pk>/onboarding-history/',               EmployeeOnboardingHistoryView.as_view(), name='employee-onboarding-history'),
     path('employees/<uuid:pk>/invite-status/',                    EmployeeInviteStatusView.as_view(),     name='employee-invite-status'),
     path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
 

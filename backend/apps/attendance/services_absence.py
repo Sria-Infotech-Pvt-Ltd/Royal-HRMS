@@ -186,7 +186,7 @@ def detect_absence_alerts() -> dict:
     from apps.accounts.models import User
     employees = (
         User.objects
-        .filter(is_active=True, onboarding_status='complete')
+        .filter(is_active=True, onboarding_status='complete', activation_pending=False)
         .exclude(employee_id='')
         .select_related('reporting_manager', 'hr')
     )
@@ -231,6 +231,7 @@ def finalize_missing_attendance(target_date: date) -> dict:
         User.objects.filter(
             is_active=True,
             onboarding_status=User.ONBOARDING_COMPLETE,
+            activation_pending=False,
             date_of_joining__lte=target_date,
         )
         .exclude(employee_id='')
