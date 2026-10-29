@@ -203,6 +203,8 @@ class EmployeeDetailView(APIView):
         if auto_changed:
             employee.save(update_fields=auto_changed + ['updated_at'])
         data = _employee_dict(employee)
+        from apps.accounts.models import EmployeeEditDraft
+        data['has_edit_draft'] = EmployeeEditDraft.objects.filter(employee=employee, created_by=request.user).exists()
         return success('Employee retrieved.', data=data)
 
     def put(self, request, employee_id: str):

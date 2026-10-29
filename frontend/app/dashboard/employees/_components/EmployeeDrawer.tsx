@@ -44,7 +44,7 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
               color={avatarColor(employee.department)} photoUrl={employee.photoUrl}
             />
             <div style={{ minWidth: 0 }}>
-              <div className="n">{fullName(employee)}</div>
+              <div className="n">{fullName(employee)}{employee.hasEditDraft && <span className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold align-middle" style={{ background: "var(--amber-bg, #fef3c7)", color: "var(--amber-ink, #92400e)" }} title="You have unsaved draft changes for this employee">Draft</span>}</div>
               <div className="i">{employee.code} · {employee.designation || "—"}</div>
             </div>
           </div>

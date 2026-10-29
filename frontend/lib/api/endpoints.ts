@@ -57,6 +57,8 @@ export const API = {
   },
 
   employees: {
+    editDraft: (id: string) => `/employees/${id}/edit-draft/`,
+    editDraftResume: (id: string) => `/employees/${id}/edit-draft/resume/`,
     list: "/employees/",
     stats: "/employees/stats/",
     headcount: "/employees/headcount/",

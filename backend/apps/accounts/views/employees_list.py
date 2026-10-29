@@ -126,6 +126,17 @@ LIST_MAX_PAGE_SIZE = 50
 EXPORT_MAX_PAGE_SIZE = 1000
 
 
+def _with_edit_draft_flag(viewer, rows: list[dict]) -> list[dict]:
+    """Mark rows the viewer has a pending Edit Record draft for. Drafts are private, so this never reflects anyone else's."""
+    from apps.accounts.models import EmployeeEditDraft
+    draft_codes = set(EmployeeEditDraft.objects.filter(
+        created_by=viewer, employee__employee_id__in=[row['id'] for row in rows if row.get('id')],
+    ).values_list('employee__employee_id', flat=True))
+    for row in rows:
+        row['has_edit_draft'] = row.get('id') in draft_codes
+    return rows
+
+
 class EmployeeListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -256,7 +267,7 @@ class EmployeeListCreateView(APIView):
             'page':        page_obj.number,
             'page_size':   page_size,
             'total_pages': paginator.num_pages,
-            'results':     [_employee_dict(u) for u in page_obj.object_list],
+            'results':     _with_edit_draft_flag(request.user, [_employee_dict(u) for u in page_obj.object_list]),
         })
 
     def post(self, request):

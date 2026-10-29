@@ -69,6 +69,8 @@ export interface Employee {
   /** Real uploaded profile photo (ImageKit CDN URL), or null when the
    * employee has never uploaded one — Avatar falls back to initials. */
   photoUrl?: string | null;
+  /** The signed-in user has an unpublished Edit Record draft for this employee (drafts are private to their creator). */
+  hasEditDraft?: boolean;
   /** all the long-tail profile fields, keyed by FieldDef.key */
   details: DetailValues;
   /** repeatable sections, keyed by TableSection.id */
@@ -531,6 +533,7 @@ export interface ApiEmployee {
   org_unit_name?: string | null;
   org_unit_parent_name?: string | null;
   profile_photo_url?: string | null;
+  has_edit_draft?: boolean;
 }
 
 export function apiToEmployee(u: ApiEmployee): Employee {
@@ -559,6 +562,7 @@ export function apiToEmployee(u: ApiEmployee): Employee {
     orgUnitName: u.org_unit_name ?? null,
     orgUnitParentName: u.org_unit_parent_name ?? null,
     photoUrl: u.profile_photo_url ?? null,
+    hasEditDraft: u.has_edit_draft === true,
     details: {
       code:          u.employee_id,
       firstName:     u.first_name,

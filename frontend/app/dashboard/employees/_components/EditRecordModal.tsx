@@ -56,6 +56,7 @@ import { matchEmploymentType } from "@/lib/employmentType";
 import { parseApiError } from "@/lib/apiError";
 import { MARITAL_STATUS_OPTIONS } from "@/lib/maritalStatus";
 import { usePermission } from "@/hooks/usePermission";
+import { useToast } from "@/components/ToastProvider";
 import EditRecordContactFields from "./EditRecordContactFields";
 import { buildContactChanges } from "./editRecordContact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -190,13 +191,17 @@ const EMPTY_PERSONAL: PersonalIdentityDraft = {
   personalEmail: "", mobileNumber: "", alternateMobile: "",
 };
 
-// ── Local drafts ────────────────────────────────────────────────────────
-// Lets HR save in-progress edits without submitting, and come back to them
-// later — local-only (localStorage), per employee, no backend model. Note:
-// loading a draft that had removed a family/nominee/education/experience/
-// asset entry won't re-send the delete for that entry on save (the
-// deletedXIds refs that drive those deletes aren't part of the snapshot) —
-// acceptable for a "resume my edits" draft, not a full undo history.
+// ── Drafts ──────────────────────────────────────────────────────────────
+// Lets HR save in-progress edits (e.g. waiting on a document or approval)
+// WITHOUT touching the live employee record, and resume later — backed by
+// EmployeeEditDraft on the server (one per employee per admin — see
+// backend/apps/accounts/models_edit_draft.py), so it survives across
+// sessions/devices and is audit-logged, unlike a localStorage-only draft.
+// Note: resuming a draft that had removed a family/nominee/education/
+// experience/asset entry won't re-send the delete for that entry on save
+// (the deletedXIds refs that drive those deletes aren't part of the
+// snapshot) — acceptable for a "resume my edits" draft, not a full undo
+// history.
 interface EditRecordDraftState {
   values: DetailValues;
   addressExtras: AddressExtras;
@@ -215,28 +220,11 @@ interface EditRecordDraftState {
   certifications: string;
   assetEntries: AssetEntry[];
 }
-interface EditRecordDraft {
+interface ApiEditDraft {
   id: string;
-  savedAt: string; // ISO
-  state: EditRecordDraftState;
-}
-const MAX_DRAFTS = 10;
-const draftsStorageKey = (employeeId: string) => `editRecordDrafts:${employeeId}`;
-
-function loadDrafts(employeeId: string): EditRecordDraft[] {
-  try {
-    const raw = localStorage.getItem(draftsStorageKey(employeeId));
-    return raw ? (JSON.parse(raw) as EditRecordDraft[]) : [];
-  } catch {
-    return [];
-  }
-}
-function persistDrafts(employeeId: string, drafts: EditRecordDraft[]) {
-  try {
-    localStorage.setItem(draftsStorageKey(employeeId), JSON.stringify(drafts));
-  } catch {
-    // Storage unavailable/full — the draft just won't persist, not fatal.
-  }
+  data: EditRecordDraftState;
+  last_step: number;
+  updated_at: string;
 }
 
 export default function EditRecordModal({ employee, onClose }: { employee: Employee; onClose: () => void }) {
@@ -249,8 +237,6 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previousOverflow; };
   }, []);
-
-  useEffect(() => () => { if (draftSavedTimer.current) clearTimeout(draftSavedTimer.current); }, []);
 
   const [uuid, setUuid] = useState("");
   const [loading, setLoading] = useState(true);
@@ -353,16 +339,22 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   const baselineRef = useRef<string | null>(null);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
-  const [showDrafts, setShowDrafts] = useState(false);
-  const [drafts, setDrafts] = useState<EditRecordDraft[]>([]);
-  const [draftSavedMsg, setDraftSavedMsg] = useState(false);
-  const draftSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { showToast } = useToast();
+  const [savingDraft, setSavingDraft] = useState(false);
+  // Set once on mount if the server has a draft for this employee+admin;
+  // the banner/prompt stays up until the user explicitly resumes or
+  // discards it (never auto-applied, so opening the panel never silently
+  // overwrites what's currently on screen with old draft data).
+  const [pendingDraft, setPendingDraft] = useState<ApiEditDraft | null>(null);
+  const [showDraftPrompt, setShowDraftPrompt] = useState(false);
 
-  function openDrafts() {
-    setDrafts(loadDrafts(employee.id));
-    setDraftSavedMsg(false);
-    setShowDrafts(true);
-  }
+  useEffect(() => {
+    clientApi.get<{ data: { draft: ApiEditDraft | null } }>(API.employees.editDraft(employee.id))
+      .then(({ data }) => {
+        if (data.data.draft) { setPendingDraft(data.data.draft); setShowDraftPrompt(true); }
+      })
+      .catch(() => {});
+  }, [employee.id]);
 
   function buildSnapshot(): EditRecordDraftState {
     return {
@@ -372,14 +364,63 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     };
   }
 
-  function saveCurrentAsDraft() {
-    const draft: EditRecordDraft = { id: nextTempId(), savedAt: new Date().toISOString(), state: buildSnapshot() };
-    const next = [draft, ...loadDrafts(employee.id)].slice(0, MAX_DRAFTS);
-    persistDrafts(employee.id, next);
-    setDrafts(next);
-    setDraftSavedMsg(true);
-    if (draftSavedTimer.current) clearTimeout(draftSavedTimer.current);
-    draftSavedTimer.current = setTimeout(() => setDraftSavedMsg(false), 2500);
+  function applyDraftState(s: EditRecordDraftState, lastStep: number) {
+    setValues(s.values);
+    setAddressExtras(s.addressExtras);
+    setPersonal(s.personal);
+    setEmergencyContacts(s.emergencyContacts);
+    setGuardian(s.guardian);
+    setAccessCard(s.accessCard);
+    setEmployment(s.employment);
+    setBasicPay(s.basicPay);
+    setStatutory(s.statutory);
+    setFamilyEntries(s.familyEntries);
+    setNomineeEntries(s.nomineeEntries);
+    setEducationEntries(s.educationEntries);
+    setExperienceEntries(s.experienceEntries);
+    setCoreSkills(s.coreSkills);
+    setCertifications(s.certifications);
+    setAssetEntries(s.assetEntries);
+    setStep(lastStep || 0);
+  }
+
+  async function saveAsDraft(closeAfter = false) {
+    setSavingDraft(true);
+    try {
+      await clientApi.post(API.employees.editDraft(employee.id), { data: buildSnapshot(), last_step: step });
+      showToast("Draft saved.", "success");
+      // The current edits are now safely persisted as a draft — closing
+      // right after this is safe, so this counts as a new "known saved" point.
+      setBaselineTick(t => t + 1);
+      if (closeAfter) onClose();
+    } catch {
+      showToast("Failed to save draft. Please try again.", "error");
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  async function resumeDraft() {
+    try {
+      const { data } = await clientApi.post<{ data: { draft: ApiEditDraft } }>(API.employees.editDraftResume(employee.id));
+      applyDraftState(data.data.draft.data, data.data.draft.last_step);
+      setShowDraftPrompt(false);
+      // Deliberately NOT bumping baselineTick — the resumed content differs
+      // from the live record (that's the whole point), so closing without
+      // an explicit Save/Save as Draft should still prompt.
+    } catch {
+      showToast("Failed to resume the draft.", "error");
+    }
+  }
+
+  async function discardDraft() {
+    try {
+      await clientApi.delete(API.employees.editDraft(employee.id));
+    } catch {
+      // Not fatal — worst case the stale draft just lingers and is offered again next time.
+    }
+    setPendingDraft(null);
+    setShowDraftPrompt(false);
   }
 
   // Always holds this render's buildSnapshot — read from the effect below
@@ -401,36 +442,23 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     return JSON.stringify(buildSnapshot()) !== baselineRef.current;
   }
 
+  // Kept in sync every render so the native `beforeunload` listener (added
+  // once, see below) always reads the current dirty state rather than a
+  // stale closure from whichever render first attached it.
+  const isDirtyRef = useRef(isDirty);
+  useEffect(() => { isDirtyRef.current = isDirty; });
+
+  useEffect(() => {
+    function handler(e: BeforeUnloadEvent) {
+      if (isDirtyRef.current()) { e.preventDefault(); e.returnValue = ""; }
+    }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
+
   function requestClose() {
     if (isDirty()) setShowCloseConfirm(true);
     else onClose();
-  }
-
-  function loadDraft(draft: EditRecordDraft) {
-    const s = draft.state;
-    setValues(s.values);
-    setAddressExtras(s.addressExtras);
-    setPersonal(s.personal);
-    setEmergencyContacts(s.emergencyContacts);
-    setGuardian(s.guardian);
-    setAccessCard(s.accessCard);
-    setEmployment(s.employment);
-    setBasicPay(s.basicPay);
-    setStatutory(s.statutory);
-    setFamilyEntries(s.familyEntries);
-    setNomineeEntries(s.nomineeEntries);
-    setEducationEntries(s.educationEntries);
-    setExperienceEntries(s.experienceEntries);
-    setCoreSkills(s.coreSkills);
-    setCertifications(s.certifications);
-    setAssetEntries(s.assetEntries);
-    setShowDrafts(false);
-  }
-
-  function deleteDraft(id: string) {
-    const next = loadDrafts(employee.id).filter(d => d.id !== id);
-    persistDrafts(employee.id, next);
-    setDrafts(next);
   }
 
   const refreshDocs = useCallback((raw: ApiEmployee) => {
@@ -793,6 +821,9 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         setSaveError(prev => prev ?? "Some sections could not be saved — see the errors above.");
       } else {
         setBaselineTick(t => t + 1);
+        showToast("Changes saved.", "success");
+        // The changes just went live — any draft for this employee+admin is now stale, resumed or not.
+        if (pendingDraft) { clientApi.delete(API.employees.editDraft(employee.id)).catch(() => {}); setPendingDraft(null); }
         if (closeAfter) onClose();
       }
     } catch (err: unknown) {
@@ -824,53 +855,18 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       scrollBody
       bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
       footer={
-        <div className="flex items-center gap-3 w-full justify-end" style={{ position: "relative" }}>
+        <div className="flex items-center gap-3 w-full justify-end">
           {savedMsg && <span style={{ fontSize: 12, color: "var(--ok)", marginRight: "auto" }}>All changes saved</span>}
           {saveError && <span style={{ fontSize: 12, color: "var(--crit)", marginRight: "auto" }}>{saveError}</span>}
-          <button onClick={openDrafts} disabled={saving} className="btn btn-ghost">Drafts{drafts.length > 0 ? ` (${drafts.length})` : ""}</button>
-          <button onClick={() => onSaveChanges(false)} disabled={saving} className="btn btn-ghost">
+          <button onClick={() => saveAsDraft(false)} disabled={saving || savingDraft} className="btn btn-ghost">
+            {savingDraft ? "Saving…" : "Save as draft"}
+          </button>
+          <button onClick={() => onSaveChanges(false)} disabled={saving || savingDraft} className="btn btn-ghost">
             {saving ? "Saving…" : "Save"}
           </button>
-          <button onClick={() => onSaveChanges(true)} disabled={saving} className="btn btn-filled">
+          <button onClick={() => onSaveChanges(true)} disabled={saving || savingDraft} className="btn btn-filled">
             {saving ? "Saving…" : "Save & close"}
           </button>
-
-          {showDrafts && (
-            <div style={{
-              position: "absolute", bottom: "calc(100% + 8px)", right: 0, zIndex: 50,
-              width: 320, maxHeight: 360, overflowY: "auto",
-              background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: 8,
-              boxShadow: "var(--shadow-md)", padding: 10,
-            }}>
-              <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--on-variant)" }}>Drafts</span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowDrafts(false)}>
-                  <i className="ti ti-x" />
-                </button>
-              </div>
-              <button type="button" className="btn btn-ghost btn-sm" style={{ width: "100%", marginBottom: 8 }} onClick={saveCurrentAsDraft}>
-                <i className="ti ti-device-floppy" /> Save current as draft
-              </button>
-              {draftSavedMsg && (
-                <div style={{ fontSize: 12, color: "var(--ok)", marginBottom: 8 }}>
-                  <i className="ti ti-circle-check" /> Draft saved
-                </div>
-              )}
-              {drafts.length === 0 ? (
-                <div style={{ fontSize: 12, color: "var(--on-variant)", padding: "8px 0" }}>No saved drafts yet.</div>
-              ) : (
-                drafts.map(d => (
-                  <div key={d.id} className="flex items-center gap-2" style={{ padding: "6px 0", borderTop: "1px solid var(--outline-v)" }}>
-                    <span style={{ fontSize: 12, flex: 1 }}>{new Date(d.savedAt).toLocaleString()}</span>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => loadDraft(d)}>Load</button>
-                    <button type="button" className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteDraft(d.id)}>
-                      <i className="ti ti-trash" />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
         </div>
       }
     >
@@ -892,6 +888,19 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                 <p>{step === 1 ? "Position, reporting line, work setup and pay." : STEPS[step].sub}</p>
               </div>
             </div>
+
+            {showDraftPrompt && pendingDraft && (
+              <div style={{
+                margin: "0 24px 12px", padding: "10px 14px", borderRadius: 8,
+                background: "var(--warn-c)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+              }}>
+                <span style={{ fontSize: 13, flex: 1, minWidth: 200 }}>
+                  You have unsaved draft changes from {new Date(pendingDraft.updated_at).toLocaleString()}.
+                </span>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={discardDraft}>Discard draft and start fresh</button>
+                <button type="button" className="btn btn-filled btn-sm" onClick={resumeDraft}>Resume draft</button>
+              </div>
+            )}
 
             <div className="wiz-body">
               {step === 0 && (
@@ -1437,26 +1446,37 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     </Modal>
 
     {showCloseConfirm && (
-      <Modal
-        title="Unsaved changes"
-        onClose={() => setShowCloseConfirm(false)}
-        footer={
-          <div className="flex items-center gap-3 w-full justify-end">
-            <button className="btn btn-ghost" onClick={() => setShowCloseConfirm(false)}>Keep editing</button>
-            <button
-              className="btn btn-filled"
-              style={{ background: "var(--error)" }}
-              onClick={() => { setShowCloseConfirm(false); onClose(); }}
-            >
-              Discard changes
+      <div
+        className="modal-overlay open"
+        style={{ zIndex: 1010 }}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="unsaved-changes-title"
+        onKeyDown={e => { if (e.key === "Escape") setShowCloseConfirm(false); }}
+        onMouseDown={e => { if (e.target === e.currentTarget) setShowCloseConfirm(false); }}
+      >
+        <div className="modal" style={{ maxWidth: "min(440px, 94vw)" }}>
+          <div className="modal-header">
+            <div id="unsaved-changes-title" className="modal-title">You have unsaved changes</div>
+          </div>
+          <div className="modal-body">
+            <p style={{ fontSize: 14, color: "var(--on-variant)", lineHeight: 1.6, margin: 0 }}>
+              What would you like to do with your changes?
+            </p>
+          </div>
+          <div className="modal-footer" style={{ flexWrap: "wrap", gap: 8 }}>
+            {/* Default focus lands here per spec — the safest action (don't lose anything, keep going). */}
+            <button autoFocus className="btn btn-ghost" onClick={() => setShowCloseConfirm(false)}>Keep editing</button>
+            <button className="btn btn-ghost" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Don&apos;t save</button>
+            <button className="btn btn-ghost" disabled={savingDraft} onClick={async () => { setShowCloseConfirm(false); await saveAsDraft(true); }}>
+              {savingDraft ? "Saving…" : "Save as draft"}
+            </button>
+            <button className="btn btn-filled" disabled={saving} onClick={async () => { setShowCloseConfirm(false); await onSaveChanges(true); }}>
+              {saving ? "Saving…" : "Save"}
             </button>
           </div>
-        }
-      >
-        <p style={{ fontSize: 13, color: "var(--on-variant)" }}>
-          You have unsaved changes to this record. Closing now will discard them — save, or save as a draft to come back to later, first.
-        </p>
-      </Modal>
+        </div>
+      </div>
     )}
     </>
   );

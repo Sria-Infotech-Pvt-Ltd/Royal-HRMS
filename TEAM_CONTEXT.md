@@ -4707,6 +4707,25 @@ Tested on the private DB `test_neondb_uat3040`. **Open items are listed at the e
 
 ---
 
+### 26. Edit Employee: Save as Draft (ticket pasted without a bug number)
+
+**What it does.** The Edit full record panel has Save as draft / Save / Save & close. A draft stores every unsaved edit across all 9 steps plus the step the user was on, in `employee_edit_drafts` (`EmployeeEditDraft`, one row per employee per creator). The live record is not touched until Save or Save & close succeeds, which then deletes the draft.
+
+| Requirement | Where |
+|---|---|
+| Save as Draft on every step | footer of `EditRecordModal.tsx` |
+| Banner + Resume / Discard on reopen | same file; banner "You have unsaved draft changes from <date>", discard asks for confirmation |
+| Resume restores fields and last step | `POST /employees/<id>/edit-draft/resume/` |
+| Visibility (item 7) | **Private to the creator.** Another admin sees no draft, cannot resume or discard it, and saving their own does not touch it. This was decided by the product owner earlier; confirm if "take over" is wanted. |
+| Expiry (item 8) | None for now (owner's answer). Not built. |
+| Audit (item 9) | `employee_edit_draft_created`, `_updated`, `_resumed`, `_discarded` (module employees). Opening the panel only reads, so it is not logged. |
+| Draft indicator | `has_edit_draft` on the employee list rows and profile, shown as a "Draft" badge in the table row and the drawer header. Only the viewer's own drafts count. |
+
+**Known gap:** when Save fails validation the panel shows the error banner but does not jump to the step holding the bad field.
+
+**Tests:** `accounts/tests_employee_edit_draft.py` (15: create/update/resume/discard, audit rows, permission, privacy between admins, list and profile flag).
+**Ops:** migration `0205_employeeeditdraft` must run on UAT.
+
 ## Session Log — 2026-10-28 — Merged teammate branch `origin/28-oct-2026` into `New-AI`
 
 Her branch chain (26-oct-safura -> 27-oct-2026 -> 28-oct-2026) brought 4 commits: attendance Not-joined/Pending, F&F PF/PT recovery + numbering, 2026 holiday calendar, ESS/onboarding UI, requirements bump. Six files conflicted; how each was resolved:

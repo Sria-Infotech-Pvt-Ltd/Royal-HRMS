@@ -85,7 +85,7 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
           <Avatar text={initials(e.firstName, e.lastName)} size={32} color={tint.bg} textColor={tint.text} shape="square" className="av" photoUrl={e.photoUrl} />
         </div>
         <div className="min-w-0">
-          <div className="n truncate">{fullName(e)}</div>
+          <div className="n truncate">{fullName(e)}{e.hasEditDraft && <span className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold align-middle" style={{ background: "var(--amber-bg, #fef3c7)", color: "var(--amber-ink, #92400e)" }} title="You have unsaved draft changes for this employee">Draft</span>}</div>
           <div className="i truncate">{e.code}</div>
         </div>
       </div>
