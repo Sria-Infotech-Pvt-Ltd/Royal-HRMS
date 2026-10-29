@@ -87,3 +87,44 @@ class PositionCreateValidationTests(TestCase):
         chief_b.refresh_from_db()
         self.assertTrue(chief_a.is_chief)
         self.assertTrue(chief_b.is_chief)
+
+    def test_creating_a_chief_also_sets_can_manage_team(self):
+        # A unit's chief is, by definition, that unit's team manager — without
+        # can_manage_team, a chief resolved as someone's L1 leave approver
+        # (services_reporting_line's org-chart fallback) never sees that
+        # request in their own approval queue (_approval_scope_filter gates
+        # the L1 queue on can_manage_team, not is_chief).
+        resp = self.client.post(reverse('position-list'), {
+            'org_unit': str(self.unit.id), 'title': 'Head of Engineering', 'is_chief': True,
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        position = Position.objects.get(pk=resp.data['data']['id'])
+        self.assertTrue(position.can_manage_team)
+
+    def test_editing_a_position_to_be_chief_also_sets_can_manage_team(self):
+        position = Position.objects.create(org_unit=self.unit, title='Deputy Head', is_chief=False, can_manage_team=False)
+        resp = self.client.put(reverse('position-detail', args=[position.id]), {
+            'org_unit': str(self.unit.id), 'title': position.title, 'is_chief': True,
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        position.refresh_from_db()
+        self.assertTrue(position.can_manage_team)
+
+    def test_creating_a_non_chief_does_not_force_can_manage_team(self):
+        resp = self.client.post(reverse('position-list'), {
+            'org_unit': str(self.unit.id), 'title': 'Engineer', 'is_chief': False,
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        position = Position.objects.get(pk=resp.data['data']['id'])
+        self.assertFalse(position.can_manage_team)
+
+    def test_unsetting_chief_does_not_revoke_can_manage_team(self):
+        # Never silently revoke access — same rule this codebase applies everywhere else.
+        position = Position.objects.create(org_unit=self.unit, title='Head of Engineering', is_chief=True, can_manage_team=True)
+        resp = self.client.put(reverse('position-detail', args=[position.id]), {
+            'org_unit': str(self.unit.id), 'title': position.title, 'is_chief': False,
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        position.refresh_from_db()
+        self.assertFalse(position.is_chief)
+        self.assertTrue(position.can_manage_team)

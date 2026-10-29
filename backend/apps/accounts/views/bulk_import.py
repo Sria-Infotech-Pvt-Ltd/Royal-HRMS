@@ -67,6 +67,7 @@ from apps.accounts.models import (
     EmailTemplateAttachment,
     EmailTemplateCategory,
     EmployeeApprovalOverride,
+    EmployeeCodeSeries,
     EmployeeCodeSettings,
     HireAction,
     JobTemplate,
@@ -336,11 +337,8 @@ class EmployeeBulkImportView(APIView):
                         secrets.choice(string.ascii_letters + string.digits)
                         for _ in range(12)
                     )
-                    employee_id = EmployeeCodeSettings.generate_employee_id(
-                        first_name=vd['first_name'],
-                        last_name=vd['last_name'],
-                        date_of_joining=vd.get('date_of_joining'),
-                    )
+                    # One numbering series per employment type (e.g. EMP/CON/FRL).
+                    employee_id = EmployeeCodeSeries.generate_employee_id_for_type(vd.get('employee_type') or 'Permanent')
                     full_name   = f'{vd["first_name"]} {vd["last_name"]}'
 
                     user = User.objects.create_user(

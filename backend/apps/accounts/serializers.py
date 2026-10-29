@@ -48,6 +48,7 @@ from apps.accounts.models import (
     EmailTemplate,
     EmailTemplateAttachment,
     EmailTemplateCategory,
+    EmployeeCodeSeries,
     EmployeeCodeSettings,
     EmployeeDocument,
     EmployeeProfile,
@@ -57,6 +58,7 @@ from apps.accounts.models import (
     OnboardingSection,
     OrgUnit,
     Permission,
+    PermissionTemplate,
     Placement,
     Position,
     SMTPSettings,
@@ -573,6 +575,20 @@ class PositionSerializer(serializers.ModelSerializer):
         with transaction.atomic():
             if validated_data.get('is_chief'):
                 self._unset_other_chiefs(validated_data['org_unit'])
+                # A unit's chief is, by definition, the manager of that
+                # unit's team — can_manage_team is a SEPARATE flag
+                # (Settings > Permissions / Position access) that nothing
+                # here used to set automatically. Without it, a chief
+                # resolved as someone's L1 leave approver (the org-chart
+                # fallback in services_reporting_line.resolve_manager) never
+                # saw that request in their own approval queue
+                # (_approval_scope_filter gates the L1 queue on
+                # can_manage_team, not on is_chief) — confirmed live: 43
+                # existing chief positions had this gap (see the matching
+                # data migration). Never forced back to False when a
+                # position stops being chief — same "never silently revoke"
+                # rule as everywhere else in this codebase.
+                validated_data['can_manage_team'] = True
             return super().create(validated_data)
 
     def update(self, instance, validated_data):
@@ -580,6 +596,7 @@ class PositionSerializer(serializers.ModelSerializer):
             if validated_data.get('is_chief'):
                 org_unit = validated_data.get('org_unit', instance.org_unit)
                 self._unset_other_chiefs(org_unit, exclude_pk=instance.pk)
+                validated_data['can_manage_team'] = True
             return super().update(instance, validated_data)
 
 
@@ -1380,6 +1397,105 @@ class EmployeeCodeSettingsSerializer(serializers.ModelSerializer):
         if value < 1:
             raise serializers.ValidationError('Starting number must be at least 1.')
         return value
+
+
+class EmployeeCodeSeriesSerializer(serializers.ModelSerializer):
+    """One row per employment type — see EmployeeCodeSeries' own docstring.
+    employment_type is read-only here: each type gets exactly one series row
+    (created on demand, see the view), never reassigned to a different type."""
+    employment_type_display = serializers.CharField(source='get_employment_type_display', read_only=True)
+    format_description       = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = EmployeeCodeSeries
+        fields = ['employment_type', 'employment_type_display', 'prefix', 'padding', 'next_sequence', 'format_description']
+        read_only_fields = ['employment_type', 'employment_type_display', 'format_description']
+
+    def get_format_description(self, obj) -> str:
+        seq = str(obj.next_sequence).zfill(obj.padding)
+        return f'{obj.prefix}{seq}'
+
+    # Same validation rules as EmployeeCodeSettingsSerializer above — kept as
+    # a literal copy rather than a shared mixin, since the two models' field
+    # sets already diverge (employment_type) and are edited by two separate
+    # screens that don't need to change in lockstep.
+    def validate_prefix(self, value):
+        value = value.strip().upper()
+        if not re.fullmatch(r'[A-Z0-9_-]+', value):
+            raise serializers.ValidationError(
+                'Prefix may contain only letters, numbers, hyphens, and underscores.'
+            )
+        return value
+
+    def validate_padding(self, value):
+        if not 3 <= value <= 8:
+            raise serializers.ValidationError('Padding must be between 3 and 8.')
+        return value
+
+    def validate_next_sequence(self, value):
+        if value < 1:
+            raise serializers.ValidationError('Starting number must be at least 1.')
+        return value
+
+
+class PermissionTemplateSerializer(serializers.ModelSerializer):
+    """codenames in/out as a flat list of strings — the M2M-to-Permission
+    plumbing (validated against real, known codenames) stays internal."""
+    codenames = serializers.ListField(child=serializers.CharField(), write_only=True, required=False, default=list)
+    permission_codenames = serializers.SerializerMethodField()
+    position_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = PermissionTemplate
+        fields = [
+            'id', 'name', 'description', 'can_manage_team', 'can_manage_branch',
+            'codenames', 'permission_codenames', 'position_count', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'permission_codenames', 'position_count', 'created_at', 'updated_at']
+
+    def get_permission_codenames(self, obj) -> list[str]:
+        return sorted(obj.permissions.values_list('codename', flat=True))
+
+    def get_position_count(self, obj) -> int:
+        # How many positions currently exist to apply this template to isn't
+        # meaningful (a template isn't a live link to any position — see the
+        # model's own docstring) — this is a placeholder 0 for a future
+        # "last applied to N positions" log if ever needed, not a live count.
+        return 0
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Name is required.')
+        qs = PermissionTemplate.objects.filter(name__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('A template with this name already exists.')
+        return value
+
+    def validate_codenames(self, value):
+        wanted = set(value)
+        known = set(Permission.objects.filter(codename__in=wanted).values_list('codename', flat=True))
+        unknown = wanted - known
+        if unknown:
+            raise serializers.ValidationError(f'Unknown permission(s): {", ".join(sorted(unknown))}.')
+        return value
+
+    def create(self, validated_data):
+        codenames = validated_data.pop('codenames', [])
+        template = PermissionTemplate.objects.create(**validated_data)
+        template.permissions.set(Permission.objects.filter(codename__in=codenames))
+        return template
+
+    def update(self, instance, validated_data):
+        codenames = validated_data.pop('codenames', None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        if codenames is not None:
+            instance.permissions.set(Permission.objects.filter(codename__in=codenames))
+        return instance
 
 
 # ─── Employee Profile (onboarding wizard) ─────────────────────────────────────

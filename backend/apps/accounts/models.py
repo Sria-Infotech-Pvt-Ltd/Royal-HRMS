@@ -3049,3 +3049,6 @@ from .models_edit_draft import EmployeeEditDraft  # noqa: E402,F401
 
 # New-hire onboarding history (additive) — see models_onboarding_event.py.
 from .models_onboarding_event import OnboardingEvent  # noqa: E402,F401
+
+# Reusable bulk permission bundles (additive) — see models_permission_template.py.
+from .models_permission_template import PermissionTemplate  # noqa: E402,F401

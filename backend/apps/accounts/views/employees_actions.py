@@ -67,6 +67,7 @@ from apps.accounts.models import (
     EmailTemplateAttachment,
     EmailTemplateCategory,
     EmployeeApprovalOverride,
+    EmployeeCodeSeries,
     EmployeeCodeSettings,
     HireAction,
     JobTemplate,
@@ -95,6 +96,7 @@ from apps.accounts.serializers import (
     EmailTemplatePreviewSerializer,
     EmailTemplateSerializer,
     EmployeeBulkImportRowSerializer,
+    EmployeeCodeSeriesSerializer,
     EmployeeCodeSettingsSerializer,
     ForgotPasswordSerializer,
     JobTemplateSerializer,
@@ -507,3 +509,59 @@ class EmployeeCodeSettingsView(APIView):
 
     def patch(self, request):
         return self.put(request)
+
+
+class EmployeeCodeSeriesListView(APIView):
+    """GET /settings/employee-code/series/ — one row per employment type
+    (Permanent/Contract/Freelancer/...), auto-created on first read from
+    EmployeeCodeSettings' current defaults (same seeding EmployeeCodeSeries
+    already does lazily in generate_employee_id_for_type) so a type added
+    after this feature shipped still shows up here without a migration."""
+    permission_classes = [IsAuthenticated, CanManageRoles]
+
+    def get(self, request):
+        base = EmployeeCodeSettings.get()
+        existing = {s.employment_type for s in EmployeeCodeSeries.objects.all()}
+        for value, _label in User.EMPLOYMENT_TYPE_CHOICES:
+            if value not in existing:
+                EmployeeCodeSeries.objects.get_or_create(
+                    employment_type=value,
+                    defaults={'prefix': base.prefix, 'padding': base.padding, 'next_sequence': base.next_sequence},
+                )
+        series = EmployeeCodeSeries.objects.all()
+        return success('Employee code series retrieved.', data=EmployeeCodeSeriesSerializer(series, many=True).data)
+
+
+class EmployeeCodeSeriesDetailView(APIView):
+    """PUT /settings/employee-code/series/<employment_type>/ — edit one
+    type's prefix/padding/next starting number. Same reserve-and-increment
+    model as EmployeeCodeSettingsView; employment_type itself is never
+    editable here (it's the row's identity, not a field of it)."""
+    permission_classes = [IsAuthenticated, CanManageRoles]
+
+    @transaction.atomic
+    def put(self, request, employment_type: str):
+        if employment_type not in dict(User.EMPLOYMENT_TYPE_CHOICES):
+            return error('Unknown employment type.', http_status=status.HTTP_404_NOT_FOUND)
+        base = EmployeeCodeSettings.get()
+        series = EmployeeCodeSeries.objects.select_for_update().get_or_create(
+            employment_type=employment_type,
+            defaults={'prefix': base.prefix, 'padding': base.padding, 'next_sequence': base.next_sequence},
+        )[0]
+        serializer = EmployeeCodeSeriesSerializer(series, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return error('Please fix the errors below.', data=serializer.errors)
+        serializer.save()
+        AuditLog.objects.create(
+            user=request.user,
+            action='employee_code_series_updated',
+            module='accounts',
+            object_id=employment_type,
+            changes=dict(serializer.validated_data),
+            ip_address=get_client_ip(request),
+        )
+        logger.info('Employee code series for %s updated by %s', employment_type, request.user.email)
+        return success('Employee code series updated.', data=serializer.data)
+
+    def patch(self, request, employment_type: str):
+        return self.put(request, employment_type)

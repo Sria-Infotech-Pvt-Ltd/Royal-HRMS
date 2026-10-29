@@ -22,9 +22,14 @@ class EmployeeHeadcountView(APIView):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
 
         people = User.objects.exclude(employee_id='')
-        if can_manage_team(request.user):
+        # settings.edit first, same precedence fix as EmployeeListCreateView.get() —
+        # a full admin who also holds a can_manage_team position must still see
+        # everyone, not just their own direct reports.
+        if _has_perm(request.user, 'settings.edit'):
+            pass
+        elif can_manage_team(request.user):
             people = people.filter(reporting_manager=request.user)
-        elif not _has_perm(request.user, 'settings.edit') and request.user.branch:
+        elif request.user.branch:
             people = people.filter(branch=request.user.branch)
 
         as_of = None

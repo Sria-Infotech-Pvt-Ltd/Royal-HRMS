@@ -13,6 +13,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import PermissionMatrix from "@/components/PermissionMatrix";
 import PersonAccessPanel from "@/components/PersonAccessPanel";
+import PermissionTemplatesPanel from "@/components/settings/PermissionTemplatesPanel";
 import type { PermissionCatalogueItem } from "@/types/orgStructure";
 
 interface Catalogue { results: Record<string, PermissionCatalogueItem[]> }
@@ -27,7 +28,7 @@ export default function AccessSettingsPage() {
   const catalogue = useFetch<Catalogue>(`${API.permissions.list}?page_size=500`);
   const baseline = useFetch<Baseline>(API.access.baselinePermissions);
   const [granted, setGranted] = useState<Set<string>>(new Set());
-  const [tab, setTab] = useState<"everyone" | "person">("everyone");
+  const [tab, setTab] = useState<"everyone" | "person" | "templates">("everyone");
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
@@ -99,12 +100,21 @@ export default function AccessSettingsPage() {
         </p>
       </header>
 
+      <div className="grid gap-2 rounded-xl border border-[var(--outline-v)] bg-[var(--bg-low)] p-3 text-xs leading-5 text-[var(--on-variant)] sm:grid-cols-3">
+        <p><strong className="text-[var(--on-bg)]">Everyone</strong> — what every employee can do, no matter their position.</p>
+        <p><strong className="text-[var(--on-bg)]">One person</strong> — extra access for just one specific employee, on top of their position.</p>
+        <p><strong className="text-[var(--on-bg)]">Bulk apply (Templates)</strong> — give the same permissions to many positions at once, e.g. every manager.</p>
+      </div>
+
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={tab === "everyone"} className={`tab${tab === "everyone" ? " active" : ""}`} onClick={() => setTab("everyone")}>
           Everyone
         </button>
         <button role="tab" aria-selected={tab === "person"} className={`tab${tab === "person" ? " active" : ""}`} onClick={() => setTab("person")}>
           One person
+        </button>
+        <button role="tab" aria-selected={tab === "templates"} className={`tab${tab === "templates" ? " active" : ""}`} onClick={() => setTab("templates")}>
+          Bulk apply (Templates)
         </button>
       </div>
 
@@ -117,6 +127,8 @@ export default function AccessSettingsPage() {
         </p>
       ) : loadError ? null : tab === "person" ? (
         <PersonAccessPanel catalogue={catalogueByModule} canEdit={canEdit} />
+      ) : tab === "templates" ? (
+        <PermissionTemplatesPanel catalogue={catalogueByModule} canEdit={canEdit} />
       ) : modules.length === 0 ? (
         <p className="py-10 text-center text-sm text-[var(--on-variant)]">No permissions are available.</p>
       ) : (

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import EmployeeCodeSeriesCard from "./_components/EmployeeCodeSeriesCard";
 
 interface EmployeeCodeSettings {
   prefix:        string;
@@ -126,7 +127,7 @@ export default function EmployeeCodeSettingsPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Employee ID Format</div>
-          <div className="page-sub">Configure the prefix, digit count, and starting number for employee codes</div>
+          <div className="page-sub">Configure the default ID format below, and each worker type&apos;s own series further down</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
@@ -159,7 +160,7 @@ export default function EmployeeCodeSettingsPage() {
         {/* Config card */}
         <div className="card mb-24" style={{ flex: 1 }}>
           <div className="card-header">
-            <div className="card-title"><i className="ti ti-id-badge" /> Configuration</div>
+            <div className="card-title"><i className="ti ti-id-badge" /> Default Configuration</div>
           </div>
           <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
 
@@ -275,6 +276,8 @@ export default function EmployeeCodeSettingsPage() {
           </div>
         </div>
       </div>
+
+      <EmployeeCodeSeriesCard />
 
       {/* Bottom action bar */}
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, paddingBottom: 32 }}>

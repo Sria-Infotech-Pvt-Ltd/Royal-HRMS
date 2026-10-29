@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import ToggleSwitch from "@/components/ToggleSwitch";
+import PermissionMatrix from "@/components/PermissionMatrix";
 import type { PermissionCatalogueItem, Position, PositionPermissions } from "@/types/orgStructure";
 
 interface Props {
@@ -13,16 +14,29 @@ interface Props {
   onSaved: () => void;
 }
 
+// Turning on "Team manager" with none of these checked left a position that
+// appears in manager dropdowns/workflows but can't actually see or approve
+// anything for its team — confusing ("0 permissions enabled" right after
+// flipping the toggle on). Mirrors the same bundle this codebase's own
+// `manager` demo persona is seeded with (seed_demo_personas.py) — the
+// project's own definition of "what a manager position needs" — applied
+// here as a one-time default, not a hidden/recurring side effect: it only
+// fires the moment the toggle flips OFF->ON, never removes anything on the
+// way back off, and every box it checks stays a normal, uncheckable-if-
+// unwanted checkbox afterward.
+const TEAM_MANAGER_DEFAULT_PERMISSIONS = ["employees.view", "leave.approve", "attendance.view"];
+
 export default function PositionPermissionsModal({ position, onClose, onSaved }: Props) {
   const [catalogue, setCatalogue] = useState<Record<string, PermissionCatalogueItem[]>>({});
   const [granted, setGranted] = useState<Set<string>>(new Set());
   const [canManageTeam, setCanManageTeam] = useState(false);
   const [canManageBranch, setCanManageBranch] = useState(false);
-  const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [loadedPositionId, setLoadedPositionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [appliedDefaultsHint, setAppliedDefaultsHint] = useState(false);
+  const [search, setSearch] = useState("");
 
   const positionId = position?.id;
 
@@ -31,9 +45,9 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
     let isCurrent = true;
     setIsLoading(true);
     setError(null);
-    setSearch("");
     setLoadedPositionId(null);
     setGranted(new Set());
+    setAppliedDefaultsHint(false);
 
     Promise.all([
       clientApi.get<{ data: { results: Record<string, PermissionCatalogueItem[]> } }>(API.permissions.list, { params: { page_size: 500 } }),
@@ -63,19 +77,22 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
     return () => { isCurrent = false; };
   }, [positionId]);
 
-  const filteredModules = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return Object.entries(catalogue)
-      .map(([module, items]) => [
-        module,
-        term
-          ? items.filter(item =>
-              `${item.action} ${item.codename} ${item.description ?? ""}`.toLowerCase().includes(term),
-            )
-          : items,
-      ] as const)
-      .filter(([, items]) => items.length > 0);
-  }, [catalogue, search]);
+  function toggleMany(codenames: string[], isOn: boolean) {
+    setGranted(previous => {
+      const next = new Set(previous);
+      codenames.forEach(codename => { if (isOn) next.add(codename); else next.delete(codename); });
+      return next;
+    });
+  }
+
+  function onTeamManagerChange(next: boolean) {
+    setCanManageTeam(next);
+    if (!next) return; // only auto-apply on OFF->ON, never remove anything going back off
+    const missing = TEAM_MANAGER_DEFAULT_PERMISSIONS.filter(codename => !granted.has(codename));
+    if (missing.length === 0) return;
+    setGranted(previous => new Set([...previous, ...missing]));
+    setAppliedDefaultsHint(true);
+  }
 
   function toggle(codename: string) {
     setGranted(previous => {
@@ -110,11 +127,24 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
 
   if (!position) return null;
 
+  const term = search.trim().toLowerCase();
+  const modules = Object.entries(catalogue)
+    .map(([module, items]) => [
+      module,
+      term
+        ? items.filter(item => `${item.action} ${item.codename} ${item.description ?? ""}`.toLowerCase().includes(term))
+        : items,
+    ] as [string, PermissionCatalogueItem[]])
+    .filter(([, items]) => items.length > 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+  const permissionCount = modules.reduce((total, [, items]) => total + items.length, 0);
+  const grantedCount = modules.reduce((total, [, items]) => total + items.filter(item => granted.has(item.codename)).length, 0);
+
   return (
     <Modal
       title={<><i className="ti ti-shield-lock" style={{ marginRight: 8 }} />Position access</>}
       onClose={onClose}
-      maxWidth={900}
+      maxWidth={1040}
       scrollBody
       footer={
         <>
@@ -169,7 +199,7 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
                 <span className="block text-sm font-semibold text-[var(--on-bg)]">Team manager</span>
                 <span className="mt-1 block text-xs leading-5 text-[var(--on-variant)]">Marks this position as a team manager for manager-based workflows.</span>
               </span>
-              <ToggleSwitch checked={canManageTeam} onChange={setCanManageTeam} />
+              <ToggleSwitch checked={canManageTeam} onChange={onTeamManagerChange} />
             </label>
             <label className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-[var(--outline-v)] bg-[var(--surface)] p-4">
               <span>
@@ -179,13 +209,24 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
               <ToggleSwitch checked={canManageBranch} onChange={setCanManageBranch} />
             </label>
           </div>
+          {appliedDefaultsHint && (
+            <div className="flex items-start gap-2 rounded-xl border border-[var(--primary-c)] bg-[var(--sec-c)] p-3 text-xs leading-5 text-[var(--on-bg)]">
+              <i className="ti ti-info-circle mt-0.5 shrink-0 text-base text-[var(--primary)]" />
+              <p>
+                Turning on Team manager also checked the usual manager permissions below (View employees, Approve leave, View attendance)
+                so this position isn&apos;t left with 0 permissions. Uncheck any you don&apos;t want before saving.
+              </p>
+            </div>
+          )}
         </section>
 
         <section aria-label="Position permissions">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-[var(--on-bg)]">Module permissions</h3>
-              <p className="mt-1 text-xs text-[var(--on-variant)]">Select only the actions required for this position.</p>
+              <p className="mt-1 text-xs text-[var(--on-variant)]">
+                Select only the actions required for this position. <strong className="text-[var(--on-bg)]">{grantedCount} of {permissionCount}</strong> enabled.
+              </p>
             </div>
             <label className="relative w-full sm:w-64">
               <i className="ti ti-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--on-variant)]" />
@@ -206,54 +247,12 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
               <i className="ti ti-loader-2 mr-2 animate-spin text-lg text-[var(--primary)]" />
               Loading position permissions…
             </div>
-          ) : filteredModules.length === 0 ? (
+          ) : modules.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--outline)] px-4 py-10 text-center text-sm text-[var(--on-variant)]">
               No permissions match that search.
             </div>
           ) : (
-            <div className="grid items-start gap-3 md:grid-cols-2">
-              {filteredModules.map(([module, items]) => {
-                const enabled = items.filter(item => granted.has(item.codename)).length;
-                return (
-                  <section key={module} className="overflow-hidden rounded-xl border border-[var(--outline-v)] bg-[var(--surface)]">
-                    <div className="flex items-center justify-between gap-3 border-b border-[var(--outline-v)] px-4 py-3">
-                      <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-[var(--on-variant)]">{module.replace(/_/g, " ")}</h4>
-                      <span className="text-xs font-medium text-[var(--on-variant)]">{enabled}/{items.length}</span>
-                    </div>
-                    <div className="space-y-1 p-2">
-                      {items.map(item => {
-                        const isGranted = granted.has(item.codename);
-                        return (
-                          <label
-                            key={item.codename}
-                            className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
-                              isGranted
-                                ? "border-[var(--primary-c)] bg-[var(--sec-c)]"
-                                : "border-transparent hover:border-[var(--outline-v)] hover:bg-[var(--bg-low)]"
-                            }`}
-                          >
-                            <input
-                              className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]"
-                              type="checkbox"
-                              checked={isGranted}
-                              onChange={() => toggle(item.codename)}
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="flex items-center gap-1.5 text-sm font-semibold capitalize text-[var(--on-bg)]">
-                                {item.action}
-                                {item.is_sensitive && <i className="ti ti-alert-triangle text-xs text-[var(--warn)]" aria-label="Sensitive permission" />}
-                              </span>
-                              {item.description && <span className="mt-0.5 block text-xs leading-4 text-[var(--on-variant)]">{item.description}</span>}
-                              <span className="mt-1 block truncate font-mono text-[10px] text-[var(--outline)]">{item.codename}</span>
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
+            <PermissionMatrix modules={modules} granted={granted} onToggle={toggle} onToggleMany={toggleMany} />
           )}
         </section>
       </div>

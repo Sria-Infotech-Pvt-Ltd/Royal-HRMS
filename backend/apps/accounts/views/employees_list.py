@@ -68,6 +68,7 @@ from apps.accounts.models import (
     EmailTemplateAttachment,
     EmailTemplateCategory,
     EmployeeApprovalOverride,
+    EmployeeCodeSeries,
     EmployeeCodeSettings,
     HireAction,
     JobTemplate,
@@ -163,6 +164,13 @@ class EmployeeListCreateView(APIView):
         # Everyone else without settings.edit is scoped to their own branch, and
         # cannot be overridden by query params.
         #
+        # settings.edit (full admin) is checked FIRST and unconditionally
+        # bypasses both narrowings below — a full admin who ALSO happens to
+        # hold a can_manage_team position (e.g. an org-unit Chief) must still
+        # see every employee, not just their own direct reports. Without this,
+        # such an admin's own directory showed 0 employees whenever they had
+        # no direct reports of their own (confirmed live).
+        #
         # Exception: picking a KT handover assignee for the viewer's OWN
         # separation request. A manager/HR can't assign their own handover to
         # their own report (see SeparationHandoverTaskListCreateView.post), so
@@ -177,9 +185,11 @@ class EmployeeListCreateView(APIView):
             id=own_sep_request_id, employee=request.user,
         ).exclude(status=SEP_REJECTED).exists()
 
-        if can_manage_team(request.user) and not widen_for_own_separation:
+        if _has_perm(request.user, 'settings.edit'):
+            pass
+        elif can_manage_team(request.user) and not widen_for_own_separation:
             qs = qs.filter(reporting_manager=request.user)
-        elif not _has_perm(request.user, 'settings.edit') and request.user.branch:
+        elif request.user.branch:
             qs = qs.filter(branch=request.user.branch)
         if widen_for_own_separation:
             qs = qs.exclude(reporting_manager=request.user)
@@ -400,11 +410,10 @@ class EmployeeListCreateView(APIView):
 
         temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
-        employee_id = EmployeeCodeSettings.generate_employee_id(
-            first_name=first_name,
-            last_name=last_name,
-            date_of_joining=date_of_joining or None,
-        )
+        # One numbering series per employment type (e.g. EMP/CON/FRL) — the
+        # employee_type resolved above decides which series this ID comes
+        # from, same as the Hire wizard already does.
+        employee_id = EmployeeCodeSeries.generate_employee_id_for_type(employee_type)
         full_name = f'{first_name} {last_name}'
 
         with transaction.atomic():
@@ -572,9 +581,12 @@ class EmployeeStatsView(APIView):
 
         base_qs = User.objects.filter(is_active__in=[True, False]).exclude(employee_id='')
 
-        if can_manage_team(request.user):
+        # Same settings.edit-first precedence as EmployeeListCreateView.get() above.
+        if _has_perm(request.user, 'settings.edit'):
+            pass
+        elif can_manage_team(request.user):
             base_qs = base_qs.filter(reporting_manager=request.user)
-        elif not _has_perm(request.user, 'settings.edit') and request.user.branch:
+        elif request.user.branch:
             base_qs = base_qs.filter(branch=request.user.branch)
 
         # branch_names/department_names always come from base_qs (ignores the
