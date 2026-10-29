@@ -1401,6 +1401,8 @@ class MyProfileSerializer(serializers.ModelSerializer):
     role_name       = serializers.CharField(source='role.name',         read_only=True, default='')
     role_display    = serializers.CharField(source='role.display_name', read_only=True, default='')
     profile         = EmployeeProfileSerializer(read_only=True)
+    # Assigned by HR (Settings → Notice Period); employees only see it.
+    notice_period_days = serializers.IntegerField(read_only=True, allow_null=True)
     assessment_status  = serializers.SerializerMethodField()
     reporting_manager  = serializers.SerializerMethodField()
     reporting_approver = serializers.SerializerMethodField()
@@ -1412,7 +1414,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'full_name', 'email', 'phone', 'employee_id',
             'department', 'designation', 'branch',
-            'role_name', 'role_display', 'date_of_joining', 'date_joined',
+            'role_name', 'role_display', 'date_of_joining', 'notice_period_days', 'date_joined',
             'onboarding_status', 'assessment_status',
             'reporting_manager', 'reporting_approver', 'hr',
             'profile', 'profile_photo_url',
@@ -1597,6 +1599,15 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
     name_as_per_aadhar   = serializers.CharField(max_length=150, required=False,
                                                   allow_blank=True, default='')
     annual_ctc           = serializers.CharField(required=False, allow_blank=True, default='')
+    # Optional column — older templates without it keep working (blank = not assigned).
+    notice_period_days   = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_notice_period_days(self, value: str):
+        from apps.accounts.notice_period import parse_notice_period_days
+        err, days = parse_notice_period_days(value)
+        if err:
+            raise serializers.ValidationError(err)
+        return days
 
     def validate_first_name(self, value: str) -> str:
         value = value.strip()

@@ -116,7 +116,7 @@ def _resolve_separation_chain(employee):
             permission__codename__in={'separation.approve', 'settings.edit'}
         ).exists()
     )
-    if is_hr_tier:
+    if is_hr_tier: 
         return [(SEP_STAGE_BRANCH_ADMIN, None)]
 
     from apps.accounts.models import Department
@@ -128,6 +128,19 @@ def _resolve_separation_chain(employee):
 
 def _log(sep_request, user, message: str) -> None:
     SeparationActivity.objects.create(request=sep_request, actor=user, message=message)
+
+
+def _apply_assigned_notice(validated: dict, employee, request, self_service: bool) -> None:
+    """The request's notice period comes from the employee's assigned notice
+    period (Settings → Notice Period): always for an employee's own request —
+    they can't shorten it — and by default when HR files one without a value.
+    HR may still enter a different value (e.g. a waiver). The employee's
+    assigned notice period itself is never changed here."""
+    assigned = employee.notice_period_days
+    if assigned is None:
+        return
+    if self_service or 'notice_period_days' not in request.data:
+        validated['notice_period_days'] = assigned
 
 
 class SeparationRequestListCreateView(APIView):
@@ -189,6 +202,9 @@ class SeparationRequestListCreateView(APIView):
 
         if SeparationRequest.objects.filter(employee=target_employee, status__in=_ACTIVE_STATUSES).exists():
             return error('This employee already has an active separation request.')
+
+        _apply_assigned_notice(serializer.validated_data, target_employee, request,
+                               self_service=target_employee.pk == request.user.pk)
 
         with transaction.atomic():
             last_num = (
@@ -275,6 +291,7 @@ class SeparationRequestDetailView(APIView):
         serializer = SeparationRequestCreateSerializer(sep_request, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
+        _apply_assigned_notice(serializer.validated_data, sep_request.employee, request, self_service=True)
         serializer.save()
         _log(sep_request, request.user, f'Request details updated by {request.user.full_name}.')
         logger.info('Separation request %s updated by %s', sep_request.id, request.user.email)

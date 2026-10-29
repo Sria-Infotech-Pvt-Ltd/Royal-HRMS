@@ -165,6 +165,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     branch          = models.CharField(max_length=100, blank=True)
     phone           = models.CharField(max_length=20, blank=True)
     date_of_joining = models.DateField(null=True, blank=True)
+    # Notice period HR assigned to this employee, in calendar days (empty = not
+    # assigned). A resignation uses it for the expected last working day.
+    notice_period_days = models.PositiveSmallIntegerField(null=True, blank=True)
     reporting_manager = models.ForeignKey(
                             'self',
                             on_delete=models.SET_NULL,

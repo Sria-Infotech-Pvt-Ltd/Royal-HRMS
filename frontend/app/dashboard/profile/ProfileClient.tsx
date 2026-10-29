@@ -16,6 +16,7 @@ import ProfilePhotoModal from "@/components/ProfilePhotoModal";
 import SeparationCard from "./_components/SeparationCard";
 import OnboardingDynamicField from "@/components/OnboardingDynamicField";
 import CustomFieldFileUpload from "@/components/CustomFieldFileUpload";
+import { formatNoticePeriod } from "@/lib/noticePeriod";
 import type { CustomFieldFileValue, OnboardingFieldConfig, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
 
 interface ProfileSub {
@@ -67,6 +68,7 @@ interface ProfileData {
   assessment_status: string | null;
   reporting_manager:  AssignedPerson | null;
   reporting_approver: AssignedPerson | null;
+  notice_period_days?: number | null;
   hr:                 AssignedPerson | null;
   profile:           ProfileSub | null;
   profile_photo_url: string | null;
@@ -676,6 +678,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               </div>
               <div className="form-row cols-2">
                 <AssignedField label="HR" person={profile?.hr} />
+                <ReadField label="Notice Period" value={formatNoticePeriod(profile?.notice_period_days)} />
               </div>
               <div className="form-row cols-2">
                 <div className="field-group">

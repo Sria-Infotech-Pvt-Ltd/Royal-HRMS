@@ -153,6 +153,7 @@ from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
 from core.permissions import HasSettingsPermission, has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
+from apps.accounts.notice_period import parse_notice_period_days
 from core.template_context import (
     candidate_context as _candidate_template_context,
     expense_context as _expense_template_context,
@@ -431,6 +432,7 @@ def _employee_dict(user: User) -> dict:
         'role':           user.role.name         if user.role else '',
         'role_display':   user.role.display_name if user.role else '',
         'date_of_joining': str(user.date_of_joining) if user.date_of_joining else '',
+        'notice_period_days': user.notice_period_days,
         'date_joined':    user.date_joined.date().isoformat(),
         'is_active':      user.is_active,
         'status':         emp_status,
@@ -3636,6 +3638,18 @@ class EmployeeDetailView(APIView):
             employee.date_of_joining = doj
             update_fields.append('date_of_joining')
 
+        # Notice period (days): same editors as every other field here
+        # (employees.edit + branch scope). Blank clears it; the change is audited below.
+        if 'notice_period_days' in data:
+            notice_raw = data.get('notice_period_days')
+            notice_err, notice_days = parse_notice_period_days(notice_raw)
+            if notice_err:
+                return error(notice_err, data={'notice_period_days': notice_err})
+            if employee.notice_period_days != notice_days:
+                changes['notice_period_days'] = {'from': employee.notice_period_days, 'to': notice_days}
+            employee.notice_period_days = notice_days
+            update_fields.append('notice_period_days')
+
         dob_raw = (data.get('date_of_birth') or '').strip()
         if dob_raw:
             try:
@@ -6562,6 +6576,9 @@ _EMP_IMPORT_COL_MAP = {
     'aadhar name': 'name_as_per_aadhar', 'aadhaar name': 'name_as_per_aadhar',
     'basic salary': 'basic_salary', 'basic_salary': 'basic_salary', 'basic': 'basic_salary',
     'annual ctc': 'annual_ctc', 'annual_ctc': 'annual_ctc', 'ctc': 'annual_ctc',
+    'notice period': 'notice_period_days', 'notice_period': 'notice_period_days',
+    'notice period (days)': 'notice_period_days', 'notice period days': 'notice_period_days',
+    'notice_period_days': 'notice_period_days', 'notice days': 'notice_period_days',
 }
 
 _EMP_MAX_IMPORT_ROWS  = 1000
@@ -6824,6 +6841,7 @@ class EmployeeBulkImportView(APIView):
                     branch               = branch_name,
                     phone                = vd.get('phone') or '',
                     date_of_joining      = vd.get('date_of_joining'),
+                    notice_period_days   = vd.get('notice_period_days'),
                     must_change_password = True,
                     onboarding_status    = User.ONBOARDING_PENDING,
                 )
@@ -6980,17 +6998,20 @@ class EmployeeBulkImportSampleView(APIView):
         'First Name', 'Last Name', 'Work Email', 'Mobile Number',
         'Role', 'Department', 'Designation', 'Branch', 'Employee Type',
         'Date of Joining', 'Gender', 'Date of Birth', 'Blood Group', 'Address',
+        'Notice Period (days)',
     ]
     _SAMPLE_ROWS = [
         [
             'John', 'Doe', 'john.doe@company.com', '9876543210',
             'Employee', 'Engineering', 'Software Engineer', 'Mumbai HQ', 'Permanent',
             '2026-01-15', 'Male', '1995-06-20', 'B+', '123 Main Street, Mumbai',
+            '30',
         ],
         [
             'Jane', 'Smith', 'jane.smith@company.com', '9123456789',
             'HR Admin', 'Human Resources', 'HR Manager', 'Delhi Branch', 'Permanent',
             '2026-02-01', 'Female', '1990-03-15', 'A+', '456 Park Avenue, Delhi',
+            '',
         ],
     ]
 

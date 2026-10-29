@@ -10,10 +10,12 @@ export interface PickedEmployee {
   name:        string;
   department:  string;
   designation: string;
+  noticePeriodDays?: number | null; // assigned in Settings → Notice Period
 }
 
 interface ApiEmployeeRow {
   id: string; uuid?: string; employee_id: string; full_name: string; department: string; designation: string;
+  notice_period_days?: number | null;
 }
 
 interface Props {
@@ -75,7 +77,7 @@ export default function EmployeePickerField({
     setOpen(false);
     onChange({
       code: row.employee_id || row.id, uuid: row.uuid ?? "", name: row.full_name,
-      department: row.department, designation: row.designation,
+      department: row.department, designation: row.designation, noticePeriodDays: row.notice_period_days ?? null,
     });
   }
 

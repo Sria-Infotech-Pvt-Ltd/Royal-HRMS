@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import type { SeparationLookupOption, SeparationRequest } from "@/types/separation";
 import { daysBetween, todayIso } from "../_workflow";
 import EmployeePickerField, { type PickedEmployee } from "./EmployeePickerField";
+import { expectedLastWorkingDay, formatNoticePeriod } from "@/lib/noticePeriod";
 
 interface Props {
   mode:            "create" | "edit";
@@ -53,6 +54,27 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
   const [errors,     setErrors]     = useState<FormErrors>({});
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // The proposed last working day follows the expected one until the user picks a date.
+  const [lwdTouched, setLwdTouched] = useState(mode === "edit");
+
+  // Assigned notice period (Settings → Notice Period): the picked employee's
+  // when HR files for someone, otherwise the signed-in employee's own.
+  const forSelf = mode === "edit" ? !!existing?.is_own : !employee;
+  const { data: me } = useFetch<{ notice_period_days?: number | null }>(forSelf ? API.employees.me : null);
+  const assigned: number | null | undefined = forSelf ? me?.notice_period_days : employee?.noticePeriodDays;
+  // An employee can't shorten their own assigned notice period (the backend enforces this too).
+  const noticeLocked = forSelf && assigned !== null && assigned !== undefined;
+
+  useEffect(() => {
+    if (assigned === null || assigned === undefined) return;
+    if (mode === "edit" && !noticeLocked) return;
+    setForm(prev => ({ ...prev, noticePeriodDays: String(assigned) }));
+  }, [assigned, mode, noticeLocked]);
+
+  const expectedLwd = expectedLastWorkingDay(form.requestDate, form.noticePeriodDays === "" ? null : Number(form.noticePeriodDays));
+  useEffect(() => {
+    if (!lwdTouched && expectedLwd) setForm(prev => ({ ...prev, proposedLastWorkingDay: expectedLwd }));
+  }, [expectedLwd, lwdTouched]);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -225,11 +247,18 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
               </label>
               <input
                 type="date" className={`field-input${errors.proposedLastWorkingDay ? " field-error" : ""}`}
-                value={form.proposedLastWorkingDay} onChange={e => setField("proposedLastWorkingDay", e.target.value)}
+                value={form.proposedLastWorkingDay}
+                onChange={e => { setLwdTouched(true); setField("proposedLastWorkingDay", e.target.value); }}
               />
               {errors.proposedLastWorkingDay
                 ? <p className="field-error-msg">{errors.proposedLastWorkingDay}</p>
                 : noticeDays !== null && <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>{noticeDays} day{noticeDays !== 1 ? "s" : ""} from request date</p>}
+              {expectedLwd && (
+                <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>
+                  Expected (request date + notice period): {expectedLwd}
+                  {form.proposedLastWorkingDay && form.proposedLastWorkingDay < expectedLwd && " — earlier than the notice period; HR will review."}
+                </p>
+              )}
             </div>
             <div className="field-group">
               <label className="field-label">
@@ -238,7 +267,13 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
               <input
                 type="number" min="0" className={`field-input${errors.noticePeriodDays ? " field-error" : ""}`}
                 value={form.noticePeriodDays} onChange={e => setField("noticePeriodDays", e.target.value)}
+                readOnly={noticeLocked} aria-readonly={noticeLocked}
               />
+              {assigned !== undefined && (
+                <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>
+                  Assigned notice period: {formatNoticePeriod(assigned)}{noticeLocked ? " (set by HR)" : ""}
+                </p>
+              )}
               {errors.noticePeriodDays && <p className="field-error-msg">{errors.noticePeriodDays}</p>}
             </div>
           </div>

@@ -42,6 +42,8 @@ export interface SeparationRequest {
   request_date:               string; // ISO date
   proposed_last_working_day:  string; // ISO date
   notice_period_days:         number;
+  assigned_notice_period_days?: number | null;
+  expected_last_working_day?: string | null;
   comments:                   string;
   status:                     string;
   status_display:             string;

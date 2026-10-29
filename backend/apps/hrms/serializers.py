@@ -861,6 +861,8 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
     is_own                    = serializers.SerializerMethodField()
     approved_at                = serializers.SerializerMethodField()
     confirmed_last_working_day = serializers.SerializerMethodField()
+    assigned_notice_period_days = serializers.SerializerMethodField()
+    expected_last_working_day   = serializers.SerializerMethodField()
     notice_status              = serializers.SerializerMethodField()
     days_remaining             = serializers.SerializerMethodField()
 
@@ -874,6 +876,7 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
             'document_url', 'created_by_name', 'approval_stages',
             'can_approve', 'can_cancel', 'can_edit', 'can_delete', 'is_own', 'created_at',
             'approved_at', 'confirmed_last_working_day', 'notice_status', 'days_remaining',
+            'assigned_notice_period_days', 'expected_last_working_day',
         ]
 
     def _notice(self, obj):
@@ -886,6 +889,17 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
     def get_approved_at(self, obj):
         info = self._notice(obj)
         return info['approved_at'] if info else None
+
+    def get_assigned_notice_period_days(self, obj):
+        """The employee's notice period from Settings → Notice Period (None if not assigned)."""
+        return obj.employee.notice_period_days
+
+    def get_expected_last_working_day(self, obj):
+        """Request date + this request's notice period (calendar days). An
+        expectation only — confirmed_last_working_day is the approved date."""
+        from apps.accounts.notice_period import expected_last_working_day
+        day = expected_last_working_day(obj.request_date, obj.notice_period_days)
+        return day.isoformat() if day else None
 
     def get_confirmed_last_working_day(self, obj):
         info = self._notice(obj)

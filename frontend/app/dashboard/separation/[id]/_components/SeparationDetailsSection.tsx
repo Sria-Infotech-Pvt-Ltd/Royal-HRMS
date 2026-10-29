@@ -1,5 +1,5 @@
 import type { SeparationRequest } from "@/types/separation";
-import { formatNoticeDate, noticeRemainingLabel } from "@/lib/noticePeriod";
+import { formatNoticeDate, formatNoticePeriod, noticeRemainingLabel } from "@/lib/noticePeriod";
 import { fmtDate } from "../../_workflow";
 
 function ReadField({ label, value }: { label: string; value: string }) {
@@ -30,7 +30,14 @@ export default function SeparationDetailsSection({ r }: { r: SeparationRequest }
           <ReadField label="Request Date" value={fmtDate(r.request_date)} />
           <ReadField label="Proposed Last Working Day" value={fmtDate(r.proposed_last_working_day)} />
         </div>
-        <ReadField label="Notice Period" value={`${r.notice_period_days} days`} />
+        <div className="form-row cols-2">
+          <ReadField label="Notice Period" value={`${r.notice_period_days} days`} />
+          <ReadField label="Assigned Notice Period" value={formatNoticePeriod(r.assigned_notice_period_days)} />
+        </div>
+        <ReadField
+          label="Expected Last Working Day (request date + notice)"
+          value={formatNoticeDate(r.expected_last_working_day)}
+        />
         {r.confirmed_last_working_day && (
           <>
             <div className="form-row cols-2">
