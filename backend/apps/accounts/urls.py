@@ -1,4 +1,5 @@
 from django.urls import path
+from apps.accounts.views_notice_period_import import NoticePeriodImportSampleView, NoticePeriodImportView
 from apps.accounts.views_policy import (
     CompanyContactDetailView,
     CompanyContactListCreateView,
@@ -82,6 +83,8 @@ urlpatterns = [
     path('employees/stats/',                                     EmployeeStatsView.as_view(),             name='employee-stats'),
     path('employees/bulk-import/',                               EmployeeBulkImportView.as_view(),       name='employee-bulk-import'),
     path('employees/bulk-import/sample/',                        EmployeeBulkImportSampleView.as_view(), name='employee-bulk-import-sample'),
+    path('employees/notice-period/import/',                     NoticePeriodImportView.as_view(),       name='notice-period-import'),
+    path('employees/notice-period/import/sample/',              NoticePeriodImportSampleView.as_view(), name='notice-period-import-sample'),
     path('employees/me/',                                        MyProfileView.as_view(),                name='my-profile'),
     path('employees/me/photo/',                                  ProfilePhotoView.as_view(),             name='my-profile-photo'),
     path('employees/hrs/',                                       HRListView.as_view(),                   name='employee-hr-list'),

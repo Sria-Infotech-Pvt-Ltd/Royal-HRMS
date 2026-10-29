@@ -11,6 +11,7 @@ import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import { formatNoticePeriod, noticePeriodInputError } from "@/lib/noticePeriod";
+import NoticePeriodImportModal from "./_components/NoticePeriodImportModal";
 
 interface EmployeeRow {
   employee_id: string;
@@ -37,6 +38,7 @@ export default function NoticePeriodSettingsPage() {
   const [debounced, setDebounced]   = useState("");
   const [department, setDepartment] = useState("");
   const [page, setPage]             = useState(1);
+  const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => { setDebounced(search.trim()); setPage(1); }, 300);
@@ -58,7 +60,14 @@ export default function NoticePeriodSettingsPage() {
           <div className="page-title">Notice Period</div>
           <div className="page-sub">Assign each employee&apos;s notice period — used for the expected last working day when they resign</div>
         </div>
+        {canEdit && (
+          <button className="btn btn-filled" onClick={() => setShowImport(true)}>
+            <i className="ti ti-file-import" /> Import
+          </button>
+        )}
       </div>
+
+      {showImport && <NoticePeriodImportModal onClose={() => setShowImport(false)} onImported={refetch} />}
 
       <div className="filter-bar" style={{ marginBottom: 14 }}>
         <input className="field-input" style={{ width: 260 }} placeholder="Search name or employee ID"

@@ -117,6 +117,8 @@ export const API = {
     branches:    "/branch/branches/",
     bulkImport:  "/employees/bulk-import/",
     bulkImportSample: "/employees/bulk-import/sample/",
+    noticePeriodImport:       "/employees/notice-period/import/",
+    noticePeriodImportSample: "/employees/notice-period/import/sample/",
   },
 
   roles: {

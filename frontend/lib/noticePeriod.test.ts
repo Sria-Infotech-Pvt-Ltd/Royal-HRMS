@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { expectedLastWorkingDay, formatNoticeDate, formatNoticePeriod, noticePeriodInputError, noticeRemainingLabel } from "./noticePeriod";
+import {
+  expectedLastWorkingDay, formatNoticeDate, formatNoticePeriod, noticeChangeText, noticePeriodInputError, noticeRemainingLabel,
+} from "./noticePeriod";
 
 describe("noticeRemainingLabel", () => {
   it("shows 0 days remaining on the last working day", () => {
@@ -69,5 +71,18 @@ describe("expectedLastWorkingDay", () => {
   it("is null without a date or a notice period", () => {
     expect(expectedLastWorkingDay("", 30)).toBeNull();
     expect(expectedLastWorkingDay("2026-10-01", null)).toBeNull();
+  });
+});
+
+describe("noticeChangeText", () => {
+  const base = { row: 2, employee_id: "EMP001", name: "A", message: "" };
+  it("shows the change for rows that update", () => {
+    expect(noticeChangeText({ ...base, current: null, new: 60, status: "update" })).toBe("Not assigned → 60 days");
+    expect(noticeChangeText({ ...base, current: 30, new: 60, status: "updated" })).toBe("30 days → 60 days");
+  });
+  it("shows the kept value or a dash otherwise", () => {
+    expect(noticeChangeText({ ...base, current: 30, new: 30, status: "no_change" })).toBe("30 days");
+    expect(noticeChangeText({ ...base, current: 30, new: null, status: "skipped" })).toBe("—");
+    expect(noticeChangeText({ ...base, current: null, new: null, status: "error" })).toBe("—");
   });
 });

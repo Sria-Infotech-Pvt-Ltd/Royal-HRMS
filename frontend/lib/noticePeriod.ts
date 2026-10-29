@@ -46,3 +46,42 @@ export function expectedLastWorkingDay(requestDate: string, days: number | null 
   const date = new Date(Date.UTC(y, m - 1, d + days));
   return date.toISOString().slice(0, 10);
 }
+
+// Settings → Notice Period → Import (Employee ID, Notice Period (days)).
+// Mirrors apps/accounts/views_notice_period_import.py.
+
+export type NoticeImportStatus = "update" | "updated" | "no_change" | "skipped" | "error";
+
+export interface NoticeImportRow {
+  row: number;
+  employee_id: string;
+  name: string;
+  current: number | null;
+  new: number | null;
+  status: NoticeImportStatus;
+  message: string;
+}
+
+export interface NoticeImportSummary {
+  total: number;
+  update: number;
+  no_change: number;
+  skipped: number;
+  error: number;
+  updated?: number;
+}
+
+export const NOTICE_IMPORT_STATUS_LABEL: Record<NoticeImportStatus, string> = {
+  update:    "Will update",
+  updated:   "Updated",
+  no_change: "No change",
+  skipped:   "Skipped",
+  error:     "Error",
+};
+
+/** "30 days → 60 days" for a row that changes; otherwise just the value it has. */
+export function noticeChangeText(r: NoticeImportRow): string {
+  if (r.status === "update" || r.status === "updated") return `${formatNoticePeriod(r.current)} → ${formatNoticePeriod(r.new)}`;
+  if (r.status === "no_change") return formatNoticePeriod(r.current);
+  return "—";
+}
