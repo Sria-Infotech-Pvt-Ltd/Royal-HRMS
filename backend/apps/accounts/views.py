@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import mimetypes
 import os
 import re
 import secrets
@@ -141,6 +142,7 @@ from django.core import signing
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, connection, transaction
+from django_tenants.utils import get_public_schema_name
 from django.http import HttpResponse, StreamingHttpResponse
 from django.db.models.deletion import ProtectedError
 from django.db.models import Count, F, Max, Q
@@ -2615,6 +2617,22 @@ class DocumentDetailView(APIView):
         except Exception:
             return error('Invalid or expired download link.', http_status=status.HTTP_401_UNAUTHORIZED)
 
+        # Documents live in the company schema, but this request may carry no
+        # (or an expired) access cookie, leaving the connection on public —
+        # where the Document table doesn't exist (was an unhandled 500).
+        # Use the company the link was issued for; the token is signed, so
+        # it opens only this document in that company. Links issued before
+        # 's' existed fall back to the cookie's company, as before.
+        schema = data.get('s')
+        if schema:
+            from core.cache_service import TenantClientCacheService
+            tenant = TenantClientCacheService.get(schema)
+            if tenant is None:
+                return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
+            connection.set_tenant(tenant)
+        elif connection.schema_name == get_public_schema_name():
+            return error('Invalid or expired download link.', http_status=status.HTTP_401_UNAUTHORIZED)
+
         try:
             doc = Document.objects.only('file', 'file_name', 'is_active').get(pk=pk, is_active=True)
         except Document.DoesNotExist:
@@ -2642,7 +2660,11 @@ class DocumentDetailView(APIView):
             logger.error('Document download error pk=%s: %s', pk, exc, exc_info=True)
             return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
 
+        # Cloudinary serves 'raw' files as application/octet-stream; use the
+        # file's own type so PDFs open inline in the browser.
         content_type = r.headers.get('content-type', 'application/octet-stream')
+        if content_type.split(';')[0].strip() in ('', 'application/octet-stream'):
+            content_type = mimetypes.guess_type(doc.file_name or name)[0] or 'application/octet-stream'
         response = StreamingHttpResponse(
             r.iter_content(chunk_size=8192),
             content_type=content_type,

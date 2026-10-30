@@ -229,7 +229,11 @@ export default function DocumentCenterPage() {
     // JWT Bearer token causes MinIO to return 401. Fetch without auth headers.
     async function fetchMedia(url: string): Promise<Response> {
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        // The proxy answers errors as JSON ({ message }) — show that, not just the status.
+        const body = await res.json().catch(() => null) as { message?: string } | null;
+        throw new Error(body?.message || `HTTP ${res.status}`);
+      }
       return res;
     }
 

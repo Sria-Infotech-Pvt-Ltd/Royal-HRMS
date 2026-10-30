@@ -7,6 +7,7 @@ import time
 
 import cloudinary.utils
 from django.core import signing
+from django.db import connection
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -752,7 +753,11 @@ class DocumentSerializer(serializers.ModelSerializer):
             return ''
         # Issue a short-lived signed token so the frontend can fetch the file
         # through Django's proxy endpoint without needing an auth header.
-        token = signing.dumps({'id': obj.pk}, salt='doc-dl')
+        # 's' binds it to this company: the file request may arrive after the
+        # 15-minute access cookie has expired (preview/download use a plain
+        # fetch/link, not clientApi's refresh), so the proxy resolves the
+        # schema from the token instead of the cookie.
+        token = signing.dumps({'id': obj.pk, 's': connection.schema_name}, salt='doc-dl')
         path = f'/api/documents/{obj.pk}/?t={token}'
         request = self.context.get('request')
         if request:
