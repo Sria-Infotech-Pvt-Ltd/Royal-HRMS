@@ -11,6 +11,7 @@ FRONTEND_DIR="$REPO_DIR/frontend"
 VENV="/srv/apps/aira/venv"
 BRANCH="New-AI"
 HEALTH_URL="https://aira.nxsys.in/login"
+DEPLOYED_COMMIT_FILE="$REPO_DIR/.git/last_successful_deploy"
 
 cd "$REPO_DIR"
 
@@ -28,16 +29,41 @@ fi
 
 NEW_HEAD=$(git rev-parse HEAD)
 
-if [ "$OLD_HEAD" = "$NEW_HEAD" ]; then
-    echo "==> Already up to date at $NEW_HEAD, nothing to deploy."
+# The current process may have loaded an older copy of this script before the
+# fast-forward. Re-exec the checked-out version so its deploy logic applies.
+if [ "$OLD_HEAD" != "$NEW_HEAD" ] && git diff --name-only "$OLD_HEAD" "$NEW_HEAD" | grep -q '^deploy/deploy.sh$'; then
+    echo "==> Deploy script changed; restarting with the fetched version"
+    exec bash "$REPO_DIR/deploy/deploy.sh"
+fi
+
+LAST_DEPLOYED=""
+if [ -f "$DEPLOYED_COMMIT_FILE" ]; then
+    LAST_DEPLOYED=$(tr -d '[:space:]' < "$DEPLOYED_COMMIT_FILE")
+fi
+
+if [ "$LAST_DEPLOYED" = "$NEW_HEAD" ]; then
+    echo "==> Already successfully deployed at $NEW_HEAD, nothing to do."
     exit 0
 fi
 
-echo "==> Deploying $OLD_HEAD -> $NEW_HEAD"
-CHANGED_FILES=$(git diff --name-only "$OLD_HEAD" "$NEW_HEAD")
+FULL_DEPLOY=0
+if [ -z "$LAST_DEPLOYED" ] \
+    || ! git cat-file -e "$LAST_DEPLOYED^{commit}" 2>/dev/null \
+    || ! git merge-base --is-ancestor "$LAST_DEPLOYED" "$NEW_HEAD"; then
+    echo "==> No valid successful-deploy record; performing a full deploy."
+    FULL_DEPLOY=1
+    CHANGED_FILES=""
+else
+    echo "==> Deploying $LAST_DEPLOYED -> $NEW_HEAD"
+    CHANGED_FILES=$(git diff --name-only "$LAST_DEPLOYED" "$NEW_HEAD")
+fi
 echo "$CHANGED_FILES"
 
-if echo "$CHANGED_FILES" | grep -q "^backend/requirements.txt$"; then
+changed() {
+    [ "$FULL_DEPLOY" = "1" ] || printf '%s\n' "$CHANGED_FILES" | grep -qE "$1"
+}
+
+if changed "^backend/requirements.txt$"; then
     echo "==> requirements.txt changed - installing backend dependencies"
     "$VENV/bin/pip" install -r "$BACKEND_DIR/requirements.txt"
 fi
@@ -47,7 +73,7 @@ cd "$BACKEND_DIR"
 echo "==> Running database migrations"
 "$VENV/bin/python" manage.py migrate --noinput
 
-if echo "$CHANGED_FILES" | grep -qE "^frontend/(app/|components/|hooks/|lib/|types/|public/|package.*\.json|next\.config\.ts)"; then
+if changed "^frontend/(app/|components/|hooks/|lib/|types/|public/|package.*\.json|next\.config\.ts)"; then
     echo "==> Frontend changed - installing deps and rebuilding"
     cd "$FRONTEND_DIR"
     npm ci
@@ -74,4 +100,6 @@ if [ "$HTTP_CODE" != "200" ]; then
     exit 1
 fi
 
-echo "==> Deploy succeeded: $OLD_HEAD -> $NEW_HEAD"
+printf '%s\n' "$NEW_HEAD" > "$DEPLOYED_COMMIT_FILE.tmp"
+mv "$DEPLOYED_COMMIT_FILE.tmp" "$DEPLOYED_COMMIT_FILE"
+echo "==> Deploy succeeded: ${LAST_DEPLOYED:-<full deploy>} -> $NEW_HEAD"
