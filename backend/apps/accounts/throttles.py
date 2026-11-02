@@ -41,3 +41,10 @@ class ResendInviteRateThrottle(UserRateThrottle):
     it would let one admin's resends count against every other admin
     sharing an office network, and barely limit a single admin at all."""
     scope = 'resend_invite'
+
+
+class ExternalWebhookThrottle(ExternalAPIKeyThrottle):
+    """Same per-key bucketing as ExternalAPIKeyThrottle, but its own (higher) rate and counter: one project change
+    pushes once per affected employee, so a burst from a big project would otherwise eat the polling budget of the
+    read-only employees API (shared 'external_api' scope) and get the rest of the burst answered with 429."""
+    scope = 'external_webhook'

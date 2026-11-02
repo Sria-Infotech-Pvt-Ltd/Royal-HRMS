@@ -46,6 +46,10 @@ from .views import (
     SeparationSettlementFinalizeView,
     SeparationSettlementView,
     SeparationTypeListView,
+    EmployeeWorkStatusView,
+    MyWorkStatusView,
+    ProjectAssignmentsWebhookView,
+    ProjectSyncStatusView,
     WorkFromHomeApprovalView,
     WorkFromHomeRequestDetailView,
     WorkFromHomeRequestListCreateView,
@@ -54,6 +58,14 @@ from .views import (
 )
 
 urlpatterns = [
+    # Project Budget & Tracking tool pushes an employee's project list here (X-API-Key auth, not a HRMS login)
+    path('external/project-assignments/', ProjectAssignmentsWebhookView.as_view(), name='external-project-assignments-push'),
+
+    # Work Status (project assignments managed in Project Budgeting; read-only here)
+    path('work-status/me/',                MyWorkStatusView.as_view(),       name='my-work-status'),
+    path('work-status/<str:employee_id>/', EmployeeWorkStatusView.as_view(), name='employee-work-status'),
+    path('project-sync/status/',           ProjectSyncStatusView.as_view(),  name='project-sync-status'),
+
     # Birthdays
     path('birthdays/',          BirthdayView.as_view(),         name='birthday-list'),
     path('birthdays/settings/', BirthdaySettingsView.as_view(), name='birthday-settings'),

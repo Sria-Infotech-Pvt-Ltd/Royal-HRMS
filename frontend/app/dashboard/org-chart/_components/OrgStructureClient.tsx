@@ -85,18 +85,22 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
     setLoading(true);
     setLoadError(null);
     try {
-      const [unitsRes, posRes, jobsRes, empRes, branchRes] = await Promise.all([
+      const [unitsRes, posRes, jobsRes] = await Promise.all([
         clientApi.get(`${API.orgStructure.units.list}?page_size=1000`),
         clientApi.get(`${API.orgStructure.positions.list}?page_size=1000`),
         clientApi.get(API.orgStructure.jobTemplates.list),
+      ]);
+      // Employees and branches only feed the edit pop-ups and the branch filter, and ordinary employees are refused
+      // (403) on both lists — a refusal there must not blank the whole chart.
+      const [empResult, branchResult] = await Promise.allSettled([
         clientApi.get(API.employees.list, { params: { page_size: 200, status: "active" } }),
         clientApi.get(API.branches.list, { params: { page_size: 200 } }),
       ]);
       setUnits(unitsRes.data?.data?.results ?? []);
       setPositions(posRes.data?.data?.results ?? []);
       setJobs(jobsRes.data?.data ?? []);
-      setEmployees(empRes.data?.data?.results ?? []);
-      setBranches(branchRes.data?.data?.results ?? []);
+      setEmployees(empResult.status === "fulfilled" ? empResult.value.data?.data?.results ?? [] : []);
+      setBranches(branchResult.status === "fulfilled" ? branchResult.value.data?.data?.results ?? [] : []);
     } catch (err: unknown) {
       setLoadError((err as { message?: string })?.message ?? "Failed to load organisation structure.");
     } finally {

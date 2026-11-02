@@ -470,3 +470,18 @@ def _record_birthday_delivery(employee, action: str, changes: dict) -> None:
     except Exception:
         logger.exception('Failed to record birthday delivery audit log for %s', employee.id)
 
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def reconcile_project_assignments(self):
+    """
+    Every 30 minutes: safety net for missed Project Budgeting pushes. Pulls all employee assignments and re-applies each
+    employee's list (history is kept, nothing is deleted). Does nothing unless the Project Budgeting URL/key are set.
+    Idempotent — re-applying an unchanged list changes nothing. A failed pull is logged (ProjectSyncLog) and retried.
+    """
+    from apps.hrms.services_project_sync import ProjectSyncError, reconcile_all_employees
+
+    try:
+        return reconcile_all_employees()
+    except ProjectSyncError as exc:
+        logger.error('reconcile_project_assignments failed: %s', exc)
+        raise self.retry(exc=exc)

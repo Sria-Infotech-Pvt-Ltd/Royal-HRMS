@@ -30,6 +30,7 @@ from apps.dashboard.views.people import (
     EmployeeActionItemsView,
     EmployeeRecentRequestsView,
 )
+from apps.dashboard.views.employee_projects import EmployeeProjectAssignmentsView
 __all__ = [
     'MyBirthdayWidgetsView',
     'ManagerDashboardView',
@@ -57,4 +58,5 @@ __all__ = [
     'EmployeeBirthdayTodayView',
     'EmployeeActionItemsView',
     'EmployeeRecentRequestsView',
+    'EmployeeProjectAssignmentsView',
 ]

@@ -1,5 +1,7 @@
 from .birthdays import BirthdaySettingsView, BirthdayView
 from .expenses import ExpenseCategoryListView, ExpenseDetailView, ExpenseListCreateView, ExpenseStatsView, ExpenseStatusListView
+from .project_assignments import ProjectAssignmentsWebhookView
+from .work_status import EmployeeWorkStatusView, MyWorkStatusView, ProjectSyncStatusView
 from .holidays import (
     HolidayBulkImportSampleView,
     HolidayBulkImportView,
