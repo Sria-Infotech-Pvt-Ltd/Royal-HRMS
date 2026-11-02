@@ -100,7 +100,7 @@ export function toDrawerEmployee(d: ProfileData, photoUrl?: string | null): Empl
     department: d.department, designation: d.designation,
     dateOfJoining: d.date_of_joining ?? d.date_joined ?? "", dateOfBirth: "",
     location: d.branch, gender: "male",
-    status: "active", employmentStatus: "probation", confirmationDate: null,
+    status: "active", needsOnboardingData: false, employmentStatus: "probation", confirmationDate: null,
     details: {}, tables: {},
     photoUrl: photoUrl ?? d.profile_photo_url ?? undefined,
   };

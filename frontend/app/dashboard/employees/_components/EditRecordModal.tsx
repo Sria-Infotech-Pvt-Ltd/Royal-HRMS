@@ -62,6 +62,7 @@ import { buildContactChanges } from "./editRecordContact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import EditRecordUnsavedChangesDialog from "./EditRecordUnsavedChangesDialog";
 import Modal from "@/components/Modal";
 import PhoneInput from "@/components/PhoneInput";
 import CountrySelect from "@/components/CountrySelect";
@@ -730,6 +731,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     setContactErrors({});
     if (statutory.uan_number && statutory.uan_number.length !== 12) {
       setSaveError("UAN must be 12 digits");
+      setStep(3); // Statutory & accounts — where UAN lives
       setSaving(false);
       return;
     }
@@ -857,6 +859,13 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         setIsLoginChangeConfirmed(false);
       } else {
         setSaveError(prev => prev ?? "Some sections could not be saved — see the errors above.");
+        // Jump to the first failing section, in wizard order, so its
+        // inline error is actually visible instead of silently failing on
+        // a step the user isn't looking at.
+        if (!ctcOk) setStep(2);
+        else if (!familyOk) setStep(4);
+        else if (!eduExpOk) setStep(5);
+        else if (!assetsOk) setStep(7);
       }
       setSavedMsg(allOk);
       if (allOk) {
@@ -870,6 +879,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       const parsed = parseApiError(err, "Failed to save changes. Please try again.");
       setContactErrors({ email: parsed.fieldErrors.email, phone: parsed.fieldErrors.phone });
       setSaveError(parsed.message);
+      // Email/phone (contact) errors are highlighted on Personal identity (step 0).
+      if (parsed.fieldErrors.email || parsed.fieldErrors.phone) setStep(0);
     } finally {
       setSaving(false);
     }
@@ -1499,37 +1510,14 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     </Modal>
 
     {showCloseConfirm && (
-      <div
-        className="modal-overlay open"
-        style={{ zIndex: 1010 }}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="unsaved-changes-title"
-        onKeyDown={e => { if (e.key === "Escape") setShowCloseConfirm(false); }}
-        onMouseDown={e => { if (e.target === e.currentTarget) setShowCloseConfirm(false); }}
-      >
-        <div className="modal" style={{ maxWidth: "min(440px, 94vw)" }}>
-          <div className="modal-header">
-            <div id="unsaved-changes-title" className="modal-title">You have unsaved changes</div>
-          </div>
-          <div className="modal-body">
-            <p style={{ fontSize: 14, color: "var(--on-variant)", lineHeight: 1.6, margin: 0 }}>
-              What would you like to do with your changes?
-            </p>
-          </div>
-          <div className="modal-footer" style={{ flexWrap: "wrap", gap: 8 }}>
-            {/* Default focus lands here per spec — the safest action (don't lose anything, keep going). */}
-            <button autoFocus className="btn btn-ghost" onClick={() => setShowCloseConfirm(false)}>Keep editing</button>
-            <button className="btn btn-ghost" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Don&apos;t save</button>
-            <button className="btn btn-ghost" disabled={savingDraft} onClick={async () => { setShowCloseConfirm(false); await saveAsDraft(true); }}>
-              {savingDraft ? "Saving…" : "Save as draft"}
-            </button>
-            <button className="btn btn-filled" disabled={saving} onClick={async () => { setShowCloseConfirm(false); await onSaveChanges(true); }}>
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </div>
-      </div>
+      <EditRecordUnsavedChangesDialog
+        saving={saving}
+        savingDraft={savingDraft}
+        onKeepEditing={() => setShowCloseConfirm(false)}
+        onDontSave={() => { setShowCloseConfirm(false); onClose(); }}
+        onSaveAsDraft={async () => { setShowCloseConfirm(false); await saveAsDraft(true); }}
+        onSave={async () => { setShowCloseConfirm(false); await onSaveChanges(true); }}
+      />
     )}
     </>
   );

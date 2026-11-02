@@ -291,10 +291,17 @@ class OnboardingApprovalView(APIView):
             target.onboarding_status    = User.ONBOARDING_COMPLETE
             target.must_change_password = False
             target.onboarding_rejection_remarks = ''
+            # The portal account already logged in to build this profile
+            # (that's how self-service onboarding works), so there's no
+            # separate "first login" event left to wait for here — approval
+            # itself is the activation moment, unlike the other two creation
+            # paths where it genuinely hasn't happened yet.
+            if target.account_activated_at is None:
+                target.account_activated_at = timezone.now()
             auto_fields = _auto_assign_managers(target)
             target.save(update_fields=list(dict.fromkeys([
                 'onboarding_status', 'must_change_password', 'onboarding_rejection_remarks',
-                'employee_id', 'date_of_joining',
+                'account_activated_at', 'employee_id', 'date_of_joining',
                 'designation', 'department', 'branch',
                 'reporting_manager', 'reporting_manager_from_org_chart', 'hr',
                 *auto_fields,

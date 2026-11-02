@@ -76,6 +76,7 @@ function toDrawerEmployee(d: ProfileSummaryData, photoUrl?: string | null): Empl
     dateOfJoining: d.date_of_joining ?? d.date_joined ?? "", dateOfBirth: "",
     location: d.branch, gender: "male",
     status: d.onboarding_status === "pending" ? "onboarding" : "active",
+    needsOnboardingData: d.onboarding_status !== "complete",
     employmentStatus: d.employment_status ?? "confirmed", confirmationDate: null,
     details: {}, tables: {},
     photoUrl: photoUrl ?? d.profile_photo_url ?? undefined,

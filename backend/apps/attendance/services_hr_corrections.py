@@ -208,7 +208,8 @@ def list_corrections(
 
     status_filter: 'pending' | 'l2_pending' | 'approved' | 'rejected' | '' (all)
     """
-    employee_qs = User.objects.filter(is_active=True)
+    # Onboarding employees (not yet activated) have no attendance to correct yet — see User.onboarded_q().
+    employee_qs = User.objects.filter(is_active=True).filter(User.onboarded_q())
     if branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:

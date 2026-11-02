@@ -44,6 +44,11 @@ export interface Employee {
   location: string;
   gender: Gender;
   status: EmployeeStatus;
+  /** Self-service onboarding data is still incomplete — decoupled from
+   * `status` above (which is "has this account ever been activated"), so
+   * the "Complete onboarding" wizard redirect doesn't fire just because an
+   * otherwise-fully-onboarded employee hasn't logged in yet. */
+  needsOnboardingData: boolean;
   /** "probation" | "confirmed" — flipped exactly once by the Confirmation action. */
   employmentStatus: string;
   confirmationDate: string | null;
@@ -534,6 +539,7 @@ export interface ApiEmployee {
   org_unit_parent_name?: string | null;
   profile_photo_url?: string | null;
   has_edit_draft?: boolean;
+  needs_onboarding_data?: boolean;
 }
 
 export function apiToEmployee(u: ApiEmployee): Employee {
@@ -553,6 +559,7 @@ export function apiToEmployee(u: ApiEmployee): Employee {
     location:      u.branch,
     gender:        "male",
     status:        (u.status as EmployeeStatus) || (u.is_active ? "active" : "inactive"),
+    needsOnboardingData: u.needs_onboarding_data === true,
     employmentStatus: u.employment_status || "probation",
     confirmationDate: u.confirmation_date ?? null,
     reportingManagerName: u.reporting_manager?.name ?? null,

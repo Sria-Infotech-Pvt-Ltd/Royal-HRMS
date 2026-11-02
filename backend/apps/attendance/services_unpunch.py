@@ -98,7 +98,8 @@ def detect_and_mark_unpunches(
             'reason': f'shift_not_ended (deadline={deadline.strftime("%H:%M")})',
         }
 
-    employee_qs = User.objects.filter(is_active=True)
+    # Onboarding employees (not yet activated) have no attendance to auto-punch-out — see User.onboarded_q().
+    employee_qs = User.objects.filter(is_active=True).filter(User.onboarded_q())
     if branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:

@@ -65,10 +65,16 @@ def get_headcount(branch=None, as_of: date | None = None, base_queryset: QuerySe
 
     on_notice = current.filter(is_on_notice=True)
     not_on_notice = current.filter(is_on_notice=False)
-    onboarded = not_on_notice.filter(fully_onboarded_q())
+    # Two independent activation signals exist (activation_pending vs.
+    # account_activated_at — see models.User) that are kept in sync going
+    # forward by the auth flows, so "active" requires both to agree —
+    # everyone else not on notice falls into "onboarding", keeping the
+    # buckets mutually exclusive as the module docstring promises.
+    not_on_notice_count = not_on_notice.count()
+    onboarded = not_on_notice.filter(fully_onboarded_q()).filter(User.onboarded_q())
 
     active = onboarded.count()
-    onboarding = not_on_notice.filter(onboarding_q()).count()
+    onboarding = not_on_notice_count - active
     notice_period = on_notice.count()
     return {
         'total': active + onboarding + notice_period,

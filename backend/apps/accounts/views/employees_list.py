@@ -116,7 +116,7 @@ from apps.accounts.services_onboarding import fully_onboarded_q, onboarding_q
 from apps.accounts.services_placement import assign_position, sync_from_position
 from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle, ResetPasswordRateThrottle
 from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
-from apps.accounts.utils import send_otp_email, send_template_email, send_test_email
+from apps.accounts.utils import send_activation_invite, send_otp_email, send_template_email, send_test_email
 
 logger = logging.getLogger(__name__)
 
@@ -233,15 +233,21 @@ class EmployeeListCreateView(APIView):
                 qs = qs.filter(is_active=False)
             elif status_param == 'active':
                 # Hired and onboarded means Active; probation is a separate
-                # employment label (the 'probation' filter below is a subset).
-                qs = qs.filter(is_active=True).filter(fully_onboarded_q()).exclude(notice_period_q)
+                # employment label (the 'probation' filter below is a
+                # subset). Two independent activation signals exist
+                # (activation_pending vs. account_activated_at — see
+                # models.User) that are kept in sync going forward by the
+                # auth flows, so Active requires both to agree.
+                qs = qs.filter(
+                    is_active=True,
+                ).filter(fully_onboarded_q()).filter(User.onboarded_q()).exclude(notice_period_q)
             elif status_param == 'onboarding':
-                # Same bucket as the Onboarding KPI: not complete and not already on notice.
-                qs = qs.filter(is_active=True).filter(onboarding_q()).exclude(notice_period_q)
+                # Same bucket as the Onboarding KPI: not complete by either signal and not already on notice.
+                qs = qs.filter(is_active=True).filter(onboarding_q() | ~User.onboarded_q()).exclude(notice_period_q)
             elif status_param == 'probation':
                 qs = qs.filter(
                     is_active=True, employment_status=User.EMPLOYMENT_STATUS_PROBATION,
-                ).filter(fully_onboarded_q()).exclude(notice_period_q)
+                ).filter(fully_onboarded_q()).filter(User.onboarded_q()).exclude(notice_period_q)
             elif status_param == 'notice_period':
                 qs = qs.filter(is_active=True).filter(notice_period_q).distinct()
             else:
@@ -508,42 +514,15 @@ class EmployeeListCreateView(APIView):
                 ip_address=get_client_ip(request),
             )
 
+        # Token-based activation link (send_activation_invite), not the
+        # temp password itself — gives this creation path the same
+        # EmailLog tracking, resend, and expiry as the other two (Hire
+        # wizard, portal conversion), instead of an untracked plaintext-
+        # password email only this path used to send.
         try:
-            from apps.accounts.utils import (
-                _get_smtp_connection, _build_message, _company_email_wrapper,
-                _get_company_branding,
-            )
-
-            company_name, logo_url, website, address = _get_company_branding()
-            company_name = company_name or 'Aira HRMS'
-
-            body = (
-                f'<p>Hi <strong>{full_name}</strong>,</p>'
-                f'<p>Your {company_name} account has been created.'
-                f' Use the credentials below to log in:</p>'
-                f'<p>'
-                f'<strong>Employee ID:</strong> {employee_id}<br>'
-                f'<strong>Login Email:</strong> {email}<br>'
-                f'<strong>Temporary Password:</strong> {temp_password}'
-                f'</p>'
-                f'<p>You will be asked to change your password on first login.</p>'
-                f'<p>— HR Team</p>'
-            )
-            html_body = _company_email_wrapper(body, company_name, logo_url, website, address)
-
-            connection, from_email, _smtp = _get_smtp_connection()
-            msg = _build_message(
-                subject=f'Welcome to {company_name} — Your Login Credentials',
-                html_body=html_body,
-                from_email=from_email,
-                to=[email],
-                connection=connection,
-            )
-            msg.send(fail_silently=False)
-            logger.info('Welcome email sent to %s', email)
-            email_sent = True
+            _token, email_sent = send_activation_invite(user, created_by=request.user)
         except Exception as exc:
-            logger.error('Welcome email failed for %s: %s', email, exc)
+            logger.error('Onboarding invite failed for %s: %s', email, exc)
             email_sent = False
 
         logger.info('Employee %s (%s) created by %s', employee_id, email, request.user.email)
@@ -553,10 +532,10 @@ class EmployeeListCreateView(APIView):
         # themselves (email failures are silent otherwise: this request
         # still returns 201, and the account is fully usable).
         message = (
-            f'{full_name} added successfully. Login credentials sent to {email}.'
+            f'{full_name} added successfully. An activation invite was sent to {email}.'
             if email_sent else
-            f'{full_name} added successfully, but the welcome email could not be sent. '
-            f'Share their login credentials manually — check Settings → SMTP.'
+            f'{full_name} added successfully, but the activation invite could not be sent. '
+            f'Resend it from the Onboarding panel once Settings → SMTP is fixed.'
         )
         return success(
             message,

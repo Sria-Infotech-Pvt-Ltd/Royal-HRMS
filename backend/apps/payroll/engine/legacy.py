@@ -389,6 +389,9 @@ def _eligible_employees_qs(cycle: PayrollCycle):
         User.objects.filter(is_active=True)
         .exclude(employee_id='')
         .exclude(excluded_from_payroll())
+        # Onboarding employees (not yet logged in / activated) have no
+        # business being paid or processed yet — see User.onboarded_q().
+        .filter(User.onboarded_q())
     )
 
     # Mid-cycle leavers: an employee deactivated before this cycle is

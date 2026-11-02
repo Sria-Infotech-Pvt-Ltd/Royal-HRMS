@@ -302,6 +302,21 @@ class User(AbstractBaseUser, PermissionsMixin):
     # while True the employee shows as Onboarding (see services_onboarding). Separate from must_change_password, which an
     # admin password reset also sets and must not push a working employee back to Onboarding.
     activation_pending      = models.BooleanField(default=False, db_index=True)
+    # Set exactly once — the first time this person actually logs in and
+    # sets their own password (invite-link activation, or the forced
+    # change-on-first-login that follows a temp-password welcome email).
+    # Deliberately separate from onboarding_status below: that field means
+    # "has HR/the employee finished filling in required data" and must keep
+    # meaning only that (it drives the self-service wizard, field-locking,
+    # etc.) — this field means "has this person ever activated their
+    # account". Kept alongside `activation_pending` above (two parallel
+    # activation signals that the auth flows set together — see
+    # views/auth.py and services_onboarding._maybe_activate) rather than
+    # merged into one, since each already has its own independent
+    # consumers (is_onboarded()/onboarded_q() below vs. is_onboarding()/
+    # onboarding_q()/fully_onboarded_q() in services_onboarding) — see
+    # _employee_dict() in views/shared.py for how the two are combined.
+    account_activated_at    = models.DateTimeField(null=True, blank=True)
     onboarding_status       = models.CharField(
                                   max_length=20,
                                   choices=ONBOARDING_CHOICES,
@@ -372,6 +387,23 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self) -> str:
         return self.email
+
+    def is_onboarded(self) -> bool:
+        """True once this employee is eligible to show "Active": their data
+        is complete (onboarding_status) AND they've activated their own
+        account (account_activated_at) — the single combined condition used
+        everywhere "Active vs Onboarding" is decided (directory status,
+        headcount, payroll eligibility, attendance). The two inputs are
+        deliberately kept separate fields; only this combination matters for
+        display/eligibility purposes."""
+        return self.onboarding_status == self.ONBOARDING_COMPLETE and self.account_activated_at is not None
+
+    @classmethod
+    def onboarded_q(cls) -> models.Q:
+        """Same condition as is_onboarded(), as a Q for queryset filtering —
+        `.filter(User.onboarded_q())` for Active-eligible, `.exclude(...)`
+        for Onboarding/not-yet-eligible (headcount, payroll, attendance)."""
+        return models.Q(onboarding_status=cls.ONBOARDING_COMPLETE, account_activated_at__isnull=False)
 
     # ── Lockout helpers ───────────────────────────────────────────────────────
 
