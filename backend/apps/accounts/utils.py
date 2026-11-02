@@ -192,15 +192,21 @@ def _activation_link(token_id) -> str:
     return f'{base.rstrip("/")}{path}' if base else path
 
 
-def send_activation_invite(user, *, created_by=None, extra_html: str = '') -> 'PasswordResetToken':  # noqa: F821 - type-hint only, real import below to avoid a cycle
+def send_activation_invite(user, *, created_by=None, extra_html: str = '') -> tuple['PasswordResetToken', bool]:  # noqa: F821 - type-hint only, real import below to avoid a cycle
     """Issues a fresh single-use activation invite (replacing any
     outstanding one for this user) and emails the link — the credentials-
     delivery path for every newly hired employee, and also what
     ResendInviteView calls to reissue one. Never emails a password; the new
     hire sets their own via this link (POST /reset-password/, same
     endpoint forgot-password already uses — a PasswordResetToken is a
-    PasswordResetToken regardless of purpose)."""
-    from apps.accounts.models import PasswordResetToken
+    PasswordResetToken regardless of purpose).
+
+    Returns (token, email_sent) — the send itself is best-effort: a failure
+    is caught, recorded in EmailLog (previously this call had no delivery
+    tracking at all — requirement to surface a failed invite send), and
+    reported back via the bool rather than raising, so creating/resending
+    an invite never 500s just because SMTP is misconfigured."""
+    from apps.accounts.models import EmailLog, PasswordResetToken
 
     token = PasswordResetToken.create_for_user(
         user, purpose=PasswordResetToken.PURPOSE_INVITE, validity_hours=INVITE_VALIDITY_HOURS,
@@ -229,15 +235,33 @@ def send_activation_invite(user, *, created_by=None, extra_html: str = '') -> 'P
     )
     html_body = _company_email_wrapper(html_body, *branding)
 
+    subject = f'Welcome to {company_name} — Activate Your Account'
     msg = _build_message(
-        subject=f'Welcome to {company_name} — Activate Your Account',
+        subject=subject,
         html_body=html_body,
         from_email=from_email,
         to=[user.email],
         connection=connection,
     )
-    msg.send(fail_silently=False)
-    return token
+    try:
+        msg.send(fail_silently=False)
+        email_sent, error_message = True, ''
+    except Exception as exc:
+        logger.exception('Failed to send activation invite to %s', user.email)
+        email_sent, error_message = False, str(exc)
+
+    EmailLog.record(
+        recipient_email=user.email,
+        subject=subject,
+        body_html=html_body,
+        template_name='onboarding_invite',
+        module='accounts',
+        status=EmailLog.STATUS_SENT if email_sent else EmailLog.STATUS_FAILED,
+        error_message=error_message,
+        triggered_by=created_by,
+        smtp_settings=_smtp,
+    )
+    return token, email_sent
 
 
 def send_test_email(recipient_email: str, smtp_config: dict) -> None:

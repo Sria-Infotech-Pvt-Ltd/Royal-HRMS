@@ -69,6 +69,14 @@ def place_in_seat(user: User, profile: AccessProfile) -> Position:
 
 def make_user(email: str, role: AccessProfile | None = None, password: str = 'TestPass123!', **extra) -> User:
     full_name = extra.pop('full_name', 'Test User')
+    # Test fixtures predate account_activated_at (added for the Onboarding-
+    # vs-Active distinction) and overwhelmingly mean "an ordinary, already-
+    # usable test user" — default to already-activated so existing tests
+    # that don't care about onboarding/activation keep their old behavior.
+    # A test that specifically wants an unactivated user passes its own
+    # account_activated_at (including None) to opt out.
+    from django.utils import timezone
+    extra.setdefault('account_activated_at', timezone.now())
     user = User.objects.create_user(email=email, password=password, full_name=full_name, **extra)
     if role is not None and role.has_access:
         place_in_seat(user, role)

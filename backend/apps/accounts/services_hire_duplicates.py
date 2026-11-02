@@ -43,7 +43,7 @@ def employee_status_label(user: User) -> str:
         employee=user, status=SEP_APPROVED, proposed_last_working_day__gte=date.today(),
     ).exists():
         return 'notice period'
-    return 'active' if user.onboarding_status == User.ONBOARDING_COMPLETE else 'onboarding'
+    return 'active' if user.is_onboarded() else 'onboarding'
 
 
 def _hit(field: str, label: str, user: User) -> DuplicateHit:

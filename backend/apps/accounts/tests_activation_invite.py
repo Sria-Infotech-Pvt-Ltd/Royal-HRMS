@@ -27,7 +27,7 @@ class ActivationInviteTests(TestCase):
     @patch('apps.accounts.utils._get_smtp_connection', return_value=(None, 'noreply@test.com', None))
     def test_send_activation_invite_creates_a_valid_invite_token(self, _mock_conn, mock_build):
         mock_build.return_value.send.return_value = None
-        token = send_activation_invite(self.user)
+        token, _ = send_activation_invite(self.user)
         self.assertEqual(token.purpose, PasswordResetToken.PURPOSE_INVITE)
         self.assertEqual(token.status, PasswordResetToken.STATUS_SENT)
         self.assertTrue(token.is_valid())
@@ -36,7 +36,7 @@ class ActivationInviteTests(TestCase):
     @patch('apps.accounts.utils._get_smtp_connection', return_value=(None, 'noreply@test.com', None))
     def test_check_endpoint_marks_opened_once(self, _mock_conn, mock_build):
         mock_build.return_value.send.return_value = None
-        token = send_activation_invite(self.user)
+        token, _ = send_activation_invite(self.user)
         client = APIClient()
 
         resp = client.get(reverse('invite-check', args=[token.id]))
@@ -56,7 +56,7 @@ class ActivationInviteTests(TestCase):
     @patch('apps.accounts.utils._get_smtp_connection', return_value=(None, 'noreply@test.com', None))
     def test_setting_password_activates_the_account(self, _mock_conn, mock_build):
         mock_build.return_value.send.return_value = None
-        token = send_activation_invite(self.user)
+        token, _ = send_activation_invite(self.user)
         client = APIClient()
 
         resp = client.post(reverse('reset-password'), {
@@ -94,7 +94,7 @@ class ActivationInviteTests(TestCase):
         admin_role = make_role('admin_invite_test', permission_codenames=['employees.reset_password', 'employees.edit'])
         admin = make_user('admin-invite@test.com', role=admin_role, password='TestPass123!')
 
-        old_token = send_activation_invite(self.user)
+        old_token, _ = send_activation_invite(self.user)
 
         client = APIClient()
         client.force_authenticate(user=admin)
@@ -134,7 +134,7 @@ class ActivationInviteTests(TestCase):
         resp = client.get(reverse('employee-invite-status', args=[self.user.id]))
         self.assertEqual(resp.data['data']['invite_status'], None)
 
-        token = send_activation_invite(self.user)
+        token, _ = send_activation_invite(self.user)
         resp = client.get(reverse('employee-invite-status', args=[self.user.id]))
         self.assertEqual(resp.data['data']['invite_status'], 'sent')
 

@@ -412,14 +412,16 @@ class ResetPasswordView(APIView):
         user = token_obj.user
         is_activation = token_obj.purpose == PasswordResetToken.PURPOSE_INVITE
 
+        update_fields = ['password', 'must_change_password', 'failed_login_attempts', 'locked_until']
         with transaction.atomic():
             user.set_password(new_password)
             user.must_change_password   = False
             user.failed_login_attempts  = 0
             user.locked_until           = None
-            user.save(update_fields=[
-                'password', 'must_change_password', 'failed_login_attempts', 'locked_until'
-            ])
+            if is_activation and user.account_activated_at is None:
+                user.account_activated_at = timezone.now()
+                update_fields.append('account_activated_at')
+            user.save(update_fields=update_fields)
             token_obj.is_used = True
             token_obj.save(update_fields=['is_used'])
             from apps.accounts.services_onboarding import on_password_set
@@ -474,9 +476,15 @@ class InviteCheckView(APIView):
                 http_status=status.HTTP_410_GONE,
             )
 
+        was_unopened = not token_obj.opened_at
         token_obj.mark_opened()
         from apps.accounts.services_onboarding import on_link_opened
         on_link_opened(token_obj.user)
+        if was_unopened:
+            AuditLog.objects.create(
+                user=token_obj.user, action='onboarding_link_opened', module='accounts',
+                object_id=str(token_obj.user.id),
+            )
         return success('Invite is valid.', data={
             'full_name': token_obj.user.full_name,
             'email':     token_obj.user.email,
@@ -498,9 +506,18 @@ class ChangePasswordView(APIView):
         if not user.check_password(old_password):
             return error('Current password is incorrect.')
 
+        # A forced change-on-first-login (temp-password creation flows land
+        # here once authenticated) counts as account activation, same as the
+        # invite-link flow in ResetPasswordView._reset() above — it's the
+        # employee's first real password set, just reached a different way.
+        is_first_activation = user.must_change_password and user.account_activated_at is None
+        update_fields = ['password', 'must_change_password']
         user.set_password(new_password)
         user.must_change_password = False
-        user.save(update_fields=['password', 'must_change_password'])
+        if is_first_activation:
+            user.account_activated_at = timezone.now()
+            update_fields.append('account_activated_at')
+        user.save(update_fields=update_fields)
         from apps.accounts.services_onboarding import on_password_set
         on_password_set(user)
 
@@ -513,7 +530,7 @@ class ChangePasswordView(APIView):
                 pass
 
         AuditLog.objects.create(
-            user=user, action='password_changed', module='accounts',
+            user=user, action='account_activated' if is_first_activation else 'password_changed', module='accounts',
             ip_address=get_client_ip(request),
         )
         logger.info('Password changed for %s', user.email)

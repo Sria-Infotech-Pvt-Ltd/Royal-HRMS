@@ -48,6 +48,7 @@ export interface ApiEmployee {
   department: string; designation: string; branch: string;
   position_id: string | null; org_unit_id: string | null;
   date_of_joining: string; is_active: boolean; status: string;
+  needs_onboarding_data?: boolean;
   onboarding_status: string;
   employment_status: string;
   confirmation_date: string | null;
@@ -104,6 +105,7 @@ export function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeCo
     location:      u.branch || "",
     gender:        (p.gender as Gender) || "male",
     status:        (u.status as EmployeeStatus) || (u.is_active ? "active" : "inactive"),
+    needsOnboardingData: u.needs_onboarding_data ?? (u.onboarding_status !== "complete"),
     employmentStatus: u.employment_status || "probation",
     confirmationDate: u.confirmation_date,
     details: {

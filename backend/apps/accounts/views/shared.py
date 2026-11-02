@@ -247,10 +247,20 @@ def _employee_dict(user: User) -> dict:
     last  = parts[1] if len(parts) > 1 else ''
     if not user.is_active:
         emp_status = 'inactive'
-    elif is_onboarding(user):
+    # Two independent activation signals exist (activation_pending vs.
+    # account_activated_at — see models.User) that are kept in sync going
+    # forward by the auth flows; checking both here means a user only ever
+    # shows as Active once neither signal still thinks they're onboarding.
+    elif is_onboarding(user) or not user.is_onboarded():
         emp_status = 'onboarding'
     else:
         emp_status = 'active'
+    # Decoupled from emp_status above: this is specifically "does the
+    # self-service onboarding wizard still have required data to collect",
+    # today's original (and unchanged) meaning of onboarding_status — used
+    # only to gate the "Complete onboarding" wizard redirect, independent of
+    # whether the account has been activated.
+    needs_onboarding_data = user.onboarding_status != User.ONBOARDING_COMPLETE
 
     try:
         p = user.profile
@@ -454,6 +464,7 @@ def _employee_dict(user: User) -> dict:
         'date_joined':    user.date_joined.date().isoformat(),
         'is_active':      user.is_active,
         'status':         emp_status,
+        'needs_onboarding_data': needs_onboarding_data,
         'hr': {
             'id':   _hr.employee_id if _hr else None,
             'uuid': str(_hr.id)     if _hr else None,

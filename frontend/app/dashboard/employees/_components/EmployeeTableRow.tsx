@@ -59,7 +59,7 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
           },
         }]
       : []),
-    ...(canEditOnboarding && e.status === "onboarding"
+    ...(canEditOnboarding && e.needsOnboardingData
       ? [{ label: "Complete onboarding", icon: "ti-clipboard-check", tone: "warn", onClick: () => router.push(`/dashboard/employees/${e.id}/onboarding`) } satisfies RowAction]
       : []),
     // Replaces the old standalone "Deactivate" toggle — Separation (inside

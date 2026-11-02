@@ -6164,3 +6164,46 @@ Also fixed a genuine `react-hooks/refs` lint error caught along the way (a ref w
 - UAT-016 through UAT-020 were also completed today (28 October), per the user — see the root `TEAM_CONTEXT.md`'s sections 16-20 and 22 (bug 6 Face ID, bug 7 Holiday import, bug 8 Salary Setup, bug 9 Bank masking, and the UAT-016 form-errors section). Only UAT-016 is explicitly labeled with its ticket number in that record; the exact 017/018/019/020 mapping to those 4 bug sections isn't independently pinned down beyond the user's confirmation that the whole 016-030 range was done today. UAT-011, 013, 014, 015 are the entries above, dated 27 October.
 - Manually click through the Save/Save & Close feature in a browser — not verified live this session (no browser-automation tool was available).
 - Confirm on UAT/production whether UAT-026 and UAT-029's Face ID messaging are actually fixed once the latest deploy runs — both look like stale-deployment issues from here, not remaining code bugs.
+
+---
+
+# Team Context — Unsaved-Changes Dialog, Onboarding/Activation Status, Build-Breaking Import Fixes
+
+**Author:** Safura Samreen
+**Date:** 29 October 2026
+
+## Ticket 1 — Unsaved-changes confirmation on the Edit-record panel
+
+`EditRecordModal.tsx` already had almost everything the ticket asked for (dirty-tracking via a JSON-diff baseline, X/backdrop/ESC/`beforeunload` all routed through one `requestClose()`, a confirm dialog with Save/Save as Draft/Don't Save/Keep Editing, baseline reset on save, and a server-persisted `EmployeeEditDraft` model — not localStorage). Audited against every acceptance criterion and fixed the 2 real gaps:
+- The confirm dialog was a hand-rolled overlay with no Tab-trap and no Esc-stack priority over the modal underneath it. Extracted it into its own `EditRecordUnsavedChangesDialog.tsx` component wired to the shared `useDialogFocus` hook (same pattern as `ConfirmModal.tsx`) — a plain inline conditional render doesn't get a fresh mount each time, which `useDialogFocus`'s one-time-per-mount effect requires.
+- A failed Save (bad UAN, a failed family/basic-pay/education/assets sub-save, a rejected contact-field change) left the error set but never navigated back to the step where that error is actually visible. Added `setStep(...)` at each failure point.
+
+## Ticket 2 — Employees show "Active" immediately, before they've ever logged in
+
+Root cause: the displayed status was driven entirely by `onboarding_status` (HR/employee data-entry completeness), which for a direct Hire-wizard creation is set to `complete` at the moment of creation — so "Active" never actually meant "this person has logged in."
+
+- Added `User.account_activated_at` (nullable, set exactly once — at invite-link password-set, at the forced change-on-first-login, or at self-service portal-approval time, since that path's account already logged in during onboarding). Deliberately kept separate from `onboarding_status`, which still drives the self-service wizard/field-locking untouched.
+- One combined condition (`User.is_onboarded()` / `User.onboarded_q()`) now gates the directory status badge, headcount, payroll eligibility (`_eligible_employees_qs` had **zero** onboarding-awareness before this), and 4 attendance queries that previously only checked `is_active`.
+- Fixed `send_activation_invite()`: it called `msg.send()` with no try/except and no `EmailLog` row at all — a real gap for "failed email must be captured." Now records sent/failed via `EmailLog.record()`.
+- Unified the "quick Add Employee" path onto the same token-based invite as the other two creation paths — it was the one still emailing a plaintext temp password with no tracking/resend/expiry.
+- New onboarding-history endpoint + admin panel (timeline + current-state message), `onboarding_link_opened` audit event, resend rate-limiting (5/hour, per-admin via a new `ResendInviteRateThrottle`), and inline email correction before resend.
+- **Caught by the test suite, not foresight**: adding the field with no backfill would have made every *existing* employee show "Onboarding" the moment this deploys (NULL for anyone created before this shipped). Added a backfill migration for that — found via an existing stats-consistency test failing unexpectedly.
+- Backend: `manage.py check` clean, `makemigrations --check` clean, 20 passing tests (new `tests_onboarding_activation.py` plus the existing modules this touched). One old test (`tests_hire_wizard.py`) updated because it had encoded the exact old/buggy behavior this ticket fixes.
+- Frontend: decoupled the "Complete onboarding" wizard-redirect action from the new status (it's about data completeness, not login activation) via a new `needsOnboardingData` field, so it doesn't misfire for an otherwise-fully-onboarded employee who just hasn't logged in yet.
+- Noted but not chased: this shared test database (`test_neondb`, reused across many unrelated past sessions) has pre-existing leftover rows that break a couple of *unscoped global-count* tests (`tests_headcount.py`, one assertion in `tests_employee_stats_consistency.py`) regardless of any change here — confirmed by the identical symptom appearing before any of today's edits.
+
+## Ticket 3 — Per-worker-type employee ID series (EMP-/CON-/FRL-) — built, then reverted
+
+Implemented in full: consolidated the two competing, collision-prone ID generators (`EmployeeCodeSettings` global counter vs `EmployeeCodeSeries` per-type counter — a documented production bug where both can produce the same ID) onto `EmployeeCodeSeries`; seeded `EMP-0001`/`CON-0001`/`FRL-0001`; added a "Per-type ID series" admin settings table; added `EmployeeIdHistory` to keep the old code on a worker-type change; added a `remap_employee_ids --apply` management command for retroactive backfill. Tests passing, migrations clean.
+
+**Then fully reverted at the user's request** — all 3 creation paths are back on `EmployeeCodeSettings.generate_employee_id(...)`, the `EmployeeIdHistory` model/migrations/admin-settings-endpoint/management-command are all removed, and `Settings > Employee ID Format` is back to its original single-global-counter form. Confirmed clean afterward (`manage.py check`, `makemigrations --check`, `tsc`, `eslint`, and the ticket-2 tests still passing untouched).
+
+## Dev-server build error — `@/components/work-status/WorkStatusPanel` not found
+
+Pre-existing, unrelated to any of the above — a component that was imported in 2 places (`EmployeeFullRecordBody.tsx`, `EmploymentTab.tsx`) but never actually created anywhere in the repo. No backend endpoint or other reference to reconstruct its intended behavior from, so removed both the imports and their usages rather than fabricate a panel with unknown functionality. Ran a full `next build` afterward (all 58 routes compile, static generation succeeds) and a whole-project `eslint .` (0 errors, 9 pre-existing warnings on files untouched today — unused-expression/`useMemo`-deps/`<img>` style, unrelated to this) to confirm no other screen has the same kind of dangling reference.
+
+## Still open for the user
+
+- None of today's backend migrations have been applied anywhere real — only run against the test database. `migrate` still needs to be run in an actual environment when ready.
+- The ticket-2 feature is otherwise ready to use as-is; the ticket-3 work no longer exists (reverted).
+- The 9 pre-existing ESLint warnings (not errors) found during the full-project sweep are still there — left alone since they're out of scope and not breaking anything; flagged to the user, decision on fixing them pending.

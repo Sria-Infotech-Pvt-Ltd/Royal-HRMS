@@ -566,4 +566,10 @@ class HireCompletionOnboardingStatusTests(HireWizardTestCase):
         from apps.accounts.views.shared import _employee_dict
         # Nothing left to self-report, but the person only becomes Active after setting a password and logging in once.
         self.assertTrue(employee.activation_pending)
+        # Data-complete (onboarding_status) is not the same as account-
+        # activated (account_activated_at) — this employee's data entry is
+        # done, but they haven't logged in / set a password yet, so the
+        # directory still shows them as Onboarding, not Active (see
+        # tests_onboarding_activation.py for the activation-trigger tests).
         self.assertEqual(_employee_dict(employee)['status'], 'onboarding')
+        self.assertFalse(_employee_dict(employee)['needs_onboarding_data'])
