@@ -16,7 +16,12 @@ jobs:
           username: ${{ secrets.DEPLOY_SSH_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           command_timeout: 20m
-          script: bash /srv/apps/aira/repo/deploy/deploy.sh
+          script: |
+            set -euo pipefail
+            cd /srv/apps/aira/repo
+            git fetch origin New-AI
+            git merge --ff-only origin/New-AI
+            bash /srv/apps/aira/repo/deploy/deploy.sh
 
       - name: Notify success
         if: success()
