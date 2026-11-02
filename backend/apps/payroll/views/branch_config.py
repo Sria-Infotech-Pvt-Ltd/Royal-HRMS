@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 
 from core.responses import success, error, first_error
 from core.permissions import has_perm as _has_perm
+from apps.payroll.audit import log_change, snapshot
 from apps.payroll.models import BranchPayrollConfig
 from apps.payroll.serializers import BranchPayrollConfigSerializer
 from apps.branch.models import Branch
@@ -40,6 +41,8 @@ class BranchPayrollConfigListView(APIView):
             return error(first_error(serializer.errors))
 
         config = serializer.save()
+        log_change(request, 'payroll_branch_config_created', config.pk, None, snapshot(config),
+                   extra={'branch_name': config.branch.branch_name})
         logger.info(
             'BranchPayrollConfig created for branch %s by %s',
             config.branch.branch_name, request.user.email,
@@ -67,11 +70,14 @@ class BranchPayrollConfigDetailView(APIView):
             return error('Only HR admin can update branch payroll configs.', http_status=403)
 
         config = get_object_or_404(BranchPayrollConfig, pk=pk)
+        before = snapshot(config)
         serializer = BranchPayrollConfigSerializer(config, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
 
         serializer.save()
+        log_change(request, 'payroll_branch_config_updated', config.pk, before, snapshot(config),
+                   extra={'branch_name': config.branch.branch_name})
         logger.info(
             'BranchPayrollConfig for %s updated by %s',
             config.branch.branch_name, request.user.email,
@@ -84,6 +90,8 @@ class BranchPayrollConfigDetailView(APIView):
 
         config = get_object_or_404(BranchPayrollConfig, pk=pk)
         branch_name = config.branch.branch_name
+        log_change(request, 'payroll_branch_config_removed', config.pk, snapshot(config), None,
+                   extra={'branch_name': branch_name})
         config.delete()
         logger.info(
             'BranchPayrollConfig for %s removed by %s — reverting to system defaults',

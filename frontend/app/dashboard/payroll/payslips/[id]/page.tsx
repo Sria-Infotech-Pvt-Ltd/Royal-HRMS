@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import PayslipDocument, { fmtDate, type PayslipCompany } from "@/components/payroll/PayslipDocument";
+import WageSlipDocument from "@/components/payroll/WageSlipDocument";
 import PrintCopy from "@/components/payroll/PayslipPrint";
 import type { EmployeePayslip } from "@/types/payroll";
 
@@ -42,15 +43,22 @@ export default function PayslipViewPage({ params }: { params: Promise<{ id: stri
 
   const isPaid = slip.status === "paid";
   const zeroPay = Number(slip.gross_earnings) <= 0 && Number(slip.net_pay) <= 0 && Number(slip.annual_ctc) > 0;
-  const doc = (
+  // Letterhead as printed when the payslip was processed (logo / phone stay live).
+  const header = company && slip.company_header ? { ...company, ...slip.company_header } : company;
+  const doc = slip.payslip_template === "wage_slip" ? (
+    <WageSlipDocument slip={slip} company={company} />
+  ) : (
     <PayslipDocument
       slip={slip}
-      company={company}
+      company={header}
       strip={[
         ["Employee", slip.employee_name || "—"],
         ["Employee ID", slip.employee_id_code || "—"],
         ["Department", slip.department || "—"],
         ["Branch", slip.branch || "—"],
+        ...(slip.designation ? [["Designation", slip.designation] as [string, string]] : []),
+        ...(slip.uan_display ? [["UAN", slip.uan_display] as [string, string]] : []),
+        ...(slip.esic_display ? [["ESIC No.", slip.esic_display] as [string, string]] : []),
       ]}
       netLabel={isPaid ? "Net Salary Paid" : "Net Salary"}
       netSubline={isPaid && slip.paid_at

@@ -7,6 +7,8 @@ import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import PayslipDocument, { fmtDate, fmtMonth, type PayslipCompany } from "@/components/payroll/PayslipDocument";
 import PayslipPrintCopy from "@/components/payroll/PayslipPrint";
+import WageSlipDocument from "@/components/payroll/WageSlipDocument";
+import type { PayslipAdjustmentItem, PayslipCompanyHeader, PayslipTemplate } from "@/types/payroll";
 import {
   QUERY_MAX_LENGTH, QUERY_STATUS_LABEL, canRaiseQuery, queriesFor, validateQueryText, type PayslipQueryRow,
 } from "@/lib/payslipQuery";
@@ -40,6 +42,17 @@ interface ApiPayslip {
   esi_employee: string;
   pt_deduction: string;
   lwf_employee: string;
+  adjustments_earning: string;
+  adjustments_deduction: string;
+  adjustment_items: PayslipAdjustmentItem[];
+  designation: string;
+  principal_employer_name: string;
+  company_header: PayslipCompanyHeader | null;
+  payslip_template: PayslipTemplate;
+  uan_display: string | null;
+  esic_display: string | null;
+  fixed_deduction_rows: string[];
+  stamp_url: string | null;
   total_deductions: string;
   net_pay: string;
   status: string;
@@ -200,19 +213,25 @@ export default function MyPayslipPage() {
     );
   }
 
-  const doc = slip && (
+  // Letterhead as printed when the payslip was processed (logo / phone stay live).
+  const header = slip && company && slip.company_header ? { ...company, ...slip.company_header } : company;
+  const doc = slip && (slip.payslip_template === "wage_slip" ? (
+    <WageSlipDocument slip={slip} company={company} />
+  ) : (
     <PayslipDocument
       slip={slip}
-      company={company}
+      company={header}
       strip={[
         ["Employee ID",  slip.employee_id_code || "—"],
         ["Bank",        me?.profile?.bank_name || "—"],
         ["Account No.", bankMasked],
         ["IFSC Code",   me?.profile?.ifsc_code || "—"],
+        ...(slip.uan_display ? [["UAN", slip.uan_display] as [string, string]] : []),
+        ...(slip.esic_display ? [["ESIC No.", slip.esic_display] as [string, string]] : []),
       ]}
       netSubline={`Paid on ${fmtDate(slip.pay_date)}${me?.profile?.bank_name ? ` · ${me.profile.bank_name} ${bankMasked}` : ""}`}
     />
-  );
+ ));
 
   return (
     <div className="payslip-page flex flex-col gap-6">

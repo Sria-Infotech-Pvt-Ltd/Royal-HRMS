@@ -418,9 +418,13 @@ def _audit_revision(config, previous, specs, *, user, ip_address, source):
     )
 
 
+ELIGIBILITY_FIELDS = ('pf_eligible', 'esi_eligible', 'pt_applicable')
+
+
 @transaction.atomic
 def save_revision(*, employee, annual_ctc, effective_from, salary_structure, template_structure,
-                  specs: list[ComponentSpec], user=None, ip_address=None, source='assign_ctc') -> EmployeeSalaryConfig:
+                  specs: list[ComponentSpec], user=None, ip_address=None, source='assign_ctc',
+                  eligibility: dict | None = None) -> EmployeeSalaryConfig:
     """New revision + its component snapshot + audit entry, in one transaction. Earlier revisions stay as history."""
     # Lock the employee row so two saves for the same employee can't interleave.
     type(employee).objects.select_for_update().filter(pk=employee.pk).first()
@@ -430,10 +434,14 @@ def save_revision(*, employee, annual_ctc, effective_from, salary_structure, tem
     previous = (EmployeeSalaryConfig.objects.filter(employee=employee, is_active=True)
                 .prefetch_related('components').order_by('-effective_from', '-created_at').first())
     EmployeeSalaryConfig.objects.filter(employee=employee, is_active=True).update(is_active=False)
+    # Statutory eligibility carries over from the previous revision unless
+    # the caller sets it (a CTC change never silently resets an opt-out).
+    flags = {f: getattr(previous, f) if previous is not None else None for f in ELIGIBILITY_FIELDS}
+    flags.update({k: v for k, v in (eligibility or {}).items() if k in ELIGIBILITY_FIELDS})
     config = EmployeeSalaryConfig.objects.create(
         employee=employee, annual_ctc=annual_ctc, effective_from=effective_from,
         salary_structure=salary_structure, template_structure=template_structure, is_active=True,
-        created_by=user,
+        created_by=user, **flags,
     )
     EmployeeSalaryComponent.objects.bulk_create(_snapshot_rows(config, specs))
     _audit_revision(config, previous, specs, user=user, ip_address=ip_address, source=source)

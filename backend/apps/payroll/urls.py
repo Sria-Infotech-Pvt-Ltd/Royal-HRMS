@@ -1,12 +1,16 @@
 from django.urls import path
 
 from apps.payroll.views.analytics import PayrollCostSummaryView, BranchPayrollBreakdownView
-from apps.payroll.views.settings import PayrollSettingsView
+from apps.payroll.views.settings import PayrollSettingsView, PayrollStampView
 from apps.payroll.views.structures import (
     SalaryStructureListView,
     SalaryStructureDetailView,
     SalaryComponentListView,
     SalaryComponentDetailView,
+    SalaryStructureImportView,
+    SalaryStructureImportSampleView,
+    SalaryStructureAssignImportView,
+    SalaryStructureAssignSampleView,
 )
 from apps.payroll.views.statutory import (
     StatutoryConfigListView,
@@ -69,9 +73,14 @@ from apps.payroll.views.salary_transfer import (
 urlpatterns = [
     # ── Payroll global settings ──────────────────────────────────────────────
     path('settings/', PayrollSettingsView.as_view(), name='payroll-settings'),
+    path('settings/stamp/', PayrollStampView.as_view(), name='payroll-settings-stamp'),
 
     # ── Salary structures ────────────────────────────────────────────────────
     path('structures/', SalaryStructureListView.as_view(), name='salary-structure-list'),
+    path('structures/import/', SalaryStructureImportView.as_view(), name='salary-structure-import'),
+    path('structures/import/sample/', SalaryStructureImportSampleView.as_view(), name='salary-structure-import-sample'),
+    path('structures/assign-import/', SalaryStructureAssignImportView.as_view(), name='salary-structure-assign-import'),
+    path('structures/assign-import/sample/', SalaryStructureAssignSampleView.as_view(), name='salary-structure-assign-sample'),
     path('structures/<uuid:pk>/', SalaryStructureDetailView.as_view(), name='salary-structure-detail'),
     path('structures/<uuid:structure_pk>/components/', SalaryComponentListView.as_view(), name='salary-component-list'),
     path('structures/<uuid:structure_pk>/components/<uuid:pk>/', SalaryComponentDetailView.as_view(), name='salary-component-detail'),

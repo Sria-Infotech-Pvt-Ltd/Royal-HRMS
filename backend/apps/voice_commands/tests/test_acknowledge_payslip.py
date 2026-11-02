@@ -56,7 +56,7 @@ class AcknowledgePayslipPermissionDeniedTests(SimpleTestCase):
 
 class AcknowledgePayslipExecutorTests(SimpleTestCase):
     def _mock_query(self, mock_model, payslip):
-        mock_model.objects.filter.return_value.select_related.return_value.order_by.return_value.first.return_value = payslip
+        mock_model.objects.filter.return_value.exclude.return_value.select_related.return_value.order_by.return_value.first.return_value = payslip
 
     @patch('apps.voice_commands.executor_payroll.AcknowledgePayslipView')
     @patch('apps.voice_commands.executor_payroll.EmployeePayslip')

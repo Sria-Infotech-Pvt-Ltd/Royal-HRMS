@@ -5,6 +5,8 @@
 // only; nothing is recalculated here. Zero amounts are hidden from the
 // breakdown rows (as before) but totals always show, including ₹0.
 
+import { additionsOutsideGross, adjustmentRows, type AdjustmentItem } from "@/lib/payslipLayout";
+
 export interface PayslipDocData {
   cycle_start: string;
   pay_date: string;
@@ -23,6 +25,10 @@ export interface PayslipDocData {
   esi_employee: string;
   pt_deduction: string;
   lwf_employee: string;
+  /** One-time adjustments (itemised when the payslip saved them). */
+  adjustments_earning?: string;
+  adjustments_deduction?: string;
+  adjustment_items?: AdjustmentItem[];
   total_deductions: string;
   net_pay: string;
 }
@@ -88,6 +94,12 @@ export default function PayslipDocument({
   const reimb  = Number(slip.reimbursements  ?? 0);
   const lopAmt = Number(slip.lop_deduction   ?? 0);
   const lopDays = Number(slip.lop_days ?? 0);
+  // Additions/arrears: inside gross once it was recomputed (reimbursement /
+  // bonus step), otherwise paid on top of it — shown accordingly so the
+  // figures always add up to the saved net pay.
+  const additions = adjustmentRows(slip, "earning");
+  const additionsSeparate = additionsOutsideGross(slip);
+  const additionsTotal = additions.reduce((a, r) => a + r.amount, 0);
   const companyAddress = company
     ? [company.address, company.city, company.state, company.pin_code].filter(Boolean).join(", ")
     : "";
@@ -169,6 +181,9 @@ export default function PayslipDocument({
             {Object.entries(slip.other_earnings ?? {}).map(([name, amt]) => (
               <EarningRow key={name} label={name} value={amt} />
             ))}
+            {!additionsSeparate && additions.map((r, i) => (
+              <EarningRow key={`add-${i}`} label={r.label} value={r.amount} />
+            ))}
           </div>
           <div className="flex justify-between items-center px-4 py-3 border-t mt-1" style={{ background: "var(--success-c)", borderColor: "var(--success-c)" }}>
             <span className="text-sm font-bold" style={{ color: "var(--success)" }}>Gross Earnings</span>
@@ -189,6 +204,9 @@ export default function PayslipDocument({
             {Object.entries(slip.other_deductions ?? {}).map(([name, amt]) => (
               <DeductionRow key={name} label={name} value={amt} />
             ))}
+            {adjustmentRows(slip, "deduction").map((r, i) => (
+              <DeductionRow key={`adj-${i}`} label={r.label} value={r.amount} />
+            ))}
             <DeductionRow label="Loss of Pay (LOP)"     value={slip.lop_deduction} highlight />
           </div>
           <div className="flex justify-between items-center px-4 py-3 border-t mt-1" style={{ background: "var(--error-c)", borderColor: "var(--error-c)" }}>
@@ -197,6 +215,20 @@ export default function PayslipDocument({
           </div>
         </div>
       </div>
+
+      {/* Additions / arrears paid on top of gross — shown only then */}
+      {additionsSeparate && additionsTotal > 0 && (
+        <div className="mx-6 mb-5 rounded-xl border overflow-hidden" style={{ borderColor: "var(--success-c)" }}>
+          <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ background: "var(--success-c)", borderColor: "var(--success-c)" }}>
+            <i className="ti ti-circle-plus text-sm" style={{ color: "var(--success)" }} />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--success)" }}>Additions</span>
+            <span className="ml-auto text-sm font-bold" style={{ color: "var(--success)" }}>{INR(additionsTotal)}</span>
+          </div>
+          <div className="px-4 py-2">
+            {additions.map((r, i) => <EarningRow key={i} label={r.label} value={r.amount} />)}
+          </div>
+        </div>
+      )}
 
       {/* Reimbursements — shown only if non-zero */}
       {reimb > 0 && (
@@ -219,6 +251,12 @@ export default function PayslipDocument({
               <span>Gross {INR(gross)}</span>
               <span style={{ color: "rgba(255,255,255,0.5)" }}>−</span>
               <span>Ded. {INR(ded)}</span>
+              {additionsSeparate && additionsTotal > 0 && (
+                <>
+                  <span style={{ color: "rgba(255,255,255,0.5)" }}>+</span>
+                  <span>Add. {INR(additionsTotal)}</span>
+                </>
+              )}
               {reimb > 0 && (
                 <>
                   <span style={{ color: "rgba(255,255,255,0.5)" }}>+</span>

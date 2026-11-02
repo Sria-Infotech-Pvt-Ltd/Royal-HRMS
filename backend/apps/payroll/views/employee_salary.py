@@ -9,11 +9,12 @@ from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
+from apps.payroll.audit import log_change
 from apps.payroll.models import EmployeeSalaryConfig
 from apps.payroll.serializers import EmployeeSalaryConfigSerializer
 from apps.payroll.services_salary_components import (
-    RevisionNotAllowed, parse_components, resolve_template_structure, revision_problem, save_revision,
-    specs_for_revision, specs_from_structure, summary,
+    ELIGIBILITY_FIELDS, RevisionNotAllowed, parse_components, resolve_template_structure, revision_problem,
+    save_revision, specs_for_revision, specs_from_structure, summary,
 )
 from apps.payroll.views.cycles import _is_admin
 
@@ -81,7 +82,8 @@ class EmployeeSalaryConfigListView(APIView):
         if not _is_admin(request.user) and employee.branch != request.user.branch:
             return error('Access denied.', http_status=403)
 
-        data = {k: request.data.get(k) for k in ('annual_ctc', 'salary_structure', 'effective_from')
+        data = {k: request.data.get(k) for k in ('annual_ctc', 'salary_structure', 'effective_from',
+                                                  *ELIGIBILITY_FIELDS)
                 if k in request.data}
         data['employee'] = str(employee.id)
 
@@ -122,6 +124,7 @@ class EmployeeSalaryConfigListView(APIView):
                 employee=employee, annual_ctc=annual_ctc, effective_from=vd['effective_from'],
                 salary_structure=override, template_structure=template, specs=specs,
                 user=request.user, ip_address=get_client_ip(request), source='assign_ctc',
+                eligibility={f: vd[f] for f in ELIGIBILITY_FIELDS if f in vd},
             )
         except RevisionNotAllowed as exc:          # changed between the check above and the save
             return error(str(exc), data={'errors': [str(exc)]})
@@ -186,11 +189,19 @@ class EmployeeSalaryConfigDetailView(APIView):
             config.components.exists() and locked_fields & set(request.data.keys())
         ):
             return error('Salary terms of a saved revision cannot be edited. Assign a new CTC revision instead.')
+        # Statutory eligibility applies from the next payroll processed with
+        # this revision, so only the current revision's flags may change.
+        if set(ELIGIBILITY_FIELDS) & set(request.data.keys()) and not config.is_active:
+            return error('Statutory eligibility can only be changed on the current salary revision.')
+        before = {f: getattr(config, f) for f in ELIGIBILITY_FIELDS}
         serializer = EmployeeSalaryConfigSerializer(config, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
 
         serializer.save()
+        log_change(request, 'payroll_eligibility_updated', config.pk, before,
+                   {f: getattr(config, f) for f in ELIGIBILITY_FIELDS},
+                   extra={'employee_id': config.employee.employee_id})
         return success('Salary config updated.', serializer.data)
 
 

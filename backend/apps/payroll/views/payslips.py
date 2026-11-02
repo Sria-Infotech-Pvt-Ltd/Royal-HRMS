@@ -53,7 +53,7 @@ class EmployeePayslipHistoryView(APIView):
 
         payslips = EmployeePayslip.objects.filter(
             employee=employee,
-        ).select_related('cycle', 'salary_structure').order_by('-cycle__cycle_start')
+        ).select_related('cycle', 'salary_structure', 'employee__profile').order_by('-cycle__cycle_start')
 
         page_obj, paginator = paginate(payslips, request)
         serializer = EmployeePayslipSerializer(page_obj.object_list, many=True)
@@ -81,7 +81,7 @@ class CyclePayslipListView(APIView):
             branch_obj = _resolve_user_branch(request.user)
             if branch_obj is None or cycle.branch_id != branch_obj.id:
                 return error('Payroll cycle not found.', http_status=404)
-        payslips = cycle.payslips.select_related('employee').order_by('employee__full_name')
+        payslips = cycle.payslips.select_related('employee__profile').order_by('employee__full_name')
 
         page_obj, paginator = paginate(payslips, request)
         serializer = EmployeePayslipSerializer(page_obj.object_list, many=True)
@@ -97,11 +97,18 @@ class PayslipDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        payslip = get_object_or_404(EmployeePayslip.objects.select_related('employee', 'cycle'), pk=pk)
+        payslip = get_object_or_404(EmployeePayslip.objects.select_related('employee__profile', 'cycle'), pk=pk)
 
         is_own = payslip.employee_id == request.user.id
-        if not _has_perm(request.user, 'payroll.view') and not is_own:
-            return error('You can only view your own payslips.', http_status=403)
+        if not _has_perm(request.user, 'payroll.view'):
+            if not is_own:
+                return error('You can only view your own payslips.', http_status=403)
+            # Same rules as My Payslips: payroll.view_own, and no drafts —
+            # a payslip is visible to its employee only once it's sent.
+            if not _has_perm(request.user, 'payroll.view_own'):
+                return error('You do not have permission to view payslips.', http_status=403)
+            if payslip.status == EmployeePayslip.STATUS_DRAFT:
+                return error('Payslip not found.', http_status=404)
         # Same branch scoping as CyclePayslipListView: without settings.edit,
         # only payslips of your own branch's cycles (your own payslip always).
         if not is_own and not _has_perm(request.user, 'settings.edit'):
@@ -398,9 +405,12 @@ class MyPayslipsView(APIView):
         if not _has_perm(request.user, 'payroll.view_own'):
             return error('You do not have permission to view payslips.', http_status=403)
 
+        # Drafts stay with payroll until they're sent to the employee.
         payslips = EmployeePayslip.objects.filter(
             employee=request.user,
-        ).select_related('cycle').order_by('-cycle__cycle_start')
+        ).exclude(status=EmployeePayslip.STATUS_DRAFT).select_related(
+            'cycle', 'employee__profile',
+        ).order_by('-cycle__cycle_start')
 
         page_obj, paginator = paginate(payslips, request)
         serializer = EmployeePayslipSerializer(page_obj.object_list, many=True)

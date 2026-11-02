@@ -174,6 +174,12 @@ def company_logo_upload_path(instance, filename) -> str:
     return _short_upload_name(f'{_tenant_schema()}/company', filename)
 
 
+def payslip_upload_path(instance, filename) -> str:
+    # Payslip stamp / authorised-signature image — private
+    # (AuthenticatedRawMediaCloudinaryStorage), served only via signed URLs.
+    return f'{_tenant_schema()}/payslip/{filename}'
+
+
 def id_card_upload_path(instance, filename) -> str:
     # ID card reference PDF and authorised-signature image — private
     # (AuthenticatedRawMediaCloudinaryStorage), served only via signed URLs.

@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 
 from core.responses import success, error, first_error
 from core.permissions import has_perm as _has_perm
+from apps.payroll.audit import log_change, snapshot
 from apps.payroll.models import StatutoryConfig
 from apps.payroll.serializers import StatutoryConfigSerializer
 from apps.branch.models import State
@@ -38,6 +39,8 @@ class StatutoryConfigListView(APIView):
             return error(first_error(serializer.errors))
 
         config = serializer.save()
+        log_change(request, 'payroll_statutory_created', config.pk, None, snapshot(config),
+                   extra={'state': config.state.name})
         logger.info('StatutoryConfig created for state %s by %s', config.state.name, request.user.email)
         return success('Statutory config created.', StatutoryConfigSerializer(config).data, http_status=201)
 
@@ -59,11 +62,14 @@ class StatutoryConfigDetailView(APIView):
             return error('Only HR admin can update statutory configs.', http_status=403)
 
         config = get_object_or_404(StatutoryConfig, pk=pk)
+        before = snapshot(config)
         serializer = StatutoryConfigSerializer(config, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
 
         serializer.save()
+        log_change(request, 'payroll_statutory_updated', config.pk, before, snapshot(config),
+                   extra={'state': config.state.name})
         logger.info('StatutoryConfig for %s updated by %s', config.state.name, request.user.email)
         return success('Statutory config updated.', serializer.data)
 

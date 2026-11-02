@@ -3,6 +3,15 @@ from django.db import models
 from django.conf import settings
 
 from core.encrypted_fields import EncryptedCharField
+from core.storage import AuthenticatedRawMediaCloudinaryStorage, payslip_upload_path
+
+# Payslip layouts (frontend renders each from the same stored payslip data).
+PAYSLIP_TEMPLATE_STANDARD = 'standard'
+PAYSLIP_TEMPLATE_WAGE_SLIP = 'wage_slip'
+PAYSLIP_TEMPLATE_CHOICES = [
+    (PAYSLIP_TEMPLATE_STANDARD, 'Standard'),
+    (PAYSLIP_TEMPLATE_WAGE_SLIP, 'Wage slip (salary head / actual / earning / deduction)'),
+]
 
 
 class PayrollSettings(models.Model):
@@ -64,6 +73,26 @@ class PayrollSettings(models.Model):
         max_digits=5, decimal_places=2, default=0.50,
         help_text='EPF administrative / inspection charges %',
     )
+
+    # Payslip presentation only — none of these affect calculations.
+    payslip_template = models.CharField(
+        max_length=20, choices=PAYSLIP_TEMPLATE_CHOICES, default=PAYSLIP_TEMPLATE_STANDARD,
+    )
+    # UAN / ESIC number on payslips: hidden, masked (last 4 digits) or full.
+    # Applied server-side in the payslip API, so a hidden/masked number never
+    # reaches the browser.
+    show_uan = models.BooleanField(default=True)
+    mask_uan = models.BooleanField(default=True)
+    show_esic = models.BooleanField(default=True)
+    mask_esic = models.BooleanField(default=True)
+    payslip_stamp = models.FileField(
+        upload_to=payslip_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage(),
+        null=True, blank=True,
+        help_text='Company stamp / authorised signature shown on the wage slip',
+    )
+    # Deduction rows the wage slip always shows (as 0 when unused), e.g.
+    # ["Food", "Shoes", "Accommodation"] — labels only.
+    fixed_deduction_rows = models.JSONField(default=list, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -301,6 +330,13 @@ class BranchPayrollConfig(models.Model):
         ),
     )
 
+    # Payslip presentation for this branch (blank = company setting).
+    payslip_template = models.CharField(
+        max_length=20, choices=PAYSLIP_TEMPLATE_CHOICES, blank=True, default='',
+    )
+    # Client / principal employer shown on this branch's wage slips.
+    principal_employer_name = models.CharField(max_length=200, blank=True, default='')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -332,6 +368,13 @@ class EmployeeSalaryConfig(models.Model):
         help_text='Leave blank to use branch/company default',
     )
     effective_from = models.DateField()
+    # Statutory eligibility for this employee. None (default) = follow the
+    # branch / state policy exactly as before; False = not deducted even when
+    # the policy applies; True = follow the policy (it cannot force a
+    # deduction the policy doesn't apply). Copied onto new revisions.
+    pf_eligible = models.BooleanField(null=True, blank=True)
+    esi_eligible = models.BooleanField(null=True, blank=True)
+    pt_applicable = models.BooleanField(null=True, blank=True)
     # Latest revision saved for the employee (what the screens show as
     # "current"). Payroll picks the revision applicable to each cycle by
     # effective date — see services_salary_components.applicable_configs.
@@ -623,6 +666,17 @@ class EmployeePayslip(models.Model):
 
     total_deductions = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     net_pay = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # Saved at processing so the payslip keeps its original look and details
+    # after later changes. Blank / empty on payslips processed before these
+    # existed (the API then falls back to live values).
+    template = models.CharField(max_length=20, choices=PAYSLIP_TEMPLATE_CHOICES, blank=True, default='')
+    # One-time adjustments behind adjustments_earning/deduction:
+    # [{"type": "deduction", "label": "Shoes", "amount": "150.00"}, ...]
+    adjustment_items = models.JSONField(default=list, blank=True)
+    # Employee/company details as printed: name, code, department,
+    # designation, branch, client name, company header. No UAN/ESIC/bank.
+    identity_snapshot = models.JSONField(default=dict, blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
     payslip_pdf = models.FileField(upload_to='payslips/', null=True, blank=True)

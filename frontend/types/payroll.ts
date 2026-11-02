@@ -1,3 +1,5 @@
+export type PayslipTemplate = "standard" | "wage_slip";
+
 export interface PayrollSettings {
   id: string;
   cycle_start_day: number;
@@ -11,6 +13,14 @@ export interface PayrollSettings {
   edli_rate: string;
   edli_wage_ceiling: string;
   epf_admin_rate: string;
+  /** Payslip presentation (calculations are not affected). */
+  payslip_template: PayslipTemplate;
+  show_uan: boolean;
+  mask_uan: boolean;
+  show_esic: boolean;
+  mask_esic: boolean;
+  fixed_deduction_rows: string[];
+  payslip_stamp_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -101,6 +111,10 @@ export interface BranchPayrollConfig {
   pf_employee_rate: string;
   pf_employer_rate: string;
   pf_wage_ceiling: string;
+  /** Blank = the company's payslip layout. */
+  payslip_template: PayslipTemplate | "";
+  /** Client / principal employer printed on this branch's wage slips. */
+  principal_employer_name: string;
   created_at: string;
   updated_at: string;
 }
@@ -120,6 +134,10 @@ export interface EmployeeSalaryConfig {
   /** Empty for older revisions, which payroll still calculates from the live structure. */
   components?: EmployeeSalaryComponent[];
   effective_from: string;
+  /** null = follow the branch / state policy; false = not deducted for this employee. */
+  pf_eligible?: boolean | null;
+  esi_eligible?: boolean | null;
+  pt_applicable?: boolean | null;
   is_active: boolean;
   /** Who saved the revision (null for revisions saved before this was recorded). */
   created_by_name?: string | null;
@@ -245,6 +263,21 @@ export interface ManagerApprovalStatus {
   current_user_pending: boolean;
 }
 
+export interface PayslipAdjustmentItem {
+  type: "addition" | "deduction" | "arrear";
+  label: string;
+  amount: string;
+}
+
+export interface PayslipCompanyHeader {
+  company_name: string;
+  address: string;
+  city: string;
+  state: string;
+  pin_code: string;
+  cin: string;
+}
+
 export interface EmployeePayslip {
   id: string;
   cycle: string;
@@ -255,7 +288,17 @@ export interface EmployeePayslip {
   employee_name: string;
   employee_id_code: string;
   department: string;
+  designation: string;
   branch: string;
+  /** Details as printed (saved at processing; live for older payslips). */
+  principal_employer_name: string;
+  company_header: PayslipCompanyHeader | null;
+  payslip_template: PayslipTemplate;
+  /** Masked / hidden by the server per Payroll Settings → Payslip. */
+  uan_display: string | null;
+  esic_display: string | null;
+  fixed_deduction_rows: string[];
+  stamp_url: string | null;
   salary_structure: string | null;
   structure_name: string | null;
   annual_ctc: string;
@@ -280,6 +323,10 @@ export interface EmployeePayslip {
   pt_deduction: string;
   lwf_employee: string;
   lwf_employer: string;
+  adjustments_earning: string;
+  adjustments_deduction: string;
+  /** One-time adjustments behind the totals (empty on payslips processed before this was saved). */
+  adjustment_items: PayslipAdjustmentItem[];
   total_deductions: string;
   net_pay: string;
   status: "draft" | "sent" | "acknowledged" | "queried" | "resolved" | "paid";

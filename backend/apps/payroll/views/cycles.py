@@ -23,6 +23,7 @@ from apps.payroll.models import (
     ManagerAttendanceApproval,
     SalaryTransferBatch,
     BranchPayrollConfig,
+    PAYSLIP_TEMPLATE_STANDARD,
 )
 from apps.payroll.serializers import (
     PayrollCycleSerializer,
@@ -51,6 +52,7 @@ _PAYSLIP_FIELDS = [
     'lop_deduction', 'pf_wage_base', 'pf_employee', 'pf_employer', 'esi_employee', 'esi_employer',
     'pt_deduction', 'lwf_employee', 'lwf_employer', 'adjustments_earning',
     'adjustments_deduction', 'total_deductions', 'net_pay', 'status',
+    'template', 'adjustment_items', 'identity_snapshot',
 ]
 
 
@@ -133,6 +135,12 @@ def _compute_employee_payslip(
 
     # PF: use branch config if present, else statutory defaults (12%/12%, Rs.15,000 ceiling)
     pf_applicable = branch_config.pf_applicable if branch_config is not None else True
+    # Employee eligibility (EmployeeSalaryConfig.pf_eligible/esi_eligible/
+    # pt_applicable): only an explicit False switches a deduction off — None
+    # (the default) follows the policy exactly as before, and True can't
+    # force a deduction the branch/state policy doesn't apply.
+    if getattr(salary_config, 'pf_eligible', None) is False:
+        pf_applicable = False
     pf_employee = Decimal('0')
     pf_employer = Decimal('0')
     pf_wage_base = Decimal('0')
@@ -165,7 +173,7 @@ def _compute_employee_payslip(
     # rest of the current contribution period (Apr-Sep / Oct-Mar), per
     # ESIC rules. esi_covered_earlier_this_period is bulk-checked by the
     # caller against prior payslips this period (see _run_payroll_processing).
-    if statutory and statutory.esi_applicable and (
+    if statutory and statutory.esi_applicable and getattr(salary_config, 'esi_eligible', None) is not False and (
         gross <= statutory.esi_wage_ceiling or esi_covered_earlier_this_period
     ):
         esi_employer = gross * statutory.esi_employer_rate / 100
@@ -179,7 +187,8 @@ def _compute_employee_payslip(
             esi_employee = gross * statutory.esi_employee_rate / 100
 
     # PT
-    pt = Decimal(str(statutory.compute_pt(gross))) if statutory else Decimal('0')
+    pt_on = statutory and getattr(salary_config, 'pt_applicable', None) is not False
+    pt = Decimal(str(statutory.compute_pt(gross))) if pt_on else Decimal('0')
 
     # LWF — only charged in the state's configured due cycle(s); see _lwf_due_this_cycle().
     lwf_due = _lwf_due_this_cycle(statutory, cycle_month)
@@ -416,6 +425,8 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
 
     computed = {}   # employee_id -> payslip fields dict
     skipped = []
+    company_header = _company_header()
+    company_template = (payroll_settings.payslip_template if payroll_settings else '') or PAYSLIP_TEMPLATE_STANDARD
 
     for employee in employees:
         salary_config = salary_config_by_employee.get(employee.id)
@@ -453,6 +464,9 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
             cycle_month=cycle.cycle_start.month,
             esi_covered_earlier_this_period=employee.id in esi_covered_earlier_ids,
         )
+        computed[employee.id].update(_payslip_copies(
+            employee, branch_config, adjustments, company_header, company_template,
+        ))
 
     # ── Write phase: bulk_create + bulk_update instead of update_or_create per employee ──
     with transaction.atomic():
@@ -485,6 +499,40 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     names = {e.id: e.full_name for e in employees}
     zero_gross = [names[eid] for eid, f in computed.items() if f['gross_earnings'] <= 0 and f['net_pay'] <= 0 and f['annual_ctc'] > 0]
     return {'created_count': len(computed), 'skipped': skipped, 'zero_gross': zero_gross}
+
+
+def _company_header() -> dict:
+    """Company letterhead as printed on payslips (saved per payslip)."""
+    from apps.accounts.models import Company
+    company = Company.objects.first()
+    if company is None:
+        return {}
+    return {
+        'company_name': company.company_name, 'address': company.address, 'city': company.city,
+        'state': company.state, 'pin_code': company.pin_code, 'cin': company.cin,
+    }
+
+
+def _payslip_copies(employee, branch_config, adjustments, company_header, company_template) -> dict:
+    """Presentation data saved with each payslip so it keeps its original
+    look after later edits: layout, itemised adjustments and the employee /
+    company details as printed. No UAN, ESIC or bank details are copied."""
+    template = (branch_config.payslip_template if branch_config is not None else '') or company_template
+    return {
+        'template': template,
+        'adjustment_items': [
+            {'type': a.type, 'label': a.label, 'amount': str(a.amount)} for a in adjustments
+        ],
+        'identity_snapshot': {
+            'employee_name': employee.full_name,
+            'employee_code': employee.employee_id,
+            'department': employee.department,
+            'designation': employee.designation,
+            'branch': employee.branch,
+            'principal_employer_name': branch_config.principal_employer_name if branch_config is not None else '',
+            'company': company_header,
+        },
+    }
 
 
 def _can_l1_approve(user):

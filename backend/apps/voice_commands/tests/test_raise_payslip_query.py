@@ -63,7 +63,7 @@ def _mock_payslip(pk='payslip-9'):
 
 
 def _mock_query(mock_model, payslip):
-    mock_model.objects.filter.return_value.select_related.return_value.order_by.return_value.first.return_value = payslip
+    mock_model.objects.filter.return_value.exclude.return_value.select_related.return_value.order_by.return_value.first.return_value = payslip
 
 
 def _query_view_response(status_code=201, message='Query raised.', data=None):

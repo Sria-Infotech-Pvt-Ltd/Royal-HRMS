@@ -106,7 +106,7 @@ _EMPLOYEE_PAYSLIP_RETRIEVE_FAILED_TEMPLATE = {
 }
 
 
-def _most_recent_payslip(employee_id):
+def _most_recent_payslip(employee_id, include_drafts=False):
     """
     Same ordering MyPayslipsView.get() uses (payroll/views/payslips.py:328)
     for 'the caller's own payslips, most recent cycle first' — queried
@@ -118,13 +118,11 @@ def _most_recent_payslip(employee_id):
     so this same helper is reused for both the caller's own payslip and,
     once an HR caller has identified a specific employee, that employee's.
     """
-    return (
-        EmployeePayslip.objects
-        .filter(employee_id=employee_id)
-        .select_related('cycle')
-        .order_by('-cycle__cycle_start')
-        .first()
-    )
+    qs = EmployeePayslip.objects.filter(employee_id=employee_id)
+    if not include_drafts:
+        # An employee's own payslip is visible only once sent (as My Payslips).
+        qs = qs.exclude(status=EmployeePayslip.STATUS_DRAFT)
+    return qs.select_related('cycle', 'employee__profile').order_by('-cycle__cycle_start').first()
 
 
 _PAYSLIP_SUMMARY_TEMPLATE = {
@@ -316,7 +314,7 @@ def execute_identify_employee_payslip(request, name_query: Optional[str]) -> Exe
         )
 
     matched = matches[0]
-    payslip = _most_recent_payslip(matched['user_id'])
+    payslip = _most_recent_payslip(matched['user_id'], include_drafts=True)
     if payslip is None:
         return ExecutionResult(
             success=True,

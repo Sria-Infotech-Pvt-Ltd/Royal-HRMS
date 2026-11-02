@@ -20,6 +20,10 @@ interface SalaryModalState {
   annual_ctc: string;
   salary_structure: string;
   effective_from: string;
+  /** Statutory eligibility: null = follow branch / state policy, false = not deducted. */
+  pf_eligible: boolean | null;
+  esi_eligible: boolean | null;
+  pt_applicable: boolean | null;
   /** null until the template has loaded; then this employee's own component list. */
   components: SalaryComponentInput[] | null;
 }
@@ -74,6 +78,9 @@ export default function SalarySetupTab() {
       // A revision can't start before the current one or inside paid payroll; today is the usual choice.
       effective_from: new Date().toISOString().split("T")[0],
       components: null,
+      pf_eligible: current?.pf_eligible ?? null,
+      esi_eligible: current?.esi_eligible ?? null,
+      pt_applicable: current?.pt_applicable ?? null,
     });
     setPreview(null);
     setFormErrors([]);
@@ -140,6 +147,9 @@ export default function SalarySetupTab() {
         salary_structure: modal.salary_structure || null,
         effective_from: modal.effective_from,
         ...(modal.components ? { components: modal.components } : {}),
+        pf_eligible: modal.pf_eligible,
+        esi_eligible: modal.esi_eligible,
+        pt_applicable: modal.pt_applicable,
       });
       setModal(null);
       setPreview(null);
@@ -381,6 +391,26 @@ export default function SalarySetupTab() {
                   {notes("summary")}
                 </Section>
               )}
+
+              <Section icon="ti-shield-check" title="Statutory eligibility"
+                hint="Whether PF, ESI and PT apply to this employee. Follow policy = exactly as the branch / state settings decide.">
+                <div className="form-row cols-3" style={{ marginBottom: 0 }}>
+                  {([["pf_eligible", "PF"], ["esi_eligible", "ESI"], ["pt_applicable", "Professional Tax"]] as const).map(([key, label]) => (
+                    <div className="field-group" key={key}>
+                      <label className="field-label" htmlFor={`elig-${key}`}>{label}</label>
+                      <select
+                        id={`elig-${key}`}
+                        className="field-input"
+                        value={modal[key] === false ? "no" : "policy"}
+                        onChange={e => setModal(m => m ? { ...m, [key]: e.target.value === "no" ? false : null } : m)}
+                      >
+                        <option value="policy">Follow policy</option>
+                        <option value="no">Not deducted for this employee</option>
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </Section>
 
               {preview?.previous && <RevisionComparison preview={preview} />}
             </div>

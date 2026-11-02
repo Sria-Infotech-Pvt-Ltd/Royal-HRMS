@@ -56,7 +56,7 @@ class CheckMyPayslipPermissionDeniedTests(SimpleTestCase):
 
 class CheckMyPayslipExecutorTests(SimpleTestCase):
     def _mock_query(self, mock_model, payslip):
-        mock_model.objects.filter.return_value.select_related.return_value.order_by.return_value.first.return_value = payslip
+        mock_model.objects.filter.return_value.exclude.return_value.select_related.return_value.order_by.return_value.first.return_value = payslip
 
     @patch('apps.voice_commands.executor_payroll.EmployeePayslipSerializer')
     @patch('apps.voice_commands.executor_payroll.EmployeePayslip')
@@ -123,6 +123,6 @@ class CheckMyPayslipExecutorTests(SimpleTestCase):
 
         execute_intent(INTENT_CHECK_MY_PAYSLIP, request)
 
-        mock_model.objects.filter.return_value.select_related.return_value.order_by.assert_called_once_with(
-            '-cycle__cycle_start',
-        )
+        # Own payslip: drafts excluded (visible only once sent, as My Payslips).
+        mock_model.objects.filter.return_value.exclude.assert_called_once_with(status=mock_model.STATUS_DRAFT)
+        mock_model.objects.filter.return_value.exclude.return_value.select_related.return_value.order_by             .assert_called_once_with('-cycle__cycle_start')

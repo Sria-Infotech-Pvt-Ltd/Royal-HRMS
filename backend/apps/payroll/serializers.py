@@ -12,10 +12,37 @@ from .models import (
     EmployeePayslip,
     PayslipQuery,
     PayrollAdjustment,
+    PAYSLIP_TEMPLATE_STANDARD,
 )
+
+MAX_FIXED_DEDUCTION_ROWS = 15
+MAX_FIXED_DEDUCTION_LABEL = 40
+
+
+def mask_statutory_number(value: str, show: bool, mask: bool) -> str | None:
+    """UAN / ESIC number as the payslip shows it: None when hidden, the
+    last 4 characters with the rest starred when masked, else in full."""
+    value = (value or '').strip()
+    if not show or not value:
+        return None
+    if mask:
+        return '*' * max(0, len(value) - 4) + value[-4:]
+    return value
+
+
+def signed_file_url(field_file) -> str | None:
+    # AuthenticatedRawMediaCloudinaryStorage.url() is a short-lived signed URL.
+    if not field_file:
+        return None
+    try:
+        return field_file.url
+    except Exception:
+        return None
 
 
 class PayrollSettingsSerializer(serializers.ModelSerializer):
+    payslip_stamp_url = serializers.SerializerMethodField()
+
     class Meta:
         model = PayrollSettings
         fields = [
@@ -31,10 +58,32 @@ class PayrollSettingsSerializer(serializers.ModelSerializer):
             'edli_rate',
             'edli_wage_ceiling',
             'epf_admin_rate',
+            'payslip_template',
+            'show_uan',
+            'mask_uan',
+            'show_esic',
+            'mask_esic',
+            'fixed_deduction_rows',
+            'payslip_stamp_url',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'payslip_stamp_url', 'created_at', 'updated_at']
+
+    def get_payslip_stamp_url(self, obj):
+        return signed_file_url(obj.payslip_stamp)
+
+    def validate_fixed_deduction_rows(self, value):
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise serializers.ValidationError('Fixed deduction rows must be a list of labels.')
+        labels = [' '.join(v.split()) for v in value if v.strip()]
+        if len(labels) > MAX_FIXED_DEDUCTION_ROWS:
+            raise serializers.ValidationError(f'At most {MAX_FIXED_DEDUCTION_ROWS} fixed deduction rows.')
+        if any(len(v) > MAX_FIXED_DEDUCTION_LABEL for v in labels):
+            raise serializers.ValidationError(f'Each label must be at most {MAX_FIXED_DEDUCTION_LABEL} characters.')
+        if len({v.lower() for v in labels}) != len(labels):
+            raise serializers.ValidationError('Each fixed deduction row may appear only once.')
+        return labels
 
     def validate_eps_rate(self, value):
         if value is not None and not (0 < value <= 100):
@@ -192,10 +241,15 @@ class BranchPayrollConfigSerializer(serializers.ModelSerializer):
             'pf_employee_rate',
             'pf_employer_rate',
             'pf_wage_ceiling',
+            'payslip_template',
+            'principal_employer_name',
             'created_at',
             'updated_at',
         ]
         read_only_fields = ['id', 'branch_name', 'branch_state', 'structure_name', 'created_at', 'updated_at']
+
+    def validate_principal_employer_name(self, value):
+        return ' '.join((value or '').split())
 
 
 class EmployeeSalaryComponentSerializer(serializers.ModelSerializer):
@@ -240,6 +294,9 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
             'template_structure_name',
             'components',
             'effective_from',
+            'pf_eligible',
+            'esi_eligible',
+            'pt_applicable',
             'is_active',
             'created_by_name',
             'created_at',
@@ -334,10 +391,23 @@ class ManagerAttendanceApprovalSerializer(serializers.ModelSerializer):
 
 
 class EmployeePayslipSerializer(serializers.ModelSerializer):
-    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
-    employee_id_code = serializers.CharField(source='employee.employee_id', read_only=True)
-    department = serializers.CharField(source='employee.department', read_only=True)
-    branch = serializers.CharField(source='employee.branch', read_only=True)
+    # Employee / company details come from the copy saved at processing
+    # (identity_snapshot), so later edits don't change an issued payslip;
+    # payslips processed before the copy existed fall back to live values.
+    employee_name = serializers.SerializerMethodField()
+    employee_id_code = serializers.SerializerMethodField()
+    department = serializers.SerializerMethodField()
+    designation = serializers.SerializerMethodField()
+    branch = serializers.SerializerMethodField()
+    principal_employer_name = serializers.SerializerMethodField()
+    company_header = serializers.SerializerMethodField()
+    payslip_template = serializers.SerializerMethodField()
+    # Masked / hidden per PayrollSettings, server-side.
+    uan_display = serializers.SerializerMethodField()
+    esic_display = serializers.SerializerMethodField()
+    # Wage-slip presentation settings (live — layout configuration, not payroll data).
+    fixed_deduction_rows = serializers.SerializerMethodField()
+    stamp_url = serializers.SerializerMethodField()
     cycle_start = serializers.DateField(source='cycle.cycle_start', read_only=True)
     cycle_end = serializers.DateField(source='cycle.cycle_end', read_only=True)
     pay_date = serializers.DateField(source='cycle.pay_date', read_only=True)
@@ -356,7 +426,15 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
             'employee_name',
             'employee_id_code',
             'department',
+            'designation',
             'branch',
+            'principal_employer_name',
+            'company_header',
+            'payslip_template',
+            'uan_display',
+            'esic_display',
+            'fixed_deduction_rows',
+            'stamp_url',
             'salary_structure',
             'structure_name',
             'annual_ctc',
@@ -382,6 +460,7 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
             'lwf_employer',
             'adjustments_earning',
             'adjustments_deduction',
+            'adjustment_items',
             'total_deductions',
             'net_pay',
             'status',
@@ -398,8 +477,72 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
             'cycle_start', 'cycle_end', 'pay_date',
             'gross_earnings', 'lop_deduction', 'total_deductions', 'net_pay', 'other_deductions',
             'status', 'payslip_pdf', 'sent_at', 'query_deadline', 'paid_at',
-            'open_query_count', 'created_at', 'updated_at',
+            'open_query_count', 'created_at', 'updated_at', 'adjustment_items',
         ]
+
+    def _identity(self, obj, key, live):
+        snap = obj.identity_snapshot or {}
+        return snap[key] if key in snap else live
+
+    def get_employee_name(self, obj):
+        return self._identity(obj, 'employee_name', obj.employee.full_name)
+
+    def get_employee_id_code(self, obj):
+        return self._identity(obj, 'employee_code', obj.employee.employee_id)
+
+    def get_department(self, obj):
+        return self._identity(obj, 'department', obj.employee.department)
+
+    def get_designation(self, obj):
+        return self._identity(obj, 'designation', obj.employee.designation)
+
+    def get_branch(self, obj):
+        return self._identity(obj, 'branch', obj.employee.branch)
+
+    def get_principal_employer_name(self, obj):
+        return (obj.identity_snapshot or {}).get('principal_employer_name') or ''
+
+    def get_company_header(self, obj):
+        return (obj.identity_snapshot or {}).get('company') or None
+
+    def get_payslip_template(self, obj):
+        # Payslips issued before layouts existed keep the standard layout.
+        return obj.template or PAYSLIP_TEMPLATE_STANDARD
+
+    def _payroll_settings(self):
+        # One lookup per response, shared by every payslip in a list.
+        root = self.root
+        if not hasattr(root, '_payroll_settings_cache'):
+            root._payroll_settings_cache = PayrollSettings.objects.first()
+        return root._payroll_settings_cache
+
+    def _statutory_number(self, obj, attr, show_flag, mask_flag):
+        ps = self._payroll_settings()
+        show = getattr(ps, show_flag, True) if ps else True
+        mask = getattr(ps, mask_flag, True) if ps else True
+        if not show:
+            return None
+        profile = getattr(obj.employee, 'profile', None)
+        return mask_statutory_number(getattr(profile, attr, '') if profile else '', show, mask)
+
+    def get_uan_display(self, obj):
+        return self._statutory_number(obj, 'uan_number', 'show_uan', 'mask_uan')
+
+    def get_esic_display(self, obj):
+        return self._statutory_number(obj, 'esi_number', 'show_esic', 'mask_esic')
+
+    def get_fixed_deduction_rows(self, obj):
+        ps = self._payroll_settings()
+        return list(ps.fixed_deduction_rows or []) if ps else []
+
+    def get_stamp_url(self, obj):
+        if self.get_payslip_template(obj) == PAYSLIP_TEMPLATE_STANDARD:
+            return None
+        root = self.root
+        if not hasattr(root, '_stamp_url_cache'):
+            ps = self._payroll_settings()
+            root._stamp_url_cache = signed_file_url(ps.payslip_stamp) if ps else None
+        return root._stamp_url_cache
 
     def get_open_query_count(self, obj):
         return obj.queries.filter(status=PayslipQuery.STATUS_OPEN).count()

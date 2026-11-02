@@ -253,6 +253,28 @@ export default function BranchConfigTab() {
                   </div>
                 )}
               </div>
+
+              {/* Payslip presentation for this branch (amounts unaffected) */}
+              <div className="flex flex-col gap-3 pt-3 border-t border-[var(--outline-v)]">
+                <div className="text-[13px] font-semibold" style={{ color: "var(--on-bg)" }}>Payslip</div>
+                <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+                  <div>
+                    <label className="field-label">Layout</label>
+                    <select className="field-input" value={current.payslip_template ?? ""}
+                      onChange={e => set("payslip_template", e.target.value as BranchPayrollConfig["payslip_template"])}>
+                      <option value="">Company setting</option>
+                      <option value="standard">Standard</option>
+                      <option value="wage_slip">Wage slip</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="field-label">Client / principal employer</label>
+                    <input className="field-input" maxLength={200} placeholder="Optional — printed on wage slips"
+                      value={current.principal_employer_name ?? ""}
+                      onChange={e => set("principal_employer_name", e.target.value)} />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

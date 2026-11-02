@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { SalaryStructure, SalaryStructureListItem, SalaryComponent } from "@/types/payroll";
+import SalaryStructureImportModal from "./SalaryStructureImportModal";
 
 const CALC_LABEL: Record<string, string> = {
   percentage_of_ctc:   "% of CTC",
@@ -40,6 +41,7 @@ export default function SalaryStructuresTab() {
     useFetch<SalaryStructureListItem[]>(API.payroll.structures);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [importMode, setImportMode] = useState<"structures" | "assign" | null>(null);
 
   // Detail fetch keyed on selectedId — null URL skips the fetch
   const { data: selectedDetail, loading: detailLoading, refetch: refetchDetail } =
@@ -134,6 +136,22 @@ export default function SalaryStructuresTab() {
   }
 
   return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap justify-end gap-2">
+        <button className="btn btn-ghost btn-sm" onClick={() => setImportMode("structures")}>
+          <i className="ti ti-file-import" /> Import structures
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setImportMode("assign")}>
+          <i className="ti ti-users" /> Assign to employees (import)
+        </button>
+      </div>
+      {importMode && (
+        <SalaryStructureImportModal
+          mode={importMode}
+          onClose={() => setImportMode(null)}
+          onImported={() => { refetchList(); if (selectedId) refetchDetail(); }}
+        />
+      )}
     <div className="flex gap-4">
       {/* Structure list */}
       <div className="w-64 shrink-0">
@@ -412,6 +430,7 @@ export default function SalaryStructuresTab() {
           </div>
         </Modal>
       )}
+    </div>
     </div>
   );
 }

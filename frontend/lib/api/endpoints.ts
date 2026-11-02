@@ -394,10 +394,15 @@ export const API = {
   payroll: {
     // Settings
     settings: "/payroll/settings/",
+    settingsStamp: "/payroll/settings/stamp/",
 
     // Salary structures
     structures: "/payroll/structures/",
     structure: (id: string) => `/payroll/structures/${id}/`,
+    structureImport: "/payroll/structures/import/",
+    structureImportSample: "/payroll/structures/import/sample/",
+    structureAssignImport: "/payroll/structures/assign-import/",
+    structureAssignSample: "/payroll/structures/assign-import/sample/",
     components: (structureId: string) => `/payroll/structures/${structureId}/components/`,
     component: (structureId: string, id: string) => `/payroll/structures/${structureId}/components/${id}/`,
 

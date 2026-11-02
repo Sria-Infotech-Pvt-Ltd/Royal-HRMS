@@ -146,10 +146,18 @@ class PayslipDetailScopeTests(SalaryFixtureMixin, TestCase):
         self.assertEqual(api.get(self.url).status_code, 404)
 
     def test_employee_sees_own_but_not_others(self):
+        # Own payslip: needs payroll.view_own, and only once it's sent
+        # (drafts stay with payroll) - same rules as My Payslips.
+        from apps.accounts.factories import make_role
         from apps.payroll.tests_salary_components import _login
         from rest_framework.test import APIClient
+        self.emp_a.role = self.emp_b.role = make_role('scope_own', permission_codenames=['payroll.view_own'])
+        self.emp_a.save(update_fields=['role'])
+        self.emp_b.save(update_fields=['role'])
         own = APIClient()
         _login(own, self.emp_a.email)
+        self.assertEqual(own.get(self.url).status_code, 404)              # still a draft
+        EmployeePayslip.objects.filter(pk=self.slip.pk).update(status=EmployeePayslip.STATUS_SENT)
         self.assertEqual(own.get(self.url).status_code, 200)
         other = APIClient()
         _login(other, self.emp_b.email)

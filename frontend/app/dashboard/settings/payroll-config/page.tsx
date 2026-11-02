@@ -9,14 +9,16 @@ import type { PayrollSettings } from "@/types/payroll";
 import SalaryStructuresTab from "./_components/SalaryStructuresTab";
 import StatutoryConfigTab from "./_components/StatutoryConfigTab";
 import BranchConfigTab from "./_components/BranchConfigTab";
+import PayslipSettingsTab from "./_components/PayslipSettingsTab";
 
-type TabId = "run" | "structures" | "statutory" | "branch";
+type TabId = "run" | "structures" | "statutory" | "branch" | "payslip";
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: "run",       icon: "ti-settings",     label: "Payroll Run Settings"  },
   { id: "structures",icon: "ti-stack",         label: "Salary Structures"     },
   { id: "statutory", icon: "ti-building-bank", label: "Statutory Config"      },
   { id: "branch",    icon: "ti-building",      label: "Branch Config"         },
+  { id: "payslip",   icon: "ti-file-invoice",  label: "Payslip"               },
 ];
 
 export default function PayrollConfigPage() {
@@ -103,6 +105,11 @@ export default function PayrollConfigPage() {
           </button>
         ))}
       </div>
+
+      {/* ── Payslip layout & display ── */}
+      {tab === "payslip" && settings && (
+        <PayslipSettingsTab key={settings.updated_at} settings={settings} onSaved={refetch} />
+      )}
 
       {/* ── Payroll Run Settings ── */}
       {tab === "run" && (
