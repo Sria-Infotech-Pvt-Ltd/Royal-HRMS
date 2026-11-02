@@ -11,7 +11,7 @@
 // layout — photo + greeting/subtitle on the left, date/shift + a single plain
 // "Punch in" button on the right, no extra correction-request link.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import ClockInButton from "@/components/ClockInButton";
@@ -58,7 +58,12 @@ export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false 
     return () => window.removeEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
   }, [refetchProfile]);
 
-  const now = new Date();
+  // The greeting and date depend on the viewer's clock and timezone. Rendering them on the server (whose timezone
+  // differs from the browser's) makes the first client render disagree with the server HTML — React error #418 —
+  // so they are filled in only after mount.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => { setNow(new Date()); }, []);
+  const greeting = now ? `Good ${greetingWord(now.getHours())}` : "Welcome";
   const firstName = (profile?.full_name ?? "").split(" ")[0];
   const subtitle = [
     profile?.position_title || profile?.designation,
@@ -89,13 +94,13 @@ export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false 
           {!profile?.profile_photo_url && profile ? initials(profile.full_name) : null}
         </div>
         <div>
-          <h1>{firstName ? `Good ${greetingWord(now.getHours())}, ${firstName}` : `Good ${greetingWord(now.getHours())}`}</h1>
+          <h1>{firstName ? `${greeting}, ${firstName}` : greeting}</h1>
           <p>{subtitle || "Welcome to your workspace"}</p>
         </div>
       </div>
       <div className="ess-clock">
         <div>
-          <b>{now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</b>
+          <b>{now ? now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }) : " "}</b>
           <span>{shiftLabel}</span>
         </div>
         {!isReadOnly && <ClockInButton variant="ess" onPunchSuccess={onPunchSuccess} />}
