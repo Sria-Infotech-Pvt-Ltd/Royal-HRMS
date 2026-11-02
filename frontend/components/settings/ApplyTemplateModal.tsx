@@ -6,9 +6,10 @@
 // fix: giving the same access to 50 managers shouldn't mean 50 separate
 // edits).
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useFetch } from "@/hooks/useFetch";
 import Modal from "@/components/Modal";
 import type { Position } from "@/types/orgStructure";
 import type { PermissionTemplate } from "./permissionTemplateTypes";
@@ -20,8 +21,10 @@ interface Props {
 }
 
 export default function ApplyTemplateModal({ template, onClose, onApplied }: Props) {
-  const [positions, setPositions] = useState<Position[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { data: positionsData, error: loadError } = useFetch<{ results: Position[] }>(
+    `${API.orgStructure.positions.list}?page_size=1000`,
+  );
+  const positions = positionsData?.results ?? null;
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isApplying, setIsApplying] = useState(false);
@@ -31,12 +34,6 @@ export default function ApplyTemplateModal({ template, onClose, onApplied }: Pro
   // permissions (replace, not merge), so a one-click "Apply" with no
   // checkpoint was too easy to fire by accident on the wrong selection.
   const [step, setStep] = useState<"select" | "confirm">("select");
-
-  useEffect(() => {
-    clientApi.get<{ data: { results: Position[] } }>(API.orgStructure.positions.list, { params: { page_size: 1000 } })
-      .then(({ data }) => setPositions(data.data.results ?? []))
-      .catch(() => setLoadError("Could not load positions."));
-  }, []);
 
   const term = search.trim().toLowerCase();
   const filtered = useMemo(() => {

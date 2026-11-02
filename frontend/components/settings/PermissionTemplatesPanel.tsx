@@ -5,9 +5,10 @@
 // positions in one action, instead of opening each position's own access
 // modal one at a time (Organization > a position > Permissions).
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useFetch } from "@/hooks/useFetch";
 import { useToast } from "@/components/ToastProvider";
 import ConfirmModal from "@/components/ConfirmModal";
 import PermissionTemplateEditor from "./PermissionTemplateEditor";
@@ -22,24 +23,15 @@ interface Props {
 
 export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) {
   const { showToast } = useToast();
-  const [templates, setTemplates] = useState<PermissionTemplate[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { data: templates, error: loadError, refetch } = useFetch<PermissionTemplate[]>(API.settings.permissionTemplates);
   const [editing, setEditing] = useState<PermissionTemplate | "new" | null>(null);
   const [applying, setApplying] = useState<PermissionTemplate | null>(null);
   const [deleting, setDeleting] = useState<PermissionTemplate | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  function load() {
-    clientApi.get<{ data: PermissionTemplate[] }>(API.settings.permissionTemplates)
-      .then(({ data }) => setTemplates(data.data ?? []))
-      .catch(() => setLoadError("Could not load permission templates."));
-  }
-
-  useEffect(load, []);
-
   function onSaved() {
     setEditing(null);
-    load();
+    refetch();
     showToast("Template saved.", "success");
   }
 
@@ -49,7 +41,7 @@ export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) 
     try {
       await clientApi.delete(API.settings.permissionTemplateDetail(deleting.id));
       setDeleting(null);
-      load();
+      refetch();
       showToast("Template deleted.", "success");
     } catch (err: unknown) {
       showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not delete this template.", "error");

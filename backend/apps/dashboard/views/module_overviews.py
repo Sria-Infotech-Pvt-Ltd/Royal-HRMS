@@ -208,7 +208,7 @@ class PayrollOverviewView(APIView):
             },
             {
                 'name': 'Bank validation',
-                'context': f"{len(bank_ids)} accounts",
+                'context': f"{len(snapshot.bank_ok_ids)} accounts",
                 'status_label': f"{bank_missing} missing" if bank_missing else 'Complete',
                 'status_kind': 'error' if bank_missing else 'success',
                 'link': '/dashboard/employees',

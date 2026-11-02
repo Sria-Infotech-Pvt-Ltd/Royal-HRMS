@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useFetch } from "@/hooks/useFetch";
 
 interface SeriesRow {
   employment_type:         string;
@@ -123,14 +124,16 @@ function SeriesRowEditor({ row, onSaved }: { row: SeriesRow; onSaved: (row: Seri
  * EmployeeCodeSeries.generate_employee_id_for_type); this just lets an
  * admin see and edit each type's prefix/digit-count/starting number. */
 export default function EmployeeCodeSeriesCard() {
+  const { data: fetchedRows, error: loadError } = useFetch<SeriesRow[]>(API.settings.employeeCodeSeries);
+  // A local, independently-patchable copy of the fetched rows — each row
+  // saves itself (see onRowSaved) without waiting on a full refetch, so
+  // fixing one type's prefix doesn't flicker/reset every other row's
+  // in-progress edit.
   const [rows, setRows] = useState<SeriesRow[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    clientApi.get<{ data: SeriesRow[] }>(API.settings.employeeCodeSeries)
-      .then(({ data }) => setRows(data.data ?? []))
-      .catch(() => setLoadError("Failed to load per-type ID series."));
-  }, []);
+    if (fetchedRows) setRows(fetchedRows);
+  }, [fetchedRows]);
 
   function onRowSaved(updated: SeriesRow) {
     setRows(prev => prev?.map(r => r.employment_type === updated.employment_type ? updated : r) ?? prev);

@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import PermissionMatrix from "@/components/PermissionMatrix";
+import { filterCatalogueForMatrix, toggleManyInSet } from "@/lib/permissionMatrixHelpers";
 import type { PermissionCatalogueItem } from "@/types/orgStructure";
 import type { PermissionTemplate } from "./permissionTemplateTypes";
 
@@ -35,11 +36,7 @@ export default function PermissionTemplateEditor({ catalogue, template, onClose,
   }
 
   function toggleMany(codenames: string[], isOn: boolean) {
-    setGranted(previous => {
-      const next = new Set(previous);
-      codenames.forEach(codename => { if (isOn) next.add(codename); else next.delete(codename); });
-      return next;
-    });
+    setGranted(previous => toggleManyInSet(previous, codenames, isOn));
   }
 
   async function save() {
@@ -68,16 +65,7 @@ export default function PermissionTemplateEditor({ catalogue, template, onClose,
     }
   }
 
-  const term = search.trim().toLowerCase();
-  const modules = Object.entries(catalogue)
-    .map(([module, items]) => [
-      module,
-      term ? items.filter(item => `${item.action} ${item.codename} ${item.description ?? ""}`.toLowerCase().includes(term)) : items,
-    ] as [string, PermissionCatalogueItem[]])
-    .filter(([, items]) => items.length > 0)
-    .sort(([a], [b]) => a.localeCompare(b));
-  const permissionCount = modules.reduce((total, [, items]) => total + items.length, 0);
-  const grantedCount = modules.reduce((total, [, items]) => total + items.filter(item => granted.has(item.codename)).length, 0);
+  const { modules, permissionCount, grantedCount } = filterCatalogueForMatrix(catalogue, search, granted);
 
   return (
     <Modal
