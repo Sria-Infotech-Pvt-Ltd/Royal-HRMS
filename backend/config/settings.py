@@ -309,7 +309,21 @@ SEPARATION_ALLOW_REQUESTER_APPROVAL = env.bool('SEPARATION_ALLOW_REQUESTER_APPRO
 # Hire-wizard drafts untouched for this many days are discarded by the daily expire-stale-hire-drafts task.
 HIRE_DRAFT_EXPIRY_DAYS = env.int('HIRE_DRAFT_EXPIRY_DAYS', default=30)
 
+# Project Budget & Tracking tool — used only for the "My Projects" fallback pull when we hold no rows for an employee.
+# Blank means the fallback is switched off (the push webhook still works).
+PROJECT_BUDGET_API_BASE_URL = env('PROJECT_BUDGET_API_BASE_URL', default='')
+PROJECT_BUDGET_API_KEY      = env('PROJECT_BUDGET_API_KEY', default='')
+# When an employee is assigned a new project, end their still-open assignments on other projects the day before it
+# starts. Skipped for assignments that carry an allocation %. Turn off if the business wants concurrent open-ended work.
+PROJECT_ASSIGNMENT_AUTO_CLOSE_OPEN_ENDED = env.bool('PROJECT_ASSIGNMENT_AUTO_CLOSE_OPEN_ENDED', default=True)
+
 CELERY_BEAT_SCHEDULE = {
+    # Every 30 minutes — safety net for missed Project Budgeting pushes: pulls all employee assignments and re-applies
+    # them. Does nothing unless PROJECT_BUDGET_API_BASE_URL / PROJECT_BUDGET_API_KEY are set.
+    'reconcile-project-assignments': {
+        'task':     'apps.hrms.tasks.reconcile_project_assignments',
+        'schedule': 1800.0,  # seconds
+    },
     # Runs daily at 02:10 IST — discards hire drafts nobody has touched for HIRE_DRAFT_EXPIRY_DAYS and releases their
     # reserved employee numbers. Drafts that merely look like an existing employee are NOT touched here (see the
     # cleanup_hire_drafts command, where a person approves the list).
@@ -410,6 +424,7 @@ REST_FRAMEWORK = {
         # paginated sync plus individual employee lookups doesn't get
         # throttled mid-sync.
         'external_api':         '600/hour',
+        'external_webhook':     '6000/hour',
     },
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
 }

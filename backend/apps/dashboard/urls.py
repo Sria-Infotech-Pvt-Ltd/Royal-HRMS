@@ -54,6 +54,7 @@ urlpatterns = [
     path('employee/leave-balances/',     views.EmployeeLeaveBalanceView.as_view()),
     path('employee/action-items/',       views.EmployeeActionItemsView.as_view()),
     path('employee/recent-requests/',    views.EmployeeRecentRequestsView.as_view()),
+    path('employee/projects/',           views.EmployeeProjectAssignmentsView.as_view()),
     path('employee/attendance-summary/', views.EmployeeAttendanceSummaryView.as_view()),
     path('employee/attendance-status/',  views.EmployeeAttendanceStatusView.as_view()),
     path('employee/birthdays/today/',    views.EmployeeBirthdayTodayView.as_view()),

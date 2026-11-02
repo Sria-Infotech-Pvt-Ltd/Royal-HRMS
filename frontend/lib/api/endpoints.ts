@@ -464,6 +464,14 @@ export const API = {
     myBirthdayWidgets: "/dashboard/birthdays/mine/",
   },
 
+  workStatus: {
+    me:       "/work-status/me/",
+    employee: (employeeId: string) => `/work-status/${employeeId}/`,
+  },
+  projectSync: {
+    status: "/project-sync/status/",
+  },
+
   payroll: {
     // Settings
     settings: "/payroll/settings/",

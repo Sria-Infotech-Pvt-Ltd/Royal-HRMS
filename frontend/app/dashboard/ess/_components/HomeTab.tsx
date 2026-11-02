@@ -28,6 +28,7 @@ import HomeQuickActions from "./HomeQuickActions";
 import HomeTodayPanel from "./HomeTodayPanel";
 import HomeRequestsList from "./HomeRequestsList";
 import HomePayslipsPanel from "./HomePayslipsPanel";
+import HomeProjectsPanel from "./HomeProjectsPanel";
 import { currentFinancialYearStart } from "@/app/dashboard/my-payslip/_components/types";
 
 interface ApiPayslip {
@@ -170,6 +171,8 @@ export default function HomeTab({ onNavigate, status }: Props) {
         <HomeQuickActions primary={primaryActions} secondary={secondaryActions} />
         <HomeTodayPanel status={status} />
       </div>
+
+      <HomeProjectsPanel onViewAll={() => onNavigate("employment")} />
 
       <div style={{ display: "grid", gridTemplateColumns: "5fr 3fr", gap: 14 }}>
         <HomeRequestsList items={requestItems.slice(0, 5)} onViewAll={() => onNavigate("requests")} />

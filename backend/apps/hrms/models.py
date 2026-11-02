@@ -1114,3 +1114,4 @@ from apps.hrms.models_separation_v2b import ExitInterview, SeparationChecklistLi
 from apps.hrms.models_helpdesk_v2b import (  # noqa: E402,F401
     KnowledgeBaseArticle, TicketSatisfactionRating, TicketMergeRecord, RoundRobinAssignmentState,
 )
+from apps.hrms.models_project_assignment import ProjectAssignment, ProjectAssignmentEvent, ProjectSyncLog  # noqa: E402,F401

@@ -26,6 +26,7 @@ NOTIFICATION_TYPE_CHOICES = [
     ('password_reset',         'Password Reset'),
     ('employee_confirmed',     'Employee Confirmed'),
     ('salary_updated',         'Salary Updated'),
+    ('project_sync_alert',     'Project Sync Alert'),
 ]
 
 MODULE_CHOICES = [
@@ -43,6 +44,7 @@ MODULE_CHOICES = [
     ('documents',      'Documents'),
     ('confirmation',   'Confirmation'),
     ('payroll',        'Payroll'),
+    ('system',         'System'),
 ]
 
 

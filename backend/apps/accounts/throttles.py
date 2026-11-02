@@ -33,3 +33,10 @@ class ResetPasswordRateThrottle(AnonRateThrottle):
 
 class OTPVerifyRateThrottle(AnonRateThrottle):
     scope = 'otp_verify'
+
+
+class ExternalWebhookThrottle(ExternalAPIKeyThrottle):
+    """Same per-key bucketing as ExternalAPIKeyThrottle, but its own (higher) rate and counter: one project change
+    pushes once per affected employee, so a burst from a big project would otherwise eat the polling budget of the
+    read-only employees API (shared 'external_api' scope) and get the rest of the burst answered with 429."""
+    scope = 'external_webhook'
