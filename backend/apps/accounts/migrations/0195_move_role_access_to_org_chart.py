@@ -33,6 +33,10 @@ def move_role_access_to_the_org_chart(apps, schema_editor):
     OrgUnit = apps.get_model('accounts', 'OrgUnit')
     User = apps.get_model('accounts', 'User')
 
+    if Role._meta.db_table not in schema_editor.connection.introspection.table_names():
+        print('  [roles] legacy role table is already absent; access migration was previously applied')
+        return
+
     def role_codenames(role):
         codenames = set(RolePermission.objects.filter(role=role).values_list('permission__codename', flat=True))
         if role.is_full_access:

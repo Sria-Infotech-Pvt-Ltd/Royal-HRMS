@@ -9,6 +9,7 @@ from datetime import date
 
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
+from django.db.migrations.recorder import MigrationRecorder
 from django.test import TransactionTestCase
 
 BEFORE = [('accounts', '0194_approval_rule_approver_kinds'), ('platform_core', '0021_add_position_links')]
@@ -132,3 +133,23 @@ class RolesRemovalMigrationTests(TransactionTestCase):
         self.assertNotIn('hrms_roles', tables)
         self.assertNotIn('hrms_role_permissions', tables)
         self.assertNotIn('role_id', columns)
+
+    def test_legacy_applied_role_removal_is_safe_with_split_migrations(self):
+        recorder = MigrationRecorder(connection)
+        recorder.record_unapplied('accounts', '0195_move_role_access_to_org_chart')
+        recorder.record_unapplied('accounts', '0196_remove_roles')
+        recorder.record_applied('accounts', '0195_remove_roles')
+
+        try:
+            MigrationExecutor(connection).migrate(AFTER)
+            with connection.cursor() as cursor:
+                tables = connection.introspection.table_names(cursor)
+                columns = [
+                    column.name
+                    for column in connection.introspection.get_table_description(cursor, 'hrms_users')
+                ]
+            self.assertNotIn('hrms_roles', tables)
+            self.assertNotIn('hrms_role_permissions', tables)
+            self.assertNotIn('role_id', columns)
+        finally:
+            recorder.record_unapplied('accounts', '0195_remove_roles')
