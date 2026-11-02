@@ -551,7 +551,17 @@ def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
     employee.branch yet (it's only copied over from the linked Candidate at
     approval time) — fall back to the source candidate's branch so HR can
     still see/act on their own branch's pending submissions.
+
+    settings.edit (full admin) is checked FIRST and unconditionally bypasses
+    both narrowings below — mirrors EmployeeListCreateView.get()'s own
+    ordering. Without this, a full admin who ALSO happens to hold a
+    can_manage_team position (e.g. an org-unit Chief) gets scoped down to
+    only their own direct reports on every one of these endpoints
+    (profile, work-status, leave balance, action-history, audit-trail, …)
+    even though the employee directory itself correctly shows everyone.
     """
+    if _has_perm(requesting_user, 'settings.edit'):
+        return False
     if can_manage_team(requesting_user):
         return employee.reporting_manager_id != requesting_user.id
     if not _has_perm(requesting_user, 'settings.edit') and requesting_user.branch:
