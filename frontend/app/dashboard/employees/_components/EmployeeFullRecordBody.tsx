@@ -18,7 +18,6 @@ import EmployeeDrawerLeaveCard from "./EmployeeDrawerLeaveCard";
 import EmployeeDrawerActions from "./EmployeeDrawerActions";
 import type { PersonnelActionRequest } from "@/types/personnelAction";
 import EmployeeDrawerAuditTrail, { type AuditTrailRow } from "./EmployeeDrawerAuditTrail";
-import WorkStatusPanel from "@/components/work-status/WorkStatusPanel";
 
 interface RevealedFields {
   pan_number?:         string;
@@ -331,8 +330,6 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
       </SectionCard>
 
       <EmployeeDrawerAuditTrail rows={auditTrail ?? null} forbidden={auditStatus === 403} loading={auditLoading} />
-
-      {isAdmin && hasEmployeeId && <WorkStatusPanel employeeId={employee.id} />}
 
       {isSelf && <EmployeeDrawerLeaveCard />}
       {isAdmin && hasEmployeeId && canViewLeave && <EmployeeDrawerLeaveCard employeeCode={employee.id} />}

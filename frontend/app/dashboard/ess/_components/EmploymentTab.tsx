@@ -22,7 +22,6 @@ import { API_BASE } from "@/lib/config";
 import { fmtDate, statusBadgeClass } from "@/app/dashboard/separation/_workflow";
 import type { PaginatedResponse, SeparationRequest } from "@/types/separation";
 import ResignationRequestModal from "./ResignationRequestModal";
-import WorkStatusPanel from "@/components/work-status/WorkStatusPanel";
 
 interface EmploymentProfileData {
   employee_id:                string;
@@ -66,7 +65,6 @@ export default function EmploymentTab({ onNavigateToDocuments }: Props) {
         <CurrentAssignmentCard profile={profile} />
         <EmploymentDocumentsCard onNavigateToDocuments={onNavigateToDocuments} />
       </div>
-      <WorkStatusPanel />
       <LifecycleRequestsCard requests={requests} loading={sepLoading} error={sepError} />
 
       {showResign && (
