@@ -87,9 +87,7 @@ class Command(TenantCommand):
             parts = full_name_parts = (u.full_name or '').strip().split(' ', 1)
             first_name = parts[0]
             last_name  = parts[1] if len(parts) > 1 else ''
-            initials = EmployeeCodeSettings._initials(first_name, last_name)
-            ddmm = u.date_of_joining.strftime('%d%m')
-            base = f'{prefix}{ddmm}{initials}'
+            base = EmployeeCodeSettings.build_base_id(prefix, cfg.id_format, first_name, last_name, u.date_of_joining)
             base_to_users.setdefault(base, []).append(u)
 
         for base, users_in_group in base_to_users.items():

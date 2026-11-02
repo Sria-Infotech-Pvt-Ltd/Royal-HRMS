@@ -707,7 +707,18 @@ class Company(models.Model):
 
 class EmployeeCodeSettings(models.Model):
     """Singleton row (pk=1) that governs how employee IDs are generated."""
+    # Where the date of joining sits relative to the name initials. Per
+    # company (this row lives in each tenant schema); the default is the
+    # original format, so companies that never choose keep it unchanged.
+    FORMAT_DATE_INITIALS   = 'date_initials'    # prefix + DDMM + first + last initial → RSS0308TG
+    FORMAT_FIRST_DATE_LAST = 'first_date_last'  # prefix + first initial + DDMM + last initial → RIST0308G
+    FORMAT_CHOICES = [
+        (FORMAT_DATE_INITIALS,   'Prefix + DDMM + initials (e.g. RSS0308TG)'),
+        (FORMAT_FIRST_DATE_LAST, 'Prefix + first initial + DDMM + last initial (e.g. RIST0308G)'),
+    ]
+
     prefix        = models.CharField(max_length=10, default='EMP')
+    id_format     = models.CharField(max_length=20, choices=FORMAT_CHOICES, default=FORMAT_DATE_INITIALS)
     padding       = models.PositiveSmallIntegerField(default=5)
     next_sequence = models.PositiveIntegerField(default=1)
     updated_at    = models.DateTimeField(auto_now=True)
@@ -723,7 +734,7 @@ class EmployeeCodeSettings(models.Model):
         db_table = 'hrms_employee_code_settings'
 
     def __str__(self) -> str:
-        return f'{self.prefix} (format: prefix + initial + DD + month + surname)'
+        return f'{self.prefix} ({self.get_id_format_display()})'
 
     @classmethod
     def get(cls) -> 'EmployeeCodeSettings':
@@ -753,15 +764,27 @@ class EmployeeCodeSettings(models.Model):
         return f'{words[0][:1].upper()}{words[-1][:1].upper()}'
 
     @classmethod
+    def build_base_id(cls, prefix: str, id_format: str, first_name: str, last_name: str, doj) -> str:
+        """The id before any collision suffix — shared by new-employee
+        generation and the convert_employee_ids command so the two can't drift."""
+        ddmm = doj.strftime('%d%m')
+        initials = cls._initials(first_name, last_name)
+        if id_format == cls.FORMAT_FIRST_DATE_LAST:
+            return f'{prefix}{initials[0]}{ddmm}{initials[1]}'
+        return f'{prefix}{ddmm}{initials}'
+
+    @classmethod
     def generate_employee_id(
         cls,
         first_name: str,
         last_name: str,
         date_of_joining=None,
     ) -> str:
-        """Generate ID: prefix + date of joining (DDMM) + name initials.
+        """Generate ID from prefix, date of joining (DDMM) and name initials,
+        in the company's id_format (see build_base_id).
 
-        Format example: RSS + 0308 (3 Aug) + TG (Teerdaveni Gedela) → RSS0308TG
+        Format examples for Teerdaveni Gedela joining 3 Aug:
+        date_initials → RSS0308TG; first_date_last → RIST0308G
 
         Two different employees can legitimately share DDMM+initials (e.g.
         two "RK"s joining the same day) — collisions are resolved by
@@ -784,8 +807,6 @@ class EmployeeCodeSettings(models.Model):
         doj = date_of_joining or _date.today()
         if isinstance(doj, str):
             doj = _datetime.strptime(doj, '%Y-%m-%d').date()
-        ddmm = doj.strftime('%d%m')
-        initials = cls._initials(first_name, last_name)
 
         with _tx.atomic():
             cfg = cls.objects.select_for_update().get_or_create(
@@ -793,7 +814,7 @@ class EmployeeCodeSettings(models.Model):
                 defaults={'prefix': 'EMP', 'padding': 5, 'next_sequence': 1},
             )[0]
             prefix = cfg.prefix or 'EMP'
-            base   = f'{prefix}{ddmm}{initials}'
+            base   = cls.build_base_id(prefix, cfg.id_format, first_name, last_name, doj)
 
             candidate = base
             suffix = 2

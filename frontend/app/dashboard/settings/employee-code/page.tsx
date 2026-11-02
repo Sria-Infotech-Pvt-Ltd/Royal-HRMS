@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 
+type IdFormat = "date_initials" | "first_date_last";
+
 interface EmployeeCodeSettings {
   prefix:        string;
+  id_format:     IdFormat;
   padding:       number;
   next_sequence: number;
 }
@@ -17,31 +20,50 @@ interface FieldErrors {
   next_sequence?: string;
 }
 
-// Employee ID format: prefix + date of joining (DDMM) + name initials
-// (first letter of first name + first letter of last name) — e.g.
-// RSS + 0308 (3 Aug) + TG (Teerdaveni Gedela) -> RSS0308TG. Shown here with
-// fixed example people/dates, not derived from padding/next_sequence
-// (those no longer affect the generated id under this format).
+// Employee ID = prefix + date of joining (DDMM) + name initials (first
+// letter of first name + first letter of last name), in one of two orders
+// (backend EmployeeCodeSettings.build_base_id):
+//   date_initials   — RSS + 0308 + TG        -> RSS0308TG
+//   first_date_last — RIS + T + 0308 + G     -> RIST0308G
+// Shown with fixed example people/dates, not derived from padding/
+// next_sequence (those no longer affect the generated id).
+const FORMAT_OPTIONS: { value: IdFormat; label: string; description: string }[] = [
+  { value: "date_initials",   label: "Prefix + DDMM + initials",                     description: "prefix + date of joining (DDMM) + first and last name initials" },
+  { value: "first_date_last", label: "Prefix + first initial + DDMM + last initial", description: "prefix + first name initial + date of joining (DDMM) + last name initial" },
+];
+
 const PREVIEW_EXAMPLES: { name: string; doj: string; ddmm: string; initials: string }[] = [
   { name: "Teerdaveni Gedela", doj: "03 Aug", ddmm: "0308", initials: "TG" },
   { name: "Ravi Kumar",        doj: "15 Sep", ddmm: "1509", initials: "RK" },
   { name: "Rahul Kumar",       doj: "15 Sep", ddmm: "1509", initials: "RK" },
 ];
 
-function buildPreview(prefix: string): { label: string; code: string; note?: string }[] {
+function buildPreview(prefix: string, format: IdFormat): { label: string; code: string; note?: string }[] {
   const p = prefix || "EMP";
-  return PREVIEW_EXAMPLES.map((ex, i) => ({
-    label: `${ex.name} (joined ${ex.doj})`,
-    code: i === 2 ? `${p}${ex.ddmm}${ex.initials}2` : `${p}${ex.ddmm}${ex.initials}`,
-    note: i === 2 ? "Same day + same initials as above — a 2 is appended to keep it unique" : undefined,
-  }));
+  return PREVIEW_EXAMPLES.map((ex, i) => {
+    const base = format === "first_date_last"
+      ? `${p}${ex.initials[0]}${ex.ddmm}${ex.initials[1]}`
+      : `${p}${ex.ddmm}${ex.initials}`;
+    return {
+      label: `${ex.name} (joined ${ex.doj})`,
+      code: i === 2 ? `${base}2` : base,
+      note: i === 2 ? "Same day + same initials as above — a 2 is appended to keep it unique" : undefined,
+    };
+  });
+}
+
+function toSettings(d: Partial<EmployeeCodeSettings>): EmployeeCodeSettings {
+  return {
+    prefix: d.prefix ?? "", id_format: d.id_format ?? "date_initials",
+    padding: d.padding ?? 5, next_sequence: d.next_sequence ?? 1,
+  };
 }
 
 export default function EmployeeCodeSettingsPage() {
   const router = useRouter();
 
-  const [form,    setForm]    = useState<EmployeeCodeSettings>({ prefix: "", padding: 5, next_sequence: 1 });
-  const [base,    setBase]    = useState<EmployeeCodeSettings>({ prefix: "", padding: 5, next_sequence: 1 });
+  const [form,    setForm]    = useState<EmployeeCodeSettings>(toSettings({}));
+  const [base,    setBase]    = useState<EmployeeCodeSettings>(toSettings({}));
   const [errors,  setErrors]  = useState<FieldErrors>({});
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -52,8 +74,7 @@ export default function EmployeeCodeSettingsPage() {
     clientApi
       .get<{ data: EmployeeCodeSettings }>(API.settings.employeeCode)
       .then(({ data }) => {
-        const d = data.data ?? {};
-        const safe = { prefix: d.prefix ?? "", padding: d.padding ?? 5, next_sequence: d.next_sequence ?? 1 };
+        const safe = toSettings(data.data ?? {});
         setForm(safe);
         setBase(safe);
       })
@@ -84,6 +105,12 @@ export default function EmployeeCodeSettingsPage() {
     setForm(f => ({ ...f, prefix: value }));
   }
 
+  function onFormatChange(value: IdFormat) {
+    setSaved(false);
+    setApiError(null);
+    setForm(f => ({ ...f, id_format: value }));
+  }
+
   async function onSave() {
     if (!validate()) return;
     setSaving(true);
@@ -91,10 +118,12 @@ export default function EmployeeCodeSettingsPage() {
     try {
       const { data } = await clientApi.put<{ data: EmployeeCodeSettings }>(
         API.settings.employeeCode,
-        { prefix: form.prefix.trim().toUpperCase(), padding: form.padding, next_sequence: form.next_sequence }
+        {
+          prefix: form.prefix.trim().toUpperCase(), id_format: form.id_format,
+          padding: form.padding, next_sequence: form.next_sequence,
+        }
       );
-      const d = data.data ?? {};
-      const safe = { prefix: d.prefix ?? "", padding: d.padding ?? 5, next_sequence: d.next_sequence ?? 1 };
+      const safe = toSettings(data.data ?? {});
       setForm(safe);
       setBase(safe);
       setSaved(true);
@@ -110,7 +139,8 @@ export default function EmployeeCodeSettingsPage() {
     }
   }
 
-  const preview = buildPreview(form.prefix.trim().toUpperCase() || "EMP");
+  const preview = buildPreview(form.prefix.trim().toUpperCase() || "EMP", form.id_format);
+  const formatOption = FORMAT_OPTIONS.find(o => o.value === form.id_format) ?? FORMAT_OPTIONS[0];
 
   if (loading) {
     return (
@@ -184,6 +214,22 @@ export default function EmployeeCodeSettingsPage() {
               </div>
             </div>
 
+            {/* Format */}
+            <div className="field-group">
+              <label className="field-label">Format</label>
+              <select
+                className="field-input"
+                value={form.id_format}
+                onChange={e => onFormatChange(e.target.value as IdFormat)}
+                style={{ maxWidth: 380 }}
+              >
+                {FORMAT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
+                Applies to employees created from now on. Existing employee IDs are not changed.
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -194,7 +240,7 @@ export default function EmployeeCodeSettingsPage() {
           </div>
           <div style={{ padding: "20px 24px" }}>
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 14 }}>
-              Format: prefix + date of joining (DDMM) + name initials. Example IDs:
+              Format: {formatOption.description}. Example IDs:
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {preview.map((ex, idx) => (

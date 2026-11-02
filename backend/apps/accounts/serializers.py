@@ -843,12 +843,13 @@ class EmployeeCodeSettingsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = EmployeeCodeSettings
-        fields = ['prefix', 'padding', 'next_sequence', 'format_description']
+        # id_format is optional on save (model default) - a client that
+        # does not send it leaves the company's format unchanged.
+        fields = ['prefix', 'id_format', 'padding', 'next_sequence', 'format_description']
         read_only_fields = ['format_description']
 
     def get_format_description(self, obj) -> str:
-        seq = str(obj.next_sequence).zfill(obj.padding)
-        return f'{obj.prefix}{seq}  (prefix + {obj.padding}-digit sequence, next = {obj.next_sequence})'
+        return obj.get_id_format_display()
 
     def validate_prefix(self, value):
         value = value.strip().upper()

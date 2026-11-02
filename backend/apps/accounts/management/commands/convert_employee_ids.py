@@ -1,14 +1,17 @@
 """
 Management command: convert_employee_ids
 
-Converts existing employees' Employee IDs to the prefix + DDMM + initials
-format (e.g. RSS0308TG) for ONE company. PREVIEW BY DEFAULT — nothing is
-written unless --apply is passed.
+Converts existing employees' Employee IDs to the prefix + date of joining +
+initials format for ONE company. PREVIEW BY DEFAULT — nothing is written
+unless --apply is passed.
 
 Rules:
-- New id = <--prefix> + date_of_joining as DDMM + EmployeeCodeSettings._initials()
-  (first word + last word of full_name — the same rule new-employee
-  generation uses, so the two can never drift apart).
+- New id = EmployeeCodeSettings.build_base_id(<--prefix>, <--format>, ...):
+  date_initials   → prefix + DDMM + first + last initial  (RSS0308TG)
+  first_date_last → prefix + first initial + DDMM + last initial  (RIST0308G)
+  Initials are the first word + last word of full_name — the same rule
+  new-employee generation uses, so the two can never drift apart.
+  --format defaults to the company's current format.
 - --skip <old ids...> leaves those employees completely untouched; their
   current ids stay reserved so nobody is converted onto them.
 - Same base id for several employees: ACTIVE employees first, then
@@ -18,8 +21,9 @@ Rules:
   run: fill the data in, or list them in --skip.
 
 On --apply, inside ONE transaction:
-- every employee_id is updated, and EmployeeCodeSettings.prefix is set to
-  --prefix so employees created afterwards get the same format;
+- every employee_id is updated, and EmployeeCodeSettings.prefix/id_format
+  are set to --prefix/--format so employees created afterwards get the same
+  format;
 - one AuditLog row (action 'employee_id_bulk_conversion') records the full
   old -> new mapping;
 - a CSV of the mapping (user uuid, old id, new id) is written to
@@ -27,11 +31,13 @@ On --apply, inside ONE transaction:
   written, nothing is changed.
 
 --revert <csv> restores old ids from such a CSV (only for employees whose
-id is still the converted one) and puts the previous prefix back.
+id is still the converted one) and puts the previous prefix (and format, for
+CSVs that record it) back.
 
 Usage:
     python manage.py convert_employee_ids --company-code RIS --prefix RSS --skip RIS00049 RIS00050
     python manage.py convert_employee_ids --company-code RIS --prefix RSS --skip ... --apply --mapping-file /path/map.csv
+    python manage.py convert_employee_ids --company-code RIS --prefix RIS --format first_date_last
     python manage.py convert_employee_ids --company-code RIS --revert /path/to/mapping.csv --apply
 """
 import csv
@@ -56,7 +62,7 @@ class Candidate:
     is_active: bool
 
 
-def plan_conversion(candidates, prefix, skip_ids):
+def plan_conversion(candidates, prefix, skip_ids, id_format=EmployeeCodeSettings.FORMAT_DATE_INITIALS):
     """Pure planning step (no DB access) — returns (mapping, skipped, invalid).
 
     mapping: list of dicts {pk, old_id, new_id, base, suffixed, candidate}
@@ -84,8 +90,9 @@ def plan_conversion(candidates, prefix, skip_ids):
     mapping = []
     for c in valid:
         words = ' '.join(c.full_name.split()).split(' ')
-        initials = EmployeeCodeSettings._initials(words[0], ' '.join(words[1:]))
-        base = f'{prefix}{c.date_of_joining.strftime("%d%m")}{initials}'
+        base = EmployeeCodeSettings.build_base_id(
+            prefix, id_format, words[0], ' '.join(words[1:]), c.date_of_joining,
+        )
         new_id, suffix = base, 2
         while new_id in taken:
             new_id = f'{base}{suffix}'
@@ -100,12 +107,15 @@ def plan_conversion(candidates, prefix, skip_ids):
 
 class Command(TenantCommand):
     help = (
-        'Convert existing Employee IDs to prefix+DDMM+initials for one company. '
+        'Convert existing Employee IDs to prefix + date of joining + initials for one company. '
         'Preview only unless --apply is given.'
     )
 
     def add_tenant_arguments(self, parser):
         parser.add_argument('--prefix', help='Target prefix, e.g. RSS.')
+        parser.add_argument('--format', dest='id_format', default=None,
+                            choices=[k for k, _ in EmployeeCodeSettings.FORMAT_CHOICES],
+                            help="Target id format (default: the company's current format).")
         parser.add_argument('--skip', nargs='*', default=[],
                             help='Old employee ids to leave untouched.')
         parser.add_argument('--apply', action='store_true',
@@ -130,6 +140,8 @@ class Command(TenantCommand):
         if not prefix or not prefix.isalnum() or len(prefix) > 10:
             raise CommandError('--prefix is required (letters/digits, max 10), e.g. --prefix RSS.')
 
+        id_format = options.get('id_format') or EmployeeCodeSettings.get().id_format
+
         users = list(User.objects.exclude(employee_id='').order_by('employee_id'))
         unknown = set(options['skip']) - {u.employee_id for u in users}
         if unknown:
@@ -143,8 +155,8 @@ class Command(TenantCommand):
             Candidate(u.pk, u.employee_id, u.full_name, u.date_of_joining, u.date_joined, u.is_active)
             for u in users
         ]
-        mapping, skipped, invalid = plan_conversion(candidates, prefix, options['skip'])
-        self._print_plan(client, prefix, users, mapping, skipped, invalid)
+        mapping, skipped, invalid = plan_conversion(candidates, prefix, options['skip'], id_format)
+        self._print_plan(client, f'{prefix} ({id_format})', users, mapping, skipped, invalid)
 
         if not options['apply']:
             self.stdout.write(self.style.WARNING('PREVIEW ONLY — no changes were made. Re-run with --apply to convert.'))
@@ -162,7 +174,7 @@ class Command(TenantCommand):
             cfg = EmployeeCodeSettings.objects.select_for_update().get_or_create(
                 pk=1, defaults={'prefix': 'EMP', 'padding': 5, 'next_sequence': 1},
             )[0]
-            old_prefix = cfg.prefix
+            old_prefix, old_format = cfg.prefix, cfg.id_format
             # Re-check under the lock that nobody's id changed since planning.
             current = dict(User.objects.filter(pk__in=[m['pk'] for m in mapping])
                            .values_list('pk', 'employee_id'))
@@ -172,15 +184,16 @@ class Command(TenantCommand):
 
             with open(path, 'x', newline='', encoding='utf-8') as f:
                 w = csv.writer(f)
-                w.writerow(['user_id', 'old_employee_id', 'new_employee_id', 'old_prefix', 'new_prefix'])
+                w.writerow(['user_id', 'old_employee_id', 'new_employee_id', 'old_prefix', 'new_prefix',
+                            'old_format', 'new_format'])
                 for m in changes:
-                    w.writerow([m['pk'], m['old_id'], m['new_id'], old_prefix, prefix])
+                    w.writerow([m['pk'], m['old_id'], m['new_id'], old_prefix, prefix, old_format, id_format])
             os.chmod(path, 0o600)
 
             for m in changes:
                 User.objects.filter(pk=m['pk']).update(employee_id=m['new_id'])
-            cfg.prefix = prefix
-            cfg.save(update_fields=['prefix', 'updated_at'])
+            cfg.prefix, cfg.id_format = prefix, id_format
+            cfg.save(update_fields=['prefix', 'id_format', 'updated_at'])
 
             AuditLog.objects.create(
                 user=None,
@@ -188,6 +201,7 @@ class Command(TenantCommand):
                 module='employees',
                 changes={
                     'old_prefix': old_prefix, 'new_prefix': prefix,
+                    'old_format': old_format, 'new_format': id_format,
                     'converted': {m['old_id']: m['new_id'] for m in changes},
                     'skipped': [c.old_id for c in skipped],
                     'mapping_file': path,
@@ -195,7 +209,8 @@ class Command(TenantCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(
-            f'APPLIED: {len(changes)} employee ids converted, prefix {old_prefix} -> {prefix}. '
+            f'APPLIED: {len(changes)} employee ids converted, prefix {old_prefix} -> {prefix}, '
+            f'format {old_format} -> {id_format}. '
             f'Mapping saved to {path}'
         ))
 
@@ -207,6 +222,7 @@ class Command(TenantCommand):
         if not rows:
             raise CommandError(f'{path} has no rows.')
         old_prefix = rows[0]['old_prefix']
+        old_format = rows[0].get('old_format') or None   # absent in CSVs written before formats existed
 
         by_pk = {str(u.pk): u for u in User.objects.filter(pk__in=[r['user_id'] for r in rows])}
         revertable, mismatched = [], []
@@ -222,7 +238,8 @@ class Command(TenantCommand):
         clash = [r['old_employee_id'] for r in revertable if r['old_employee_id'] in in_use]
 
         self.stdout.write(f'Tenant: {client.company_code} ({client.schema_name})')
-        self.stdout.write(f'Would restore: {len(revertable)}   prefix -> {old_prefix}')
+        self.stdout.write(f'Would restore: {len(revertable)}   prefix -> {old_prefix}'
+                          + (f'   format -> {old_format}' if old_format else ''))
         for r in revertable:
             self.stdout.write(f'{r["new_employee_id"]:>14}  ->  {r["old_employee_id"]}')
         for r, cur in mismatched:
@@ -238,13 +255,14 @@ class Command(TenantCommand):
             for r in revertable:
                 User.objects.filter(pk=r['user_id'], employee_id=r['new_employee_id']) \
                     .update(employee_id=r['old_employee_id'])
-            EmployeeCodeSettings.objects.filter(pk=1).update(prefix=old_prefix)
+            restore = {'prefix': old_prefix, **({'id_format': old_format} if old_format else {})}
+            EmployeeCodeSettings.objects.filter(pk=1).update(**restore)
             AuditLog.objects.create(
                 user=None,
                 action='employee_id_bulk_conversion_reverted',
                 module='employees',
                 changes={'restored': {r['new_employee_id']: r['old_employee_id'] for r in revertable},
-                         'prefix': old_prefix, 'mapping_file': path},
+                         **restore, 'mapping_file': path},
             )
         self.stdout.write(self.style.SUCCESS(f'REVERTED: {len(revertable)} ids restored, prefix -> {old_prefix}.'))
 
