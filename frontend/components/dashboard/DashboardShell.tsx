@@ -18,6 +18,8 @@ import { useOpenMenu } from "@/hooks/useOpenMenu";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { canOpenTeamDashboard } from "@/lib/dashboardHome";
 import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
+import FaceModelPreloader from "@/components/FaceModelPreloader";
+import FaceRegistrationBanner from "@/components/FaceRegistrationBanner";
 
 export default function DashboardShell({
   session,
@@ -139,6 +141,9 @@ export default function DashboardShell({
             The Employee Directory is a "fit" page (as in the reference): the wrapper fills <main>
             so the page header, KPIs and banner stay put and only the table body scrolls. */}
         <div className={`${pathname.startsWith("/dashboard/ess") ? "px-6 pt-4 pb-10" : isFitPage ? "px-4 py-3 md:px-5 md:pt-2 md:pb-2.5" : "px-6 py-4 md:px-10 md:py-6"}${isFitPage ? " flex-1 min-h-0 flex flex-col w-full max-w-[1400px] mx-auto" : ""}`}>
+          {/* Face ID: warm the models in the background, and nudge anyone who still needs to register. */}
+          <FaceModelPreloader />
+          <FaceRegistrationBanner />
           {children}
         </div>
       </main>

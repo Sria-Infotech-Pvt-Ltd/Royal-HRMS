@@ -6,9 +6,14 @@ import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
 import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
+import { faceGateFor } from "@/lib/faceApi/punchGate";
+import {
+  formatLockoutCountdown, loadLockoutUntil, lockoutUntilFromError, saveLockoutUntil, secondsRemaining,
+} from "@/lib/faceApi/lockout";
 import type { TodaySession, AttendanceMode, PunchLocation } from "@/types/attendance";
 
-type NormalisedError = { message?: string };
+// `data` carries the lockout payload ({ blocked, retry_after_seconds }) on a face-verification lockout 403.
+type NormalisedError = { message?: string; data?: unknown };
 
 function parseBrowser(): string {
   if (typeof navigator === "undefined") return "Unknown";
@@ -41,15 +46,39 @@ export function useClockWidget() {
   // to verify; when it is on, an employee with an approved Face ID must verify, and everyone else is stopped with the
   // server's instruction unless the audited fallback currently allows an office punch without one.
   const { isMandatory, requiresFaceToPunch, fallbackActive, message: faceMessage } = useFaceVerificationStatus();
-  const faceVerificationRequired = isMandatory && requiresFaceToPunch;
-  const faceRegistrationMissing  = isMandatory && !requiresFaceToPunch && !fallbackActive;
+  const { faceVerificationRequired, faceRegistrationMissing } = faceGateFor({ isMandatory, requiresFaceToPunch, fallbackActive });
   const [session, setSession] = useState<TodaySession | null>(null);
   const [isPunching, setIsPunching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  // Face-verification lockout (too many failed attempts): epoch ms the lock ends, plus a 1 s ticker
+  // that only runs while locked. Restored from sessionStorage after mount (never during SSR/hydration).
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [lockoutNow, setLockoutNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (todayData) setSession(todayData);
   }, [todayData]);
+
+  useEffect(() => {
+    const stored = loadLockoutUntil();
+    if (stored) { setLockoutUntil(stored); setLockoutNow(Date.now()); }
+  }, []);
+
+  useEffect(() => {
+    if (!lockoutUntil) return;
+    const id = setInterval(() => {
+      const now = Date.now();
+      setLockoutNow(now);
+      if (now >= lockoutUntil) {
+        setLockoutUntil(null);
+        saveLockoutUntil(null);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [lockoutUntil]);
+
+  const lockoutSecondsRemaining = secondsRemaining(lockoutUntil, lockoutNow);
+  const isLockedOut = lockoutSecondsRemaining > 0;
 
   useEffect(() => {
     function handleAttendanceUpdate() { refetch(); }
@@ -98,7 +127,7 @@ export function useClockWidget() {
         const isPermissionDenied = (geoErr as GeolocationPositionError).code === 1;
         showToast(
           isPermissionDenied
-            ? "Location access is required for office clock-in. Please allow location in your browser settings."
+            ? "Location access is required for office punch in/out. Please allow location in your browser settings."
             : "Unable to determine your location. Please check your device's location settings and try again.",
           "error"
         );
@@ -126,6 +155,27 @@ export function useClockWidget() {
     [showToast]
   );
 
+  // Call BEFORE fetching GPS or opening the camera. When Face ID is mandatory and this employee has no approved
+  // Face ID (not registered, pending or rejected) and no fallback applies, they are stopped here with the server's
+  // own instruction - the camera never opens and no location is requested. Returns true when it is fine to go on.
+  const ensureFaceReady = useCallback((): boolean => {
+    if (faceRegistrationMissing) {
+      showToast(
+        faceMessage || "Please register your Face ID first (Profile > Register My Face), then come back to punch in.",
+        "error",
+      );
+      return false;
+    }
+    if (isLockedOut) {
+      showToast(
+        `Too many failed face verification attempts. Please wait ${formatLockoutCountdown(lockoutSecondsRemaining)} before trying again.`,
+        "error",
+      );
+      return false;
+    }
+    return true;
+  }, [faceRegistrationMissing, faceMessage, isLockedOut, lockoutSecondsRemaining, showToast]);
+
   const punch = useCallback(
     async (
       punchType: "IN" | "OUT",
@@ -135,10 +185,7 @@ export function useClockWidget() {
       livenessScore?: number,
       captureSessionId?: string,
     ): Promise<boolean> => {
-      if (faceRegistrationMissing) {
-        showToast(faceMessage || "Face ID registration is required before you can clock in.", "error");
-        return false;
-      }
+      if (!ensureFaceReady()) return false;
 
       setIsPunching(true);
       try {
@@ -162,23 +209,32 @@ export function useClockWidget() {
         const envelope = res.data as { message?: string; data?: TodaySession };
         if (envelope.data) setSession(envelope.data);
         showToast(
-          envelope.message ?? (punchType === "IN" ? "Clocked in successfully." : "Clocked out successfully."),
+          envelope.message ?? (punchType === "IN" ? "Punched in successfully." : "Punched out successfully."),
           "success"
         );
         return true;
       } catch (err: unknown) {
         const e = err as NormalisedError;
+        // A face-verification lockout carries how long to wait: start the countdown (button disabled,
+        // "Please wait mm:ss") instead of letting the employee keep retrying into the same refusal.
+        const until = lockoutUntilFromError(e?.data);
+        if (until) {
+          setLockoutUntil(until);
+          setLockoutNow(Date.now());
+          saveLockoutUntil(until);
+        }
         showToast(e?.message ?? "Punch failed. Please try again.", "error");
         return false;
       } finally {
         setIsPunching(false);
       }
     },
-    [showToast, faceRegistrationMissing, faceMessage]
+    [showToast, ensureFaceReady]
   );
 
   return {
     session, isLoading: fetchLoading && !session, isPunching, isLocating,
     faceVerificationRequired, faceRegistrationMissing, faceFallbackActive: fallbackActive, prepareLocation, punch,
+    ensureFaceReady, isLockedOut, lockoutSecondsRemaining,
   };
 }

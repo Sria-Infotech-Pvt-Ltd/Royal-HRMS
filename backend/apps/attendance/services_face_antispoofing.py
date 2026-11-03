@@ -59,6 +59,30 @@ class FaceAntiSpoofingGuard:
         return failed_count >= MAX_FAILED_ATTEMPTS
 
     @staticmethod
+    def seconds_until_unblocked(employee) -> Optional[int]:
+        """How many more seconds the cap stays tripped for this employee, or
+        None if it isn't tripped at all right now. Used to tell the frontend
+        when it's worth letting the employee try again, instead of leaving
+        them to guess — see check_attempt_cap for the trip condition itself.
+
+        The window is rolling, so the cap clears the moment the OLDEST failed
+        attempt inside it ages past ATTEMPT_CAP_WINDOW_SECONDS (that's the
+        attempt whose expiry drops the in-window failed count back below
+        MAX_FAILED_ATTEMPTS)."""
+        window_start = timezone.now() - timedelta(seconds=ATTEMPT_CAP_WINDOW_SECONDS)
+        failed = list(
+            FaceVerificationAttempt.objects
+            .filter(employee=employee, is_match=False, created_at__gte=window_start)
+            .order_by('created_at')
+            .values_list('created_at', flat=True)[:MAX_FAILED_ATTEMPTS]
+        )
+        if len(failed) < MAX_FAILED_ATTEMPTS:
+            return None
+        oldest_of_the_cap = failed[0]
+        remaining = (oldest_of_the_cap + timedelta(seconds=ATTEMPT_CAP_WINDOW_SECONDS)) - timezone.now()
+        return max(0, int(remaining.total_seconds()) + 1)
+
+    @staticmethod
     def check_replay(employee, fingerprint: str, capture_session_id: str) -> bool:
         """True when this exact embedding was already submitted by this
         employee within the replay window from a DIFFERENT capture session."""

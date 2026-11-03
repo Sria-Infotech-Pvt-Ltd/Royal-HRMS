@@ -1,14 +1,23 @@
 // Liveness detection: proves the camera is looking at a live person, not a
-// static photo held up to it, by tracking real movement across frames —
-// either a natural blink or a slight head turn. A single still frame can
-// never pass this; it requires landmark positions to actually change over
-// a short window of time.
+// static photo held up to it, by tracking real movement across frames. A single
+// still frame can never pass this; it requires landmark positions to actually
+// change over a short window of time.
 //
-// Two independent signals are tracked; either one passing is enough:
-//   1. Blink  — Eye Aspect Ratio (Soukupová & Čech) dipping and recovering.
-//   2. Head turn — the nose tip shifting laterally relative to the eyes.
+// Two independent signals are tracked:
+//   1. Blink  - Eye Aspect Ratio (Soukupova & Cech) dipping and recovering.
+//   2. Head turn - the nose tip shifting laterally relative to the eyes.
 // Both are normalized against the detected face's own size, so thresholds
 // don't depend on how close the camera is.
+//
+// Which of them must be seen depends on the mode:
+//   - "blink_and_turn" (default, used for REGISTRATION): BOTH are required. A
+//     single successful action never passes. A static photo held up to the
+//     camera and tilted reproduces a head turn's landmark delta just as well
+//     as a real head does, with no genuine 3D motion; a held photo cannot
+//     blink, so requiring both closes that bypass.
+//   - "turn_only" (used for PUNCH IN / PUNCH OUT): a head turn alone passes.
+//     This is the quick daily check; the face is also matched against the
+//     registered reference, which is the stronger control at punch time.
 import type { FaceLandmarks68 } from "face-api.js";
 
 type Point = { x: number; y: number };
@@ -18,6 +27,19 @@ const EAR_BLINK_RATIO   = 0.78; // EAR must dip below 78% of the observed "open"
 const EAR_RECOVER_RATIO = 0.92; // ...then rise back above 92% of that baseline to count as re-opening
 const HEAD_TURN_RATIO   = 0.12; // nose-vs-eye-center lateral shift, normalized by inter-eye width
 const BASELINE_SAMPLES  = 5;    // frames averaged before the "eyes open" / "centered" baseline is trusted
+const EAR_HISTORY_SIZE  = 40;   // rolling window the "eyes open" baseline is read from
+const EAR_BASELINE_PCT  = 0.9;  // baseline = 90th percentile of that window, not its single maximum
+
+/** Value at fraction `p` (0-1) of the sorted samples - nearest-rank, no interpolation. */
+function percentile(samples: number[], p: number): number {
+  if (samples.length === 0) return 0;
+  const sorted = [...samples].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+}
+
+function median(samples: number[]): number {
+  return percentile(samples, 0.5);
+}
 
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -31,28 +53,39 @@ function eyeAspectRatio(eye: Point[]): number {
   return horizontal === 0 ? 0 : (vertical1 + vertical2) / (2 * horizontal);
 }
 
+/** "blink_and_turn" (default) needs both signals. "turn_only" is the quick punch mode: a head turn alone passes. */
+export type LivenessMode = "blink_and_turn" | "turn_only";
+
 export interface LivenessResult {
   passed: boolean;
-  score:  number; // 0–1, informational only — the backend stores it but never gates on it
-  signal: "blink" | "head_turn" | null;
+  score:  number; // 0-1, informational only - the backend stores it but never gates on it
+  signal: "blink_and_head_turn" | "blink" | "head_turn" | null;
 }
 
 /**
  * Call `addSample` once per detected video frame, then `getResult()` at any
  * point to read the current pass/fail state. Plain mutable class (not a
- * reducer) on purpose — it's driven from a requestAnimationFrame loop where
+ * reducer) on purpose - it's driven from a requestAnimationFrame loop where
  * triggering a React re-render per frame would be wasteful.
  */
 export class LivenessTracker {
   private earBaseline = 0;
   private earSamples: number[] = [];
+  private earHistory: number[] = [];
   private eyeClosed = false;
   private blinkDetected = false;
   private minEarDuringBlink = 1;
 
   private noseBaselineX: number | null = null;
+  private noseBaselineSamples: number[] = [];
   private maxHeadTurnRatio = 0;
   private headTurnDetected = false;
+
+  constructor(private mode: LivenessMode = "blink_and_turn") {}
+
+  setMode(mode: LivenessMode): void {
+    this.mode = mode;
+  }
 
   addSample(landmarks: Landmarks68): void {
     this.trackBlink(landmarks);
@@ -62,14 +95,22 @@ export class LivenessTracker {
   private trackBlink(landmarks: Landmarks68): void {
     const ear = (eyeAspectRatio(landmarks.getLeftEye()) + eyeAspectRatio(landmarks.getRightEye())) / 2;
 
+    this.earHistory.push(ear);
+    if (this.earHistory.length > EAR_HISTORY_SIZE) this.earHistory.shift();
+
     if (this.earSamples.length < BASELINE_SAMPLES) {
       this.earSamples.push(ear);
-      this.earBaseline = Math.max(this.earBaseline, ear);
+      this.earBaseline = percentile(this.earHistory, EAR_BASELINE_PCT);
       return;
     }
-    // Keep tracking the running max — a well-lit, eyes-open frame is the
-    // best baseline available and can arrive at any point in the window.
-    this.earBaseline = Math.max(this.earBaseline, ear);
+    // "Eyes open" baseline = 90th percentile of the recent window rather than
+    // its single maximum. A running max let one noisy/over-wide frame inflate
+    // the baseline permanently, after which ordinary open-eye frames read as
+    // "closed" - a FALSE blink that a jittery static image could trigger. A
+    // percentile keeps the baseline at a genuinely open-eye level (still near
+    // the maximum, so a real blink is just as detectable) while ignoring
+    // isolated spikes.
+    this.earBaseline = percentile(this.earHistory, EAR_BASELINE_PCT);
     if (this.earBaseline === 0) return;
 
     const ratio = ear / this.earBaseline;
@@ -89,14 +130,19 @@ export class LivenessTracker {
     const leftEye  = landmarks.getLeftEye();
     const rightEye = landmarks.getRightEye();
     const nose     = landmarks.getNose();
-    const noseTip  = nose[3]; // dlib point 30 — tip of the nose bridge, stable across expressions
+    const noseTip  = nose[3]; // dlib point 30 - tip of the nose bridge, stable across expressions
 
     const eyeXs = [...leftEye, ...rightEye].map(p => p.x);
     const interEyeWidth = Math.max(...eyeXs) - Math.min(...eyeXs);
     if (interEyeWidth === 0) return;
 
     if (this.noseBaselineX === null) {
-      this.noseBaselineX = noseTip.x;
+      // Median of the first few frames, not frame 1 alone - a single frame
+      // caught mid-motion would otherwise mis-centre every later comparison.
+      this.noseBaselineSamples.push(noseTip.x);
+      if (this.noseBaselineSamples.length >= BASELINE_SAMPLES) {
+        this.noseBaselineX = median(this.noseBaselineSamples);
+      }
       return;
     }
 
@@ -107,22 +153,35 @@ export class LivenessTracker {
     }
   }
 
+  /** Which of the two signals have been observed so far - for live on-screen
+   *  guidance only; passing still requires getResult().passed. */
+  getProgress(): { blink: boolean; turn: boolean } {
+    return { blink: this.blinkDetected, turn: this.headTurnDetected };
+  }
+
   getResult(): LivenessResult {
     const blinkScore    = this.blinkDetected ? Math.min(1, 1 - this.minEarDuringBlink / (this.earBaseline || 1)) / (1 - EAR_BLINK_RATIO) : 0;
     const headTurnScore = Math.min(1, this.maxHeadTurnRatio / HEAD_TURN_RATIO);
 
-    if (this.blinkDetected) return { passed: true, score: clamp01(blinkScore), signal: "blink" };
-    if (this.headTurnDetected) return { passed: true, score: clamp01(headTurnScore), signal: "head_turn" };
-    return { passed: false, score: clamp01(Math.max(blinkScore, headTurnScore) * 0.5), signal: null };
+    // A head turn is always needed. "blink_and_turn" additionally needs a
+    // blink; "turn_only" does not. A blink on its own never passes either mode.
+    if (this.headTurnDetected && (this.blinkDetected || this.mode === "turn_only")) {
+      const score = this.blinkDetected ? (blinkScore + headTurnScore) / 2 : headTurnScore;
+      return { passed: true, score: clamp01(score), signal: this.blinkDetected ? "blink_and_head_turn" : "head_turn" };
+    }
+    const partialSignal = this.blinkDetected ? "blink" : this.headTurnDetected ? "head_turn" : null;
+    return { passed: false, score: clamp01(Math.max(blinkScore, headTurnScore) * 0.5), signal: partialSignal };
   }
 
   reset(): void {
     this.earBaseline = 0;
     this.earSamples = [];
+    this.earHistory = [];
     this.eyeClosed = false;
     this.blinkDetected = false;
     this.minEarDuringBlink = 1;
     this.noseBaselineX = null;
+    this.noseBaselineSamples = [];
     this.maxHeadTurnRatio = 0;
     this.headTurnDetected = false;
   }

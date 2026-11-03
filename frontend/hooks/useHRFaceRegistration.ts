@@ -43,6 +43,9 @@ interface UseHRFaceCapture {
   phase:             HRCapturePhase;
   errorMessage:      string | null;
   registeredRequest: FaceRegistrationRequest | null;
+  modelProgress:     number;
+  liveHint:          string | null;
+  livenessProgress:  { blink: boolean; turn: boolean };
   videoRef:          ReturnType<typeof useFaceLivenessCapture>["videoRef"];
   canvasRef:         ReturnType<typeof useFaceLivenessCapture>["canvasRef"];
   /** No-op (does not open the camera) if consentAcknowledged is false — see
@@ -103,6 +106,9 @@ export function useHRFaceCapture(employeeUuid: string | null): UseHRFaceCapture 
     onCaptured: handleCaptured,
     framesToCapture: REGISTRATION_FRAMES_TO_CAPTURE,
     normalizeLighting: REGISTRATION_NORMALIZE_LIGHTING,
+    // HR-witnessed registration is still a registration: BOTH a blink and a head turn are required.
+    livenessMode: "blink_and_turn",
+    purpose: "register",
   });
   useEffect(() => { stopCaptureRef.current = capture.stop; }, [capture.stop]);
 
@@ -141,7 +147,8 @@ export function useHRFaceCapture(employeeUuid: string | null): UseHRFaceCapture 
   const errorMessage = submitPhase === "error" ? submitError : capture.errorMessage;
 
   return {
-    phase, errorMessage, registeredRequest,
+    phase, errorMessage, registeredRequest, modelProgress: capture.modelProgress,
+    liveHint: capture.liveHint, livenessProgress: capture.livenessProgress,
     videoRef: capture.videoRef, canvasRef: capture.canvasRef,
     start, retry, stop,
   };

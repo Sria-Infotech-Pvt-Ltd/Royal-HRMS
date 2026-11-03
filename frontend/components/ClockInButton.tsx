@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useClockWidget } from "@/hooks/useClockWidget";
 import CorrectionModal from "@/app/dashboard/my-attendance/_components/CorrectionModal";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
+import { formatLockoutCountdown } from "@/lib/faceApi/lockout";
 import type { AttendanceMode, PunchLocation } from "@/types/attendance";
 
 const MODE: AttendanceMode = "office";
@@ -14,7 +15,7 @@ function todayString() {
 }
 
 interface Props {
-  /** Called after a clock in/out request succeeds — lets the parent refresh
+  /** Called after a punch in/out request succeeds — lets the parent refresh
    *  any sibling widgets (KPIs, attendance status) that read the same data. */
   onPunchSuccess?: () => void;
   /** "ess" renders the Employee Self Service hero's single white "Punch in / Punch out" button
@@ -23,15 +24,23 @@ interface Props {
 }
 
 export default function ClockInButton({ onPunchSuccess, variant = "default" }: Props) {
-  const { session, isLoading, isPunching, faceVerificationRequired, prepareLocation, punch } = useClockWidget();
+  const {
+    session, isLoading, isPunching, faceVerificationRequired, prepareLocation, punch,
+    ensureFaceReady, isLockedOut, lockoutSecondsRemaining,
+  } = useClockWidget();
   const [showModal, setShowModal] = useState(false);
   const [showFaceModal, setShowFaceModal] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
 
   const isClockedIn = session?.is_clocked_in ?? false;
-  const isBusy      = isLoading || isPunching;
+  // After too many failed face attempts the button stays disabled and counts down ("Please wait mm:ss").
+  const isBusy      = isLoading || isPunching || isLockedOut;
+  const waitLabel   = `Please wait ${formatLockoutCountdown(lockoutSecondsRemaining)}`;
 
   async function handlePunch() {
+    // Not registered / pending / rejected: stop here with the server's instruction. No location request, no camera.
+    if (!ensureFaceReady()) return;
+
     // Location is fetched and geofence-validated BEFORE face verification —
     // same order the voice clock-in/out flow enforces.
     const { ok, location } = await prepareLocation(MODE);
@@ -56,7 +65,7 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
     return (
       <>
         <button type="button" className="btn" onClick={handlePunch} disabled={isBusy} aria-pressed={isClockedIn} suppressHydrationWarning>
-          {isPunching ? "Please wait…" : isClockedIn ? "Punch out" : "Punch in"}
+          {isLockedOut ? waitLabel : isPunching ? "Please wait…" : isClockedIn ? "Punch out" : "Punch in"}
         </button>
         <FaceVerificationModal
           isOpen={showFaceModal}
@@ -89,7 +98,12 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
           onMouseEnter={e => { if (!isBusy) (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; }}
         >
-          {isPunching ? (
+          {isLockedOut ? (
+            <>
+              <i className="ti ti-lock" style={{ fontSize: 14 }} />
+              {waitLabel}
+            </>
+          ) : isPunching ? (
             <>
               <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />
               Please wait…
@@ -102,7 +116,7 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
                 animation: !isClockedIn ? "clockPulse 2s ease-in-out infinite" : "none",
               }} />
               <i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} style={{ fontSize: 14 }} />
-              {isClockedIn ? "Clock Out" : "Clock In"}
+              {isClockedIn ? "Punch Out" : "Punch In"}
             </>
           )}
         </button>

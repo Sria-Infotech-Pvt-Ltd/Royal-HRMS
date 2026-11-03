@@ -159,6 +159,12 @@ def _send_leave_email(user, template_name: str, context: dict) -> None:
     transaction.on_commit(_dispatch)
 
 
+def _send_lifecycle_email(user, template_name: str, context: dict) -> None:
+    """Generic fire-and-forget lifecycle email (same queueing as _send_leave_email) for events outside the leave /
+    separation flows, e.g. Face ID registration review. template_name must already exist as an EmailTemplate row."""
+    _send_leave_email(user, template_name, context)
+
+
 # ─── Leave Request ─────────────────────────────────────────────────────────────
 
 @receiver(pre_save, sender='hrms.LeaveRequest')

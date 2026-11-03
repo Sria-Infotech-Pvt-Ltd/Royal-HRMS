@@ -18,7 +18,7 @@ STATE_PENDING = 'pending'
 STATE_REJECTED = 'rejected'
 STATE_NOT_REGISTERED = 'not_registered'
 
-_APPROVED_MESSAGE = 'Your Face ID is registered. You will be asked to verify it when you clock in.'
+_APPROVED_MESSAGE = 'Your Face ID is registered. You will be asked to verify it when you punch in or out.'
 
 # (state, mode) -> the single instruction shown to the employee.
 _MESSAGES = {
@@ -33,9 +33,18 @@ _MESSAGES = {
         STATE_REJECTED: 'Your Face ID needs to be registered again. Please ask HR to register it in person.',
     },
     Rules.MODE_SELF_SERVICE_APPROVAL: {
-        STATE_NOT_REGISTERED: 'Register your Face ID from your Profile page (Register My Face). HR will approve it before it can be used.',
-        STATE_PENDING: 'Your Face ID has been submitted and is waiting for HR approval.',
-        STATE_REJECTED: 'Your Face ID registration was rejected. Register it again from your Profile page.',
+        STATE_NOT_REGISTERED: (
+            'Please register your Face ID first, then come back to punch in. Register it from your Profile page '
+            '(Register My Face); HR will approve it before it can be used.'
+        ),
+        STATE_PENDING: (
+            'Your Face ID has been submitted and is waiting for HR approval. '
+            'Please come back and punch in once it is approved.'
+        ),
+        STATE_REJECTED: (
+            'Your Face ID registration was rejected. Please register it again from your Profile page '
+            '(Register My Face), then come back to punch in once HR approves it.'
+        ),
     },
 }
 
@@ -122,7 +131,7 @@ def instruction_for(state: str, *, fallback_allowed: bool = False, until: Option
     mode = registration_mode()
     message = _MESSAGES[mode].get(state, _MESSAGES[mode][STATE_NOT_REGISTERED])
     if fallback_allowed:
-        message += ' Until then you can still clock in from your office location; those punches are flagged for HR.'
+        message += ' Until then you can still punch in from your office location; those punches are flagged for HR.'
         if until:
             message += f' This is allowed until {until.strftime("%d %b %Y")}.'
     return message

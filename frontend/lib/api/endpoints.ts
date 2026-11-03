@@ -424,6 +424,9 @@ export const API = {
       status: "/attendance/face-verification/status/",
     },
 
+    // One summary per client-side face-capture camera session (numbers only, fire-and-forget).
+    faceCaptureTelemetry: "/attendance/face-capture-telemetry/",
+
     // Weekly Off Patterns (Settings) — existing backend CRUD, newly exposed to the frontend
     weeklyDayPolicies: "/attendance/weekly-days/",
     weeklyDayPolicy: (id: string) => `/attendance/weekly-days/${id}/`,

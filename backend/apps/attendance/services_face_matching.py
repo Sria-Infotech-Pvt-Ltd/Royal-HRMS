@@ -157,6 +157,19 @@ def _euclidean_distance(a: list, b: list) -> float:
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
+class FaceVerificationBlockedError(PermissionError):
+    """Raised instead of a plain PermissionError when the rejection is a
+    terminal block (attempt cap, replay, low-confidence) rather than an
+    ordinary retryable mismatch (see FaceVerificationOutcome.blocked), so
+    callers that surface a countdown / disable-retry UI (AttendancePunchView,
+    voice's _execute_punch) can tell the two apart without inspecting the
+    message string."""
+
+    def __init__(self, message: str, retry_after_seconds: Optional[int] = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
 @dataclass
 class FaceVerificationOutcome:
     required:           bool
@@ -173,6 +186,11 @@ class FaceVerificationOutcome:
     # True when the punch goes ahead WITHOUT a face match because the employee has no approved face ID yet and the
     # organisation's Face ID fallback allows it (see services_face_policy.fallback_allows). Always flagged and audited.
     fallback:           bool = False
+    # Only ever set alongside blocked=True from the attempt-cap gate — how
+    # many more seconds the cap stays tripped, so a caller can show a
+    # countdown / disable retry instead of repeating the same rejection
+    # message on every click (see FaceAntiSpoofingGuard.seconds_until_unblocked).
+    retry_after_seconds: Optional[int] = None
 
 
 class FaceVerificationService:
@@ -200,7 +218,11 @@ class FaceVerificationService:
                     required=False, embedding_provided=bool(submitted_embedding), is_match=False,
                     distance=None, rejection_message=None, fallback=True,
                 )
-        precondition_failure = cls._check_preconditions(registration, submitted_embedding, is_secure, employee)
+        precondition_failure = cls._check_preconditions(
+            registration, submitted_embedding, is_secure, employee,
+            source=source, capture_session_id=capture_session_id,
+            liveness_passed=liveness_passed, liveness_score=liveness_score,
+        )
         if precondition_failure:
             return precondition_failure
 
@@ -215,7 +237,9 @@ class FaceVerificationService:
 
     @staticmethod
     def _check_preconditions(
-        registration, submitted_embedding: Optional[list], is_secure: bool, employee,
+        registration, submitted_embedding: Optional[list], is_secure: bool, employee, *,
+        source: str = AttendancePunch.SOURCE_WEB, capture_session_id: str = '',
+        liveness_passed: Optional[bool] = None, liveness_score: Optional[float] = None,
     ) -> Optional[FaceVerificationOutcome]:
         """Cheap, no-DB-write checks that must pass before a submitted embedding
         is touched any further. Returns the terminal outcome to short-circuit
@@ -242,6 +266,12 @@ class FaceVerificationService:
         # the project's `secure=not settings.DEBUG` cookie convention has.
         if not is_secure and not settings.IS_LOCAL_OR_TEST_ENV:
             logger.warning('Face verification rejected: insecure transport for employee %s', employee.pk)
+            # Audit row so repeated insecure attempts are visible (and count toward the failed-attempt cap).
+            FaceAntiSpoofingGuard.record_attempt(
+                employee, source, capture_session_id, fingerprint_embedding(submitted_embedding),
+                liveness_passed, liveness_score,
+                is_match=False, distance=None, rejection_reason=FaceVerificationAttempt.REJECTION_INSECURE,
+            )
             return FaceVerificationOutcome(
                 required=True, embedding_provided=True, is_match=False,
                 distance=None, rejection_message=_INSECURE_TRANSPORT_MESSAGE, blocked=True,
@@ -277,6 +307,7 @@ class FaceVerificationService:
             return FaceVerificationOutcome(
                 required=True, embedding_provided=True, is_match=False,
                 distance=None, rejection_message=_ATTEMPT_CAP_MESSAGE, blocked=True,
+                retry_after_seconds=FaceAntiSpoofingGuard.seconds_until_unblocked(employee),
             )
         if FaceAntiSpoofingGuard.check_replay(employee, fingerprint, capture_session_id):
             FaceAntiSpoofingGuard.record_attempt(
