@@ -201,11 +201,13 @@ def send_activation_invite(user, *, created_by=None, extra_html: str = '') -> tu
     endpoint forgot-password already uses — a PasswordResetToken is a
     PasswordResetToken regardless of purpose).
 
-    Returns (token, email_sent) — the send itself is best-effort: a failure
-    is caught, recorded in EmailLog (previously this call had no delivery
-    tracking at all — requirement to surface a failed invite send), and
-    reported back via the bool rather than raising, so creating/resending
-    an invite never 500s just because SMTP is misconfigured."""
+    Returns (token, True) on success. A send failure is recorded in EmailLog
+    (previously this call had no delivery tracking at all) and then
+    re-raised — callers decide how to handle it: employees_list.py's
+    EmployeeListCreateView.post() catches it and reports a 201 with a
+    "could not send" message, while services_onboarding.send_onboarding_email
+    catches it to record an EMAIL_FAILED OnboardingEvent and flip the
+    Onboarding history panel into its "email_failed" state."""
     from apps.accounts.models import EmailLog, PasswordResetToken
 
     token = PasswordResetToken.create_for_user(
@@ -245,10 +247,20 @@ def send_activation_invite(user, *, created_by=None, extra_html: str = '') -> tu
     )
     try:
         msg.send(fail_silently=False)
-        email_sent, error_message = True, ''
     except Exception as exc:
         logger.exception('Failed to send activation invite to %s', user.email)
-        email_sent, error_message = False, str(exc)
+        EmailLog.record(
+            recipient_email=user.email,
+            subject=subject,
+            body_html=html_body,
+            template_name='onboarding_invite',
+            module='accounts',
+            status=EmailLog.STATUS_FAILED,
+            error_message=str(exc),
+            triggered_by=created_by,
+            smtp_settings=_smtp,
+        )
+        raise
 
     EmailLog.record(
         recipient_email=user.email,
@@ -256,12 +268,12 @@ def send_activation_invite(user, *, created_by=None, extra_html: str = '') -> tu
         body_html=html_body,
         template_name='onboarding_invite',
         module='accounts',
-        status=EmailLog.STATUS_SENT if email_sent else EmailLog.STATUS_FAILED,
-        error_message=error_message,
+        status=EmailLog.STATUS_SENT,
+        error_message='',
         triggered_by=created_by,
         smtp_settings=_smtp,
     )
-    return token, email_sent
+    return token, True
 
 
 def send_test_email(recipient_email: str, smtp_config: dict) -> None:
