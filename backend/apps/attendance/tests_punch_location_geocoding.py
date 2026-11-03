@@ -62,6 +62,73 @@ def _punch(client: APIClient, punch_type: str, lat=None, lon=None):
 #  services_geocoding.reverse_geocode — pure function, no DB
 # ══════════════════════════════════════════════════════════════════════════════
 
+class GoogleReverseGeocodeTests(SimpleTestCase):
+    def _resp(self, payload):
+        r = type('R', (), {})()
+        r.raise_for_status = lambda: None
+        r.json = lambda: payload
+        return r
+
+    @override_settings(GOOGLE_MAPS_API_KEY='test-key')
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_google_address_used_when_key_set(self, mock_get):
+        mock_get.return_value = self._resp({
+            'status': 'OK',
+            'results': [{'types': ['street_address'], 'formatted_address': '12, Road No 5, Madhapur, Hyderabad 500081, India'}],
+        })
+        self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), '12, Road No 5, Madhapur, Hyderabad 500081, India')
+        self.assertEqual(mock_get.call_count, 1)
+        self.assertIn('googleapis.com', mock_get.call_args[0][0])
+
+    @override_settings(GOOGLE_MAPS_API_KEY='test-key')
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_plus_code_only_result_is_skipped(self, mock_get):
+        mock_get.side_effect = [
+            self._resp({'status': 'OK', 'results': [
+                {'types': ['plus_code'], 'formatted_address': '7J5X+4M Hyderabad'},
+                {'types': ['route'], 'formatted_address': 'Road No 5, Hyderabad, India'},
+            ]}),
+        ]
+        self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), 'Road No 5, Hyderabad, India')
+
+    @override_settings(GOOGLE_MAPS_API_KEY='test-key')
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_zero_results_retries_without_filter(self, mock_get):
+        mock_get.side_effect = [
+            self._resp({'status': 'ZERO_RESULTS', 'results': []}),
+            self._resp({'status': 'OK', 'results': [{'types': ['locality'], 'formatted_address': 'Hyderabad, Telangana, India'}]}),
+        ]
+        self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), 'Hyderabad, Telangana, India')
+        self.assertNotIn('result_type', mock_get.call_args_list[1][1]['params'])
+
+    @override_settings(GOOGLE_MAPS_API_KEY='test-key')
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_google_failure_falls_back_to_nominatim(self, mock_get):
+        mock_get.side_effect = [
+            self._resp({'status': 'OVER_QUERY_LIMIT', 'results': [], 'error_message': 'quota'}),
+            self._resp({'address': {'city': 'Hyderabad', 'state': 'Telangana', 'country': 'India'}}),
+        ]
+        self.assertEqual(reverse_geocode(OFFICE_LAT, OFFICE_LON), 'Hyderabad, Telangana, India')
+        self.assertIn('nominatim', mock_get.call_args_list[1][0][0])
+
+    @override_settings(GOOGLE_MAPS_API_KEY='test-key')
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_google_exception_never_raises_and_key_not_logged(self, mock_get):
+        mock_get.side_effect = [requests.ConnectionError('https://x?key=test-key'), requests.Timeout()]
+        with self.assertLogs('apps.attendance.services_geocoding', level='WARNING') as logs:
+            self.assertIsNone(reverse_geocode(OFFICE_LAT, OFFICE_LON))
+        self.assertNotIn('test-key', ''.join(logs.output))
+
+    @override_settings(GOOGLE_MAPS_API_KEY='')
+    @patch('apps.attendance.services_geocoding.requests.get')
+    def test_no_key_uses_nominatim_only(self, mock_get):
+        mock_get.return_value = self._resp({'address': {'city': 'Hyderabad', 'country': 'India'}})
+        reverse_geocode(OFFICE_LAT, OFFICE_LON)
+        self.assertEqual(mock_get.call_count, 1)
+        self.assertIn('nominatim', mock_get.call_args[0][0])
+
+
+@override_settings(GOOGLE_MAPS_API_KEY='')
 class ReverseGeocodeServiceTests(SimpleTestCase):
     def _mock_response(self, address: dict):
         mock_resp = type('R', (), {})()

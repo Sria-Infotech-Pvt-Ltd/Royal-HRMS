@@ -208,6 +208,12 @@ CLOUDINARY_STORAGE = {
 # haven't added it yet.
 SARVAM_API_KEY = env('SARVAM_API_KEY', default='')
 
+# ─── Google Geocoding (attendance punch location labels) ─────────────────────
+# Server-side only, restricted to the Geocoding API + the server IP in Google
+# Cloud. Empty by default: reverse_geocode() then uses OpenStreetMap Nominatim
+# exactly as before (see apps.attendance.services_geocoding).
+GOOGLE_MAPS_API_KEY = env('GOOGLE_MAPS_API_KEY', default='')
+
 # Django 5.1+ dropped the automatic DEFAULT_FILE_STORAGE/STATICFILES_STORAGE
 # -> STORAGES translation shim (deprecated since 4.2) — STORAGES is now the
 # only setting Django itself reads for FileField/ImageField.storage and

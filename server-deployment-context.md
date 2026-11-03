@@ -2388,3 +2388,83 @@ Approver and HR ("Not assigned" when empty). Assignment rules unchanged.
 -   From §30: annual pending-request validation, ID card PDF / logo checks,
     Approval Matrix stage-1 display, geocoder, face liveness, photo delete
     order, server reboot, **no automatic database backup scheduled**.
+
+---
+
+# 32. Application change log (production support, 2026-11-03)
+
+Same rules as before. Unit tests are mocked (no real Google call from the
+dev machine). The Google key is restricted to the Geocoding API and the VPS
+IP, so it can only be verified live from this server.
+
+| Item | Commit | Migration | Pushed | Deployed on server |
+|---|---|---|---|---|
+| Google reverse geocoding for punch locations (Nominatim fallback) | see `git log` | None | Yes | No — needs `.env` key + restart |
+
+## Google Geocoding for attendance punch locations
+
+Why: Nominatim (OpenStreetMap) returns short or missing addresses where OSM
+has no street names (§29 open item "Commercial geocoder decision"). The CSV
+export and HR drawer only read the stored `AttendancePunch.location_label`,
+so changing how the label is produced fixes both.
+
+-   `services_geocoding.reverse_geocode()` now uses the Google Geocoding API
+    when `GOOGLE_MAPS_API_KEY` is set; otherwise (or if Google returns
+    nothing, errors or is over quota) it uses Nominatim exactly as before.
+    Never raises, so a geocoding failure cannot fail a clock-in.
+-   Prefers `street_address|premise|subpremise|route`; retries without that
+    filter on `ZERO_RESULTS`; skips plus-code-only results; trimmed to 255
+    chars. The key is never logged.
+-   UK Shift "Office – <Branch>" shortcut, the Celery task, the CSV columns
+    and the accuracy warnings are unchanged. Only new punches get the new
+    labels; old labels are not rewritten (no backfill command yet).
+-   New setting `GOOGLE_MAPS_API_KEY` in `backend/config/settings.py`
+    (blank default, like `SARVAM_API_KEY`). No migration, no frontend change.
+-   Files: `backend/apps/attendance/services_geocoding.py`,
+    `backend/config/settings.py`,
+    `backend/apps/attendance/tests_punch_location_geocoding.py` (6 new tests,
+    24 in the two geocoding classes pass).
+
+## Google Cloud setup (done by the owner; key value not recorded here)
+-   Geocoding API enabled; key restricted to **Geocoding API only** and IP
+    `2.25.73.246` (the VPS). Add a temporary IP only for a local test, then
+    remove it.
+-   Still to confirm: billing linked, daily quota cap (~300/day keeps usage
+    inside the free allowance) and a budget alert.
+-   The key was pasted into a chat during setup — rotate it if in doubt.
+
+## Findings during local testing
+-   Local run with the key loaded returned `REQUEST_DENIED: This IP … not
+    authorized` from the developer's own IP — expected with the VPS-only
+    restriction; the fallback produced a Nominatim address.
+-   A first attempt failed with "API key is invalid" because the `.env` value
+    was copied with `<` `>` placeholder brackets. The value must be the bare
+    key: no brackets, quotes or spaces.
+
+## Deploy steps for this batch
+```
+su - royalhrms
+cd /var/www/royalhrms/app && git pull origin production
+git log --oneline -3
+nano backend/.env          # add GOOGLE_MAPS_API_KEY=<bare key>, no quotes/brackets
+cd backend && .venv/bin/python manage.py check
+exit
+# as root — the Celery worker runs the geocoding, so it MUST restart:
+supervisorctl restart royalhrms_backend royalhrms_celery_worker
+supervisorctl status | grep royalhrms
+```
+No `migrate_schemas` needed. Verify on the server:
+```
+cd /var/www/royalhrms/app/backend
+.venv/bin/python manage.py shell -c "from apps.attendance.services_geocoding import reverse_geocode as g; print(g(17.4435, 78.3772))"
+```
+A warning line `Google reverse geocode status=…` means it fell back to
+Nominatim. Then clock in once with a test employee and check the label in the
+drawer and the CSV export.
+
+## Open items
+-   Confirm quota cap + budget alert; optional backfill command for old punches.
+-   Google's terms on storing geocoded addresses — confirm acceptable.
+-   `git remote` in this checkout points at `Sria-Infotech-Pvt-Ltd/Royal-HRMS`,
+    while §26 records `Sriainfotech/Royal-HRMS` as the real repo — confirm
+    which one the server's deploy key can read before pulling.

@@ -29,11 +29,13 @@ from __future__ import annotations
 import logging
 
 import requests
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 _NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse'
-_USER_AGENT = 'RoyalHRMS-AttendanceGeocoder/1.0'
+_GOOGLE_REVERSE_URL = 'https://maps.googleapis.com/maps/api/geocode/json'
+_USER_AGENT ='RoyalHRMS-AttendanceGeocoder/1.0'
 _TIMEOUT_SECONDS = 5
 
 _MAX_LABEL_LENGTH = 255  # AttendancePunch.location_label's max_length
@@ -60,7 +62,71 @@ def _fit_to_length(parts: list[str]) -> str:
     return label or parts[0][:_MAX_LABEL_LENGTH]
 
 
+def _google_reverse_geocode(latitude: float, longitude: float, api_key: str) -> str | None:
+    """
+    Google Geocoding API reverse lookup. Returns the formatted_address of the
+    most precise result, or None on any failure (bad status, quota, timeout,
+    no usable result). Plus-code-only results are skipped — they are not an
+    address a person can read.
+    """
+    try:
+        resp = requests.get(
+            _GOOGLE_REVERSE_URL,
+            params={
+                'latlng': f'{latitude:.8f},{longitude:.8f}',
+                'key': api_key,
+                'language': 'en',
+                # Most precise address types only; Google falls back to
+                # coarser results when none of these exist.
+                'result_type': 'street_address|premise|subpremise|route',
+            },
+            timeout=_TIMEOUT_SECONDS,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        status = data.get('status')
+        if status == 'ZERO_RESULTS':
+            # Retry without the result_type filter so rural/coarse points still
+            # get a locality-level address instead of nothing.
+            resp = requests.get(
+                _GOOGLE_REVERSE_URL,
+                params={'latlng': f'{latitude:.8f},{longitude:.8f}', 'key': api_key, 'language': 'en'},
+                timeout=_TIMEOUT_SECONDS,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            status = data.get('status')
+        if status != 'OK':
+            # Never log the key; status + Google's message are enough to debug.
+            logger.warning('Google reverse geocode status=%s: %s', status, data.get('error_message', ''))
+            return None
+    except Exception as exc:
+        # str(exc) from requests can embed the request URL (which carries the key).
+        logger.warning('Google reverse geocode failed for (%s, %s): %s', latitude, longitude, type(exc).__name__)
+        return None
+
+    for result in data.get('results') or []:
+        types = result.get('types') or []
+        address = (result.get('formatted_address') or '').strip()
+        if address and types != ['plus_code']:
+            return address[:_MAX_LABEL_LENGTH]
+    return None
+
+
 def reverse_geocode(latitude: float, longitude: float) -> str | None:
+    """
+    Uses Google when GOOGLE_MAPS_API_KEY is set (falling back to Nominatim if
+    Google returns nothing); otherwise Nominatim only. Never raises.
+    """
+    api_key = getattr(settings, 'GOOGLE_MAPS_API_KEY', '') or ''
+    if api_key:
+        label = _google_reverse_geocode(latitude, longitude, api_key)
+        if label:
+            return label
+    return _nominatim_reverse_geocode(latitude, longitude)
+
+
+def _nominatim_reverse_geocode(latitude: float, longitude: float) -> str | None:
     """
     Returns the fullest address Nominatim provides, in the order: building or
     place name, house number, road, locality, city, state, country, postal
