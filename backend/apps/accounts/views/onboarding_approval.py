@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from core.access import can_manage_team, users_with_permission
+from core.access import can_manage_team, employees_in_scope, users_with_permission
 import csv
 import io
 import logging
@@ -503,6 +503,9 @@ class OnboardingApprovalView(APIView):
             .distinct()
             .order_by('-date_joined')
         )
+        # Same scope as every other employee-data endpoint: the stats below are computed from this queryset, so they
+        # only count what the requester may see.
+        base_qs = base_qs.filter(employees_in_scope(request.user)).distinct()
         if not _has_perm(request.user, 'settings.edit'):
             base_qs = base_qs.exclude(users_with_permission('settings.edit'))
 

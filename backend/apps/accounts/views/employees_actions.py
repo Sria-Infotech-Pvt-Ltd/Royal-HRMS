@@ -425,8 +425,15 @@ class AuditLogListView(APIView):
         # outside the branch acts on it (e.g. a system_admin editing a
         # branch's employee) — filtering on the actor's branch would hide
         # that from the branch's own HR entirely. system_admin sees everything.
-        if not _has_perm(request.user, 'settings.edit') and request.user.branch:
-            qs = qs.filter(branch__iexact=request.user.branch)
+        # KNOWN, TEMPORARY INCONSISTENCY (follow-up security decision): settings.edit still grants company-wide audit-log
+        # visibility here, although it no longer grants company-wide employee scope in core.access.employee_in_scope.
+        # Do not narrow or widen it without that decision.
+        # Everyone else is default-deny: a requester with no branch sees nothing (it used to see every branch's events).
+        if not _has_perm(request.user, 'settings.edit'):
+            if (request.user.branch or '').strip():
+                qs = qs.filter(branch__iexact=request.user.branch)
+            else:
+                qs = qs.none()
 
         module    = request.query_params.get('module', '').strip()
         action    = request.query_params.get('action', '').strip()

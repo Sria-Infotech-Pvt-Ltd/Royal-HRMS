@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from core.access import can_manage_team, users_with_permission
+from core.access import can_manage_team, employee_in_scope, users_with_permission
 from core.permissions import has_perm
 import csv
 import io
@@ -789,7 +789,7 @@ class EmployeeBankChangeReviewView(APIView):
         if not _has_perm(request.user, 'employees.edit'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         employee = _get_employee(employee_id)
-        if not employee:
+        if not employee or not employee_in_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
         profile = getattr(employee, 'profile', None)
         if not profile or profile.bank_change_status != EmployeeProfile.BANK_CHANGE_PENDING:

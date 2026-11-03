@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+from core.access import employee_in_scope
+
 import csv
 import io
 import logging
@@ -194,7 +196,7 @@ class EmployeeApprovalMatrixView(APIView):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
 
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or not employee_in_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         _ensure_default_rules()
@@ -234,7 +236,7 @@ class EmployeeApprovalMatrixView(APIView):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
 
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or not employee_in_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         workflow_type = request.data.get('workflow_type')
@@ -283,7 +285,7 @@ class EmployeeApprovalMatrixView(APIView):
             return error(err)
 
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or not employee_in_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         EmployeeApprovalOverride.objects.filter(
