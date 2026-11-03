@@ -8,43 +8,66 @@ import { useFetch } from "@/hooks/useFetch";
 interface SeriesRow {
   employment_type:         string;
   employment_type_display: string;
-  prefix:                  string;
-  padding:                 number;
-  next_sequence:           number;
-  format_description:      string;
+  range_start:              number;
+  range_end:                number;
+  next_sequence:            number;
+  format_description:       string;
+  usage_percent:            number;
+  is_exhausted:             boolean;
 }
 
 interface RowErrors {
-  prefix?:        string;
-  padding?:       string;
+  range_start?:   string;
+  range_end?:     string;
   next_sequence?: string;
 }
 
 /** One row's own editable draft + save state — rows save independently so
- * fixing a typo in Freelancer's prefix never risks also resubmitting
- * Permanent's unrelated, unsaved in-progress edit. */
+ * fixing a typo in one type's range never risks also resubmitting another
+ * type's unrelated, unsaved in-progress edit. */
+type NumericField = "range_start" | "range_end" | "next_sequence";
+
 function SeriesRowEditor({ row, onSaved }: { row: SeriesRow; onSaved: (row: SeriesRow) => void }) {
   const [form, setForm] = useState(row);
+  // The raw text the user is typing, kept separate from the parsed `form`
+  // numbers — a plain controlled <input value={number}> forces the DOM back
+  // to e.g. "0" on every keystroke while the field is being cleared/retyped
+  // (Number("") === 0), which made it impossible to clear a field or type a
+  // new value that doesn't start with the digit already there.
+  const [text, setText] = useState<Record<NumericField, string>>({
+    range_start: String(row.range_start),
+    range_end: String(row.range_end),
+    next_sequence: String(row.next_sequence),
+  });
   const [errors, setErrors] = useState<RowErrors>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const dirty = form.prefix !== row.prefix || form.padding !== row.padding || form.next_sequence !== row.next_sequence;
+  const dirty = form.range_start !== row.range_start || form.range_end !== row.range_end || form.next_sequence !== row.next_sequence;
 
-  function onField(key: "prefix" | "padding" | "next_sequence", value: string) {
+  function onField(key: NumericField, value: string) {
     setSaved(false);
     setApiError(null);
     setErrors(e => ({ ...e, [key]: undefined }));
-    setForm(f => ({ ...f, [key]: key === "prefix" ? value : Number(value) }));
+    // Allow free typing (including a momentarily-empty field) in the text
+    // box; only a fully-numeric value updates the real numeric form state
+    // that validation/save actually use.
+    setText(t => ({ ...t, [key]: value }));
+    if (/^\d+$/.test(value)) {
+      setForm(f => ({ ...f, [key]: Number(value) }));
+    }
   }
 
   function validate(): boolean {
     const errs: RowErrors = {};
-    if (!form.prefix.trim()) errs.prefix = "Required.";
-    else if (!/^[A-Za-z0-9_-]+$/.test(form.prefix.trim())) errs.prefix = "Letters, numbers, -, _ only.";
-    if (form.padding < 3 || form.padding > 8) errs.padding = "3–8.";
-    if (form.next_sequence < 1) errs.next_sequence = "Min 1.";
+    if (!/^\d+$/.test(text.range_start)) errs.range_start = "Required — whole number.";
+    if (!/^\d+$/.test(text.range_end)) errs.range_end = "Required — whole number.";
+    if (!/^\d+$/.test(text.next_sequence)) errs.next_sequence = "Required — whole number.";
+    if (!errs.range_start && !errs.range_end && form.range_end <= form.range_start) errs.range_end = "Must be greater than range start.";
+    if (!errs.range_start && !errs.range_end && !errs.next_sequence && (form.next_sequence <= form.range_start || form.next_sequence > form.range_end + 1)) {
+      errs.next_sequence = `Must be between ${form.range_start + 1} and ${form.range_end} to issue a new ID (or ${form.range_end + 1}, which marks the range as fully used up).`;
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -56,9 +79,14 @@ function SeriesRowEditor({ row, onSaved }: { row: SeriesRow; onSaved: (row: Seri
     try {
       const { data } = await clientApi.put<{ data: SeriesRow }>(
         API.settings.employeeCodeSeriesDetail(row.employment_type),
-        { prefix: form.prefix.trim().toUpperCase(), padding: form.padding, next_sequence: form.next_sequence },
+        { range_start: form.range_start, range_end: form.range_end, next_sequence: form.next_sequence },
       );
       setForm(data.data);
+      setText({
+        range_start: String(data.data.range_start),
+        range_end: String(data.data.range_end),
+        next_sequence: String(data.data.next_sequence),
+      });
       onSaved(data.data);
       setSaved(true);
     } catch (err: unknown) {
@@ -70,45 +98,49 @@ function SeriesRowEditor({ row, onSaved }: { row: SeriesRow; onSaved: (row: Seri
     }
   }
 
-  const preview = `${(form.prefix || "").toUpperCase()}${String(form.next_sequence).padStart(form.padding, "0")}`;
+  const preview = form.next_sequence > form.range_end ? "Exhausted" : String(form.next_sequence);
 
   return (
     <tr>
       <td style={{ padding: "10px 12px", fontWeight: 600 }}>{row.employment_type_display}</td>
       <td style={{ padding: "10px 12px" }}>
         <input
-          className={`field-input${errors.prefix ? " field-error" : ""}`}
-          value={form.prefix}
-          onChange={e => onField("prefix", e.target.value)}
-          maxLength={10}
-          style={{ width: 90 }}
+          type="number"
+          className={`field-input${errors.range_start ? " field-error" : ""}`}
+          value={text.range_start}
+          onChange={e => onField("range_start", e.target.value)}
+          style={{ width: 110 }}
         />
-        {errors.prefix && <div className="field-error-msg">{errors.prefix}</div>}
+        {errors.range_start && <div className="field-error-msg">{errors.range_start}</div>}
       </td>
       <td style={{ padding: "10px 12px" }}>
         <input
           type="number"
-          className={`field-input${errors.padding ? " field-error" : ""}`}
-          value={form.padding}
-          min={3}
-          max={8}
-          onChange={e => onField("padding", e.target.value)}
-          style={{ width: 70 }}
+          className={`field-input${errors.range_end ? " field-error" : ""}`}
+          value={text.range_end}
+          onChange={e => onField("range_end", e.target.value)}
+          style={{ width: 110 }}
         />
-        {errors.padding && <div className="field-error-msg">{errors.padding}</div>}
+        {errors.range_end && <div className="field-error-msg">{errors.range_end}</div>}
       </td>
       <td style={{ padding: "10px 12px" }}>
         <input
           type="number"
           className={`field-input${errors.next_sequence ? " field-error" : ""}`}
-          value={form.next_sequence}
-          min={1}
+          value={text.next_sequence}
           onChange={e => onField("next_sequence", e.target.value)}
-          style={{ width: 90 }}
+          style={{ width: 110 }}
         />
         {errors.next_sequence && <div className="field-error-msg">{errors.next_sequence}</div>}
       </td>
-      <td style={{ padding: "10px 12px", fontFamily: "monospace", fontWeight: 600, color: "var(--primary)" }}>{preview}</td>
+      <td style={{ padding: "10px 12px", fontFamily: "monospace", fontWeight: 600, color: form.next_sequence > form.range_end ? "var(--error)" : "var(--primary)" }}>
+        {preview}
+      </td>
+      <td style={{ padding: "10px 12px" }}>
+        <span style={{ fontSize: 12, color: row.usage_percent >= 90 ? "var(--error)" : "var(--on-variant)" }}>
+          {row.usage_percent}%{row.usage_percent >= 90 && !row.is_exhausted && <i className="ti ti-alert-triangle" style={{ marginLeft: 4 }} title="Nearing exhaustion" />}
+        </span>
+      </td>
       <td style={{ padding: "10px 12px" }}>
         <button className="btn btn-ghost btn-sm" disabled={!dirty || saving} onClick={onSave}>
           {saving ? "Saving…" : saved ? "Saved" : "Save"}
@@ -119,15 +151,15 @@ function SeriesRowEditor({ row, onSaved }: { row: SeriesRow; onSaved: (row: Seri
   );
 }
 
-/** Per-employment-type ID series (EMP/CON/FRL/...) — each type gets its own
- * independent, concurrency-safe counter server-side (see
+/** Per-employment-type numeric ID range (SAP-personnel-number style) — each
+ * type owns a disjoint 8-digit range server-side (see
  * EmployeeCodeSeries.generate_employee_id_for_type); this just lets an
- * admin see and edit each type's prefix/digit-count/starting number. */
+ * admin see and edit each type's range and next number. */
 export default function EmployeeCodeSeriesCard() {
   const { data: fetchedRows, error: loadError } = useFetch<SeriesRow[]>(API.settings.employeeCodeSeries);
   // A local, independently-patchable copy of the fetched rows — each row
   // saves itself (see onRowSaved) without waiting on a full refetch, so
-  // fixing one type's prefix doesn't flicker/reset every other row's
+  // fixing one type's range doesn't flicker/reset every other row's
   // in-progress edit.
   const [rows, setRows] = useState<SeriesRow[] | null>(null);
 
@@ -142,14 +174,15 @@ export default function EmployeeCodeSeriesCard() {
   return (
     <div className="card mb-24">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-list-numbers" /> ID Series by Worker Type</div>
+        <div className="card-title"><i className="ti ti-list-numbers" /> ID Range by Worker Type</div>
       </div>
       <div style={{ padding: "12px 24px 20px" }}>
         <p style={{ fontSize: 12.5, color: "var(--on-variant)", marginBottom: 14 }}>
-          Each worker type (Permanent, Contract, Freelancer, …) gets its own independent, non-reused ID series —
-          e.g. permanent hires as <code>EMP00001</code>, contractors as <code>CON00001</code>, freelancers as
-          <code> FRL00001</code>. The ID is picked automatically from the type selected at hire; changing an
-          existing employee&apos;s type later does not change their existing ID.
+          Every ID is 8 digits, purely numeric — no letters. Each worker type gets its own non-overlapping,
+          non-reused numeric range, so the leading digit alone tells you the worker type — e.g.{" "}
+          <code>10000123</code> is Permanent, <code>50000045</code> is an Intern. The ID is picked automatically
+          from the type selected at hire; changing an existing employee&apos;s type later does not change their
+          existing ID, so its leading digit may no longer match their current type — that&apos;s expected.
         </p>
         {loadError && (
           <div className="alert alert-error mb-16">
@@ -164,10 +197,11 @@ export default function EmployeeCodeSeriesCard() {
               <thead>
                 <tr style={{ textAlign: "left", color: "var(--on-variant)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" }}>
                   <th style={{ padding: "6px 12px" }}>Worker type</th>
-                  <th style={{ padding: "6px 12px" }}>Prefix</th>
-                  <th style={{ padding: "6px 12px" }}>Digits</th>
+                  <th style={{ padding: "6px 12px" }}>Range from</th>
+                  <th style={{ padding: "6px 12px" }}>Range to</th>
                   <th style={{ padding: "6px 12px" }}>Next number</th>
                   <th style={{ padding: "6px 12px" }}>Next ID</th>
+                  <th style={{ padding: "6px 12px" }}>Used</th>
                   <th style={{ padding: "6px 12px" }}></th>
                 </tr>
               </thead>

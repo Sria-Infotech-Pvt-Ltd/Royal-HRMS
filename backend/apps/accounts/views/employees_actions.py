@@ -67,6 +67,7 @@ from apps.accounts.models import (
     EmailTemplateAttachment,
     EmailTemplateCategory,
     EmployeeApprovalOverride,
+    DEFAULT_EMPLOYEE_ID_RANGES,
     EmployeeCodeSeries,
     EmployeeCodeSettings,
     HireAction,
@@ -520,13 +521,13 @@ class EmployeeCodeSeriesListView(APIView):
     permission_classes = [IsAuthenticated, CanManageRoles]
 
     def get(self, request):
-        base = EmployeeCodeSettings.get()
         existing = {s.employment_type for s in EmployeeCodeSeries.objects.all()}
         for value, _label in User.EMPLOYMENT_TYPE_CHOICES:
             if value not in existing:
+                start, end = DEFAULT_EMPLOYEE_ID_RANGES.get(value, (10000000, 19999999))
                 EmployeeCodeSeries.objects.get_or_create(
                     employment_type=value,
-                    defaults={'prefix': base.prefix, 'padding': base.padding, 'next_sequence': base.next_sequence},
+                    defaults={'range_start': start, 'range_end': end, 'next_sequence': start + 1},
                 )
         series = EmployeeCodeSeries.objects.all()
         return success('Employee code series retrieved.', data=EmployeeCodeSeriesSerializer(series, many=True).data)
@@ -534,8 +535,7 @@ class EmployeeCodeSeriesListView(APIView):
 
 class EmployeeCodeSeriesDetailView(APIView):
     """PUT /settings/employee-code/series/<employment_type>/ — edit one
-    type's prefix/padding/next starting number. Same reserve-and-increment
-    model as EmployeeCodeSettingsView; employment_type itself is never
+    type's numeric ID range / next number. employment_type itself is never
     editable here (it's the row's identity, not a field of it)."""
     permission_classes = [IsAuthenticated, CanManageRoles]
 
@@ -543,10 +543,10 @@ class EmployeeCodeSeriesDetailView(APIView):
     def put(self, request, employment_type: str):
         if employment_type not in dict(User.EMPLOYMENT_TYPE_CHOICES):
             return error('Unknown employment type.', http_status=status.HTTP_404_NOT_FOUND)
-        base = EmployeeCodeSettings.get()
+        start, end = DEFAULT_EMPLOYEE_ID_RANGES.get(employment_type, (10000000, 19999999))
         series = EmployeeCodeSeries.objects.select_for_update().get_or_create(
             employment_type=employment_type,
-            defaults={'prefix': base.prefix, 'padding': base.padding, 'next_sequence': base.next_sequence},
+            defaults={'range_start': start, 'range_end': end, 'next_sequence': start + 1},
         )[0]
         serializer = EmployeeCodeSeriesSerializer(series, data=request.data, partial=False)
         if not serializer.is_valid():

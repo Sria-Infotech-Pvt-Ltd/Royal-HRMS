@@ -23,7 +23,7 @@ from rest_framework import status
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success, get_client_ip
 from apps.accounts.models import (
-    AuditLog, EmployeeCodeSeries, HireAction, HireActionDocument, Position, User,
+    AuditLog, EmployeeCodeSeries, EmployeeIdSeriesExhausted, HireAction, HireActionDocument, Position, User,
 )
 from apps.accounts.serializers import HireActionDocumentSerializer
 from apps.accounts.serializers_profile_photo import ProfilePhotoUploadSerializer
@@ -201,7 +201,10 @@ class HireActionDetailView(APIView):
             if employment_type not in dict(User.EMPLOYMENT_TYPE_CHOICES):
                 return error('Select a valid employment type.')
             action.employment_type = employment_type
-            action.reserved_employee_id = EmployeeCodeSeries.generate_employee_id_for_type(employment_type)
+            try:
+                action.reserved_employee_id = EmployeeCodeSeries.generate_employee_id_for_type(employment_type)
+            except EmployeeIdSeriesExhausted as exc:
+                return error(str(exc))
             update_fields += ['employment_type', 'reserved_employee_id']
 
         # Client-side <input type="email"> and the wizard's own EMAIL_RE

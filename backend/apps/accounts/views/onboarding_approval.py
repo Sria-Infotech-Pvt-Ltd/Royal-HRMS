@@ -69,6 +69,7 @@ from apps.accounts.models import (
     EmailTemplateCategory,
     EmployeeApprovalOverride,
     EmployeeCodeSeries,
+    EmployeeIdSeriesExhausted,
     EmployeeCodeSettings,
     EmployeeDocument,
     HireAction,
@@ -257,8 +258,11 @@ class OnboardingApprovalView(APIView):
                 if not target.date_of_joining:
                     from django.utils import timezone as tz
                     target.date_of_joining = tz.now().date()
-                # One numbering series per employment type (e.g. EMP/CON/FRL).
-                target.employee_id = EmployeeCodeSeries.generate_employee_id_for_type(target.employee_type or 'Permanent')
+                # One 8-digit numeric ID range per employment type.
+                try:
+                    target.employee_id = EmployeeCodeSeries.generate_employee_id_for_type(target.employee_type or 'Permanent')
+                except EmployeeIdSeriesExhausted as exc:
+                    return error(str(exc))
 
                 if linked_candidate and not target.branch and linked_candidate.branch:
                     target.branch = linked_candidate.branch.branch_name

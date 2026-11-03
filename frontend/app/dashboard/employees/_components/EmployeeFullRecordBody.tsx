@@ -20,6 +20,76 @@ import type { PersonnelActionRequest } from "@/types/personnelAction";
 import EmployeeDrawerAuditTrail, { type AuditTrailRow } from "./EmployeeDrawerAuditTrail";
 import WorkStatusPanel from "@/components/work-status/WorkStatusPanel";
 
+/** Settings.edit-only inline control for correcting an employee's ID (see
+ * backend EmployeeDetailView._update_fields — locked behind settings.edit,
+ * validated as unique 8-digit numeric, warns-but-doesn't-block if the new ID
+ * falls outside that worker type's configured range). On success, hard-
+ * navigates to the employee's new URL — every hook on this page keys off
+ * employee.id, so a soft refetch would leave half the page still querying
+ * the now-stale old ID. */
+function EditEmployeeIdControl({ employeeId }: { employeeId: string }) {
+  const canEditId = usePermission("settings.edit");
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(employeeId);
+  const [saving, setSaving] = useState(false);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+
+  if (!canEditId || !employeeId) return <>{employeeId || "—"}</>;
+
+  if (!editing) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        {employeeId || "—"}
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          style={{ padding: "2px 6px" }}
+          title="Correct this employee's ID"
+          onClick={() => { setValue(employeeId); setFieldError(null); setEditing(true); }}
+        >
+          <i className="ti ti-edit" />
+        </button>
+      </span>
+    );
+  }
+
+  async function onSave() {
+    setSaving(true);
+    setFieldError(null);
+    try {
+      const { data } = await clientApi.patch<{ message: string }>(API.employees.detail(employeeId), { employee_id: value.trim() });
+      if (data.message && data.message.toLowerCase().includes("outside")) {
+        window.alert(data.message);
+      }
+      window.location.href = `/dashboard/employees/${value.trim()}`;
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { data?: { employee_id?: string }; message?: string } } };
+      setFieldError(apiErr?.response?.data?.data?.employee_id ?? apiErr?.response?.data?.message ?? "Could not save this ID.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <input
+        className="field-input"
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        maxLength={8}
+        style={{ width: 110, fontFamily: "Menlo, Consolas, monospace" }}
+        autoFocus
+      />
+      <button className="btn btn-filled btn-sm" type="button" onClick={onSave} disabled={saving}>
+        {saving ? "Saving…" : "Save"}
+      </button>
+      <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditing(false)} disabled={saving}>
+        Cancel
+      </button>
+      {fieldError && <span className="field-error-msg">{fieldError}</span>}
+    </span>
+  );
+}
+
 interface RevealedFields {
   pan_number?:         string;
   account_number?:     string;
@@ -182,7 +252,10 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
         </SectionCard>
 
         <SectionCard title="Employment & Assignment">
-          <Row label="Employee number" value={employee.code} />
+          <Row
+            label="Employee number"
+            valueNode={isAdmin ? <EditEmployeeIdControl employeeId={employee.code} /> : (employee.code || "—")}
+          />
           <Row label="Position" value={employee.designation} />
           <Row label="Department" value={departmentValue} />
           <Row label="Work location" value={detail?.work_location || employee.location} />

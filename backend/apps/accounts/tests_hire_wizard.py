@@ -164,6 +164,17 @@ class EmploymentTypeReservationTests(HireWizardTestCase):
         # discarding the whole draft. Re-selecting now re-reserves a number
         # against the new type's own series (the old number is simply left
         # unused, not reused — see the PATCH handler's own comment).
+        # get_or_create rather than a plain get() — some test runs flush
+        # rows seeded by data migrations (e.g. a preceding TransactionTestCase),
+        # same reasoning as every production call site here that never
+        # assumes a series row already exists.
+        permanent_before = EmployeeCodeSeries.objects.get_or_create(
+            employment_type='Permanent', defaults={'range_start': 10000000, 'range_end': 19999999, 'next_sequence': 10000001},
+        )[0].next_sequence
+        contract_before = EmployeeCodeSeries.objects.get_or_create(
+            employment_type='Contract', defaults={'range_start': 20000000, 'range_end': 29999999, 'next_sequence': 20000001},
+        )[0].next_sequence
+
         action = self._create_draft()
         action = self._set_employment_type(action, 'Permanent')
         first_id = action.reserved_employee_id
@@ -173,15 +184,14 @@ class EmploymentTypeReservationTests(HireWizardTestCase):
         action.refresh_from_db()
         self.assertEqual(action.employment_type, 'Contract')
         self.assertTrue(action.reserved_employee_id)
-        # Each employment type has its own independent number series, so a
-        # freshly-reserved Contract number can coincidentally format the
-        # same as the first Permanent number (both start their own
-        # sequence at 1) — what actually matters is that it came from the
-        # Contract series, not that the Permanent series was rolled back.
+        # Each employment type has its own independent, disjoint numeric
+        # range, so re-selecting Contract reserves from ITS OWN series —
+        # what matters is that each series advanced by exactly one (its own
+        # new reservation), not that the Permanent series was rolled back.
         contract_series = EmployeeCodeSeries.objects.get(employment_type='Contract')
-        self.assertEqual(contract_series.next_sequence, 2)
+        self.assertEqual(contract_series.next_sequence, contract_before + 1)
         permanent_series = EmployeeCodeSeries.objects.get(employment_type='Permanent')
-        self.assertEqual(permanent_series.next_sequence, 2)
+        self.assertEqual(permanent_series.next_sequence, permanent_before + 1)
         self.assertTrue(first_id)
 
 

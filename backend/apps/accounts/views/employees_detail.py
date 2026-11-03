@@ -70,6 +70,7 @@ from apps.accounts.models import (
     EmailTemplateAttachment,
     EmailTemplateCategory,
     EmployeeApprovalOverride,
+    EmployeeCodeSeries,
     EmployeeCodeSettings,
     HireAction,
     JobTemplate,
@@ -293,6 +294,36 @@ class EmployeeDetailView(APIView):
                 update_fields.append('email')
         except ContactChangeError as exc:
             return error(exc.message, data={exc.field: exc.message})
+
+        # Manual employee_id correction — locked behind settings.edit (not
+        # the plain employees.edit this whole view otherwise requires),
+        # since a bad value here risks a duplicate ID or breaking the
+        # per-worker-type numeric ranges this system otherwise guarantees.
+        # Deliberately does not block on the new ID falling outside the
+        # employee's own worker type's configured range — the leading digit
+        # is a readability convention (see EmployeeCodeSeries), not a hard
+        # constraint, so a legitimate manual correction (e.g. restoring a
+        # pre-migration legacy numbering, or fixing a typo) is only ever
+        # warned about, never refused for that reason alone.
+        id_range_warning = None
+        if 'employee_id' in data:
+            if not _has_perm(request.user, 'settings.edit'):
+                return error('You do not have permission to edit an employee ID.', http_status=status.HTTP_403_FORBIDDEN)
+            new_employee_id = (data.get('employee_id') or '').strip()
+            if new_employee_id != employee.employee_id:
+                if not re.fullmatch(r'\d{8}', new_employee_id):
+                    return error('Employee ID must be exactly 8 digits.', data={'employee_id': 'Must be exactly 8 digits.'})
+                if User.objects.exclude(pk=employee.pk).filter(employee_id=new_employee_id).exists():
+                    return error('That employee ID is already in use.', data={'employee_id': 'Already in use by another employee.'})
+                changes['employee_id'] = {'from': employee.employee_id, 'to': new_employee_id}
+                employee.employee_id = new_employee_id
+                update_fields.append('employee_id')
+                series = EmployeeCodeSeries.objects.filter(employment_type=employee.employee_type).first()
+                if series and not (series.range_start < int(new_employee_id) <= series.range_end):
+                    id_range_warning = (
+                        f' Note: {new_employee_id} falls outside {employee.employee_type}\'s configured range '
+                        f'({series.range_start + 1}-{series.range_end}) — the leading digit will no longer match this worker type.'
+                    )
 
         if 'work_location' in data:
             # "Org assignment" action (Perform an action modal) — a plain
@@ -587,6 +618,8 @@ class EmployeeDetailView(APIView):
                 )
 
         message = 'Employee updated successfully.'
+        if id_range_warning:
+            message += id_range_warning
         if 'email' in changes:
             # The old address must stop working in every way: sessions, and reset/activation links and codes sent to it.
             invalidate_old_email_access(employee)
@@ -597,7 +630,10 @@ class EmployeeDetailView(APIView):
                 else ' The login email changed, but the notification email could not be sent. Please tell the employee yourself.'
             )
 
-        employee = _get_employee(employee_id)
+        # Re-fetch by primary key, not the URL's employee_id string — if this
+        # request just changed employee_id, the old value in the URL/closure
+        # no longer resolves to this (or any) employee.
+        employee = User.objects.select_related('profile', 'reporting_manager', 'hr').get(pk=employee.pk)
         return success(message, data=_employee_dict(employee))
 
     def patch(self, request, employee_id: str):

@@ -1402,40 +1402,81 @@ class EmployeeCodeSettingsSerializer(serializers.ModelSerializer):
 class EmployeeCodeSeriesSerializer(serializers.ModelSerializer):
     """One row per employment type — see EmployeeCodeSeries' own docstring.
     employment_type is read-only here: each type gets exactly one series row
-    (created on demand, see the view), never reassigned to a different type."""
+    (created on demand, see the view), never reassigned to a different type.
+
+    IDs are 8-digit, purely numeric, SAP-personnel-number style: each type
+    owns a disjoint numeric range, so the leading digit alone identifies the
+    worker type. range_start/range_end/next_sequence replace the old
+    prefix/padding scheme (no alphabetic prefix exists any more)."""
     employment_type_display = serializers.CharField(source='get_employment_type_display', read_only=True)
     format_description       = serializers.SerializerMethodField()
+    usage_percent            = serializers.SerializerMethodField()
+    is_exhausted             = serializers.SerializerMethodField()
 
     class Meta:
         model  = EmployeeCodeSeries
-        fields = ['employment_type', 'employment_type_display', 'prefix', 'padding', 'next_sequence', 'format_description']
-        read_only_fields = ['employment_type', 'employment_type_display', 'format_description']
+        fields = [
+            'employment_type', 'employment_type_display', 'range_start', 'range_end',
+            'next_sequence', 'format_description', 'usage_percent', 'is_exhausted',
+        ]
+        read_only_fields = ['employment_type', 'employment_type_display', 'format_description', 'usage_percent', 'is_exhausted']
 
     def get_format_description(self, obj) -> str:
-        seq = str(obj.next_sequence).zfill(obj.padding)
-        return f'{obj.prefix}{seq}'
+        if obj.next_sequence > obj.range_end:
+            return 'Exhausted — no numbers left in this range.'
+        return str(obj.next_sequence)
 
-    # Same validation rules as EmployeeCodeSettingsSerializer above — kept as
-    # a literal copy rather than a shared mixin, since the two models' field
-    # sets already diverge (employment_type) and are edited by two separate
-    # screens that don't need to change in lockstep.
-    def validate_prefix(self, value):
-        value = value.strip().upper()
-        if not re.fullmatch(r'[A-Z0-9_-]+', value):
-            raise serializers.ValidationError(
-                'Prefix may contain only letters, numbers, hyphens, and underscores.'
-            )
+    def get_usage_percent(self, obj) -> float:
+        return obj.usage_percent
+
+    def get_is_exhausted(self, obj) -> bool:
+        return obj.is_exhausted
+
+    def validate_range_start(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Range start cannot be negative.')
         return value
 
-    def validate_padding(self, value):
-        if not 3 <= value <= 8:
-            raise serializers.ValidationError('Padding must be between 3 and 8.')
-        return value
+    def validate(self, attrs):
+        range_start = attrs.get('range_start', getattr(self.instance, 'range_start', None))
+        range_end   = attrs.get('range_end', getattr(self.instance, 'range_end', None))
+        next_sequence = attrs.get('next_sequence', getattr(self.instance, 'next_sequence', None))
 
-    def validate_next_sequence(self, value):
-        if value < 1:
-            raise serializers.ValidationError('Starting number must be at least 1.')
-        return value
+        if range_start is not None and range_end is not None and range_start >= range_end:
+            raise serializers.ValidationError({'range_end': 'Range end must be greater than range start.'})
+
+        if next_sequence is not None and range_start is not None and range_end is not None:
+            if not (range_start < next_sequence <= range_end + 1):
+                raise serializers.ValidationError({
+                    'next_sequence': (
+                        f'Must be between {range_start + 1} and {range_end} to issue a new ID '
+                        f'(or {range_end + 1}, which marks the range as fully used up).'
+                    ),
+                })
+
+        # Ranges must not overlap between worker types.
+        if range_start is not None and range_end is not None:
+            qs = EmployeeCodeSeries.objects.exclude(pk=getattr(self.instance, 'pk', None))
+            overlapping = qs.filter(range_start__lt=range_end, range_end__gt=range_start).first()
+            if overlapping:
+                raise serializers.ValidationError({
+                    'range_start': f'This range overlaps {overlapping.get_employment_type_display()}\'s range ({overlapping.range_start}-{overlapping.range_end}).',
+                })
+
+        # A range cannot be edited in a way that invalidates IDs already issued.
+        employment_type = getattr(self.instance, 'employment_type', None)
+        if employment_type and range_start is not None and range_end is not None:
+            issued = User.objects.filter(employee_type=employment_type, employee_id__regex=r'^\d+$').exclude(employee_id='')
+            # employee_id is a CharField — compare as int, not lexicographically.
+            issued_ids = [int(v) for v in issued.values_list('employee_id', flat=True)]
+            if issued_ids:
+                lo, hi = min(issued_ids), max(issued_ids)
+                if lo <= range_start or hi > range_end:
+                    raise serializers.ValidationError({
+                        'range_start': f'{employment_type} already has issued IDs from {lo} to {hi} — the new range must fully contain them.',
+                    })
+
+        return attrs
 
 
 class PermissionTemplateSerializer(serializers.ModelSerializer):

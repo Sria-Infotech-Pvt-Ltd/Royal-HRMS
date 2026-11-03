@@ -429,6 +429,7 @@ def _employee_dict(user: User) -> dict:
         'id':             user.employee_id,
         'uuid':           str(user.id),
         'employee_id':    user.employee_id,
+        'legacy_employee_code': user.legacy_employee_code,
         'first_name':     first,
         'last_name':      last,
         'full_name':      user.full_name,
@@ -537,15 +538,22 @@ def _parse_as_of(request):
 
 
 def _get_employee(identifier: str):
-    """Look up an employee by employee_id code (e.g. EMP001)."""
+    """Look up an employee by employee_id (e.g. 10000001), falling back to
+    legacy_employee_code (e.g. EMP00004) for anyone whose ID was renumbered
+    by the 2026-11 move to 8-digit numeric-range IDs — old paperwork, emails,
+    and bookmarked URLs using the old code still resolve."""
+    qs = (
+        User.objects
+        .select_related('profile', 'reporting_manager', 'hr')
+        .prefetch_related('employee_documents')
+        .prefetch_related('custom_field_files')
+    )
     try:
-        return (
-            User.objects
-            .select_related('profile', 'reporting_manager', 'hr')
-            .prefetch_related('employee_documents')
-            .prefetch_related('custom_field_files')
-            .get(employee_id=identifier)
-        )
+        return qs.get(employee_id=identifier)
+    except User.DoesNotExist:
+        pass
+    try:
+        return qs.get(legacy_employee_code=identifier)
     except User.DoesNotExist:
         return None
 

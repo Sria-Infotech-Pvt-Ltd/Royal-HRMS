@@ -69,6 +69,7 @@ from apps.accounts.models import (
     EmailTemplateCategory,
     EmployeeApprovalOverride,
     EmployeeCodeSeries,
+    EmployeeIdSeriesExhausted,
     EmployeeCodeSettings,
     HireAction,
     JobTemplate,
@@ -202,7 +203,8 @@ class EmployeeListCreateView(APIView):
             qs = qs.filter(
                 Q(full_name__icontains=search) |
                 Q(email__icontains=search)     |
-                Q(employee_id__icontains=search)
+                Q(employee_id__icontains=search) |
+                Q(legacy_employee_code__icontains=search)
             )
         if dept:
             # Matches by the real OrgUnit an employee currently holds via
@@ -416,10 +418,13 @@ class EmployeeListCreateView(APIView):
 
         temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
-        # One numbering series per employment type (e.g. EMP/CON/FRL) — the
+        # One 8-digit numeric ID range per employment type — the
         # employee_type resolved above decides which series this ID comes
         # from, same as the Hire wizard already does.
-        employee_id = EmployeeCodeSeries.generate_employee_id_for_type(employee_type)
+        try:
+            employee_id = EmployeeCodeSeries.generate_employee_id_for_type(employee_type)
+        except EmployeeIdSeriesExhausted as exc:
+            return error(str(exc))
         full_name = f'{first_name} {last_name}'
 
         with transaction.atomic():

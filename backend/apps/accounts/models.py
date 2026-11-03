@@ -176,6 +176,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     email       = models.EmailField(unique=True)
     full_name   = models.CharField(max_length=150)
     employee_id     = models.CharField(max_length=20, blank=True, db_index=True)
+    # The old prefix+digits ID (e.g. EMP00004, CON00004) this employee held
+    # before the 2026-11 move to 8-digit numeric-range IDs. Blank for anyone
+    # hired after that migration. Kept searchable so old paperwork, emails,
+    # and verbal references to the old ID still resolve to the right person.
+    legacy_employee_code = models.CharField(max_length=20, blank=True, db_index=True)
     department      = models.CharField(max_length=100, blank=True)
     designation     = models.CharField(max_length=100, blank=True)
     # Free text, no choices enum — same convention as department/designation
@@ -1742,57 +1747,101 @@ class EmployeeCodeSettings(models.Model):
         return emp_id
 
 
-# ─── Employee Code Series (per employment type) ──────────────────────────────
+# ─── Employee Code Series (per employment type, SAP-style numeric ranges) ────
+
+# Default 8-digit range per employment type — first digit identifies the
+# worker type (like an SAP personnel number range), so e.g. 50000045 is
+# recognizable as an Intern with no lookup needed. range_start itself is
+# never issued (it's the exclusive lower bound); the first real ID handed
+# out is range_start + 1, matching the business's own stated examples
+# (Permanent's first ID is 10000001, not 10000000).
+DEFAULT_EMPLOYEE_ID_RANGES: dict[str, tuple[int, int]] = {
+    'Permanent':  (10000000, 19999999),
+    'Contract':   (20000000, 29999999),
+    'Consultant': (30000000, 39999999),
+    'Freelancer': (40000000, 49999999),
+    'Intern':     (50000000, 59999999),
+    'Part-Time':  (60000000, 69999999),
+    'Temporary':  (70000000, 79999999),
+}
+
+EMPLOYEE_ID_SERIES_WARN_THRESHOLD = 0.9  # log a warning once a series is ~90% used
+
+
+class EmployeeIdSeriesExhausted(Exception):
+    """Raised when an employment type's numeric ID range has no numbers left to issue."""
+    def __init__(self, employment_type: str):
+        self.employment_type = employment_type
+        super().__init__(
+            f'The {employment_type} employee ID series is exhausted — no numbers left in its configured range. '
+            'An administrator must widen the range in Settings → Employee Code before this worker type can be hired again.',
+        )
+
 
 class EmployeeCodeSeries(models.Model):
-    """One numbering series per employment type — e.g. Permanent hires get
-    EMP00001, EMP00002…, Interns get their own INT00001 series, etc. Replaces
-    EmployeeCodeSettings' single global counter for the Hire wizard (which
-    reserves a number once Employment type is chosen, before the rest of
-    hiring is complete) — EmployeeCodeSettings itself is left in place and
-    still used by its 3 existing call sites (plain employee creation, portal-
-    to-employee conversion, bulk import) so nothing that already worked
-    changes; only the new Hire wizard calls generate_employee_id_for_type()."""
+    """One numeric ID range per employment type — e.g. Permanent hires get
+    10000001, 10000002…, Interns get their own 50000001… range, etc. The
+    first digit of the ID is which range it falls in, so the worker type is
+    readable directly off the ID (SAP personnel-number style), no lookup
+    needed. IDs are 8-digit, purely numeric — no alphabetic prefix."""
     employment_type = models.CharField(max_length=50, unique=True, choices=User.EMPLOYMENT_TYPE_CHOICES)
-    prefix          = models.CharField(max_length=10, default='EMP')
-    padding         = models.PositiveSmallIntegerField(default=5)
-    next_sequence   = models.PositiveIntegerField(default=1)
-    updated_at      = models.DateTimeField(auto_now=True)
+    range_start      = models.PositiveBigIntegerField(help_text='Exclusive lower bound — never issued itself; the first ID handed out is range_start + 1.')
+    range_end        = models.PositiveBigIntegerField(help_text='Inclusive upper bound — the last ID this series can ever issue.')
+    next_sequence    = models.PositiveBigIntegerField(help_text='Next number this series will hand out.')
+    updated_at       = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'hrms_employee_code_series'
         ordering = ['employment_type']
 
     def __str__(self) -> str:
-        return f'{self.employment_type}: {self.prefix} (padding {self.padding})'
+        return f'{self.employment_type}: {self.range_start}-{self.range_end} (next {self.next_sequence})'
+
+    @property
+    def is_exhausted(self) -> bool:
+        return self.next_sequence > self.range_end
+
+    @property
+    def usage_percent(self) -> float:
+        total = self.range_end - self.range_start
+        if total <= 0:
+            return 100.0
+        used = min(self.next_sequence - self.range_start - 1, total)
+        return round(max(used, 0) / total * 100, 1)
 
     @classmethod
     def generate_employee_id_for_type(cls, employment_type: str) -> str:
-        """Same reserve-and-increment pattern as EmployeeCodeSettings.generate_employee_id,
-        scoped to one series per employment type. get_or_create's defaults seed
-        a brand-new employment type's series from EmployeeCodeSettings' own
-        current prefix/padding (not a hardcoded 'EMP'/5) so a type added after
-        this feature shipped still starts from a sensible, already-configured
-        format rather than silently reverting to the class default."""
+        """Reserve-and-increment within this employment type's own numeric
+        range. Raises EmployeeIdSeriesExhausted once the range runs out —
+        callers must turn that into a clear, blocking error to whoever is
+        hiring, not a silent fallback to some other range."""
         from django.db import transaction as _tx
 
         with _tx.atomic():
-            base = EmployeeCodeSettings.get()
+            defaults = DEFAULT_EMPLOYEE_ID_RANGES.get(employment_type, (10000000, 19999999))
             series = cls.objects.select_for_update().get_or_create(
                 employment_type=employment_type,
-                defaults={'prefix': base.prefix, 'padding': base.padding, 'next_sequence': 1},
+                defaults={'range_start': defaults[0], 'range_end': defaults[1], 'next_sequence': defaults[0] + 1},
             )[0]
-            # Same collision guard as EmployeeCodeSettings.generate_employee_id
-            # above — this series and that singleton counter (and every other
-            # employment type's own series) can all produce the same prefix,
-            # and increment completely independently of each other.
+            # Collision guard, same reasoning as before this rewrite: skip
+            # forward past any number already claimed by a real User, rather
+            # than trust next_sequence alone to never have drifted out of
+            # sync with what's actually in the database.
             while True:
-                seq    = str(series.next_sequence).zfill(series.padding)
-                emp_id = f'{series.prefix}{seq}'
+                if series.next_sequence > series.range_end:
+                    raise EmployeeIdSeriesExhausted(employment_type)
+                candidate = str(series.next_sequence)
                 series.next_sequence += 1
-                if not User.objects.filter(employee_id=emp_id).exists():
+                if not User.objects.filter(employee_id=candidate).exists():
+                    emp_id = candidate
                     break
             series.save(update_fields=['next_sequence', 'updated_at'])
+            if series.usage_percent >= EMPLOYEE_ID_SERIES_WARN_THRESHOLD * 100:
+                import logging
+                logging.getLogger(__name__).warning(
+                    'Employee ID series for %s is %.1f%% used (range %s-%s) — consider widening it soon.',
+                    employment_type, series.usage_percent, series.range_start, series.range_end,
+                )
         return emp_id
 
     @classmethod
@@ -1804,10 +1853,7 @@ class EmployeeCodeSeries(models.Model):
 
         with _tx.atomic():
             series = cls.objects.select_for_update().filter(employment_type=employment_type).first()
-            if series is None or not emp_id.startswith(series.prefix):
-                return False
-            digits = emp_id[len(series.prefix):]
-            if not digits.isdigit() or int(digits) != series.next_sequence - 1:
+            if series is None or not emp_id.isdigit() or int(emp_id) != series.next_sequence - 1:
                 return False
             if User.objects.filter(employee_id=emp_id).exists():
                 return False
