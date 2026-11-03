@@ -18,6 +18,7 @@ from apps.accounts import services_onboarding as onboarding
 from apps.accounts.factories import make_role, make_user
 from apps.accounts.models import OnboardingEvent, PasswordResetToken, User
 from apps.accounts.services_headcount import get_headcount
+from core.storage import ImageKitStorage
 
 def _events(user):
     return list(OnboardingEvent.objects.filter(employee=user).order_by('created_at').values_list('event', flat=True))
@@ -263,7 +264,23 @@ class MigrationBackfillTests(TestCase):
         self.assertFalse(untouched.activation_pending)
 
 
+def _in_memory_save(storage, name, content):
+    """Stands in for ImageKitStorage._save: keeps the upload local instead of calling the ImageKit API."""
+    content.seek(0)
+    content.read()
+    return name.replace('\\', '/')
+
+
 class HireStartsOnboardingTests(wizard.HireWizardTestCase):
+    def setUp(self):
+        super().setUp()
+        # The hire flow uploads every required document. Without this, each test makes a real request to ImageKit
+        # (rejected here with dummy keys, which is why these two used to fail with a 500).
+        for method, replacement in (('_save', _in_memory_save), ('delete', lambda storage, name: None)):
+            patcher = patch.object(ImageKitStorage, method, replacement)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def _hire(self):
         action = self._create_draft()
         self._set_employment_type(action, 'Permanent')

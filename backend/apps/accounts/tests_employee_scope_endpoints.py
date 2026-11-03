@@ -11,6 +11,7 @@ still succeeds. Fixtures: tests_employee_scope.build_world().
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.test import TestCase
 from rest_framework.test import APIClient
@@ -102,6 +103,21 @@ class ApprovalMatrixScopeTests(ScopeTestCase):
         self.assertEqual(response.status_code, 404)
         self.assertFalse(self._overrides(self.w.emp_hyd).exists())
 
+    def test_out_of_scope_actor_cannot_put_or_patch_an_override(self):
+        client = _api(self.w.hr_blr)
+        for method in (client.put, client.patch):
+            response = method(self._url(self.w.emp_hyd), {'workflow_type': 'leave'}, format='json')
+            self.assertEqual(response.status_code, 404, method.__name__)
+        self.assertFalse(self._overrides(self.w.emp_hyd).exists())
+
+    def test_in_scope_actor_can_still_put_and_patch(self):
+        client = _api(self.w.hr_hyd)
+        for method in (client.put, client.patch):
+            self._overrides(self.w.emp_hyd).delete()
+            response = method(self._url(self.w.emp_hyd), {'workflow_type': 'leave'}, format='json')
+            self.assertEqual(response.status_code, 200, method.__name__)
+            self.assertTrue(self._overrides(self.w.emp_hyd).exists(), method.__name__)
+
     def test_in_scope_actor_can_still_read_write_and_delete(self):
         client = _api(self.w.hr_hyd)
         self.assertEqual(client.get(self._url(self.w.emp_hyd)).status_code, 200)
@@ -170,6 +186,42 @@ class ByIdFileScopeTests(ScopeTestCase):
         EmployeeDocument.objects.filter(pk=self.document.pk).update(user=self.w.report)
         CustomFieldFileValue.objects.filter(pk=self.custom.pk).update(user=self.w.report)
         self.assertEqual(self._results(self.w.mgr), (200, 200))
+
+
+class ByIdFileHttpDenialTests(ScopeTestCase):
+    """Through the real views: a denied request answers before storage is touched. Any ImageKit client use fails."""
+
+    def setUp(self):
+        self.document = EmployeeDocument.objects.create(user=self.w.emp_hyd, document_type='pan', file='scope/a.pdf', file_name='a.pdf', file_size=1)
+        self.custom = CustomFieldFileValue.objects.create(user=self.w.emp_hyd, field_key='scope_key', file='scope/b.pdf', file_name='b.pdf', file_size=1)
+        guard = patch('core.storage._get_client', side_effect=AssertionError('storage must not be touched on a denied request'))
+        guard.start()
+        self.addCleanup(guard.stop)
+        self.urls = {
+            'document': (f'/api/onboarding/documents/{self.document.pk}/', 'Document not found.'),
+            'custom file': (f'/api/onboarding/custom-file-fields/{self.custom.pk}/', 'File not found.'),
+        }
+
+    def _assert_denied(self, actor, expected_status, expected_messages=True):
+        client = _api(actor)
+        for label, (url, message) in self.urls.items():
+            for method in (client.get, client.delete):
+                response = method(url)
+                self.assertEqual(response.status_code, expected_status, (actor.employee_id, label, method.__name__))
+                if expected_messages:
+                    self.assertEqual(response.json()['message'], message, (actor.employee_id, label, method.__name__))
+
+    def test_out_of_scope_actors_get_404_on_get_and_delete(self):
+        for actor in (self.w.hr_blr, self.w.hr_none, self.w.mgr):
+            self._assert_denied(actor, 404)
+
+    def test_denied_deletes_leave_the_files_in_place(self):
+        self._assert_denied(self.w.hr_blr, 404)
+        self.assertTrue(EmployeeDocument.objects.filter(pk=self.document.pk).exists())
+        self.assertTrue(CustomFieldFileValue.objects.filter(pk=self.custom.pk).exists())
+
+    def test_actor_without_employees_edit_keeps_the_existing_403(self):
+        self._assert_denied(self.w.emp_blr, 403, expected_messages=False)  # the 403 wording is not part of this change
 
 
 class AuditLogScopeTests(ScopeTestCase):
