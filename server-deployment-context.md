@@ -2633,3 +2633,195 @@ drawer and the CSV export.
 -   `git remote` in this checkout points at `Sria-Infotech-Pvt-Ltd/Royal-HRMS`,
     while §26 records `Sriainfotech/Royal-HRMS` as the real repo — confirm
     which one the server's deploy key can read before pulling.
+
+---
+
+# 34. Application change log (SaaS & Subscriptions, 2026-11-03 → 2026-11-04)
+
+Same rules as before: built and tested locally against the isolated Docker
+Postgres test DB on `localhost:15432`, never production. Production was only
+read through read-only checks run by the owner (counts only, below).
+
+**Status: all of this is uncommitted on local `production`.** On 2026-11-04
+the local branch was brought level with `origin/production` (`5a60da30`,
+§33) without losing any local change: stash → fast-forward pull → re-apply;
+the only conflict was this file (both sides added "§32" — the remote section
+became §33). Pre-merge backups (patch + new files) kept outside the repo.
+
+| Item | Migration | Pushed | Deployed |
+|---|---|---|---|
+| SaaS Priorities 1–3: plans, feature catalogue, manual assignment, module enforcement, legacy backfill | tenants `0012`, `0013` | No | No |
+| SaaS Priority 4: website registration API + Platform Admin approval (payment-gateway interface only) | tenants `0014` | No | No |
+| Manual payment tracking (payment status, payments, receipts, waiver, provisioning after payment) | tenants `0015` | No | No |
+| Plan currency dropdown (9 currencies) | None | No | No |
+| SaaS form validation (frontend + backend) | None | No | No |
+| SaaS UI fixes (alignment, pagination, tab info icons, payments layout) | None | No | No |
+
+## SaaS Priorities 1–3 — plans and subscriptions
+-   Platform Admin → **SaaS & Subscriptions** (new menu): Dashboard,
+    Subscription Plans, Customer Subscriptions, Customer Registrations,
+    Subscription History.
+-   Plans: name, code, price per employee / month, currency, GST (% and
+    inclusive flag), billing periods, min / max employees, status
+    (draft / active / inactive), published flag, display order, features.
+    Seeded (migration `0013`): Starter ₹49, Growth ₹99, Business / Premium
+    ₹149 — **active, not published**. Editing a plan never changes existing
+    subscriptions (price and features are copied onto the subscription).
+-   Feature catalogue (`apps/tenants/modules.py`): core (always on), module
+    (real switch in `Client.enabled_modules`), display (shown on the plan
+    only) and coming soon (cannot be included). Dependencies are added
+    automatically (Payroll → Attendance + Leave; Face ID → Attendance).
+-   Assigning a plan writes the company's modules; the API module gate and
+    the menus follow it immediately (company cache invalidated, JWT carries
+    the modules). Documents / Assets / WFH are only gated when
+    `SUBSCRIPTION_ENFORCEMENT=on`.
+-   New settings (all safe by default): `SUBSCRIPTION_ENFORCEMENT=off`
+    (`off` / `shadow` / `on`), `SUBSCRIPTION_ALLOW_OVERRIDES=False`,
+    `PAYMENT_GATEWAY=''`.
+-   `manage.py assign_legacy_subscriptions` — preview by default; `--apply`
+    gives existing companies (DEMO2026, RIS) a "legacy" subscription that
+    keeps their exact current modules. **Not run on production.**
+
+## SaaS Priority 4 — website registration (payment gateway deferred)
+-   Public API (`/api/public/plans/`, `/api/public/registrations/`) for the
+    company website; Royal HRMS itself has no public signup page.
+-   Platform Admin reviews registrations (filters, approve with optional new
+    company code, reject with reason / refund status) and gets a bell
+    notification.
+-   A registration can be approved **only after a verified gateway payment**.
+    Only the interface exists (`apps/tenants/payments.py`); no gateway is
+    connected (Priority 5 — not approved by the client), so registrations
+    stay "Awaiting payment". No route can mark a registration paid.
+
+## Manual payment tracking (migration `0015`)
+-   Three independent statuses on a subscription: **Payment** (Pending /
+    Paid / Partially paid / Failed / Waived), **Subscription** (Active /
+    Inactive), **Provisioning** (Awaiting payment / In progress / Success /
+    Failed).
+-   **Assigning never marks a subscription paid.** It is saved "Awaiting
+    payment": an existing company keeps its current modules, a new company is
+    not set up (company row only, new state `awaiting`, ignored by the
+    15-minute stale sweep and by `cleanup_failed_tenants`).
+-   Payments: amount, method (UPI, bank transfer, NEFT, RTGS, cash, cheque,
+    other), date, reference, notes, optional receipt (PDF / JPG / PNG ≤ 5 MB,
+    private Cloudinary storage, streamed through the API). Each payment is
+    recorded, then **confirmed** (or confirmed in the same step with an
+    explicit tick) or **rejected** with a reason. Never edited or deleted.
+-   Paid = confirmed payments ≥ amount due. Modules are applied (or the new
+    company is provisioned through the existing Celery task) only when
+    payment is **Paid or Waived** (waiver needs a reason). Provisioning shows
+    Success only after the modules are actually in place.
+-   Every change → subscription history + Platform Admin audit log.
+-   Plan changes and end-date changes still apply immediately (unchanged).
+    Website-approved subscriptions are recorded as Paid (gateway-verified).
+-   Existing subscriptions at migration: provisioning Success, payment
+    Pending (never assumed paid).
+
+## Currency, validation and UI
+-   Plan currency is a dropdown: INR (default), USD, EUR, GBP, AED, SAR, CAD,
+    AUD, SGD; backend accepts only these ISO codes. One formatter for all
+    SaaS amounts (₹49, $49, €49 …). No conversion; existing INR data and
+    subscription price snapshots unchanged.
+-   Validation on every SaaS form, in the form (message under the field) and
+    in the API: names (letters), plan code, company code (same rule as
+    website sign-up — it becomes the schema name), email, phone, GSTIN,
+    money (positive, 2 decimals), GST 0–100, employee counts (1–100,000,
+    min ≤ max, within the plan's range), real dates in a sane range, end ≥
+    start, dropdown values, text lengths.
+-   UI: SaaS page padding and header alignment; Plans table badges / buttons;
+    Customer Subscriptions gets Payment and Provisioning columns; Payments
+    section (amount due / received / balance, history, receipt preview,
+    confirm / reject in the status column); receipt remove (✕); disabled
+    buttons look disabled in SaaS pages; Subscription History pagination
+    (20 per page); ⓘ help tooltips on the five SaaS tabs.
+
+## Bugs found and fixed during testing (before any deploy)
+-   Applying a subscription to a company whose schema did not exist yet ran
+    the full schema migration inside the web request (django-tenants
+    `save()`) — now a queryset update + explicit cache invalidation.
+-   `/api/public/` blocked for signed-in users of an inactive subscription.
+-   Registration did not keep the plan's features if the plan was edited
+    before approval.
+-   `sweep_stale_provisioning` used `created_at`: a company that waited for
+    payment (or an older failed company being retried) would be marked failed
+    within minutes of setup starting — now `updated_at`, and each move to
+    pending stamps it.
+-   HTTP 500 instead of a message for: negative employee count on Change
+    plan, `NaN` / oversized amount due, impossible dates (e.g. 30 Feb).
+-   Receipt upload failed ("not a file"): the Platform Admin API client sent
+    JSON — upload now sends multipart.
+-   Confirm button silently disabled when amount due was unset — it now
+    opens the amount-due box.
+
+## Tests (local)
+-   Backend SaaS suites (`tests_saas`, `tests_registrations`,
+    `tests_saas_regression`, `tests_saas_payments`, `tests_saas_validation`):
+    78 pass; with the merged §33 geocoding tests: **117 pass**.
+    `manage.py check` clean, `makemigrations --check` = no changes.
+-   Earlier local integration run (real schema creation, Redis, JWT,
+    middleware): 32 / 32 checks. Celery worker exercised for real on a demo
+    company (provisioned after full payment confirmation).
+-   Frontend: `tsc` and ESLint clean, Vitest 37 files / 258 tests, `next
+    build` succeeds (all `/platform-admin/saas/*` routes).
+-   Not tested: real SMTP delivery, a real payment gateway, Cloudinary receipt
+    upload from the browser (unit tests use local file storage), staging.
+
+## Production read-only findings (2026-11-04)
+-   **DEMO2026 payroll, Aug + Sep 2026** (cycles labelled by `cycle_start`;
+    cycles run 25th → 24th): 3 cycles — Aug `78c9a014` (Suryapet, paid,
+    1 payslip, confirmed salary transfer), Aug `29717edd` (Khammam HRMS,
+    attendance pending, 0), Sep `cba17ee5` (Suryapet, query window open,
+    5 payslips); 1 payslip query, 2 manager approvals, 1 transfer batch +
+    1 item, 0 adjustments, 0 linked expenses, 16 audit rows, 13
+    notifications; no stored payslip PDFs.
+-   Owner confirmed it is demo data and asked to delete it. A cleanup script
+    was prepared and rehearsed locally (dry run rolls back; apply needs an
+    explicit phrase; aborts unless the 3 cycles and all counts match; keeps
+    audit history and adds one audit entry). Backup step: `pg_dump -n
+    tenant_demo2026`. **Whether it was run on the server is not confirmed.**
+-   App note: cancelling a cycle does not hide its payslips from employees
+    (My Payslips does not filter cancelled cycles).
+
+## Reports delivered (no code)
+-   "Coming soon" modules audit: none can be marked Available. Shifts exist
+    (shift master, effective-dated assignment, weekly off) inside Attendance,
+    but not roster planning; no training, appraisal / performance, TDS,
+    report builder, multi-entity, customer API or custom workflow code.
+    `/dashboard/reports` is a static placeholder.
+
+## Local development notes
+-   D: drive was full (`ENOSPC`): `frontend/.next` is now a junction to
+    `%LOCALAPPDATA%\royalhrms-next-cache` on C:, so the frontend must be
+    started with `NODE_PATH=<frontend>\node_modules` (otherwise "Cannot find
+    module"). Remove the junction once D: has space.
+-   Local DB migrated to the current code; a local-only platform admin and a
+    demo company (`PAYDEMO`) exist there. Local email is the in-memory
+    backend, so credentials are read via Companies → View credentials.
+
+## Deploy steps (after commit + push; back up first)
+```
+su - royalhrms
+cd /var/www/royalhrms/app && git pull origin production
+cd backend && .venv/bin/python manage.py migrate_schemas --shared   # tenants 0012–0015 (public schema)
+.venv/bin/python manage.py check
+exit
+supervisorctl restart royalhrms_backend royalhrms_frontend royalhrms_celery_worker royalhrms_celery_beat
+```
+-   Leave `SUBSCRIPTION_ENFORCEMENT` unset / `off` and `PAYMENT_GATEWAY`
+    empty. Do **not** publish plans until the gateway is approved.
+-   Check: Platform Admin → SaaS shows the 3 plans; existing companies show
+    "Not assigned" and keep all their modules.
+-   Legacy backfill only after approval:
+    `manage.py assign_legacy_subscriptions` (preview), then `--apply`.
+
+## Open items
+-   Commit + push of all the above; then drop the pre-merge stash.
+-   Priority 5 (payment gateway) — deferred until the client approves.
+-   Legacy backfill for DEMO2026 / RIS; plan for switching
+    `SUBSCRIPTION_ENFORCEMENT` to `shadow` / `on`.
+-   Platform Admin sidebar does not collapse on phones (all Platform Admin
+    pages are cramped below ~768 px).
+-   Companies → Add Company still uses the older, looser company-code check.
+-   GST defaults to 18 % for every currency (set 0 manually for non-INR).
+-   DEMO2026 Aug / Sep payroll cleanup — confirm whether it was run.
+-   Staging environment still missing; `backend/.env.example` still missing.
