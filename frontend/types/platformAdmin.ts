@@ -9,11 +9,15 @@ export type ModuleKey =
   | "expenses"
   | "separation"
   | "voice_commands"
-  | "assessments";
+  | "assessments"
+  | "documents"
+  | "assets"
+  | "wfh";
 
 export const ALL_MODULES: ModuleKey[] = [
   "announcements", "recruitment", "face_attendance", "attendance", "leave",
   "payroll", "expenses", "separation", "voice_commands", "assessments",
+  "documents", "assets", "wfh",
 ];
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -27,7 +31,208 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   separation:      "Separation & Offboarding",
   voice_commands:  "Voice Commands",
   assessments:     "Assessments",
+  documents:       "Document Management",
+  assets:          "Asset Management",
+  wfh:             "Work From Home",
 };
+
+// ── SaaS ───────────────────────────────────────────────────────────────────
+
+export type FeatureKind = "core" | "module" | "display" | "coming_soon";
+
+export interface SaasFeature {
+  key: string;
+  label: string;
+  category: string;
+  kind: FeatureKind;
+  depends_on: string[];
+}
+
+export type PlanStatus = "draft" | "active" | "inactive";
+
+export interface SubscriptionPlan {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  price_per_employee: string;
+  currency: string;
+  billing_periods: ("monthly" | "yearly")[];
+  gst_rate: string;
+  gst_inclusive: boolean;
+  min_employees: number | null;
+  max_employees: number | null;
+  /** Feature keys (module + display kinds). */
+  features: string[];
+  /** Module keys the plan switches on (features + dependencies). */
+  modules: string[];
+  status: PlanStatus;
+  is_public: boolean;
+  display_order: number;
+  is_legacy: boolean;
+  subscriber_count: number;
+  updated_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanySubscription {
+  id: string;
+  client_id: string;
+  plan: string;
+  plan_code: string;
+  plan_name: string;
+  source: "manual" | "website" | "legacy";
+  status: "active" | "inactive";
+  starts_on: string;
+  ends_on: string | null;
+  employee_count: number | null;
+  billing_period: string;
+  price_per_employee: string;
+  currency: string;
+  gst_rate: string;
+  gst_inclusive: boolean;
+  max_employees: number | null;
+  plan_features: string[];
+  extra_modules: string[];
+  removed_modules: string[];
+  modules: string[];
+  notes: string;
+  payment_status: PaymentStatus;
+  amount_due: string | null;
+  amount_received: string;
+  unconfirmed_payments: number;
+  payment_waiver_reason: string;
+  provisioning_status: SubscriptionProvisioning;
+  provisioning_error: string;
+  provisioned_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PaymentStatus = "pending" | "paid" | "partially_paid" | "failed" | "waived";
+export type SubscriptionProvisioning = "awaiting_payment" | "pending" | "success" | "failed";
+export type PaymentMethod = "upi" | "bank_transfer" | "neft" | "rtgs" | "cash" | "cheque" | "other";
+
+export interface SubscriptionPaymentRecord {
+  id: string;
+  amount: string;
+  currency: string;
+  method: PaymentMethod;
+  method_label: string;
+  paid_on: string;
+  reference: string;
+  notes: string;
+  has_receipt: boolean;
+  receipt_name: string;
+  status: "recorded" | "verified" | "rejected";
+  rejection_reason: string;
+  recorded_by_name: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface CustomerRow {
+  id: string;
+  company_code: string;
+  company_name: string;
+  contact_name: string;
+  contact_phone: string;
+  expected_employee_count: number | null;
+  is_active: boolean;
+  provisioning_status: ProvisioningStatus;
+  enabled_modules: string[];
+  created_at: string;
+  subscription: CompanySubscription | null;
+}
+
+export interface SubscriptionHistoryEntry {
+  id: string;
+  company_code: string;
+  company_name: string;
+  event: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  note: string;
+  admin_name: string | null;
+  created_at: string;
+}
+
+export interface SaasDashboard {
+  plans_total: number;
+  plans_active: number;
+  plans_public: number;
+  customers_total: number;
+  customers_without_subscription: number;
+  subscriptions_active: number;
+  subscriptions_inactive: number;
+  provisioning_failed: number;
+  by_source: Record<string, number>;
+  by_plan: { plan_name: string; customers: number }[];
+  registrations_pending_approval: number;
+  registrations_awaiting_payment: number;
+  registrations_rejected: number;
+  registrations_paid: number;
+}
+
+export interface PaymentTransaction {
+  gateway: string;
+  order_id: string;
+  payment_id: string | null;
+  amount_minor: number;
+  currency: string;
+  status: string;
+  failure_reason: string;
+  created_at: string;
+}
+
+export interface CompanyRegistration {
+  id: string;
+  reference: string;
+  company_name: string;
+  company_code: string;
+  contact_name: string;
+  admin_email: string;
+  contact_phone: string;
+  address: string;
+  gstin: string;
+  employee_count: number;
+  plan: string;
+  plan_code: string;
+  plan_name: string;
+  billing_period: string;
+  price_per_employee: string;
+  months: number;
+  subtotal: string;
+  gst_rate: string;
+  gst_inclusive: boolean;
+  gst_amount: string;
+  total: string;
+  currency: string;
+  payment_status: "pending" | "paid" | "failed" | "refunded";
+  paid_at: string | null;
+  approval_status: "pending" | "approved" | "rejected";
+  rejection_reason: string;
+  refund_status: string;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  client_id: string | null;
+  provisioning_status: ProvisioningStatus | null;
+  modules: string[];
+  payments: PaymentTransaction[];
+  created_at: string;
+}
+
+export interface PlatformNotification {
+  id: string;
+  kind: string;
+  title: string;
+  message: string;
+  link: string;
+  is_read: boolean;
+  created_at: string;
+}
 
 export interface PlatformAdminInfo {
   id:        string;
@@ -35,7 +240,7 @@ export interface PlatformAdminInfo {
   full_name: string;
 }
 
-export type ProvisioningStatus = "pending" | "active" | "failed";
+export type ProvisioningStatus = "pending" | "active" | "failed" | "awaiting";
 
 export interface Company {
   id:                       string;

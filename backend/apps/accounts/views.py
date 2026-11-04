@@ -480,6 +480,11 @@ class CanManageRoles(BasePermission):
         )
 
 
+def _visible_modules(enabled) -> list[str]:
+    from apps.tenants.subscriptions import visible_modules
+    return visible_modules(enabled)
+
+
 def _login_assessment_status(user) -> str:
     """Return the correct assessment_status string for the login response."""
     from django.db.models import Q as _Q
@@ -605,6 +610,9 @@ class LoginView(APIView):
                 'can_manage_team':     user.role.can_manage_team if user.role else False,
                 'can_manage_branch':   user.role.can_manage_branch if user.role else False,
                 'is_superuser':        user.is_superuser or 'settings.edit' in permissions,
+                # Modules this company's subscription includes (frontend menus / route guards;
+                # the API enforces them independently).
+                'enabled_modules':     _visible_modules(client.enabled_modules),
             },
         })
         resp.set_cookie(
@@ -3101,6 +3109,10 @@ class EmployeeListCreateView(APIView):
     def post(self, request):
         if not _has_perm(request.user, 'employees.create'):
             return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        from apps.tenants.subscriptions import employee_limit_problem
+        limit_problem = employee_limit_problem()
+        if limit_problem:
+            return error(limit_problem, http_status=status.HTTP_403_FORBIDDEN)
 
         first_name      = (request.data.get('first_name')      or '').strip()
         last_name       = (request.data.get('last_name')       or '').strip()
@@ -6701,6 +6713,10 @@ class EmployeeBulkImportView(APIView):
                 f'Maximum allowed per import is {_EMP_MAX_IMPORT_ROWS}.',
                 http_status=status.HTTP_400_BAD_REQUEST,
             )
+        from apps.tenants.subscriptions import employee_limit_problem
+        limit_problem = employee_limit_problem(adding=len(rows))
+        if limit_problem:
+            return error(limit_problem, http_status=status.HTTP_403_FORBIDDEN)
 
         # Pre-load lookup tables once for the entire batch.
         from apps.branch.models import Branch as _Branch

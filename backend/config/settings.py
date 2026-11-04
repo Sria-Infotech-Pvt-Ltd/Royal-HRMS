@@ -170,6 +170,18 @@ if DATABASES['default'].get('ENGINE') == 'django.db.backends.postgresql':
 # the run isn't enough on its own.
 TEST_RUNNER = 'config.test_runner.TenantAwareTestRunner'
 
+# ─── SaaS subscriptions ──────────────────────────────────────────────────────
+# off    — subscriptions are recorded but nothing extra is enforced (default).
+# shadow — log what 'on' would block, block nothing.
+# on     — enforce: modules added with plans (documents / assets / wfh),
+#          inactive subscriptions, and plan employee limits.
+SUBSCRIPTION_ENFORCEMENT = env('SUBSCRIPTION_ENFORCEMENT', default='off')
+# Customer-specific module overrides (not offered until approved).
+SUBSCRIPTION_ALLOW_OVERRIDES = env.bool('SUBSCRIPTION_ALLOW_OVERRIDES', default=False)
+# Payment gateway for website registrations (apps.tenants.payments). Empty =
+# no online payment: registrations stay "payment pending" and cannot be approved.
+PAYMENT_GATEWAY = env('PAYMENT_GATEWAY', default='')
+
 AUTH_USER_MODEL = 'accounts.User'
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -452,6 +464,8 @@ REST_FRAMEWORK = {
         'platform_admin_login': '20/hour',
         'platform_admin_forgot_password': '5/hour',
         'platform_admin_otp_verify':      '10/hour',
+        'public_read':          '120/hour',
+        'public_registration':  '10/hour',
     },
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
 }

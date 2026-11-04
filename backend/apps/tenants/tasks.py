@@ -19,8 +19,9 @@ import logging
 from celery import shared_task
 from django.utils import timezone
 
+from apps.tenants.billing import mark_provisioned, mark_provisioning_failed
 from apps.tenants.models import Client
-from apps.tenants.services import finish_pending_provisioning
+from apps.tenants.services import finish_pending_provisioning, retry_failed_provisioning
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +52,10 @@ def finish_provisioning_task(client_id, admin_email, modules):
         logger.info('Provisioning finished for %s.', client.company_code)
     except Exception:
         Client.objects.filter(pk=client.pk).update(provisioning_status=Client.PROVISIONING_FAILED)
+        mark_provisioning_failed(client.pk)
         logger.exception('Provisioning failed for %s.', client.company_code)
         raise
+    mark_provisioned(client.pk)
 
 
 @shared_task
@@ -68,8 +71,37 @@ def sweep_stale_provisioning(stale_minutes=15):
     failure and recreate the company.
     """
     cutoff = timezone.now() - timezone.timedelta(minutes=stale_minutes)
-    stale = Client.objects.filter(provisioning_status=Client.PROVISIONING_PENDING, created_at__lt=cutoff)
-    count = stale.update(provisioning_status=Client.PROVISIONING_FAILED)
+    # updated_at, not created_at: a company can wait a long time (awaiting
+    # payment, or failed then retried) before its setup actually starts —
+    # every move to 'pending' stamps updated_at.
+    stale = Client.objects.filter(provisioning_status=Client.PROVISIONING_PENDING, updated_at__lt=cutoff)
+    ids = list(stale.values_list('pk', flat=True))
+    count = Client.objects.filter(pk__in=ids, provisioning_status=Client.PROVISIONING_PENDING).update(
+        provisioning_status=Client.PROVISIONING_FAILED)
+    for pk in ids:
+        mark_provisioning_failed(pk)
     if count:
         logger.warning('Marked %d stale pending company provisioning row(s) as failed.', count)
     return count
+
+
+@shared_task
+def retry_provisioning_task(client_id, admin_email):
+    """Retry a company whose provisioning failed (see
+    services.retry_failed_provisioning). The view flips the row from
+    'failed' to 'pending' before queuing, so two retries can't run at once."""
+    try:
+        client = Client.objects.get(pk=client_id)
+    except Client.DoesNotExist:
+        logger.error('retry_provisioning_task: no Client row with id %s.', client_id)
+        return
+    try:
+        retry_failed_provisioning(client=client, admin_email=admin_email)
+        logger.info('Provisioning retry finished for %s.', client.company_code)
+    except Exception:
+        Client.objects.filter(pk=client.pk).update(provisioning_status=Client.PROVISIONING_FAILED)
+        mark_provisioning_failed(client.pk)
+        logger.exception('Provisioning retry failed for %s.', client.company_code)
+        raise
+    mark_provisioned(client.pk)
+

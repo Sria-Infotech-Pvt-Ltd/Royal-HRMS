@@ -257,3 +257,46 @@ def finish_pending_provisioning(*, client: Client, admin_email: str, modules: li
     client.save(update_fields=['provisioning_status', 'pending_admin_password', 'updated_at'])
 
     return {'client': client, 'password': password}
+
+
+class ProvisioningRetryRefused(Exception):
+    """The failed company can't be finished automatically (shown to the admin)."""
+
+
+def retry_failed_provisioning(*, client: Client, admin_email: str) -> dict:
+    """
+    Finish a company whose provisioning failed, without repeating steps that
+    already happened: an existing schema has its migrations resumed
+    (migrate_schemas picks up from django_migrations), and the company data
+    + first admin are seeded only when neither exists yet. A half-seeded
+    company is refused for manual review rather than guessed at. Runs in
+    the worker (apps.tenants.tasks.retry_provisioning_task).
+    """
+    from django_tenants.utils import schema_exists
+
+    if schema_exists(client.schema_name):
+        call_command('migrate_schemas', tenant=True, schema_name=client.schema_name,
+                     interactive=False, verbosity=1)
+    else:
+        _create_schema_with_retry(client)
+    Domain.objects.get_or_create(
+        tenant=client, defaults={'domain': f'{client.company_code.lower()}.internal', 'is_primary': True},
+    )
+    with client:
+        from apps.accounts.models import Company, User
+        has_company = Company.objects.exists()
+        has_admin = User.objects.filter(email__iexact=admin_email.strip()).exists()
+    password = None
+    if not has_company and not has_admin:
+        password = _seed_company_data(client, admin_email)
+    elif not (has_company and has_admin):
+        raise ProvisioningRetryRefused(
+            'The company was only partly set up (company record or admin login missing) — needs manual review.')
+    client.provisioning_status = Client.PROVISIONING_ACTIVE
+    fields = ['provisioning_status', 'updated_at']
+    if password:
+        client.pending_admin_password = password
+        fields.append('pending_admin_password')
+    client.save(update_fields=fields)
+    return {'client': client, 'password': password}
+

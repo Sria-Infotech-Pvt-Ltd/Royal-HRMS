@@ -13,6 +13,7 @@ import EmpUpdatesCard      from "@/components/dashboard/employee/EmpUpdatesCard"
 import EmpNoticePeriodCard from "@/components/dashboard/employee/EmpNoticePeriodCard";
 import PendingAcknowledgementsBanner from "@/components/policy/PendingAcknowledgementsBanner";
 import type { SessionPayload } from "@/lib/session";
+import { hasModule } from "@/lib/modules";
 
 interface Props { session: SessionPayload }
 
@@ -54,7 +55,7 @@ export default function EmployeeDashboard({ session }: Props) {
       <EmpNoticePeriodCard />
 
       {/* Company Policy / documents still to acknowledge — renders nothing when none */}
-      <PendingAcknowledgementsBanner />
+      {hasModule(session.modules, "documents") && <PendingAcknowledgementsBanner />}
 
       {/* Row 2.5 — Announcement + today's birthdays, one combined card (renders nothing when both are empty/dismissed) */}
       <EmpUpdatesCard />
@@ -80,8 +81,8 @@ export default function EmployeeDashboard({ session }: Props) {
 
       {/* Row 3 — Leave Balance | Upcoming Holidays */}
       <div className="grid-2 mb-16">
-        <EmpLeaveBalances />
-        <EmpUpcomingHolidays />
+        {hasModule(session.modules, "leave") && <EmpLeaveBalances />}
+        {hasModule(session.modules, "leave") && <EmpUpcomingHolidays />}
       </div>
 
       {/* Row 4 — Pending Requests | Recent Activity */}

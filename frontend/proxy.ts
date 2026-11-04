@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { moduleForPath, modulesFromPayload } from "./lib/modules";
 
 const AUTH_COOKIE = "royal_hrms_auth";
 const ACCESS_COOKIE = "royal_access_token";
@@ -235,6 +236,16 @@ export function proxy(request: NextRequest) {
 
     // Fully onboarded or approved users must not linger on /onboarding base page
     if (!needsOnboarding && isOnboarding && !needsAssessments && !isAssessmentsPage) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+  }
+
+  // Module check (company subscription): a page whose module the company
+  // doesn't have redirects to the dashboard. The API blocks it regardless.
+  if (isAuthenticated && pathname.startsWith("/dashboard")) {
+    const modules = modulesFromPayload(getJwtPayload(request));
+    const needed = moduleForPath(pathname);
+    if (modules && needed && !modules.includes(needed)) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }

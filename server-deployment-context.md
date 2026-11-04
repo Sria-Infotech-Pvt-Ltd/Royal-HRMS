@@ -2389,9 +2389,174 @@ Approver and HR ("Not assigned" when empty). Assignment rules unchanged.
     Approval Matrix stage-1 display, geocoder, face liveness, photo delete
     order, server reboot, **no automatic database backup scheduled**.
 
+# 32. Application change log (production support, 2026-10-27 → 2026-11-03)
+
+Same rules as §31: built and tested locally against the isolated Docker
+Postgres test DB on `localhost:15432`, never production. Production was only
+read through read-only `manage.py shell` checks run by the owner (outputs
+recorded below as counts only — no names, emails or bank/UAN/ESIC numbers).
+
+All commits below are on `origin/production` (local branch in sync on
+2026-11-03). "Deployed" = confirmed by the owner or a production screenshot.
+
+| Item | Commit(s) | Migration | Pushed | Deployed |
+|---|---|---|---|---|
+| Employee IDs: first + last-name initials; `convert_employee_ids` command | `6a08efa` | None | Yes | Yes (RIS converted RIS → RSS on 2026-10-28) |
+| Manager reporting eligibility by designation | `327c1a1` | None | Yes | Not confirmed |
+| Attendance: monthly CSV export | `227abcb` | None | Yes | Not confirmed |
+| Attendance: custom date-range export | `0cc4d37` | None | Yes | Not confirmed |
+| Company Policy compliance (9 of 10 items) | `aa99d06` | accounts `0101`, attendance `0048`, hrms `0032`, `0033` | Yes | Not confirmed |
+| Employee notice period module | `bf288fc` | accounts `0102` | Yes | Yes (owner: "hosted") |
+| Notice period bulk import; notice period on employee profile (Employee List) | `60ab66a`, `f47413f` | None | Yes | Not confirmed |
+| Document Center: PDF preview HTTP 500 fix | `95fc10a` | None | Yes | Not confirmed |
+| Employee ID: per-company format (`RIST0308G`) | `1f1687d` | accounts `0103` | Yes | Not confirmed; RIS conversion **not run yet** |
+| Payroll: payslip layouts, display settings, structure import, employee statutory eligibility, audit | `25c76fa` | payroll `0021` | Yes | Not confirmed |
+
+## Attendance export (`227abcb`, `0cc4d37`)
+-   Attendance → Export: monthly CSV, then any From–To date range. Same
+    permission and branch / team scope as the attendance list.
+
+## Company Policy compliance (`aa99d06`)
+Checked against `Company Policy- Updated.pdf`; 9 of 10 items implemented:
+missing clock-out rule, late allowance, early-leave allowance, long-leave
+notice, policy acknowledgement (Document Center), Company Contact Matrix,
+WFH medical proof and WFH daily report. Settings live under Attendance /
+Leave settings. **Half-yearly CL is not implemented — waiting for HR.**
+
+## Employee notice period (`bf288fc`, `60ab66a`, `f47413f`)
+-   `User.notice_period_days` (0–365, nullable). One field only — used by
+    Settings → Notice Period, My Profile → Work Info, Employees → profile
+    (Personal tab, read-only) and Separation & Exit (prefill / lock,
+    expected last working day). Changes need `employees.edit`, are branch /
+    Manager scoped and audit-logged.
+-   Settings → Notice Period → **Import** (CSV/XLSX, Employee ID + days):
+    preview, confirm, re-validated; blank = skip (never clears); duplicates,
+    unknown / out-of-scope / inactive IDs and invalid values are row errors.
+    The employee import is unchanged.
+-   Employee home dashboard has **no** notice-period card (not requested yet).
+
+## Document Center preview 500 (`95fc10a`)
+Cause: the signed file link (2 h) outlived the 15-minute access cookie; a
+cookie-less request ran on the public schema → `relation "hrms_documents"
+does not exist` → 500. Fix: the signed token carries the company schema;
+`Content-Type` from the file name (`application/pdf`, inline); clear 401/404/
+502 messages. Also closes a gap where a link from one company could open the
+same document number in another. Old links without a schema still work while
+the cookie is valid. Open documents need one page reload after deploy.
+
+## Employee ID format (`6a08efa`, `1f1687d`)
+-   `EmployeeCodeSettings` is per company (tenant schema). Prefix and the new
+    **format** are set in Settings → Employee Code:
+    `date_initials` = prefix + DDMM + initials (`RSS0308TG`, default) or
+    `first_date_last` = prefix + first initial + DDMM + last initial
+    (`RIST0308G`). DEMO2026 and other companies keep the default.
+-   `convert_employee_ids` gained `--format`; preview by default, one
+    transaction, mapping CSV written before commit, `--revert` restores IDs,
+    prefix **and** format.
+-   **RIS read-only check (2026-11-02):** prefix `RSS`; 54 users, all active;
+    53 `RSS` IDs + 1 blank (onboarding pending); single shape `AAA9999AA`;
+    no duplicates; planned conversion = 53 pure reorders, 0 suffixes, 0
+    missing data. History: 2026-10-28 bulk conversion RIS → RSS (54), then
+    prefix set to `ISS` and back to `RSS` the same day.
+-   **RIS conversion — still to run** after `1f1687d` is deployed:
+    backup `tenant_ris` → count-only check → preview → `--prefix RIS
+    --format first_date_last --apply --mapping-file ~/ris_empid_map_<date>.csv`.
+    Keep the mapping CSV safe (contains employee IDs). Tell RIS HR: old
+    bookmarks / saved import sheets with `RSS` IDs / ID cards printed since
+    2026-10-28 need refreshing.
+
+## Payroll — payslips, structures, eligibility (`25c76fa`)
+-   **Payroll Config → Payslip** (new tab): layout Standard / Wage slip;
+    UAN and ESIC masked (default) / full / hidden — applied **server-side**;
+    always-shown wage-slip deduction rows; stamp image (private storage,
+    signed URLs, PNG/JPEG/WebP < 2 MB).
+-   **Branch Config:** per-branch layout override and client / principal
+    employer name.
+-   Payslips save `template`, `adjustment_items` and `identity_snapshot` at
+    processing, so issued payslips keep their look; older payslips fall back
+    to live details and the Standard layout. Standard layout now itemises
+    one-time adjustments; Wage slip shows Actual / Earning (LOP split
+    across components for display only), period label, stamp, signatures.
+    Net pay is always the stored value.
+-   **Salary Structures → Import structures** (create; update only with the
+    explicit "Update existing structures" tick, shows employees following
+    the structure) and **Assign to employees (import)** (new salary revision
+    per row, same CTC; existing revisions never edited).
+-   **Statutory eligibility** per employee (Assign/Update CTC): PF / ESI / PT
+    "Follow policy" (default, results unchanged) or "Not deducted". Carried
+    to the next revision. This is the only part that can change amounts.
+-   **Behaviour changes:** employees no longer see **draft** payslips (My
+    Payslips, payslip page, voice); opening one's own payslip needs
+    `payroll.view_own`.
+-   **Audit log** now covers payroll settings, statutory, branch config,
+    structures / components, imports, stamp and eligibility changes (salary
+    amounts recorded only as "changed").
+-   Statutory formulas are **unchanged** (PF / ESIC / PT on full monthly
+    amounts; Excel slips use earned wages — compliance review pending).
+
+## Production read-only findings (2026-10-30 → 2026-11-02)
+-   Companies: DEMO2026 and RIS, both active, all 10 modules enabled;
+    active users 10 and 54.
+-   RIS branches: Hyderabad 35, Surat 18, none 1. Some deployed / contract
+    staff are recorded as **departments** (e.g. "Technical Deployment",
+    "QC/Inspection / HSE Deployment", "Contractual Deployment"). No client /
+    principal-employer concept exists; the Orin / Unique Sun Power workers
+    from the salary-slip workbook are **not** in Royal HRMS.
+
+## Reports delivered (no code)
+-   SaaS subscription / plan architecture assessment (plans should feed the
+    existing `Client.enabled_modules`; tables in the public schema).
+-   Self-service signup + Razorpay + Platform Admin approval investigation;
+    timeline estimate (~10 weeks full scope; 1-week manual-payment or
+    reduced-scope options).
+-   Salary-slip workbook (6 formats) vs payslip module; final payroll plan
+    and decision register (basis for `25c76fa`).
+
+## Test results for this batch (local, isolated DB)
+-   Notice period import 11 + related suites: 87 pass.
+-   Document Center preview: 10 new; documents / policy / ID card 40 pass.
+-   Employee ID format: 14 new; accounts 153 run — 1 known failure
+    (forgot password, pre-existing).
+-   Payroll + voice + ID card: 879 run, 878 pass — 1 failure
+    `test_office_mode_rejected_without_gps` (attendance geofence, not
+    touched by this batch; listed in the earlier attendance failures).
+-   `apps.tenants`: 11 failures locally, identical on the previous commit
+    (local Redis / cache query counts).
+-   Frontend: `tsc` and ESLint clean; Vitest 34 files / 241 tests pass.
+
+## Deploy notes
+-   Migrations in this batch (all additive, tenant schemas): accounts `0101`,
+    `0102`, `0103`; attendance `0048`; hrms `0032`, `0033`; payroll `0021`.
+    Back up first, then `.venv/bin/python manage.py migrate_schemas`.
+-   Restart `royalhrms_backend royalhrms_frontend`; also
+    `royalhrms_celery_worker` for `25c76fa` (payroll models changed).
+-   After `25c76fa`: open Payroll Config → Payslip and save once; open an old
+    payslip (should look unchanged); process a draft cycle and compare totals
+    with the previous run before switching any company / branch to Wage slip.
+    Check one real stamp upload (Cloudinary not exercised in tests).
+
+## Open items carried forward
+-   **RIS Employee ID conversion** to `RIST0308G` (steps above) — not run.
+-   **Half-yearly CL** policy — HR decision; also break deduction, CL notice
+    30 days, carry-forward cap.
+-   **Payroll decisions:** earned-wage basis for PF / ESIC / PT and rounding
+    (compliance advisor); IT Team performance allowance (held back / not paid
+    / paid); overtime and extra-day pay (future phase); TDS (out of scope);
+    contract workers (branches / client field / separate company).
+-   UAN / ESIC still shown in full in the employee profile API
+    (`employees.view`) and in ECR / ESIC files — separate decision.
+-   SaaS subscriptions / self-service signup: awaiting plan contents, prices,
+    payment gateway and approval decisions.
+-   Staging environment does not exist yet (needed before signup / payment work).
+-   **`backend/.env.example` still missing** (deleted in `eb0ac93`); restore:
+    `git checkout 9a4734d -- backend/.env.example`, commit, push.
+-   From §31: Ris `branch_admin` has `settings.edit` (security review); role
+    permission changes not audit-logged; salary-component backfill dry run;
+    **no automatic database backup scheduled**.
+
 ---
 
-# 32. Application change log (production support, 2026-11-03)
+# 33. Application change log (production support, 2026-11-03)
 
 Same rules as before. Unit tests are mocked (no real Google call from the
 dev machine). The Google key is restricted to the Geocoding API and the VPS

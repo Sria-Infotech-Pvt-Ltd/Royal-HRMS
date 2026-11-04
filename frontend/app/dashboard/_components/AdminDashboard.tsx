@@ -11,6 +11,7 @@ import EmployeeLifecycleTabs from "@/components/dashboard/EmployeeLifecycleTabs"
 import BirthdayWidget        from "@/components/dashboard/BirthdayWidget";
 import AuditLogsWidget       from "@/components/dashboard/AuditLogsWidget";
 import type { SessionPayload } from "@/lib/session";
+import { hasModule } from "@/lib/modules";
 
 interface Props { session: SessionPayload }
 
@@ -42,11 +43,11 @@ export default function AdminDashboard({ session }: Props) {
           user's own Clock In/Out (the same control the HR / manager consoles use). */}
       <KpiConsole
         firstName={firstName}
-        actions={<ClockInButton onPunchSuccess={() => setAttendanceKey(k => k + 1)} />}
+        actions={hasModule(session.modules, "attendance") ? <ClockInButton onPunchSuccess={() => setAttendanceKey(k => k + 1)} /> : undefined}
       />
 
       {/* Announcement */}
-      <AnnouncementCard />
+      {hasModule(session.modules, "announcements") && <AnnouncementCard />}
 
       {/* Quick Actions */}
       <div className="card mb-20">
@@ -80,7 +81,7 @@ export default function AdminDashboard({ session }: Props) {
           <DeptHeadcountChart />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <HrAttendanceCard refreshKey={attendanceKey} />
+          {hasModule(session.modules, "attendance") && <HrAttendanceCard refreshKey={attendanceKey} />}
           <EmployeeLifecycleTabs />
         </div>
       </div>

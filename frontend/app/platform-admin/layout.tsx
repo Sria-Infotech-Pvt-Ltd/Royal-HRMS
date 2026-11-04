@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import platformAdminApi from "@/lib/platformAdminApi";
 import { API } from "@/lib/api/endpoints";
+import NotificationBell from "./_components/NotificationBell";
 
 // "Settings" groups three previously-separate top-level nav items (Audit
 // Log, Email Settings, My Account) under one sidebar entry, landing on
@@ -12,6 +13,7 @@ import { API } from "@/lib/api/endpoints";
 const NAV_ITEMS = [
   { href: "/platform-admin",           icon: "ti-layout-dashboard", label: "Dashboard" },
   { href: "/platform-admin/companies", icon: "ti-building",         label: "Companies" },
+  { href: "/platform-admin/saas",      icon: "ti-receipt-2",        label: "SaaS & Subscriptions" },
   { href: "/platform-admin/admins",    icon: "ti-users",            label: "Platform Admins" },
   {
     href: "/platform-admin/settings", icon: "ti-settings", label: "Settings",
@@ -92,7 +94,12 @@ export default function PlatformAdminLayout({ children }: { children: React.Reac
         </div>
       </aside>
 
-      <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
+      <main style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 16px 0" }}>
+          <NotificationBell />
+        </div>
+        {children}
+      </main>
     </div>
   );
 }

@@ -15,13 +15,23 @@ def _volatile_claims(user) -> dict:
     its onboarding/assessment/superuser route gates — see that file's
     getOnboardingStatus/getAssessmentStatus/getCanManageTeam/getCanManageBranch/getIsSuperuser.
     """
-    return {
+    claims = {
         'onboarding_status': user.onboarding_status,
         'assessment_status': user.assessment_status,
         'can_manage_team':   bool(user.role and user.role.can_manage_team),
         'can_manage_branch': bool(user.role and user.role.can_manage_branch),
         'is_superuser':      user.is_superuser,
     }
+    # The company's enabled modules (subscription), read from the active
+    # tenant — login and refresh both activate it first. Re-derived on every
+    # refresh, so a plan change reaches the menus / route guards within one
+    # access-token lifetime. Omitted when no company is active.
+    from django.db import connection
+    modules = getattr(getattr(connection, 'tenant', None), 'enabled_modules', None)
+    if modules is not None:
+        from apps.tenants.subscriptions import visible_modules
+        claims['modules'] = visible_modules(modules)
+    return claims
 
 
 class RoleBasedRefreshToken(RefreshToken):

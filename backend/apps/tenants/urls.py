@@ -1,5 +1,14 @@
 from django.urls import path
 
+from apps.tenants.views_saas import (
+    FeatureCatalogueView, PlanDetailView, PlanListCreateView, RetryProvisioningView, SaasDashboardView,
+    SubscriptionChangePlanView, SubscriptionDetailView, SubscriptionHistoryListView, SubscriptionListAssignView,
+    SubscriptionPeriodView, SubscriptionStatusView, RegistrationListView, RegistrationDetailView,
+    RegistrationApproveView, RegistrationRejectView, NotificationListView, NotificationReadView,
+    SubscriptionAmountDueView, SubscriptionPaymentActionView, SubscriptionPaymentReceiptView, SubscriptionPaymentsView,
+    SubscriptionProvisionView, SubscriptionWaiverView,
+)
+
 from apps.tenants.views import (
     CompanyDetailView,
     CompanyListCreateView,
@@ -34,6 +43,33 @@ urlpatterns = [
 
     path('companies/',                       CompanyListCreateView.as_view(),    name='platform-admin-company-list'),
     path('companies/<uuid:pk>/',             CompanyDetailView.as_view(),        name='platform-admin-company-detail'),
+    path('companies/<uuid:pk>/retry-provisioning/', RetryProvisioningView.as_view(), name='platform-admin-company-retry-provisioning'),
+    path('saas/dashboard/',     SaasDashboardView.as_view(),          name='saas-dashboard'),
+    path('saas/features/',      FeatureCatalogueView.as_view(),       name='saas-features'),
+    path('saas/plans/',         PlanListCreateView.as_view(),         name='saas-plan-list'),
+    path('saas/plans/<uuid:pk>/', PlanDetailView.as_view(),           name='saas-plan-detail'),
+    path('saas/subscriptions/', SubscriptionListAssignView.as_view(), name='saas-subscription-list'),
+    path('saas/subscriptions/<uuid:client_id>/', SubscriptionDetailView.as_view(), name='saas-subscription-detail'),
+    path('saas/subscriptions/<uuid:client_id>/change-plan/', SubscriptionChangePlanView.as_view(), name='saas-subscription-change-plan'),
+    path('saas/subscriptions/<uuid:client_id>/period/', SubscriptionPeriodView.as_view(), name='saas-subscription-period'),
+    path('saas/subscriptions/<uuid:client_id>/status/', SubscriptionStatusView.as_view(), name='saas-subscription-status'),
+    path('saas/subscriptions/<uuid:client_id>/payments/', SubscriptionPaymentsView.as_view(), name='saas-subscription-payments'),
+    path('saas/subscriptions/<uuid:client_id>/payments/<uuid:payment_id>/verify/',
+         SubscriptionPaymentActionView.as_view(), {'action': 'verify'}, name='saas-subscription-payment-verify'),
+    path('saas/subscriptions/<uuid:client_id>/payments/<uuid:payment_id>/reject/',
+         SubscriptionPaymentActionView.as_view(), {'action': 'reject'}, name='saas-subscription-payment-reject'),
+    path('saas/subscriptions/<uuid:client_id>/payments/<uuid:payment_id>/receipt/',
+         SubscriptionPaymentReceiptView.as_view(), name='saas-subscription-payment-receipt'),
+    path('saas/subscriptions/<uuid:client_id>/amount-due/', SubscriptionAmountDueView.as_view(), name='saas-subscription-amount-due'),
+    path('saas/subscriptions/<uuid:client_id>/waiver/', SubscriptionWaiverView.as_view(), name='saas-subscription-waiver'),
+    path('saas/subscriptions/<uuid:client_id>/provision/', SubscriptionProvisionView.as_view(), name='saas-subscription-provision'),
+    path('saas/history/',       SubscriptionHistoryListView.as_view(), name='saas-history'),
+    path('saas/registrations/', RegistrationListView.as_view(), name='saas-registration-list'),
+    path('saas/registrations/<uuid:pk>/', RegistrationDetailView.as_view(), name='saas-registration-detail'),
+    path('saas/registrations/<uuid:pk>/approve/', RegistrationApproveView.as_view(), name='saas-registration-approve'),
+    path('saas/registrations/<uuid:pk>/reject/', RegistrationRejectView.as_view(), name='saas-registration-reject'),
+    path('notifications/',      NotificationListView.as_view(),       name='platform-admin-notifications'),
+    path('notifications/read/', NotificationReadView.as_view(),       name='platform-admin-notifications-read'),
     path('companies/<uuid:pk>/reveal-password/', CompanyRevealPasswordView.as_view(), name='platform-admin-company-reveal-password'),
     path('companies/<uuid:pk>/system-admin/',    CompanySystemAdminView.as_view(),    name='platform-admin-company-system-admin'),
     path('companies/<uuid:pk>/system-admin/reset-password/', CompanySystemAdminResetPasswordView.as_view(), name='platform-admin-company-system-admin-reset-password'),

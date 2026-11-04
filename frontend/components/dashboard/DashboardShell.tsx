@@ -75,7 +75,7 @@ export default function DashboardShell({
     ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile"
     : pathname.startsWith("/dashboard/separation/") ? "Separation Request"
     : brandName);
-  const visibleNav = buildNav(session.permissions ?? []);
+  const visibleNav = buildNav(session.permissions ?? [], session.modules);
   const navItems = visibleNav.filter((entry): entry is NavItem => !isSection(entry) && !entry.comingSoon);
   const canSearchEmployees = (session.permissions ?? []).includes("employees.view");
 

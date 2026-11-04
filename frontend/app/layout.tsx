@@ -4,6 +4,8 @@ import "./globals.css";
 import SessionExpiredOverlay from "@/components/SessionExpiredOverlay";
 import VoiceCommandButton from "@/components/VoiceCommandButton";
 import { ToastProvider } from "@/components/ToastProvider";
+import { getSession } from "@/lib/session";
+import { hasModule } from "@/lib/modules";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -21,9 +23,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Hidden when the company's subscription has no Voice Commands module
+  // (unknown module list → shown, as before). The API enforces it anyway.
+  const session = await getSession();
+  const showVoice = hasModule(session?.modules, "voice_commands");
   return (
     <html lang="en" style={{ height: "100%" }} suppressHydrationWarning>
       <head>
@@ -44,7 +50,7 @@ export default function RootLayout({
               entirely on /login and /signup (see VoiceCommandButton.tsx).
               Lives here, not inside DashboardShell, so it isn't tied to the
               dashboard route tree or duplicated per role. */}
-          <VoiceCommandButton />
+          {showVoice && <VoiceCommandButton />}
         </ToastProvider>
         <SessionExpiredOverlay />
       </body>

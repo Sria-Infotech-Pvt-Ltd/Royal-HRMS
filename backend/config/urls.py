@@ -18,6 +18,7 @@ urlpatterns = [
     path('api/voice/',         include('apps.voice_commands.urls')),
     path('api/assets/',        include('apps.assets.urls')),
     path('api/platform-admin/', include('apps.tenants.urls')),
+    path('api/public/',        include('apps.tenants.urls_public')),
 ]
  
 if settings.DEBUG:

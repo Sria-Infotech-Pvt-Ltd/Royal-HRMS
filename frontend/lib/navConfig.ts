@@ -1,3 +1,5 @@
+import { hasModule, moduleForPath, type Modules } from "./modules";
+
 export interface NavSection {
   section: string;
 }
@@ -74,7 +76,9 @@ const ALL_NAV: NavEntry[] = [
   { id: "settings", icon: "ti-settings", label: "Settings", path: "/dashboard/settings", permission: "settings.view" },
 ];
 
-export function buildNav(permissions: string[]): NavEntry[] {
+/** Menu for a user: by permission, and — when the company's module list is
+ *  known — only items whose module the company's subscription includes. */
+export function buildNav(permissions: string[], modules?: Modules): NavEntry[] {
   const permSet = new Set(permissions);
   const result: NavEntry[] = [];
   let pendingSection: NavEntry | null = null;
@@ -90,7 +94,7 @@ export function buildNav(permissions: string[]): NavEntry[] {
         || (Array.isArray(item.permission)
           ? item.permission.some(p => permSet.has(p))
           : permSet.has(item.permission));
-      if (permVisible) {
+      if (permVisible && hasModule(modules, moduleForPath(item.path))) {
         if (pendingSection && !sectionHasItem) result.push(pendingSection);
         result.push(item);
         sectionHasItem = true;

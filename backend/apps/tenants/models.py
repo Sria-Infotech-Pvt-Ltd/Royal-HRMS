@@ -25,6 +25,8 @@ from django.db.models import F
 from django.utils import timezone
 from django_tenants.models import DomainMixin, TenantMixin
 
+from core.storage import AuthenticatedRawMediaCloudinaryStorage, subscription_payment_receipt_upload_path
+
 
 # The full set of toggleable business modules this project currently
 # recognizes. A Client's `enabled_modules` stores a subset of these keys.
@@ -40,6 +42,12 @@ MODULE_EXPENSES           = 'expenses'
 MODULE_SEPARATION         = 'separation'
 MODULE_VOICE_COMMANDS     = 'voice_commands'
 MODULE_ASSESSMENTS        = 'assessments'
+# Added with SaaS plans. Companies created before them had these features
+# ungated; their URL gates apply only under SUBSCRIPTION_ENFORCEMENT=on
+# (apps.tenants.modules.LATE_GATED_MODULES).
+MODULE_DOCUMENTS          = 'documents'
+MODULE_ASSETS             = 'assets'
+MODULE_WFH                = 'wfh'
 
 ALL_MODULES = [
     MODULE_ANNOUNCEMENTS,
@@ -52,6 +60,9 @@ ALL_MODULES = [
     MODULE_SEPARATION,
     MODULE_VOICE_COMMANDS,
     MODULE_ASSESSMENTS,
+    MODULE_DOCUMENTS,
+    MODULE_ASSETS,
+    MODULE_WFH,
 ]
 
 MODULE_LABELS = {
@@ -65,6 +76,9 @@ MODULE_LABELS = {
     MODULE_SEPARATION:      'Separation & Offboarding',
     MODULE_VOICE_COMMANDS:  'Voice Commands',
     MODULE_ASSESSMENTS:     'Assessments',
+    MODULE_DOCUMENTS:       'Document Management',
+    MODULE_ASSETS:          'Asset Management',
+    MODULE_WFH:             'Work From Home',
 }
 
 
@@ -119,10 +133,16 @@ class Client(TenantMixin):
     PROVISIONING_PENDING = 'pending'
     PROVISIONING_ACTIVE  = 'active'
     PROVISIONING_FAILED  = 'failed'
+    # A company added with a manual subscription whose payment isn't
+    # confirmed yet: only the registry row exists, nothing is queued. Kept
+    # separate from 'pending' so sweep_stale_provisioning (pending -> failed
+    # after 15 min) and cleanup_failed_tenants never touch it.
+    PROVISIONING_AWAITING_PAYMENT = 'awaiting'
     PROVISIONING_STATUS_CHOICES = [
         (PROVISIONING_PENDING, 'Pending'),
         (PROVISIONING_ACTIVE,  'Active'),
         (PROVISIONING_FAILED,  'Failed'),
+        (PROVISIONING_AWAITING_PAYMENT, 'Awaiting payment'),
     ]
     provisioning_status = models.CharField(
         max_length=10, choices=PROVISIONING_STATUS_CHOICES, default=PROVISIONING_ACTIVE,
@@ -398,3 +418,318 @@ class PlatformAdminAuditLog(models.Model):
 
     def __str__(self) -> str:
         return f'{self.action} by {self.admin_id} @ {self.created_at}'
+
+
+# ─── SaaS subscriptions (public schema, like Client) ─────────────────────────
+
+class SubscriptionPlan(models.Model):
+    """A sellable plan. `features` are keys from apps.tenants.modules.FEATURES
+    (module + display kinds); the module keys among them become the
+    company's Client.enabled_modules via apps.tenants.subscriptions.
+    Editing a plan never changes existing subscriptions — each subscription
+    keeps a snapshot of the plan as assigned."""
+
+    STATUS_DRAFT = 'draft'
+    STATUS_ACTIVE = 'active'
+    STATUS_INACTIVE = 'inactive'
+    STATUS_CHOICES = [(STATUS_DRAFT, 'Draft'), (STATUS_ACTIVE, 'Active'), (STATUS_INACTIVE, 'Inactive')]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.SlugField(max_length=40, unique=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    price_per_employee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    currency = models.CharField(max_length=3, default='INR')
+    # Billing periods offered, e.g. ["monthly", "yearly"] — informational
+    # until billing is approved.
+    billing_periods = models.JSONField(default=list, blank=True)
+    # GST kept configurable (rate + whether the price includes it).
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=18)
+    gst_inclusive = models.BooleanField(default=False)
+    min_employees = models.PositiveIntegerField(null=True, blank=True)
+    max_employees = models.PositiveIntegerField(null=True, blank=True)
+    features = models.JSONField(default=list, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    is_public = models.BooleanField(default=False)
+    display_order = models.PositiveSmallIntegerField(default=0)
+    # The internal plan existing companies are moved onto (never public).
+    is_legacy = models.BooleanField(default=False)
+    updated_by = models.ForeignKey(PlatformAdmin, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'tenants_subscription_plan'
+        ordering = ['display_order', 'name']
+
+    def __str__(self) -> str:
+        return f'{self.name} ({self.code})'
+
+
+class CompanySubscription(models.Model):
+    """A company's current subscription (one per Client). Plan price and
+    features are snapshotted at assignment. Every change is recorded in
+    SubscriptionHistory."""
+
+    SOURCE_MANUAL = 'manual'
+    SOURCE_WEBSITE = 'website'
+    SOURCE_LEGACY = 'legacy'
+    SOURCE_CHOICES = [(SOURCE_MANUAL, 'Manual'), (SOURCE_WEBSITE, 'Website'), (SOURCE_LEGACY, 'Legacy')]
+
+    STATUS_ACTIVE = 'active'
+    STATUS_INACTIVE = 'inactive'
+    STATUS_CHOICES = [(STATUS_ACTIVE, 'Active'), (STATUS_INACTIVE, 'Inactive')]
+
+    # Payment, subscription status and provisioning are independent fields.
+    PAYMENT_PENDING = 'pending'
+    PAYMENT_PAID = 'paid'
+    PAYMENT_PARTIAL = 'partially_paid'
+    PAYMENT_FAILED = 'failed'
+    PAYMENT_WAIVED = 'waived'
+    PAYMENT_CHOICES = [(PAYMENT_PENDING, 'Pending'), (PAYMENT_PAID, 'Paid'), (PAYMENT_PARTIAL, 'Partially paid'),
+                       (PAYMENT_FAILED, 'Failed'), (PAYMENT_WAIVED, 'Waived')]
+
+    # Whether the subscription's modules / limits have been applied to the company.
+    PROVISION_AWAITING_PAYMENT = 'awaiting_payment'
+    PROVISION_PENDING = 'pending'
+    PROVISION_SUCCESS = 'success'
+    PROVISION_FAILED = 'failed'
+    PROVISION_CHOICES = [(PROVISION_AWAITING_PAYMENT, 'Awaiting payment'), (PROVISION_PENDING, 'In progress'),
+                         (PROVISION_SUCCESS, 'Success'), (PROVISION_FAILED, 'Failed')]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    client = models.OneToOneField(Client, on_delete=models.CASCADE, related_name='subscription')
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT, related_name='subscriptions')
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default=SOURCE_MANUAL)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    starts_on = models.DateField()
+    ends_on = models.DateField(null=True, blank=True, help_text='Blank = no end date')
+    employee_count = models.PositiveIntegerField(null=True, blank=True)
+    billing_period = models.CharField(max_length=10, blank=True, default='')
+    # Snapshot of the plan when assigned / last changed.
+    plan_name = models.CharField(max_length=100)
+    price_per_employee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    currency = models.CharField(max_length=3, default='INR')
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=18)
+    gst_inclusive = models.BooleanField(default=False)
+    max_employees = models.PositiveIntegerField(null=True, blank=True)
+    plan_features = models.JSONField(default=list, blank=True)
+    # Customer-specific overrides (module keys). Not offered in the UI until
+    # approved (settings.SUBSCRIPTION_ALLOW_OVERRIDES); legacy subscriptions
+    # use extra_modules to keep a company's exact pre-subscription modules.
+    extra_modules = models.JSONField(default=list, blank=True)
+    removed_modules = models.JSONField(default=list, blank=True)
+    notes = models.TextField(blank=True)
+    # Payment (recorded manually; see SubscriptionPayment). payment_status is
+    # derived from confirmed payments vs amount_due, except 'waived'.
+    payment_status = models.CharField(max_length=16, choices=PAYMENT_CHOICES, default=PAYMENT_PENDING)
+    amount_due = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    payment_waiver_reason = models.TextField(blank=True)
+    provisioning_status = models.CharField(max_length=20, choices=PROVISION_CHOICES, default=PROVISION_PENDING)
+    provisioning_error = models.CharField(max_length=255, blank=True)
+    provisioned_at = models.DateTimeField(null=True, blank=True)
+    # New company awaiting payment: its first admin's login email, used when
+    # provisioning starts. Cleared once provisioned.
+    pending_admin_email = models.EmailField(blank=True)
+    updated_by = models.ForeignKey(PlatformAdmin, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'tenants_company_subscription'
+
+    def __str__(self) -> str:
+        return f'{self.client.company_code} — {self.plan_name}'
+
+
+class SubscriptionHistory(models.Model):
+    """Append-only record of subscription changes."""
+
+    EVENT_ASSIGNED = 'assigned'
+    EVENT_PLAN_CHANGED = 'plan_changed'
+    EVENT_EXTENDED = 'extended'
+    EVENT_ACTIVATED = 'activated'
+    EVENT_DEACTIVATED = 'deactivated'
+    EVENT_PROVISIONING_RETRIED = 'provisioning_retried'
+    EVENT_PAYMENT_RECORDED = 'payment_recorded'
+    EVENT_PAYMENT_VERIFIED = 'payment_verified'
+    EVENT_PAYMENT_REJECTED = 'payment_rejected'
+    EVENT_PAYMENT_WAIVED = 'payment_waived'
+    EVENT_PAYMENT_WAIVER_REMOVED = 'payment_waiver_removed'
+    EVENT_AMOUNT_DUE_CHANGED = 'amount_due_changed'
+    EVENT_PROVISIONED = 'provisioned'
+    EVENT_PROVISIONING_FAILED = 'provisioning_failed'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    subscription = models.ForeignKey(CompanySubscription, on_delete=models.CASCADE, related_name='history')
+    event = models.CharField(max_length=30)
+    before = models.JSONField(default=dict, blank=True)
+    after = models.JSONField(default=dict, blank=True)
+    note = models.TextField(blank=True)
+    admin = models.ForeignKey(PlatformAdmin, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'tenants_subscription_history'
+        ordering = ['-created_at']
+
+
+class SubscriptionPayment(models.Model):
+    """A payment received outside the app (UPI, bank transfer, cheque, ...)
+    and recorded by a Platform Admin. Counts toward the subscription only
+    once confirmed ('verified'). Rows are never edited or deleted — a wrong
+    entry is rejected and re-recorded, so the trail stays complete."""
+
+    METHOD_CHOICES = [('upi', 'UPI'), ('bank_transfer', 'Bank transfer'), ('neft', 'NEFT'), ('rtgs', 'RTGS'),
+                      ('cash', 'Cash'), ('cheque', 'Cheque'), ('other', 'Other')]
+
+    STATUS_RECORDED = 'recorded'
+    STATUS_VERIFIED = 'verified'
+    STATUS_REJECTED = 'rejected'
+    STATUS_CHOICES = [(STATUS_RECORDED, 'Awaiting confirmation'), (STATUS_VERIFIED, 'Confirmed'),
+                      (STATUS_REJECTED, 'Rejected')]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    subscription = models.ForeignKey(CompanySubscription, on_delete=models.PROTECT, related_name='payments')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default='INR')
+    method = models.CharField(max_length=20, choices=METHOD_CHOICES)
+    paid_on = models.DateField()
+    reference = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
+    receipt = models.FileField(upload_to=subscription_payment_receipt_upload_path,
+                               storage=AuthenticatedRawMediaCloudinaryStorage(), max_length=255, null=True, blank=True)
+    receipt_name = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_RECORDED)
+    rejection_reason = models.TextField(blank=True)
+    recorded_by = models.ForeignKey(PlatformAdmin, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    reviewed_by = models.ForeignKey(PlatformAdmin, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'tenants_subscription_payment'
+        ordering = ['-paid_on', '-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.subscription.client.company_code} — {self.amount} {self.currency} ({self.status})'
+
+
+# ─── Website registrations (public schema) ───────────────────────────────────
+
+class CompanyRegistration(models.Model):
+    """A company signing up on the website. Nothing is provisioned until the
+    payment is VERIFIED (by the payment gateway integration, never by the
+    browser) AND a Platform Admin approves — then the normal provisioning +
+    subscription assignment runs (apps.tenants.registrations.approve)."""
+
+    PAYMENT_PENDING = 'pending'
+    PAYMENT_PAID = 'paid'
+    PAYMENT_FAILED = 'failed'
+    PAYMENT_REFUNDED = 'refunded'
+    PAYMENT_CHOICES = [(PAYMENT_PENDING, 'Pending'), (PAYMENT_PAID, 'Paid'), (PAYMENT_FAILED, 'Failed'),
+                       (PAYMENT_REFUNDED, 'Refunded')]
+
+    APPROVAL_PENDING = 'pending'
+    APPROVAL_APPROVED = 'approved'
+    APPROVAL_REJECTED = 'rejected'
+    APPROVAL_CHOICES = [(APPROVAL_PENDING, 'Pending'), (APPROVAL_APPROVED, 'Approved'),
+                        (APPROVAL_REJECTED, 'Rejected')]
+
+    REFUND_NONE = ''
+    REFUND_PENDING = 'pending'          # rejected after payment; refund per approved policy
+    REFUND_DONE = 'refunded'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reference = models.CharField(max_length=20, unique=True)
+    company_name = models.CharField(max_length=200)
+    company_code = models.CharField(max_length=20, db_index=True)
+    contact_name = models.CharField(max_length=150)
+    admin_email = models.EmailField()
+    contact_phone = models.CharField(max_length=20)
+    address = models.TextField(blank=True)
+    gstin = models.CharField(max_length=15, blank=True)
+    employee_count = models.PositiveIntegerField()
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT, related_name='registrations')
+    billing_period = models.CharField(max_length=10, default='monthly')
+    # Amount worked out on the server from the plan when registering.
+    plan_name = models.CharField(max_length=100)
+    # The plan's features when the customer registered — what they pay for,
+    # even if the plan is edited before approval.
+    plan_features = models.JSONField(default=list, blank=True)
+    price_per_employee = models.DecimalField(max_digits=10, decimal_places=2)
+    months = models.PositiveSmallIntegerField(default=1)
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2)
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2)
+    gst_inclusive = models.BooleanField(default=False)
+    gst_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    total = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default='INR')
+    payment_status = models.CharField(max_length=10, choices=PAYMENT_CHOICES, default=PAYMENT_PENDING)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    approval_status = models.CharField(max_length=10, choices=APPROVAL_CHOICES, default=APPROVAL_PENDING)
+    rejection_reason = models.TextField(blank=True)
+    refund_status = models.CharField(max_length=10, blank=True, default='')
+    reviewed_by = models.ForeignKey(PlatformAdmin, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    client = models.OneToOneField(Client, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='registration')
+    terms_accepted_at = models.DateTimeField()
+    signup_ip = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'tenants_company_registration'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.reference} {self.company_code}'
+
+
+class PaymentTransaction(models.Model):
+    """A payment attempt for a registration, as reported by the payment
+    gateway integration (apps.tenants.payments). Never written from browser
+    input. payment_id is unique so a payment can be recorded only once."""
+
+    STATUS_CREATED = 'created'
+    STATUS_PAID = 'paid'
+    STATUS_FAILED = 'failed'
+    STATUS_REFUNDED = 'refunded'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    registration = models.ForeignKey(CompanyRegistration, on_delete=models.PROTECT, related_name='payments')
+    gateway = models.CharField(max_length=30)
+    order_id = models.CharField(max_length=100, db_index=True)
+    payment_id = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    event_id = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    amount_minor = models.BigIntegerField(help_text='Amount in the smallest unit (paise)')
+    currency = models.CharField(max_length=3)
+    status = models.CharField(max_length=10, default=STATUS_CREATED)
+    failure_reason = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'tenants_payment_transaction'
+        ordering = ['-created_at']
+
+
+class PlatformNotification(models.Model):
+    """In-app notification for one Platform Admin (bell in Platform Admin)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient = models.ForeignKey(PlatformAdmin, on_delete=models.CASCADE, related_name='notifications')
+    kind = models.CharField(max_length=40)
+    title = models.CharField(max_length=200)
+    message = models.TextField(blank=True)
+    link = models.CharField(max_length=300, blank=True)
+    is_read = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'tenants_platform_notification'
+        ordering = ['-created_at']
+

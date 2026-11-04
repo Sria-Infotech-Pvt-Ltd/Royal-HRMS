@@ -2906,3 +2906,11 @@ body.dark-mode {
 .ta-timeline-item:last-child { padding-bottom: 0; }
 .ta-timeline-dot { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; border: 2px solid var(--ta-surface); box-shadow: 0 0 0 1px var(--ta-border); z-index: 1; }
 .ta-comment { background: var(--ta-bg); border-radius: var(--ta-radius-sm); padding: 10px 12px; font-size: 13px; color: var(--ta-text); margin-top: 8px; }
+/* Platform Admin -> SaaS pages: the platform-admin layout's <main> has no padding of its own */
+.saas-page { padding: 24px 24px 32px; }
+.saas-page .page-header { align-items: center; gap: 16px; margin-bottom: 20px; }
+.saas-page .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 768px) {
+  .saas-page { padding: 16px; }
+  .saas-page .page-header { align-items: flex-start; gap: 12px; }
+}

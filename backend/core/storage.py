@@ -124,6 +124,11 @@ def _short_upload_name(directory: str, filename: str) -> str:
     return f'{directory}/{uuid.uuid4().hex[:max(8, min(16, room))]}{ext}'
 
 
+def subscription_payment_receipt_upload_path(instance, filename) -> str:
+    # Platform-level (public schema) file; the original name is kept on the row.
+    return _short_upload_name('public/subscription_payments', filename)
+
+
 def expense_receipt_upload_path(instance, filename) -> str:
     return f'{_tenant_schema()}/expenses/receipts/{filename}'
 

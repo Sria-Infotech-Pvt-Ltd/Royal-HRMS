@@ -18,7 +18,9 @@ from django.utils.deprecation import MiddlewareMixin
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
-from apps.tenants.feature_gate import resolve_module_for_path
+from django.conf import settings
+
+from apps.tenants.feature_gate import resolve_late_module_for_path, resolve_module_for_path
 from apps.tenants.models import MODULE_LABELS
 from core.cache_service import TenantClientCacheService
 
@@ -78,6 +80,10 @@ class TenantSchemaMiddleware(MiddlewareMixin):
 
         connection.set_tenant(tenant)
 
+        blocked = self._subscription_gate(request, tenant)
+        if blocked is not None:
+            return blocked
+
         module = resolve_module_for_path(request.path)
         if module and not tenant.has_module(module):
             # Not core.responses.error() here: that returns a DRF Response,
@@ -93,3 +99,35 @@ class TenantSchemaMiddleware(MiddlewareMixin):
                 },
                 status=403,
             )
+
+
+    # Paths a company with an inactive subscription can still reach (sign in / out).
+    _SUBSCRIPTION_EXEMPT = ('/api/login/', '/api/logout/', '/api/token/refresh/', '/api/public/')
+
+    def _subscription_gate(self, request, tenant):
+        """SaaS checks, governed by settings.SUBSCRIPTION_ENFORCEMENT:
+        'off' (default) — nothing; 'shadow' — log what would be blocked;
+        'on' — block. Covers the modules added with plans (documents,
+        assets, wfh) and an inactive subscription."""
+        mode = getattr(settings, 'SUBSCRIPTION_ENFORCEMENT', 'off')
+        if mode not in ('shadow', 'on'):
+            return None
+
+        reason = None
+        late = resolve_late_module_for_path(request.path)
+        if late and not tenant.has_module(late):
+            label = MODULE_LABELS.get(late, late)
+            reason = f'{label} is not enabled for your company. Contact your administrator to enable it.'
+        elif request.path.startswith('/api/') and not request.path.startswith(self._SUBSCRIPTION_EXEMPT):
+            from apps.tenants.models import CompanySubscription
+            status_ = (CompanySubscription.objects.filter(client_id=tenant.pk)
+                       .values_list('status', flat=True).first())
+            if status_ == CompanySubscription.STATUS_INACTIVE:
+                reason = "Your company's subscription is inactive. Contact Royal HRMS support."
+        if reason is None:
+            return None
+        if mode == 'shadow':
+            logger.info('SUBSCRIPTION_ENFORCEMENT shadow: would block %s %s for %s (%s)',
+                        request.method, request.path, tenant.schema_name, reason)
+            return None
+        return JsonResponse({'status': 'error', 'message': reason, 'data': {}}, status=403)

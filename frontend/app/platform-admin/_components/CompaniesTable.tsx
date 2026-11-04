@@ -15,6 +15,7 @@ const STATUS_BADGE: Record<Company["provisioning_status"], { className: string; 
   pending: { className: "badge-warn",    label: "Provisioning…" },
   active:  { className: "badge-success", label: "Active" },
   failed:  { className: "badge-error",   label: "Failed" },
+  awaiting: { className: "badge-neutral", label: "Awaiting payment" },
 };
 
 export default function CompaniesTable({ companies, onChanged }: Props) {

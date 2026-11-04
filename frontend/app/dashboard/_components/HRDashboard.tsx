@@ -11,6 +11,7 @@ import HrEmployeeLifecycleTabs   from "@/components/dashboard/hr/HrEmployeeLifec
 import HrBirthdaysWidget         from "@/components/dashboard/hr/HrBirthdaysWidget";
 import { API }                   from "@/lib/api/endpoints";
 import type { SessionPayload }   from "@/lib/session";
+import { hasModule }             from "@/lib/modules";
 
 interface Props { session: SessionPayload }
 
@@ -32,7 +33,7 @@ export default function HRDashboard({ session }: Props) {
       <HrConsole firstName={firstName} />
 
       {/* Announcement */}
-      <AnnouncementCard />
+      {hasModule(session.modules, "announcements") && <AnnouncementCard />}
 
       {/* Quick Actions */}
       <div className="card mb-20">
@@ -56,12 +57,12 @@ export default function HRDashboard({ session }: Props) {
       {/* Row 2 — Attendance + Action Queue | Funnel + Attendance Card */}
       <div className="grid-2 mb-16">
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <HrAttendanceSummary />
+          {hasModule(session.modules, "attendance") && <HrAttendanceSummary />}
           <HrActionQueue />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <HrRecruitmentFunnel />
-          <HrAttendanceCard />
+          {hasModule(session.modules, "recruitment") && <HrRecruitmentFunnel />}
+          {hasModule(session.modules, "attendance") && <HrAttendanceCard />}
         </div>
       </div>
 

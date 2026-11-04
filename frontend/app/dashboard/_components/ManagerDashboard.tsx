@@ -4,6 +4,7 @@ import ClockInButton from "@/components/ClockInButton";
 import AnnouncementCard from "@/components/dashboard/AnnouncementCard";
 import { TeamProvider, useTeam } from "@/lib/teamContext";
 import type { SessionPayload } from "@/lib/session";
+import { hasModule } from "@/lib/modules";
 
 interface Props { session: SessionPayload }
 
@@ -129,7 +130,7 @@ function ManagerDashboardInner({ session }: Props) {
                 {ov.team_attendance_percentage}% Attendance
               </span>
             )}
-            <ClockInButton />
+            {hasModule(session.modules, "attendance") && <ClockInButton />}
           </div>
         </div>
 
@@ -156,7 +157,7 @@ function ManagerDashboardInner({ session }: Props) {
       </div>
 
       {/* Announcement */}
-      <AnnouncementCard />
+      {hasModule(session.modules, "announcements") && <AnnouncementCard />}
 
       {/* Quick actions */}
       {actions.length > 0 && (
