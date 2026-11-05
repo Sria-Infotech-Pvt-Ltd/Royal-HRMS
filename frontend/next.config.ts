@@ -58,6 +58,15 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy",            value: "strict-origin-when-cross-origin" },
         ],
       },
+      {
+        // Face-recognition model weights (public/models/): pinned, never-changing files that are ~7 MB in total.
+        // Cached for 30 days so each browser downloads them once; swapping the recognition model also means
+        // re-enrolling every employee (see FACE_RECOGNITION_MODEL_VERSION), at which point the files are renamed.
+        source: "/models/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=2592000, stale-while-revalidate=86400" },
+        ],
+      },
     ];
   },
 };

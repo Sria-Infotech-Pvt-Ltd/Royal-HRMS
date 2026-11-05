@@ -24,7 +24,7 @@ interface HRFaceCaptureModalProps {
 export default function HRFaceCaptureModal({
   employeeUuid, employeeName, isUpdate, onClose, onRegistered,
 }: HRFaceCaptureModalProps) {
-  const { phase, errorMessage, registeredRequest, videoRef, canvasRef, start, retry, stop } =
+  const { phase, errorMessage, registeredRequest, modelProgress, liveHint, livenessProgress, videoRef, canvasRef, start, retry, stop } =
     useHRFaceCapture(employeeUuid);
   const [consentAcknowledged, setConsentAcknowledged] = useState(false);
 
@@ -87,7 +87,7 @@ export default function HRFaceCaptureModal({
           {consentAcknowledged && (
           <>
           <div style={{ display: showCameraPreview ? "block" : "none" }}>
-            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} />
+            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} hint={liveHint} progress={livenessProgress} />
           </div>
 
           {phase === "idle" && (
@@ -106,7 +106,7 @@ export default function HRFaceCaptureModal({
           {phase === "loading_models" && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
-              title="Preparing face recognition" message="Loading models…"
+              title="Preparing face recognition" message="Downloading face models (first time only)…" progress={modelProgress}
             />
           )}
 
@@ -131,7 +131,7 @@ export default function HRFaceCaptureModal({
             <FaceStatusPanel
               icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
               title="Couldn't confirm they're live"
-              message="We didn't detect a natural blink or head turn in time. Make sure they're well-lit and centered, then try again."
+              message="Registration needs both a natural blink and a slight head turn, and we didn't see both in time. Make sure they're well-lit and centered, then try again."
               action={{ label: "Try Again", onClick: retry }}
               secondaryAction={{ label: "Cancel", onClick: handleClose }}
             />

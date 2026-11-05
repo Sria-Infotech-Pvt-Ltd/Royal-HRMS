@@ -4904,3 +4904,188 @@ Also found, same session, while investigating a live "Employee Directory shows 0
 **Tests:** 4 new cases in `tests_org_structure.py` (creating/editing to chief sets can_manage_team; non-chief creation doesn't; un-setting chief doesn't revoke it) — all pass; verified live end-to-end that the admin's directory/headcount now correctly show all 108 employees.
 
 **Verified throughout:** `manage.py check` and `makemigrations --check --dry-run` clean; `tsc --noEmit` clean on every changed frontend file (the only errors present are two pre-existing, unrelated `WorkStatusPanel` import errors already on `New-AI` before this session, flagged previously, not touched here); `eslint` clean on every changed file. Built and pushed from an isolated worktree off `origin/New-AI` — the shared checkout (`chore/testing-foundation-2`) was never touched, its own in-progress uncommitted work (a different, earlier "Save as Draft" implementation — see the open item above) is untouched and still there.
+
+---
+
+## Face Recognition + Voice Commands port into Aira (`New-AI`) — LIVING SECTION (started 2026-11-03)
+
+**This section is the shared source of truth for the port. Update it after every meaningful code change (rule from the team, 2026-11-03): files, endpoints, models/migrations, decisions, tests and their latest results, known issues, flags/env. Never mark something done unless the code and a verification run support it. Read this section before starting any phase.**
+
+### Scope and ground rules
+- **Branch meaning:** `New-AI` = the Aira app (this checkout). `production` = Royal-HRMS. The old `aira` branch is only a stale rebrand snapshot and is NOT the target.
+- **Goal:** bring ONLY the Face Recognition (face-verified punch in/out) and Voice Commands features of Royal-HRMS (`production`) into Aira. Nothing else.
+- **Never merge `production` into `New-AI`.** Files are read with `git show origin/production:<path>` and ported by hand, adapted to Aira.
+- No new branch is created. Work is in the current `New-AI` checkout. Nothing is committed or pushed unless the user asks.
+- Aira differs from production: single tenant (`apps/platform_core`, no django-tenants / no `apps/tenants`); migration numbers differ (Aira attendance was at 0045 before this work, so new ones start at 0046); Aira has its own Face ID registration modes + fallback policy and a voice capability registry that must be kept.
+- Aira's punch button is labelled **Punch In / Punch Out** (not "Clock In"); face and voice wording must say "punch".
+- Face Id rule the user wants (already how Aira's policy works, now with clearer text): employees register from the dashboard/profile via **Register My Face**; HR approves; only then does the camera step run at punch time. Not registered / pending / rejected gets a "register first, then come back and punch in" message and the camera is never opened.
+- Test database: only the private `test_neondb_aira_facevoice` on the Neon server. `migrate` on the shared `neondb` has NOT been run and needs the user's explicit go-ahead.
+
+### Phase status (updated 2026-11-03)
+| Phase | Scope | Status |
+|---|---|---|
+| 1 | Face backend gaps | **Implemented and tested** (104/106 face tests pass; 2 failures are pre-existing/unrelated, see below). `face_clockin_report` command implemented but **not yet tested/run**. |
+| 2 | Face frontend flow V2 (dotted oval, white fill-light, turn_only liveness, preloader, telemetry, lockout countdown, "Punch In" wording) | Implemented; automated tests pass (246 frontend tests, tsc, lint, build); headless-browser pass done; MANUAL real-camera testing OUTSTANDING (Phase 2 NOT complete) |
+| 3 | Face verification pass | Not started |
+| 4 | Voice backend (+2 correction-approval intents, +3 payroll analytics intents, matcher/conversation/executor updates, "Punch In" phrases/replies) | Not started |
+| 5 | Voice frontend (Hindi recovery, `useVoiceCommand` update, chips/labels) | Not started |
+| 6 | Voice verification pass | Not started |
+| 7 | Fixes beyond production (analytics speech redaction, `is_active` on voice punch, throttling, consent-version single source) | Not started. Transcript retention/redaction: deferred by the user. |
+
+### Phase 1 — Face backend (implemented and tested)
+**What changed**
+- **Lockout countdown:** `FaceAntiSpoofingGuard.seconds_until_unblocked()`; new `FaceVerificationBlockedError` (a `PermissionError` carrying `retry_after_seconds`); `FaceVerificationOutcome.retry_after_seconds`; `PunchService.record_punch` raises the blocked error for terminal blocks; `AttendancePunchView` answers 403 with `data: {blocked: true, retry_after_seconds}`. Ordinary mismatches stay a plain 403 with no lockout payload.
+- **`insecure_transport` audit row:** previously only a log line; now a `FaceVerificationAttempt` row is written (counts toward the 5-in-900s cap).
+- **Review notifications:** `FaceRegistrationReviewView` now creates an in-app `Notification` (type `face_registration_status`, module `facial_recognition`) and queues an email (`face_registration_approved` / `face_registration_rejected`) via a new generic `_send_lifecycle_email` helper in `notifications/signals.py` (wraps the existing `_send_leave_email` queueing).
+- **Telemetry:** new `FaceCaptureTelemetry` model + `POST /api/attendance/face-capture-telemetry/` (authenticated, always saved for `request.user`, bounds: duration <= 3,600,000 ms, liveness_attempts <= 200, quality_failures <= 500, auto_resumes/manual_retries <= 50, avg_fps <= 240, details <= 40 keys / 4000 chars). `purpose`/`outcome` deliberately have NO model-level `choices` (the repo's `scripts/check_no_new_choices.py` CI forbids new ones); the serializer validates against `FaceCaptureTelemetry.PURPOSES` / `OUTCOMES`.
+- **Report command:** `python manage.py face_clockin_report [--days N] [--weak-median X] [--min-attempts N]` (plain `BaseCommand`, employee_id only in output).
+- **"Register first, then come back" wording:** `services_face_policy.py` messages for the HR-approval mode (the default) now say to register first from Profile (Register My Face), wait for HR approval, then come back and punch in; "clock in" changed to "punch in" in the approved and fallback messages. The substrings existing tests assert ("Register My Face", "waiting for HR approval") are preserved.
+
+**Files modified:** `backend/apps/attendance/{models.py, services_attendance.py, services_face_antispoofing.py, services_face_matching.py, services_face_policy.py, urls.py}`, `backend/apps/attendance/views/{__init__.py, face_registration.py, my_attendance.py}`, `backend/apps/notifications/{models.py, signals.py}`.
+**Files created:** `backend/apps/attendance/views/face_capture_telemetry.py`, `backend/apps/attendance/management/commands/face_clockin_report.py`, `backend/apps/attendance/tests_face_capture_telemetry.py`, `backend/apps/attendance/tests_face_lockout_and_review_notice.py`, migrations below.
+**Files deleted:** none.
+
+**Migrations (generated; applied ONLY to the private test DB `test_neondb_aira_facevoice`, NOT to shared `neondb`)**
+- `attendance/0046_facecapturetelemetry` — creates `FaceCaptureTelemetry` (table `attendance_face_capture_telemetry`).
+- `attendance/0047_seed_face_registration_email_templates` — seeds the two builtin email templates (depends on `accounts/0211_backfill_account_activated_at`).
+- `notifications/0011_face_registration_notification_choices` — adds the new notification type and module to the choices (state-only).
+- `manage.py makemigrations --dry-run` was clean apart from these before generating them.
+
+**Tests (run 2026-11-03 on the private DB, `REDIS_URL=` empty, 106 tests, 516 s): 104 pass, 2 error**
+- New and passing: `tests_face_capture_telemetry` (7), `tests_face_lockout_and_review_notice` (lockout payload + cap, insecure-transport audit row, register-first/pending/rejected messages, review notification + email queued).
+- Existing and passing: `tests_face_verification`, `tests_face_registration`, `tests_face_lifecycle`, `tests_face_registration_capture_quality`, and the rest of `tests_face_id_policy`.
+- **Failing (2), not caused by this work:** `tests_face_id_policy.WelcomeEmailTemplateTests.test_the_builtin_welcome_email_gets_the_face_id_block` and `...test_an_edited_welcome_email_keeps_its_wording` — unique-key clash on `hire_welcome_credentials`, a row already seeded by existing migration `accounts/0190`. They do not touch anything modified here. NOT run against pristine code to prove it; not fixed (outside face/voice scope unless the user asks).
+
+**Known gaps / pending in Phase 1**
+- `face_clockin_report` has no test and has not been run.
+- Voice clock-in (`voice_commands/executor_attendance.py::_execute_punch`) does not yet return the blocked + `retry_after_seconds` info — Phase 4.
+- Frontend does not yet read `blocked` / `retry_after_seconds` — Phase 2.
+- Frontend face strings that still say "clock in" (e.g. onboarding/hire pages) are not yet changed — Phase 2.
+
+### How to run the backend tests here (learned the hard way)
+- Dependencies are not installed globally. A venv was created OUTSIDE the repo (session scratchpad) and `backend/requirements.txt` installed into it.
+- No Redis runs locally but `backend/.env` points `REDIS_URL` at `127.0.0.1:6379`; every cache call then fails slowly and logs tracebacks. For tests set `REDIS_URL=` (empty) on the command line so the app uses its in-memory fallback (no file change).
+- Command shape: `REDIS_URL= TEST_DB_SUFFIX=aira_facevoice python manage.py test <modules> --keepdb --noinput`. First run on a fresh private DB applies all migrations over the network and is very slow; later runs reuse the DB. The 106-test face run takes about 9 minutes.
+
+### Configuration, flags and env (this port)
+- Existing env names only, no values here: `FIELD_ENCRYPTION_KEY`, `REDIS_URL`, `SARVAM_API_KEY`, `TEST_DB_SUFFIX` (tests only).
+- Planned (Phase 2): build-time flag `NEXT_PUBLIC_FACE_FLOW_V2` (default on; `0` disables the readiness gate, auto-resume, camera boost, fill light and adaptive detector size, but never liveness, quality gate, consistency check or backend thresholds).
+- Face thresholds are code constants in `services_face_matching.py` / `services_face_antispoofing.py` (0.6 match, 0.05 low-confidence hard-reject band, 5 failures in 900 s, replay 300 s). Not configurable at runtime; do not change them without re-testing existing registrations.
+
+### Decisions
+- Telemetry model has no `choices=` (CI policy); validation lives in the serializer.
+- Aira keeps its own registration modes + fallback policy; production's simpler logic was NOT copied over it. Default fallback is "none", so an employee with no approved Face ID is blocked.
+- Aira's `_send_lifecycle_email` is a thin alias over `_send_leave_email` (no tenant schema argument, unlike production).
+- Migrations were generated fresh after Aira's latest numbers; production's migration files were not copied.
+
+### Next
+Phase 2: first read Aira's current capture hooks/modals/clock widget, report what already exists (e.g. whether the dotted oval and white fill-light are partly there), then implement the missing V2 pieces and update this section and `frontend/TEAMCONTEXT.md`.
+
+---
+
+### Phase 2B — face frontend flow V2 — PROGRESS CHECKPOINT 1 (2026-11-03)
+Status of everything below: **implemented, NOT yet type-checked, linted, built or unit-tested** (checkpoint 2 will record results). Approved decisions from the user (2026-11-03): keep the onboarding wizard and its Face ID gate untouched; consent wording changed to Punch In / Punch Out with version bump v1 -> v2 (frontend constant only in `consentText.ts`; Phase 7 will consolidate); backend punch success message NOT changed in Phase 2 (pending, separately approved backend change); registration liveness = blink AND head turn (`blink_and_turn`), Punch In/Out liveness = head turn only (`turn_only`); dashboard registration banner wanted; NO 2-second readiness bypass; no adaptive detector size / auto-resume / extra camera-startup strategies.
+
+**Dependencies:** `npm ci` ran in `frontend/` from the existing lockfile (684 packages installed). `package.json` and `package-lock.json` unchanged.
+
+**New files (frontend/lib/faceApi/):** `flowConfig.ts` (kill switch `NEXT_PUBLIC_FACE_FLOW_V2`, default on, `0` = off), `cameraBoost.ts`, `guide.ts` (dotted-oval geometry + `faceInsideGuide`), `readiness.ts` (blocks too_far / too_close / not_centered / not_frontal; lighting hints advisory only), `telemetry.ts` (fire-and-forget session summary), `lockout.ts` (mm:ss formatter + sessionStorage-backed lockout end time).
+**Modified:**
+- `lib/faceApi/liveness.ts` — `LivenessMode` (`blink_and_turn` default, `turn_only`), 90th-percentile blink baseline, median head-turn baseline, `getProgress()`.
+- `lib/faceApi/loadModels.ts` — two-stage loading (detector+landmarks first, recognition model in the background), byte progress, warm-up inference, `loadFaceApiModels()` loads both.
+- `lib/faceApi/frameCapture.ts` — added `sampleFaceAndFrameLuminance` (hint-only). `grabVideoFrame` deliberately NOT changed (production's 800 px downscale not ported: it would change embedding extraction vs existing registrations).
+- `lib/faceApi/qualityGate.ts` — `assessFrameQuality` now also returns short `codes` (telemetry only).
+- `lib/faceApi/consentText.ts` — version `v2`, Punch In / Punch Out wording. (Backend `FACE_CONSENT_TEXT_VERSION` bumped to `'v2'` in `backend/apps/attendance/models.py` — a single-constant change, no migration; existing v1 rows untouched.)
+- `lib/api/endpoints.ts` — `API.attendance.faceCaptureTelemetry`.
+- `hooks/useFaceLivenessCapture.ts` — rewritten around V2: models stage 1 -> camera -> detecting (readiness gate vs the dotted oval) -> liveness (per `livenessMode`) -> multi-frame capture (3 punch / 4 registration, identical CLAHE); fill-light latch, camera boost (exposureCompensation/brightness, restored on close), screen wake lock, telemetry, session guard (a capture from a closed modal can no longer fire `onCaptured`). With V2 off: original framing (10 stable frames), 12 s liveness window, 350 ms frame spacing, no hints/oval/fill light/boost. Liveness modes apply regardless of the switch.
+- `hooks/useFaceRegistrationCapture.ts`, `hooks/useHRFaceRegistration.ts` — `blink_and_turn`, `purpose: "register"`, expose `modelProgress`/`liveHint`/`livenessProgress`.
+- `components/FaceCaptureStage.tsx` (dotted oval, white-on-dark-outline; reminder line; mode-aware prompts — oval/reminder hidden when V2 off), `components/FaceVerificationModal.tsx` (`turn_only`, white screen fill light that fades in when the camera is live + low-light tip, progress bar, Punch In/Out wording), `components/FaceRegistrationModal.tsx` and `app/dashboard/face-id-registrations/_components/HRFaceCaptureModal.tsx` (hints, progress, "needs both a blink and a head turn" copy), `components/FaceStatusPanel.tsx` (optional progress bar).
+- `next.config.ts` — `Cache-Control: public, max-age=2592000, stale-while-revalidate=86400` for `/models/:path*`.
+
+**Registration modes / fallback (behaviour documented, NOT changed):** the server decides everything via `GET /attendance/face-verification/status/` (`useFaceVerificationStatus`). Modes: `self_service` (employee registers, active at once), `hr_in_person` (only HR registers; employees cannot self-register), `self_service_hr_approval` (default: employee registers, HR approves). Fallback policy `none` (default) / `days_after_joining` / `until_approved` can allow an office punch without a face match for an employee who has no approved Face ID; such punches are flagged server-side. The punch UI reads `requires_face_to_punch`, `fallback_active`, `message`; no frontend code computes its own policy.
+
+**Not implemented on purpose (production-only; report separately):** 800 px frame downscale, 2 s readiness bypass, adaptive 224->160 detector input, automatic liveness/quality resume, 640x480@30 camera constraints, camera requested in parallel with model load, modal opening in parallel with GPS/geofence. FPS is sampled for telemetry only.
+
+**Still to do in Phase 2B:** lockout countdown + Punch In/Out wording in the punch UIs (`useClockWidget.ts`, `ClockInButton.tsx`, `my-attendance/_components/ClockWidget.tsx`), register-first check before GPS, `FaceModelPreloader` + mount, dashboard registration banner, vitest files (cameraBoost, guide, liveness, readiness, telemetry, lockout), run vitest / tsc / lint / build, kill-switch ON/OFF check, final git-diff review.
+**Pending (separately approved backend change):** punch success message still says "Clocked in/out successfully." (`backend/apps/attendance/views/my_attendance.py`).
+
+---
+
+### Phase 2B — face frontend flow V2 — CHECKPOINT 2: COMPLETE, awaiting user review (2026-11-03)
+
+**Status: implemented and automatically tested; NOT yet checked in a real browser with a real camera.** No browser/manual run was done (camera, white fill-light screen, camera brightness boost, wake lock, lockout countdown UI, banner interaction and the telemetry POST against a live backend are verified only by types, build and unit/server-render tests).
+
+**Added since checkpoint 1**
+- Punch UIs: `hooks/useClockWidget.ts` (lockout state + 1 s ticker, sessionStorage-restored, `ensureFaceReady()`, `isLockedOut`, `lockoutSecondsRemaining`; Punch In/Out wording in its messages), `components/ClockInButton.tsx` and `app/dashboard/my-attendance/_components/ClockWidget.tsx` (call `ensureFaceReady()` BEFORE GPS/camera; button disabled and labelled `Please wait mm:ss` during a lockout; labels now "Punch In / Punch Out", status badge "Punched In / Punched Out"). Geofence order unchanged: GPS + geofence still run first, then the face modal.
+- `lib/faceApi/punchGate.ts` — the pure gate used by `useClockWidget` (approved -> camera; not registered / pending / rejected -> blocked with the server's "register first, then come back" message and no camera; fallback active -> punch without camera, flagged by the server).
+- `components/FaceModelPreloader.tsx` (idle-time `loadFaceApiModels()`, only when Face ID is mandatory) and `components/FaceRegistrationBanner.tsx` (dismissible prompt on `/dashboard`, `/dashboard/ess`, `/dashboard/team`; shows the server's message; "Register My Face" only when `can_self_register` and not pending), both mounted in `components/dashboard/DashboardShell.tsx`.
+- `hooks/useFaceVerificationStatus.ts` — optional `{ asSignedInUser: true }` (used by the banner/preloader so an admin viewing another employee's workspace never sees/acts on that employee's status). Default behaviour unchanged.
+- `lib/faceApi/telemetry.ts` — uses a static import of `clientApi` (a dynamic import raced on concurrent sends).
+
+**Tests added (all under frontend/, Vitest 4.1.11)** — `lib/faceApi/`: `cameraBoost.test.ts`, `guide.test.ts`, `liveness.test.ts`, `readiness.test.ts`, `telemetry.test.ts`, `lockout.test.ts`, `flowConfig.test.ts`, `punchGate.test.ts`; `components/`: `FaceCaptureStage.test.tsx` (kill switch ON/OFF), `FaceRegistrationBanner.test.tsx`. No existing test was modified.
+
+**Verification results (final run, 2026-11-03)**
+- `npx vitest run` (whole frontend): **35 files, 237 tests, all passed** — 10 of those files are the new ones above; the other 25 are pre-existing, unmodified test files and all still pass. (No separate pre-change baseline run was made.)
+- `npx tsc --noEmit`: **exit 0, no errors**.
+- ESLint on every changed/new `.ts`/`.tsx`: **exit 0, 0 errors, 0 warnings**. Full `npm run lint`: 0 errors, 9 warnings, all in untouched files (payroll, email-templates, onboarding/assessments).
+- `npm run build` (flow V2 ON, default): **exit 0**, compiled, TypeScript passed, 59/59 pages.
+- `NEXT_PUBLIC_FACE_FLOW_V2=0 npm run build`: **exit 0**. Bundle check: with V2 ON the client chunks contain "place your face inside the frame" and "exactly inside the dotted lines"; with V2 OFF they do not and instead contain "Center your face in the frame". (The fill-light tip text remains in the OFF bundle as dead code behind `screenLight`, which is false when V2 is off.) `.next/` was deleted afterwards (it is git-ignored and was created by these builds).
+- Kill switch: `FaceCaptureStage` server-render tests show the oval (`<ellipse>`, dashed), reminder line and "inside the dotted lines" prompt only when V2 is ON; the original stage when OFF. `flowConfig.test.ts`: ON when unset / any value except "0"; OFF only for "0". Liveness modes, the quality gate, the consistency check and backend thresholds are NOT behind the switch (by design).
+- Registration modes + fallback: `punchGate.test.ts` covers every mode x fallback policy x state (only an approved Face ID opens the camera; not registered / pending / rejected are blocked unless a fallback is active; never both). `FaceRegistrationBanner.test.tsx` covers self_service, self_service_hr_approval (pending), rejected, hr_in_person (no register button) and the fallback note.
+
+**Known issues / limits**
+- No time-based readiness bypass (user decision): a camera/face that can never sit inside the dotted oval at the required size cannot proceed; the person can only cancel. Watch real-world feedback.
+- Registration now needs a blink AND a head turn; people who struggle to blink on cue need the 9 s window and the on-screen prompts. Punch In/Out needs only a head turn.
+- A lockout countdown is only known after a blocked response; a hard refresh in a new tab session loses it (the server still blocks and returns the countdown again on the next attempt).
+- Voice punches also open `FaceVerificationModal`, so they now use the same head-turn-only liveness, oval and fill light (voice code itself untouched).
+- Live punch success text still comes from the server: "Clocked in/out successfully." (pending a separately approved backend change; frontend fallback text and all frontend labels say Punch).
+- Frontend still says "clock in/out" outside the agreed face-flow screens (e.g. onboarding/hire pages, voice assistant, other dashboards) — intentionally not touched in this phase.
+- Line endings: files rewritten in this phase use LF while neighbouring files use CRLF; Git normalises on commit (warning only).
+
+**Files created (frontend):** `components/FaceModelPreloader.tsx`, `components/FaceRegistrationBanner.tsx`, `lib/faceApi/{flowConfig,cameraBoost,guide,readiness,telemetry,lockout,punchGate}.ts` and the 10 test files above.
+**Files modified (frontend):** `app/dashboard/face-id-registrations/_components/HRFaceCaptureModal.tsx`, `app/dashboard/my-attendance/_components/ClockWidget.tsx`, `components/{ClockInButton,FaceCaptureStage,FaceRegistrationModal,FaceStatusPanel,FaceVerificationModal}.tsx`, `components/dashboard/DashboardShell.tsx`, `hooks/{useClockWidget,useFaceLivenessCapture,useFaceRegistrationCapture,useFaceVerificationStatus,useHRFaceRegistration}.ts`, `lib/api/endpoints.ts`, `lib/faceApi/{consentText,frameCapture,liveness,loadModels,qualityGate}.ts`, `next.config.ts`, and this file.
+**Backend touched in this phase:** only `backend/apps/attendance/models.py`, one constant: `FACE_CONSENT_TEXT_VERSION = 'v2'` (no migration; existing v1 rows untouched).
+**Files deleted:** none. `package.json` / `package-lock.json` unchanged (`npm ci` only).
+**Migrations:** none in this phase (the Phase 1 migrations are unchanged and still applied only to the private test DB).
+
+**Next:** Phase 3 (face verification pass) — NOT started; waiting for the user's review and approval.
+
+---
+
+### Phase 2C — independent verification of the face frontend (2026-11-03) — PARTIAL: Phase 2 is NOT complete
+
+**Phase 2B status:** implemented and automatically tested. **Phase 2C status:** automated checks and a headless-Chrome browser pass are done; **manual face testing by a person on a real camera is still outstanding** (mandatory), so Phase 2 must not be marked complete. Phase 3 has NOT been started.
+
+**Correction made during verification (no behaviour change):** the V2/OFF timing numbers and the fill-light decision were moved into a pure module so OFF mode can be regression-tested: NEW `lib/faceApi/flowParams.ts` (+ `flowParams.test.ts`: ON = 5 frames / 9 s / 250 ms; OFF = 10 frames / 12 s / 350 ms, every V2 flag false, no white screen/tip when OFF). `hooks/useFaceLivenessCapture.ts` (3 constants + readiness/luminance/boost flags), `components/FaceCaptureStage.tsx` (`GUIDE_OVAL`) and `components/FaceVerificationModal.tsx` (`fillLightState`) now read it. Files changed in 2C: those three modified + the two new ones.
+
+**Git audit:** only face-flow files, the Phase 1 backend face work, the two context files and the single consent constant changed. No voice file, no `package.json`/lockfile change. The only backend line touched in Phase 2 is `FACE_CONSENT_TEXT_VERSION = 'v2'` in `attendance/models.py`. Migrations: none created or run in Phase 2B/2C; the three Phase 1 migrations (`attendance 0046/0047`, `notifications 0011`) exist, untracked, and were applied only to the private DB `test_neondb_aira_facevoice`. Registration modes and fallback policy are intact (`services_face_policy.py` changed message text only). NOTE: `backend/requirements.txt` shows `redis==4.6.0 -> redis>=6.1.0` — NOT made by this work; left untouched (someone else's change).
+
+**Kill switch — what OFF does and does not restore (intentional):** OFF restores the original capture UI, framing (10 stable frames, no readiness gate/hints), 12 s liveness window, 350 ms spacing, no oval/reminder/white screen/camera boost. It does NOT restore: the liveness policy (now blink AND turn at registration, turn only at Punch In/Out — a user decision), the new blink/turn tracker maths, the quality gate/consistency check (unchanged either way), two-stage model loading + warm-up + idle preloader, wake lock, telemetry, the stale-capture guard, lockout countdown, banner, punch gate and Punch In/Out wording. So the switch restores the original look and timing, not the complete original flow.
+
+**Automated results (this phase)**
+- `npx vitest run`: exit 0, 36 files / 246 tests passed. Face subset `npx vitest run lib/faceApi components/FaceCaptureStage.test.tsx components/FaceRegistrationBanner.test.tsx`: exit 0, 13 files / 116 tests.
+- `npx tsc --noEmit`: exit 0. ESLint on all changed/new files: exit 0, no output. `npm run lint`: exit 0, 0 errors, 9 warnings (all in untouched files, unchanged).
+- `npm run build`: exit 0 (compiled, TypeScript passed, 59/59 pages). `.next/` deleted afterwards.
+- Phase 1 backend regression `REDIS_URL= TEST_DB_SUFFIX=aira_facevoice python manage.py test <7 face modules> --keepdb --noinput` (private DB, 0 migrations applied): 106 tests, 104 passed, 2 errors = the same two pre-existing `WelcomeEmailTemplateTests` (duplicate key on `hire_welcome_credentials`, seeded by migration 0190; unrelated to this work, not hidden, not fixed). The run's own exit code was not captured (ran in the background with a log; result line `FAILED (errors=2)`).
+
+**Browser results — headless Chrome with a SYNTHETIC camera (no face in the video), isolated stack: Next dev copy on :3100 -> Django on :8765 -> private DB only. Test accounts were created and removed by a guarded script (refuses any DB except `test_neondb_aira_facevoice`).**
+- PASS: idle preloader fetches models after the dashboard opens; two-stage order (recognition files requested after detector/landmarks); approved employee Punch In opens the face modal with GPS/geofence first, then camera; live preview, mirrored 320x240; dotted oval drawn, dashed, centred, 140.8 x 192.0 px (= 44% x 80%); reminder + prompt text; white fill-light backdrop while the camera is live; no low-light tip in good light; wake lock requested; camera released on close; backdrop returns after close; modal closed → no punch POST; camera permission denied panel; camera unavailable (SIMULATED NotFoundError) panel; optional APIs failing (wake lock rejected, getCapabilities throwing) → flow still reaches framing, no uncaught exception; closing while the camera request is still pending releases the late stream; telemetry POST to `/attendance/face-capture-telemetry/` with only the agreed fields and no embedding/image/video, stored (201), failing/never-answering telemetry does not affect the UI; not registered / pending / rejected: correct server message in banner and toast, no GPS, no camera, no geofence call, no punch; consent shown before the camera (camera stays closed through consent and until Start), Punch In/Out consent wording; registration camera opens with oval, dark backdrop (no white screen), released on close; new registration stored with consent `v2`; existing `v1` record unchanged and still approved/active and still verifies a matching face; HR sees the pending request in Approvals > Face Registration, approves from the UI (approved + active) and the employee gets the notification; HR Face ID Registrations page loads; `hr_in_person` (banner says ask HR, no self-register button, punch blocked, profile card no action); fallback `until_approved` and `days_after_joining` (active window): punch sent without the camera, GPS first, approved employee still verified by face; fallback expired: punch blocked, no camera; lockout: blocked response (`blocked:true`, `retry_after_seconds`) disables the button with `Please wait mm:ss`, counts down every second, re-enables, no punch row, and survives a full page reload; kill switch OFF (8 checks): original prompt, no oval, no reminder, no white screen, camera works, wake lock still requested, telemetry reports `flow_v2=false`, camera released, registration modal also original.
+- BLOCKED (needs a real face on a real camera — do manually): readiness hints for too far / too close / off-centre / not frontal; poor-lighting advice not blocking; low-light fill-light TIP and brightness recovery; camera brightness boost; blink+turn and head-turn liveness; multi-frame capture and the full punch/registration submit; "modal closed DURING capture sends no punch" (only the pending-camera and pre-capture close paths were exercised); telemetry for a real captured session and "punch succeeds even if telemetry fails" with a real capture.
+- NOT TESTED: wake-lock acquisition/release (headless Chrome denied the request; only the request was observed); model warm-up (no observable signal); browsers other than Chrome; real mobile devices; modal unmounted from OUTSIDE (e.g. the voice assistant closing its conversation) while the camera is still starting — the first two attempts were invalid (full page load), the router-based attempt was interrupted. From reading the code, the unmount cleanup does not invalidate an in-flight camera start (a stream could be left running); this is UNVERIFIED and pre-dates this work.
+
+**Findings**
+1. (pre-existing) If Punch In is clicked before the Face ID status request finishes, the page treats Face ID as "not mandatory" and posts the punch without a face; the SERVER correctly rejects it (400 "face verification is required"), so nothing is recorded, but the person must click again. Not changed. Suggested fix (needs approval): keep the punch button busy until the status has loaded.
+2. The Approvals page is only reachable (proxy gate) with leave/expense/payroll/employee-approval permissions, so a user holding ONLY `facial_recognition.approve` cannot open its Face Registration tab; the dedicated Face ID Registrations page is the path for them. Existing behaviour.
+3. `app/dashboard/my-attendance/_components/ClockWidget.tsx` is not imported anywhere (unused code); the live punch buttons are `ClockInButton` (ESS home, manager, employee and HR consoles).
+4. Voice shares `FaceVerificationModal`; its interface is unchanged (`isOpen`, `onCaptured`, `onClose`) and no voice file changed. Voice punches now get the same head-turn liveness, oval, white screen and telemetry. Not browser-tested (needs Sarvam/voice).
+
+**Verification incident (disclosed):** at 15:54 a Next dev server that I did NOT start took over port 3000 (it forwards `/api` to port 8000, which belongs to someone else's backend, probably on the shared DB). Roughly 4-5 failed login attempts for non-existent test emails and a few unauthenticated GETs from my probes went through it before I noticed and moved to my own ports (3100/8765). They were rejected and should not have written data, but they may count toward that backend's login throttle (10/hour/IP). Earlier in Phase 1, `manage.py makemigrations` also made a read-only connection to the env database to check migration history. One test run launched without a fake camera may have briefly opened this computer's real webcam; its screenshot was deleted unseen. My test servers were stopped, all `e2c_*` data was removed from the private DB (settings restored to "none"), and my temporary frontend copy and browser profiles were deleted.
+
+**Outstanding before Phase 2 can be called complete:** a person must test, on a real camera: readiness hints (too far/close/off-centre), poor-light advice, low-light white-screen tip, blink+turn registration and head-turn punch end to end, closing during capture, camera boost; plus a decision on findings 1 and the unverified unmount case.
+
+---
+
+### Phase 2C follow-up — first manual test on a real camera (2026-11-03)
+- **Manual registration test (user, real camera, test account e2c_none on the private DB): the registration capture worked end to end.** The DB shows a pending `FaceRegistrationRequest` stamped consent `v2` and one `register / captured` telemetry row (webgl). The user's screenshot showed the live prompt "Head turn ✓ — now blink naturally", so blink-AND-turn registration liveness and the live prompts work. HR approval of that request and the Punch In verification with the real face are not yet reported.
+- **Bug reported by the user and fixed:** the dotted guide looked like a doubled dashed ring. Cause: `FaceCaptureStage.tsx` drew two ellipses (dark outline under white dash) whose dash patterns did not line up on screen. Fix: ONE white dashed ellipse with a soft `drop-shadow`; geometry unchanged (44% x 80%, centred). Verified by a zoomed headless screenshot with a synthetic camera (single clean ring, `ellipses=1`) and by `components/FaceCaptureStage.test.tsx` + `lib/faceApi` (106 tests), `tsc` exit 0, ESLint exit 0. Not yet re-checked by the user on a real face.
+- **White background:** by design the white fill-light screen is applied only on the Punch In/Out verification modal (`FaceVerificationModal`), NOT on the registration modal (it keeps the dark overlay). The user expected it at registration too — OPEN DECISION: extend the white screen to registration or keep it punch-only.
+- Phase 2 remains NOT complete (manual real-camera checks outstanding); Phase 3 and all voice phases (4-7) are NOT started. Test servers (backend :8000, frontend :3000, private test DB, `e2c_*` accounts) are running for the user's manual testing.

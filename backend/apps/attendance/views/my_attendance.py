@@ -50,6 +50,7 @@ from apps.attendance.services_attendance import (
     AttendanceDashboardService,
     PunchService,
 )
+from apps.attendance.services_face_matching import FaceVerificationBlockedError
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,15 @@ class AttendancePunchView(APIView):
             PunchService.record_punch(request.user, punch_data)
         except ValueError as exc:
             return error(str(exc), http_status=status.HTTP_400_BAD_REQUEST)
+        except FaceVerificationBlockedError as exc:
+            # A terminal block (attempt cap, replay, low-confidence), not an
+            # ordinary retryable mismatch — carries retry_after_seconds so the
+            # frontend can disable the punch button and show a countdown
+            # instead of repeating the same error toast on every click.
+            return error(
+                str(exc), data={'blocked': True, 'retry_after_seconds': exc.retry_after_seconds},
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
         except PermissionError as exc:
             return error(str(exc), http_status=status.HTTP_403_FORBIDDEN)
 

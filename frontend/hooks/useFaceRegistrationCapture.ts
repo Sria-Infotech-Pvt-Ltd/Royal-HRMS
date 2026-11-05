@@ -26,6 +26,9 @@ interface UseFaceRegistrationCapture {
   phase:            CapturePhase;
   errorMessage:     string | null;
   submittedRequest: FaceRegistrationRequest | null;
+  modelProgress:    number;
+  liveHint:         string | null;
+  livenessProgress: { blink: boolean; turn: boolean };
   videoRef:         ReturnType<typeof useFaceLivenessCapture>["videoRef"];
   canvasRef:        ReturnType<typeof useFaceLivenessCapture>["canvasRef"];
   /** No-ops (does not open the camera) if consentAcknowledged is false —
@@ -81,6 +84,9 @@ export function useFaceRegistrationCapture(): UseFaceRegistrationCapture {
     onCaptured: handleCaptured,
     framesToCapture: REGISTRATION_FRAMES_TO_CAPTURE,
     normalizeLighting: REGISTRATION_NORMALIZE_LIGHTING,
+    // Registration needs BOTH a blink and a head turn (the hook's default mode) - never just one.
+    livenessMode: "blink_and_turn",
+    purpose: "register",
   });
   useEffect(() => { stopCaptureRef.current = capture.stop; }, [capture.stop]);
 
@@ -124,7 +130,8 @@ export function useFaceRegistrationCapture(): UseFaceRegistrationCapture {
   const errorMessage = submitPhase === "error" ? submitError : capture.errorMessage;
 
   return {
-    phase, errorMessage, submittedRequest,
+    phase, errorMessage, submittedRequest, modelProgress: capture.modelProgress,
+    liveHint: capture.liveHint, livenessProgress: capture.livenessProgress,
     videoRef: capture.videoRef, canvasRef: capture.canvasRef,
     start, retry, stop,
   };
