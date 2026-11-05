@@ -134,8 +134,12 @@ export function proxy(request: NextRequest) {
   // signed out — there's no session yet at that point, only a one-time
   // token in the URL the page itself validates against the backend.
   const isActivatePage = pathname.startsWith("/activate");
+  // Admin-triggered password reset is reached signed out too — the
+  // employee's existing session was invalidated when HR reset it, and
+  // this page validates its own one-time token against the backend.
+  const isAdminResetPage = pathname.startsWith("/reset-password/");
 
-  if (!isAuthenticated && !isLoginPage && !isActivatePage) {
+  if (!isAuthenticated && !isLoginPage && !isActivatePage && !isAdminResetPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

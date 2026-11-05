@@ -25,7 +25,7 @@ from core.permissions import has_perm
 from core.responses import error, get_client_ip, success
 
 from apps.accounts.models import AuditLog, Company, PasswordResetToken, User
-from apps.accounts.utils import send_template_email
+from apps.accounts.utils import _reset_link, send_template_email
 from apps.accounts.views import _employee_out_of_branch_scope
 
 logger = logging.getLogger(__name__)
@@ -44,9 +44,10 @@ def _can_manage_accounts(user) -> bool:
 
 class EmployeePasswordResetView(APIView):
     """
-    POST /employees/<uuid:pk>/reset-password/ — generates a fresh temporary
-    password for the employee, forces them to change it at next login, and
-    invalidates their existing sessions.
+    POST /employees/<uuid:pk>/reset-password/ — invalidates the employee's
+    current password and emails them a single-use link to set a new one
+    (same PasswordResetToken-based flow onboarding invites use), and
+    invalidates their existing sessions. Never emails a raw password.
     """
     permission_classes = [IsAuthenticated]
 
@@ -78,18 +79,21 @@ class EmployeePasswordResetView(APIView):
                 http_status=status.HTTP_403_FORBIDDEN,
             )
 
-        temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
-        target.set_password(temp_password)
-        target.must_change_password = True
-        target.save(update_fields=['password', 'must_change_password', 'updated_at'])
+        # Invalidate the current password immediately with a throwaway,
+        # never-transmitted value — the employee can't log in with either
+        # the old or this one; only the emailed link can set a real password.
+        throwaway_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+        target.set_password(throwaway_password)
+        target.save(update_fields=['password', 'updated_at'])
 
-        # must_change_password is not a volatile JWT claim (see tokens.py),
-        # so it wouldn't take effect on an already-active session until that
-        # session's tokens naturally expire — blacklist every outstanding
-        # token for the target so the new temp password is required
-        # immediately, not just on their next fresh login.
+        # Blacklist every outstanding token for the target so the old
+        # session is cut immediately, not just on their next fresh login.
         for outstanding in OutstandingToken.objects.filter(user=target):
             BlacklistedToken.objects.get_or_create(token=outstanding)
+
+        reset_token = PasswordResetToken.create_for_user(
+            target, purpose=PasswordResetToken.PURPOSE_RESET, validity_hours=24,
+        )
 
         try:
             company = Company.objects.first()
@@ -98,8 +102,8 @@ class EmployeePasswordResetView(APIView):
                 template_name='password_reset_by_admin',
                 context={
                     'employee_name': target.full_name or target.email,
-                    'temp_password': temp_password,
-                    'company_name': company.company_name if company else '',
+                    'reset_link':    _reset_link(reset_token.id),
+                    'company_name':  company.company_name if company else '',
                 },
                 module='accounts',
                 triggered_by=request.user,
@@ -120,7 +124,7 @@ class EmployeePasswordResetView(APIView):
 
         logger.info('Password reset for employee %s by %s', target.email, request.user.email)
         return success(
-            'Password reset. A new temporary password has been emailed to the employee.'
+            "Password reset. A link to set a new password has been emailed to the employee."
             if email_sent else
             'Password reset, but the notification email failed to send — check Email Logs.',
         )

@@ -491,6 +491,34 @@ class InviteCheckView(APIView):
         })
 
 
+class AdminResetCheckView(APIView):
+    """GET /password-reset-link/<uuid:token>/ — public, unauthenticated
+    check backing the admin-triggered-reset landing page. Mirrors
+    InviteCheckView but for PURPOSE_RESET tokens issued by
+    EmployeePasswordResetView — no onboarding-specific link-opened
+    tracking, since this employee isn't a new hire."""
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        try:
+            token_obj = PasswordResetToken.objects.select_related('user').get(
+                id=token, purpose=PasswordResetToken.PURPOSE_RESET,
+            )
+        except (PasswordResetToken.DoesNotExist, ValueError):
+            return error('This reset link is invalid.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if not token_obj.is_valid():
+            return error(
+                'This reset link has expired or was already used. Ask HR to reset your password again.',
+                http_status=status.HTTP_410_GONE,
+            )
+
+        return success('Reset link is valid.', data={
+            'full_name': token_obj.user.full_name,
+            'email':     token_obj.user.email,
+        })
+
+
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 

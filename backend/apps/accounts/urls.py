@@ -139,6 +139,7 @@ from apps.accounts.views import (
     VerifyOTPView,
     ResetPasswordView,
     InviteCheckView,
+    AdminResetCheckView,
     ChangePasswordView,
     PermissionListView,
     PermissionDetailView,
@@ -169,6 +170,7 @@ urlpatterns = [
     path('reset-password/',  ResetPasswordView.as_view(),   name='reset-password'),
     path('change-password/', ChangePasswordView.as_view(),  name='change-password'),
     path('invite/<uuid:token>/', InviteCheckView.as_view(), name='invite-check'),
+    path('password-reset-link/<uuid:token>/', AdminResetCheckView.as_view(), name='admin-reset-check'),
 
     # External systems (API-key authenticated, not a real HRMS login)
     path('external/employees/', ExternalEmployeeBasicListView.as_view(), name='external-employee-list'),

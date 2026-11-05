@@ -487,6 +487,20 @@ tr:hover td {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Matches .form-row's own margin-bottom so a standalone field and a
+     side-by-side field pair leave the same gap before whatever comes
+     next — previously only .form-row had this, so a field stacked
+     directly after another field-group (no row wrapper) sat noticeably
+     closer to the label above it than one that followed a row. */
+  margin-bottom: 16px;
+}
+
+/* A field-group used as a grid item inside .form-row already gets its
+   bottom gap from the row wrapper itself; its own margin would double
+   up directly beneath it (acceptable spacing-wise, but needlessly far
+   from the component's intent — the row, not its cells, owns that gap). */
+.form-row > .field-group {
+  margin-bottom: 0;
 }
 
 .field-label {
