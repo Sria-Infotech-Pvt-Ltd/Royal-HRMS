@@ -4,6 +4,8 @@ interface Props {
   expense:   number;
   correction: number;
   loading:   boolean;
+  /** Cards of modules the company doesn't have are left out (default: shown). */
+  show?:     { leave?: boolean; expense?: boolean; correction?: boolean };
 }
 
 const CARDS = [
@@ -13,12 +15,12 @@ const CARDS = [
   { key: "correction", label: "Attendance Corrections", icon: "ti-calendar-time", bg: "rgba(59,130,246,0.12)", color: "#1D4ED8" },
 ] as const;
 
-export default function SummaryCards({ pending, leave, expense, correction, loading }: Props) {
+export default function SummaryCards({ pending, leave, expense, correction, loading, show }: Props) {
   const values: Record<string, number> = { pending, leave, expense, correction };
 
   return (
     <div className="ta-summary-grid">
-      {CARDS.map(c => (
+      {CARDS.filter(c => c.key === "pending" || (show?.[c.key as keyof NonNullable<Props["show"]>] ?? true)).map(c => (
         <div key={c.key} className="ta-summary-card">
           <div className="ta-summary-icon" style={{ background: c.bg, color: c.color }}>
             <i className={`ti ${c.icon}`} />

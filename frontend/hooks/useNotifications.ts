@@ -17,6 +17,14 @@ import type { HRActionQueue, LeaveUpdatePayload } from "@/types/dashboard";
 const POLL_INTERVAL_MS = 60000;
 const WS_RECONNECT_BASE_MS = 1000;
 const WS_RECONNECT_MAX_MS  = 30000;
+// A socket that never opens (proxy without WebSocket support, rejected
+// login) must not be retried forever — production logged ~277k such
+// attempts. After this many consecutive failed opens, live updates stop for
+// this page and the 60s poll carries on; going back online retries once more.
+const WS_MAX_FAILED_OPENS  = 5;
+// Close codes the server uses for "will never accept this" (see
+// apps.notifications.consumers): 4401 not signed in, 4004 unknown path.
+const WS_FATAL_CLOSE_CODES = new Set([4401, 4004]);
 // Refreshing on every single reconnect attempt (previously unconditional)
 // means a socket that keeps failing to open — a flaky backend/proxy, or an
 // environment where the WS handshake never succeeds at all — hammers
@@ -27,10 +35,21 @@ const WS_RECONNECT_MAX_MS  = 30000;
 // for in the first place.
 const REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
 
-function notificationsSocketUrl(): string | null {
+// The handshake authenticates with the httpOnly access-token cookie, which
+// the browser only holds for the site the user signed in on (logins go
+// through this site's own /api proxy). So in production the socket must use
+// the same host as the page — e.g. wss://royalhrms.com/ws/notifications/,
+// routed to Daphne by nginx — not the separate API host, which never gets
+// the cookie. NEXT_PUBLIC_WS_URL overrides; local dev keeps using API_URL.
+export function notificationsSocketUrl(): string | null {
+  const explicit = process.env.NEXT_PUBLIC_WS_URL;
+  if (explicit) return `${explicit.replace(/\/+$/, "")}/ws/notifications/`;
+  if (typeof window !== "undefined" && process.env.NODE_ENV === "production") {
+    const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${scheme}://${window.location.host}/ws/notifications/`;
+  }
   if (!API_URL) return null;
-  const wsUrl = API_URL.replace(/^http/, "ws");
-  return `${wsUrl}/ws/notifications/`;
+  return `${API_URL.replace(/^http/, "ws")}/ws/notifications/`;
 }
 
 // The httpOnly access-token cookie the WS handshake authenticates with
@@ -125,6 +144,8 @@ export function useNotifications() {
     if (!url) return;
 
     let stopped = false;
+    let failedOpens = 0;      // consecutive attempts that never reached onopen
+    let givenUp = false;
 
     function connect() {
       if (stopped) return;
@@ -146,8 +167,11 @@ export function useNotifications() {
     function openSocket() {
       const socket = new WebSocket(url as string);
       socketRef.current = socket;
+      let opened = false;
 
       socket.onopen = () => {
+        opened = true;
+        failedOpens = 0;
         reconnectAttempt.current = 0;
       };
 
@@ -181,8 +205,19 @@ export function useNotifications() {
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event: CloseEvent) => {
         if (stopped) return;
+        if (!opened || WS_FATAL_CLOSE_CODES.has(event.code)) {
+          failedOpens += 1;
+          // A rejected login gets one more try (the cookie may just have been
+          // refreshed); anything that keeps failing stops here — polling stays.
+          const fatal = WS_FATAL_CLOSE_CODES.has(event.code) && failedOpens > 1;
+          if (fatal || failedOpens >= WS_MAX_FAILED_OPENS) {
+            givenUp = true;
+            return;
+          }
+          if (WS_FATAL_CLOSE_CODES.has(event.code)) lastRefreshAt.current = 0;   // force a token refresh
+        }
         const delay = Math.min(
           WS_RECONNECT_BASE_MS * 2 ** reconnectAttempt.current,
           WS_RECONNECT_MAX_MS
@@ -198,10 +233,21 @@ export function useNotifications() {
       };
     }
 
+    // Back online after giving up (e.g. phone switched networks): try again.
+    function onOnline() {
+      if (stopped || !givenUp) return;
+      givenUp = false;
+      failedOpens = 0;
+      reconnectAttempt.current = 0;
+      connect();
+    }
+    window.addEventListener("online", onOnline);
+
     connect();
 
     return () => {
       stopped = true;
+      window.removeEventListener("online", onOnline);
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       // Null out handlers before closing so the browser's close event on a
       // CONNECTING socket doesn't re-enter onclose/onerror and schedule a

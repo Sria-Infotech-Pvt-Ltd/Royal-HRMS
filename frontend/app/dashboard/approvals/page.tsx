@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePermission, useAnyPermission } from "@/hooks/usePermission";
+import { useHasModule } from "@/lib/modulesContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import TeamApprovalsSection from "./_components/TeamApprovalsSection";
 import AttendanceApprovalTab from "./_components/AttendanceApprovalTab";
@@ -13,15 +14,17 @@ export default function ApprovalsPage() {
   const user = useCurrentUser();
   const [section, setSection] = useState<Section>("approvals");
   const canApprove      = useAnyPermission("leave.approve", "expenses.approve", "attendance.create", "separation.approve");
-  const canApproveFace  = usePermission("facial_recognition.approve");
+  const faceOn          = useHasModule("face_attendance");
+  const attendanceOn    = useHasModule("attendance");
+  const canApproveFace  = usePermission("facial_recognition.approve") && faceOn;
   const hasPayrollView  = usePermission("payroll.view");
   // Managers, superusers, and anyone with payroll.view (payroll admins and HR
   // alike) get this tab — it's the only place attendance-cycle sign-off lives
   // now that Leave Management no longer has its own "Attendance Approvals" tab.
-  const canApproveAttendance =
+  const canApproveAttendance = attendanceOn && (
     user?.can_manage_team === true ||
     user?.is_superuser === true ||
-    hasPayrollView;
+    hasPayrollView);
 
   const sections: { key: Section; label: string; icon: string }[] = useMemo(() => [
     ...(canApprove           ? [{ key: "approvals"         as Section, label: "Team Approvals",      icon: "ti-checks"         }] : []),

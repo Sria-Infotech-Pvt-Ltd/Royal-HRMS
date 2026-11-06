@@ -1,6 +1,13 @@
 "use client";
 
 import { PROFILE_TABS } from "../../_data";
+import { hasModule } from "@/lib/modules";
+import { useModules } from "@/lib/modulesContext";
+
+// Tabs that belong to a module (the company's subscription decides).
+export const TAB_MODULES: Record<string, string> = {
+  salary: "payroll", payroll: "payroll", leave: "leave", attendance: "attendance", assets: "assets",
+};
 
 export default function ProfileTabBar({
   active,
@@ -9,13 +16,14 @@ export default function ProfileTabBar({
   active: string;
   onChange: (id: string) => void;
 }) {
+  const modules = useModules();
   return (
     <div
       className="rounded-xl border mb-4 overflow-x-auto"
       style={{ background: "#fff", borderColor: "var(--outline-v)" }}
     >
       <div className="flex items-center px-2 py-1.5 gap-0.5 min-w-max">
-        {PROFILE_TABS.map((t) => {
+        {PROFILE_TABS.filter((t) => hasModule(modules, TAB_MODULES[t.id])).map((t) => {
           const isActive = active === t.id;
           return (
             <button

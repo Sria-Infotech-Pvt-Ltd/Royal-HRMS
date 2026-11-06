@@ -21,6 +21,14 @@ from apps.tenants.models import (
 # Order matters — more specific prefixes must come before broader ones
 # (e.g. face-attendance sub-paths before the general attendance prefix).
 MODULE_URL_PREFIXES = (
+    # Dashboard endpoints that serve one module's data only (the mixed
+    # dashboard endpoints filter per module inside their views instead).
+    ('/api/dashboard/hr/recruitment-funnel',      MODULE_RECRUITMENT),
+    ('/api/dashboard/hr/attendance-summary',      MODULE_ATTENDANCE),
+    ('/api/dashboard/employee/attendance-',       MODULE_ATTENDANCE),
+    ('/api/dashboard/employee/leave-balances',    MODULE_LEAVE),
+    ('/api/dashboard/announcement',               MODULE_ANNOUNCEMENTS),
+    ('/api/dashboard/system-admin/announcement',  MODULE_ANNOUNCEMENTS),
     ('/api/attendance/face', MODULE_FACE_ATTENDANCE),
     ('/api/attendance/',     MODULE_ATTENDANCE),
     ('/api/announcements/',  MODULE_ANNOUNCEMENTS),

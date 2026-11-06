@@ -15,6 +15,8 @@ import {
   TYPE_TABS, correctionToItem, expenseToItem, leaveAutoVars, leaveToItem, payslipToItem, separationToItem, toSortableTime, wfhToItem,
 } from "../_data";
 import type { PayslipQuery } from "@/types/payroll";
+import { KIND_MODULES, hasModule } from "@/lib/modules";
+import { useModules } from "@/lib/modulesContext";
 import SummaryCards from "./SummaryCards";
 import ApprovalsToolbar from "./ApprovalsToolbar";
 import ApprovalsTable from "./ApprovalsTable";
@@ -39,22 +41,24 @@ export default function TeamApprovalsSection() {
   // user without payroll.view (see PayslipQueryListView.get) — that's an
   // employee's own request, not something to show in a team approval queue,
   // so we only fetch it at all for viewers who can see the team-wide list.
-  const canViewPayslipQueries = usePermission("payroll.view");
+  const modules = useModules();
+  const on = (m: string) => hasModule(modules, m);
+  const canViewPayslipQueries = usePermission("payroll.view") && on("payroll");
   const canResolvePayslip     = usePermission("payroll.edit");
 
   // ── Data: fetch every kind up front (page_size capped at 100 server-side) —
   // the summary cards and the "All Requests" tab both need the full picture,
   // not just whatever the active tab happens to be looking at. ──
   const { data: leaveRaw,      loading: leaveLoading,      error: leaveError,      refetch: refetchLeave } =
-    useFetch<LeaveListResponse>(`${API.approvals.leaveRequests}?scope=team&page_size=100`);
+    useFetch<LeaveListResponse>(on("leave") ? `${API.approvals.leaveRequests}?scope=team&page_size=100` : null);
   const { data: expenseRaw,    loading: expenseLoading,    error: expenseError,    refetch: refetchExpense } =
-    useFetch<ExpenseListResponse>(`${API.approvals.expenseList}?page_size=100`);
+    useFetch<ExpenseListResponse>(on("expenses") ? `${API.approvals.expenseList}?page_size=100` : null);
   const { data: correctionRaw, loading: correctionLoading, error: correctionError, refetch: refetchCorrections } =
-    useFetch<CorrectionListResponse>(`${API.attendance.corrections}?page_size=100`);
+    useFetch<CorrectionListResponse>(on("attendance") ? `${API.attendance.corrections}?page_size=100` : null);
   const { data: separationRaw, loading: separationLoading, error: separationError, refetch: refetchSeparation } =
-    useFetch<SeparationListResponse>(`${API.separation.list}?scope=team&page_size=100`);
+    useFetch<SeparationListResponse>(on("separation") ? `${API.separation.list}?scope=team&page_size=100` : null);
   const { data: wfhRaw,        loading: wfhLoading,        error: wfhError,        refetch: refetchWfh } =
-    useFetch<WfhListResponse>(`${API.approvals.wfhRequests}?scope=team&page_size=100`);
+    useFetch<WfhListResponse>(on("wfh") ? `${API.approvals.wfhRequests}?scope=team&page_size=100` : null);
   const { data: payslipRaw,    loading: payslipLoading,    error: payslipError,    refetch: refetchPayslip } =
     useFetch<PayslipListResponse>(canViewPayslipQueries ? API.payroll.queries : null);
 
@@ -307,10 +311,11 @@ export default function TeamApprovalsSection() {
 
   return (
     <div className="ta-root">
-      <SummaryCards pending={counts.pending} leave={counts.leave} expense={counts.expense} correction={counts.correction} loading={initialLoading} />
+      <SummaryCards pending={counts.pending} leave={counts.leave} expense={counts.expense} correction={counts.correction} loading={initialLoading}
+        show={{ leave: on("leave"), expense: on("expenses"), correction: on("attendance") }} />
 
       <div className="ta-tabs">
-        {TYPE_TABS.map(t => (
+        {TYPE_TABS.filter(t => t.key === "all" || on(KIND_MODULES[t.key])).map(t => (
           <button
             key={t.key}
             className={`ta-tab ${activeTab === t.key ? "active" : ""}`}

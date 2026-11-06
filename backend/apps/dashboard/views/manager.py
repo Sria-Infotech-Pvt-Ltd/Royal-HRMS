@@ -145,6 +145,26 @@ class ManagerDashboardView(APIView):
             REQ_APPROVED, REQ_PENDING, REQ_L2_PENDING,
         )
 
+        # Nothing from modules the company doesn't have (its subscription).
+        from apps.tenants.access import AUDIT_MODULES, hidden_names, module_enabled
+        leave_on, attendance_on = module_enabled('leave'), module_enabled('attendance')
+        if not leave_on:
+            team_overview['pending_approvals'] = None
+            upcoming_leaves = []
+        if not attendance_on:
+            team_overview['employees_on_leave_today'] = None
+            team_overview['team_attendance_percentage'] = None
+            team_attendance = None
+        approval_modules = {'leave': 'leave', 'expense': 'expenses', 'attendance_correction': 'attendance'}
+        pending_approvals = [a for a in pending_approvals
+                             if module_enabled(approval_modules.get(a.get('approval_type'), ''))
+                             or a.get('approval_type') not in approval_modules]
+        action_modules = {'apply_leave': 'leave', 'my_payslip': 'payroll', 'interviews': 'recruitment'}
+        quick_actions = [q for q in quick_actions
+                         if q['id'] not in action_modules or module_enabled(action_modules[q['id']])]
+        hidden = set(hidden_names(AUDIT_MODULES))
+        recent_team_activity = [r for r in recent_team_activity if r.get('module') not in hidden]
+
         return success('Manager dashboard retrieved.', data={
             'team_overview':        team_overview,
             'quick_actions':        quick_actions,

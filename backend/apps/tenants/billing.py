@@ -40,6 +40,13 @@ class PaymentError(Exception):
 def _history(sub, event, admin, note='', before=None):
     SubscriptionHistory.objects.create(subscription=sub, event=event, before=before or {}, after=summary(sub),
                                        admin=admin, note=note[:1000])
+    _forget_state(sub)
+
+
+def _forget_state(sub):
+    """Provisioning status decides apps.tenants.access.subscription_applied — drop its cache."""
+    from apps.tenants.subscriptions import _forget_state as forget
+    forget(Client.objects.filter(pk=sub.client_id).values_list('schema_name', flat=True).first() or '')
 
 
 def _lock(sub) -> CompanySubscription:
@@ -216,6 +223,7 @@ def provision(sub, admin=None):
         sub.provisioning_status = Sub.PROVISION_PENDING
         sub.provisioning_error = ''
         sub.save(update_fields=['provisioning_status', 'provisioning_error', 'updated_at'])
+        _forget_state(sub)
         client_id, email, modules = str(client.pk), sub.pending_admin_email, effective_modules(sub)
         transaction.on_commit(lambda: _queue_new_company(client_id, email, modules))
         return

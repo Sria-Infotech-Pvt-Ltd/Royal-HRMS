@@ -73,6 +73,8 @@ clientApi.interceptors.response.use(
   async (err: AxiosError) => {
     const original = err.config as RetryConfig | undefined;
 
+    if (err.response?.status === 403 && isModuleNotEnabled(err)) resyncModules();
+
     // Pass through: non-401, already-retried, or auth endpoints
     if (
       err.response?.status !== 401 ||
@@ -123,6 +125,29 @@ clientApi.interceptors.response.use(
     }
   }
 );
+
+// ── Module switched off (plan change) → refresh the session's module list ─────
+// The API blocks a module the moment the company's plan drops it, but menus /
+// widgets read the module list from the access token (renewed every 15 min).
+// On the API's "… is not enabled for your company" answer, renew the token now
+// and tell DashboardShell to re-render with it. At most once a minute.
+const MODULE_OFF_TEXT = "is not enabled for your company";
+let _lastModuleResync = 0;
+
+function isModuleNotEnabled(err: AxiosError): boolean {
+  const msg = (err.response?.data as { message?: unknown } | undefined)?.message;
+  return typeof msg === "string" && msg.includes(MODULE_OFF_TEXT);
+}
+
+function resyncModules(): void {
+  if (typeof window === "undefined" || Date.now() - _lastModuleResync < 60_000) return;
+  _lastModuleResync = Date.now();
+  axios.post(`${API_BASE}/token/refresh/`, {}, { withCredentials: true, headers: { "Content-Type": "application/json" } })
+    .then(() => window.dispatchEvent(new Event(MODULES_CHANGED_EVENT)))
+    .catch(() => { /* the normal 401 flow handles a dead session */ });
+}
+
+export const MODULES_CHANGED_EVENT = "session:modules-changed";
 
 // ── Unwrap blob error bodies ───────────────────────────────────────────────────
 // Requests made with responseType: "blob" (file downloads) still get their

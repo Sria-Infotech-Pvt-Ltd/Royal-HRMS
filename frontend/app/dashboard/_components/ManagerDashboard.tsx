@@ -124,7 +124,7 @@ function ManagerDashboardInner({ session }: Props) {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {ov && (
+            {ov && hasModule(session.modules, "attendance") && (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: "rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.85)", border: "1px solid rgba(255,255,255,0.15)" }}>
                 <i className="ti ti-chart-bar" style={{ fontSize: 11 }} />
                 {ov.team_attendance_percentage}% Attendance
@@ -140,10 +140,10 @@ function ManagerDashboardInner({ session }: Props) {
         <div className="stats-grid">
           {[
             { icon: "ti-users",        val: ov ? String(ov.team_size)               : (loading ? "—" : "0"), lbl: "Team Size",         sub: "Active direct reports" },
-            { icon: "ti-checks",       val: ov ? String(ov.pending_approvals)        : (loading ? "—" : "0"), lbl: "Pending Approvals", sub: "Awaiting review"       },
-            { icon: "ti-beach",        val: ov ? String(ov.employees_on_leave_today) : (loading ? "—" : "0"), lbl: "On Leave Today",    sub: "Team members"          },
-            { icon: "ti-calendar",     val: ov ? `${ov.team_attendance_percentage}%` : (loading ? "—" : "—"), lbl: "Attendance Rate",   sub: "Today"                 },
-          ].map(stat => (
+            { icon: "ti-checks",       val: ov ? String(ov.pending_approvals)        : (loading ? "—" : "0"), lbl: "Pending Approvals", sub: "Awaiting review",      module: "leave"      },
+            { icon: "ti-beach",        val: ov ? String(ov.employees_on_leave_today) : (loading ? "—" : "0"), lbl: "On Leave Today",    sub: "Team members",         module: "attendance" },
+            { icon: "ti-calendar",     val: ov ? `${ov.team_attendance_percentage}%` : (loading ? "—" : "—"), lbl: "Attendance Rate",   sub: "Today",                module: "attendance" },
+          ].filter(stat => hasModule(session.modules, (stat as { module?: string }).module)).map(stat => (
             <div key={stat.lbl} style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <i className={`ti ${stat.icon}`} style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }} />
@@ -288,6 +288,7 @@ function ManagerDashboardInner({ session }: Props) {
           )}
 
           {/* Team Attendance Today */}
+          {hasModule(session.modules, "attendance") && (
           <div className="card mb-16">
             <div className="card-header">
               <div className="card-title"><i className="ti ti-users" /> Team Attendance Today</div>
@@ -312,8 +313,10 @@ function ManagerDashboardInner({ session }: Props) {
               </div>
             )}
           </div>
+          )}
 
           {/* Upcoming Leaves */}
+          {hasModule(session.modules, "leave") && (
           <div className="card">
             <div className="card-header"><div className="card-title"><i className="ti ti-calendar" /> Upcoming Leaves</div></div>
             {leaves.length === 0 ? (
@@ -335,6 +338,7 @@ function ManagerDashboardInner({ session }: Props) {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
     </>

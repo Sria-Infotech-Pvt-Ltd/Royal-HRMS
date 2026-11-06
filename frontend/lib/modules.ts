@@ -14,6 +14,12 @@ export function hasModule(modules: Modules, key: string | undefined): boolean {
   return modules.includes(key);
 }
 
+/** Request / approval kinds (Approvals, My Requests) → module key. */
+export const KIND_MODULES: Record<string, string> = {
+  leave: "leave", wfh: "wfh", expense: "expenses", attendance_correction: "attendance",
+  payslip: "payroll", separation: "separation",
+};
+
 /** Dashboard route prefix → module key. Longest matching prefix wins. */
 export const ROUTE_MODULES: Record<string, string> = {
   "/dashboard/attendance": "attendance",
@@ -25,6 +31,7 @@ export const ROUTE_MODULES: Record<string, string> = {
   "/dashboard/my-payslip": "payroll",
   "/dashboard/expenses": "expenses",
   "/dashboard/interview-list": "recruitment",
+  "/dashboard/candidate-review": "recruitment",
   "/dashboard/email-logs": "recruitment",
   "/dashboard/referrals": "recruitment",
   "/dashboard/assessments": "assessments",
@@ -47,6 +54,11 @@ export function moduleForPath(pathname: string): string | undefined {
     .filter(r => pathname === r || pathname.startsWith(r + "/"))
     .sort((a, b) => b.length - a.length)[0];
   return match ? ROUTE_MODULES[match] : undefined;
+}
+
+/** Module of a dashboard link (query string ignored); undefined = core. */
+export function moduleForHref(href: string): string | undefined {
+  return moduleForPath(href.split(/[?#]/)[0]);
 }
 
 /** `modules` claim from a JWT payload (undefined when absent). */

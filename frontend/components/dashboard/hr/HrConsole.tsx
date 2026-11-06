@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import ClockInButton from "@/components/ClockInButton";
+import { useModules } from "@/lib/modulesContext";
+import { hasModule } from "@/lib/modules";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { HRKPIs, LeaveUpdatePayload } from "@/types/dashboard";
@@ -34,11 +36,13 @@ export default function HrConsole({ firstName }: Props) {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
 
+  const modules = useModules();
+  const attendanceOn = hasModule(modules, "attendance");
   const stats = [
     { icon: "ti-users",      val: loading ? "—" : String(kpis?.total_workforce               ?? 0), lbl: "Total Workforce",     sub: "Active employees"   },
     { icon: "ti-checks",     val: loading ? "—" : String(livePendingActions ?? kpis?.pending_actions ?? 0), lbl: "Pending Actions",     sub: "Awaiting review"    },
-    { icon: "ti-video",      val: loading ? "—" : String(kpis?.active_interviews              ?? 0), lbl: "Active Interviews",   sub: "In pipeline"        },
-    { icon: "ti-calendar-x", val: loading ? "—" : String(kpis?.attendance_correction_pending ?? 0), lbl: "Corrections Pending", sub: "Needs attention"    },
+    ...(hasModule(modules, "recruitment") ? [{ icon: "ti-video",      val: loading ? "—" : String(kpis?.active_interviews              ?? 0), lbl: "Active Interviews",   sub: "In pipeline"        }] : []),
+    ...(attendanceOn                      ? [{ icon: "ti-calendar-x", val: loading ? "—" : String(kpis?.attendance_correction_pending ?? 0), lbl: "Corrections Pending", sub: "Needs attention"    }] : []),
   ];
 
   const isClockedIn = kpis?.clocked_in;
@@ -82,14 +86,14 @@ export default function HrConsole({ firstName }: Props) {
               {isClockedIn ? "Clocked In" : "Not Clocked In"}
             </span>
           )}
-          <ClockInButton onPunchSuccess={refetch} />
+          {attendanceOn && <ClockInButton onPunchSuccess={refetch} />}
         </div>
       </div>
 
       <div style={{ margin: "6px 16px 0", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${stats.length}, 1fr)` }}>
         {stats.map(stat => (
           <div key={stat.lbl} style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>

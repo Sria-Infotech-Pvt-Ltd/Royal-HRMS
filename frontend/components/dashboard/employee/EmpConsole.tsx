@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import ClockInButton from "@/components/ClockInButton";
+import { useModules } from "@/lib/modulesContext";
+import { hasModule } from "@/lib/modules";
 import { useEmployeeKPIs, useAttendanceStatus } from "@/hooks/useEmployeeDashboard";
 
 const ATTENDANCE_LABEL: Record<string, string> = {
@@ -29,8 +31,10 @@ const ATTENDANCE_COLOR: Record<string, { color: string; bg: string }> = {
 interface Props { firstName: string }
 
 export default function EmpConsole({ firstName }: Props) {
+  const modules = useModules();
+  const attendanceOn = hasModule(modules, "attendance");
   const { data: kpis,   loading: kpiLoading,    status: kpiHttpStatus,    refetch: refetchKpis }   = useEmployeeKPIs();
-  const { data: status, loading: statusLoading, status: statusHttpStatus, refetch: refetchStatus } = useAttendanceStatus();
+  const { data: status, loading: statusLoading, status: statusHttpStatus, refetch: refetchStatus } = useAttendanceStatus(attendanceOn);
 
   // Clocking in/out changes both of these, but each is fetched independently
   // on mount — without this, the "Late"/attendance badge and stats here keep
@@ -59,7 +63,7 @@ export default function EmpConsole({ firstName }: Props) {
 
   const showDash = loading || isLocked;
   const stats = [
-    {
+    ...(attendanceOn ? [{
       icon: "ti-fingerprint",
       val:  showDash ? "—" : `${kpis?.days_present ?? 0} / ${kpis?.working_days ?? 0}`,
       lbl:  "Days Present",
@@ -70,19 +74,19 @@ export default function EmpConsole({ firstName }: Props) {
       val:  showDash ? "—" : String(kpis?.absent_days ?? 0),
       lbl:  "Absent Days",
       sub:  "This month",
-    },
+    }] : []),
     {
       icon: "ti-clipboard-list",
       val:  showDash ? "—" : String(kpis?.pending_action_items ?? 0),
       lbl:  "Action Items",
       sub:  "Require attention",
     },
-    {
+    ...(hasModule(modules, "expenses") ? [{
       icon: "ti-receipt",
       val:  showDash ? "—" : String(kpis?.pending_expense_claims ?? 0),
       lbl:  "Expense Claims",
       sub:  "Pending",
-    },
+    }] : []),
   ];
 
   return (
@@ -111,7 +115,7 @@ export default function EmpConsole({ firstName }: Props) {
               {ATTENDANCE_LABEL[attendanceKey] ?? attendanceKey}
             </span>
           )}
-          <ClockInButton onPunchSuccess={handlePunchSuccess} />
+          {attendanceOn && <ClockInButton onPunchSuccess={handlePunchSuccess} />}
         </div>
       </div>
 
@@ -126,7 +130,7 @@ export default function EmpConsole({ firstName }: Props) {
       )}
 
       {/* KPI stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${stats.length}, 1fr)` }}>
         {stats.map(stat => (
           <div key={stat.lbl} style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -140,7 +144,7 @@ export default function EmpConsole({ firstName }: Props) {
       </div>
 
       {/* Attendance status strip */}
-      {!loading && status && (
+      {attendanceOn && !loading && status && (
         <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "7px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexWrap: "wrap" }}>
           {[
             { icon: "ti-login",  label: "Clock In",  val: status.clock_in_time  ?? "—" },

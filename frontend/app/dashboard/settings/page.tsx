@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { hasModule, moduleForPath } from "@/lib/modules";
+import { useModules } from "@/lib/modulesContext";
 
 const SETTINGS_ITEMS = [
   { id: "company",            cat: "company", icon: "ti-building",        iconClass: "sc-company", label: "Company Info",          desc: "Name, GST, address, registration details" },
@@ -63,9 +65,11 @@ export default function SettingsPage() {
   const router = useRouter();
   const [activeCat, setActiveCat] = useState<CatId>("all");
 
-  const visible = activeCat === "all"
+  const modules = useModules();
+  const visible = (activeCat === "all"
     ? SETTINGS_ITEMS
-    : SETTINGS_ITEMS.filter((i) => i.cat === activeCat);
+    : SETTINGS_ITEMS.filter((i) => i.cat === activeCat))
+    .filter((i) => hasModule(modules, moduleForPath(ITEM_ROUTES[i.id] ?? "")));
 
   return (
     <div>

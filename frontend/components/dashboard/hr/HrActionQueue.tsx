@@ -7,6 +7,14 @@ import { API } from "@/lib/api/endpoints";
 import { useAnyPermission } from "@/hooks/usePermission";
 import type { PaginatedResponse, SeparationRequest } from "@/types/separation";
 import type { HRActionQueue, LeaveUpdatePayload } from "@/types/dashboard";
+import { hasModule } from "@/lib/modules";
+import { useModules } from "@/lib/modulesContext";
+
+// Rows that belong to a module (the company's subscription decides).
+const ROW_MODULES: Partial<Record<keyof Omit<HRActionQueue, "total_pending">, string>> = {
+  candidate_reviews: "recruitment", leave_approvals: "leave", attendance_corrections: "attendance",
+  expense_claims: "expenses", separation_requests: "separation",
+};
 
 const ROWS: { key: keyof Omit<HRActionQueue, "total_pending">; label: string; icon: string; href: string }[] = [
   { key: "candidate_reviews",      label: "Candidate Reviews",       icon: "ti-user-search",  href: "/dashboard/candidate-review" },
@@ -18,6 +26,7 @@ const ROWS: { key: keyof Omit<HRActionQueue, "total_pending">; label: string; ic
 ];
 
 export default function HrActionQueue() {
+  const modules = useModules();
   const { data: fetchedData, loading } = useFetch<HRActionQueue>(API.dashboard.hrActionQueue);
   // Live data pushed by the backend over WebSocket — takes priority over the
   // HTTP-fetched copy so the counts update instantly without a round trip.
@@ -63,7 +72,7 @@ export default function HrActionQueue() {
         </div>
       ) : (
         <div style={{ padding: "4px 0 8px" }}>
-          {ROWS.map(row => {
+          {ROWS.filter(row => hasModule(modules, ROW_MODULES[row.key])).map(row => {
             const count = data?.[row.key] ?? 0;
             const isEmpty = count === 0;
             return (

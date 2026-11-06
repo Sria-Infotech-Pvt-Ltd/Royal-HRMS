@@ -31,8 +31,8 @@ export const useRecentRequests = (page: number = 1, pageSize: number = 5) =>
     `${API.employeeDashboard.recentRequests}?page=${page}&page_size=${pageSize}`
   );
 
-export const useAttendanceStatus = () =>
-  useFetch<AttendanceStatus>(API.employeeDashboard.attendanceStatus);
+export const useAttendanceStatus = (enabled = true) =>
+  useFetch<AttendanceStatus>(enabled ? API.employeeDashboard.attendanceStatus : null);
 
 export const useSharedAnnouncement = () =>
   useFetch<Announcement | null>(API.employeeDashboard.announcement);

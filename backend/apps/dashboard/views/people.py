@@ -219,7 +219,8 @@ class SystemAdminAuditLogsView(APIView):
 
         from apps.accounts.models import AuditLog
 
-        qs = AuditLog.objects.select_related('user').order_by('-created_at')
+        from apps.tenants.access import AUDIT_MODULES, hidden_names
+        qs = AuditLog.objects.select_related('user').exclude(module__in=hidden_names(AUDIT_MODULES)).order_by('-created_at')
         module = (request.query_params.get('module') or '').strip()
         if module:
             qs = qs.filter(module=module)
@@ -355,6 +356,18 @@ class EmployeeBirthdayTodayView(APIView):
 
 # ─── Employee Action Items ────────────────────────────────────────────────────
 
+def _item_module_on(kind: str) -> bool:
+    """Action items / recent requests of a module the company doesn't have are not shown."""
+    from apps.tenants.access import module_enabled
+    if kind == 'attendance_correction':
+        return module_enabled('attendance')
+    if kind == 'leave' or kind.startswith('leave_'):
+        return module_enabled('leave')
+    if kind == 'expense':
+        return module_enabled('expenses')
+    return True
+
+
 class EmployeeActionItemsView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
@@ -366,6 +379,7 @@ class EmployeeActionItemsView(APIView):
         if items is None:
             items = self._compute_items(employee)
             cache.set(cache_key, items, 5 * 60)
+        items = [i for i in items if _item_module_on(i.get('action_type', ''))]
 
         page_obj, paginator = paginate(items, request, default_page_size=5)
         return success(
@@ -514,7 +528,7 @@ class EmployeeRecentRequestsView(APIView):
             }))
 
         recent.sort(key=lambda pair: pair[0], reverse=True)
-        recent = [row for _sort_key, row in recent]
+        recent = [row for _sort_key, row in recent if _item_module_on(row['request_type'])]
 
         page_obj, paginator = paginate(recent, request, default_page_size=5)
         return success(

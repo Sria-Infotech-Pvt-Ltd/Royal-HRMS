@@ -4,6 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { AuditLogEntry, AuditLogsResponse } from "@/types/dashboard";
+import { hasModule } from "@/lib/modules";
+import { useModules } from "@/lib/modulesContext";
+
+// Filter options that belong to a module (the company's subscription decides).
+const OPTION_MODULES: Record<string, string> = {
+  Leave: "leave", Expense: "expenses", Payroll: "payroll", Recruitment: "recruitment", Attendance: "attendance",
+};
 
 const PAGE_SIZE = 10;
 const MODULES = ["All", "Employee", "Auth", "Leave", "Expense", "Payroll", "Settings", "Recruitment", "Attendance"];
@@ -38,6 +45,7 @@ function formatTimestamp(raw: string): string {
 }
 
 export default function AuditLogsWidget() {
+  const modules = useModules();
   const [moduleFilter, setModuleFilter] = useState("All");
   const [logs,         setLogs]         = useState<AuditLogEntry[]>([]);
   const [total,        setTotal]        = useState(0);
@@ -93,7 +101,7 @@ export default function AuditLogsWidget() {
               color: "var(--on-bg)", cursor: "pointer",
             }}
           >
-            {MODULES.map(m => <option key={m} value={m}>{m}</option>)}
+            {MODULES.filter(m => hasModule(modules, OPTION_MODULES[m])).map(m => <option key={m} value={m}>{m}</option>)}
           </select>
           <a href="/dashboard/settings/audit" className="btn btn-ghost btn-sm">
             View all <i className="ti ti-arrow-right" style={{ fontSize: 11, marginLeft: 3 }} />

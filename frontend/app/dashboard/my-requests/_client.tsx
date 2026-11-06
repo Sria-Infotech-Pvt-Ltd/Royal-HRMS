@@ -11,6 +11,8 @@ import type { Expense } from "../expenses/_components/ExpenseClaims";
 import ExpenseDetailModal from "../expenses/_components/ExpenseDetailModal";
 import MyCorrectionDetailModal from "./_components/MyCorrectionDetailModal";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
+import { KIND_MODULES, hasModule } from "@/lib/modules";
+import { useModules } from "@/lib/modulesContext";
 import {
   DisplayStatus, MyCorrectionRequest, MyRequestItem, MyRequestKind, PaginatedResponse,
   REQUEST_TABS, STATUS_BADGE_CLASS, STATUS_FILTERS, STATUS_LABEL, TYPE_META,
@@ -50,15 +52,17 @@ export default function MyRequestsClient({ initialTab }: Props) {
   const [sortDir,      setSortDir]      = useState<"asc" | "desc">("desc");
 
   const [detailItem, setDetailItem] = useState<MyRequestItem | null>(null);
+  const modules = useModules();
+  const on = (m: string) => hasModule(modules, m);
 
   const { data: leaveRaw,      loading: leaveLoading,      error: leaveError,      refetch: refetchLeave } =
-    useFetch<PaginatedResponse<LeaveRequest>>(`${API.leave.requests}?page_size=100`);
+    useFetch<PaginatedResponse<LeaveRequest>>(on("leave") ? `${API.leave.requests}?page_size=100` : null);
   const { data: expenseRaw,    loading: expenseLoading,    error: expenseError } =
-    useFetch<PaginatedResponse<Expense>>(`${API.expenses.list}?page_size=100`);
+    useFetch<PaginatedResponse<Expense>>(on("expenses") ? `${API.expenses.list}?page_size=100` : null);
   const { data: correctionRaw, loading: correctionLoading, error: correctionError } =
-    useFetch<PaginatedResponse<MyCorrectionRequest>>(`${API.attendance.myCorrections}?page_size=100`);
+    useFetch<PaginatedResponse<MyCorrectionRequest>>(on("attendance") ? `${API.attendance.myCorrections}?page_size=100` : null);
   const { data: wfhRaw,        loading: wfhLoading,        error: wfhError } =
-    useFetch<PaginatedResponse<WorkFromHomeRequest>>(`${API.workFromHome.requests}?page_size=100`);
+    useFetch<PaginatedResponse<WorkFromHomeRequest>>(on("wfh") ? `${API.workFromHome.requests}?page_size=100` : null);
 
   const allItems: MyRequestItem[] = useMemo(() => [
     ...(leaveRaw?.results ?? []).map(leaveToMyItem),
@@ -141,7 +145,7 @@ export default function MyRequestsClient({ initialTab }: Props) {
       </div>
 
       <div className="tabs">
-        {REQUEST_TABS.map(t => (
+        {REQUEST_TABS.filter(t => t.key === "all" || on(KIND_MODULES[t.key])).map(t => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}

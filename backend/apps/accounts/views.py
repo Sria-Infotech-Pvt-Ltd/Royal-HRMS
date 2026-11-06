@@ -480,9 +480,9 @@ class CanManageRoles(BasePermission):
         )
 
 
-def _visible_modules(enabled) -> list[str]:
+def _visible_modules(enabled, client=None) -> list[str]:
     from apps.tenants.subscriptions import visible_modules
-    return visible_modules(enabled)
+    return visible_modules(enabled, client)
 
 
 def _login_assessment_status(user) -> str:
@@ -612,7 +612,7 @@ class LoginView(APIView):
                 'is_superuser':        user.is_superuser or 'settings.edit' in permissions,
                 # Modules this company's subscription includes (frontend menus / route guards;
                 # the API enforces them independently).
-                'enabled_modules':     _visible_modules(client.enabled_modules),
+                'enabled_modules':     _visible_modules(client.enabled_modules, client),
             },
         })
         resp.set_cookie(

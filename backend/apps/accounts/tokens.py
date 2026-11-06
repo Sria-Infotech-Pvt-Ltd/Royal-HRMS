@@ -27,10 +27,11 @@ def _volatile_claims(user) -> dict:
     # refresh, so a plan change reaches the menus / route guards within one
     # access-token lifetime. Omitted when no company is active.
     from django.db import connection
-    modules = getattr(getattr(connection, 'tenant', None), 'enabled_modules', None)
+    tenant = getattr(connection, 'tenant', None)
+    modules = getattr(tenant, 'enabled_modules', None)
     if modules is not None:
         from apps.tenants.subscriptions import visible_modules
-        claims['modules'] = visible_modules(modules)
+        claims['modules'] = visible_modules(modules, tenant)
     return claims
 
 

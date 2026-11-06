@@ -105,17 +105,29 @@ class TenantSchemaMiddleware(MiddlewareMixin):
     _SUBSCRIPTION_EXEMPT = ('/api/login/', '/api/logout/', '/api/token/refresh/', '/api/public/')
 
     def _subscription_gate(self, request, tenant):
-        """SaaS checks, governed by settings.SUBSCRIPTION_ENFORCEMENT:
-        'off' (default) — nothing; 'shadow' — log what would be blocked;
-        'on' — block. Covers the modules added with plans (documents,
-        assets, wfh) and an inactive subscription."""
+        """SaaS checks for the modules added with plans (documents, assets,
+        wfh) and an inactive subscription.
+
+        A late module the company's applied subscription leaves out is always
+        blocked — the plan is what the company bought. For a company not yet
+        on a plan (legacy, before its backfill) and for an inactive
+        subscription, settings.SUBSCRIPTION_ENFORCEMENT decides: 'off'
+        (default) — nothing; 'shadow' — log what would be blocked; 'on' — block."""
+        from apps.tenants.access import subscription_applied
+
         mode = getattr(settings, 'SUBSCRIPTION_ENFORCEMENT', 'off')
+        late = resolve_late_module_for_path(request.path)
+        late_off = bool(late) and not tenant.has_module(late)
+        if late_off and subscription_applied(tenant):
+            label = MODULE_LABELS.get(late, late)
+            return JsonResponse({'status': 'error', 'data': {},
+                                 'message': f'{label} is not enabled for your company. '
+                                            'Contact your administrator to enable it.'}, status=403)
         if mode not in ('shadow', 'on'):
             return None
 
         reason = None
-        late = resolve_late_module_for_path(request.path)
-        if late and not tenant.has_module(late):
+        if late_off:
             label = MODULE_LABELS.get(late, late)
             reason = f'{label} is not enabled for your company. Contact your administrator to enable it.'
         elif request.path.startswith('/api/') and not request.path.startswith(self._SUBSCRIPTION_EXEMPT):

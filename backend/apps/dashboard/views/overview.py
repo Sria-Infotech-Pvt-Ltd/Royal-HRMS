@@ -21,6 +21,27 @@ _TTL_ACTION_QUEUE  = 45          # seconds — action-queue counts, short TTL to
 _TTL_ATTENDANCE    = 3  * 60     # today's attendance breakdown
 
 
+def _on(module: str) -> bool:
+    """Whether the active company has `module` (its subscription) — dashboard
+    data of modules it doesn't have is never returned."""
+    from apps.tenants.access import module_enabled
+    return module_enabled(module)
+
+
+def mask_action_queue(data: dict) -> dict:
+    """HR action queue without the modules the company doesn't have (also
+    applied to a cached copy, which may predate a plan change)."""
+    data = dict(data)
+    for field, module in (('candidate_reviews', 'recruitment'), ('leave_approvals', 'leave'),
+                          ('attendance_corrections', 'attendance'), ('expense_claims', 'expenses'),
+                          ('separation_requests', 'separation')):
+        if not _on(module):
+            data[field] = None
+    data['total_pending'] = sum(data.get(k) or 0 for k in (
+        'candidate_reviews', 'leave_approvals', 'attendance_corrections', 'expense_claims', 'onboarding_reviews'))
+    return data
+
+
 def _is_system_admin(user):
     return _has_perm(user, 'settings.edit')
 
@@ -103,8 +124,8 @@ class SystemAdminKPIView(APIView):
         # Pending-action counts — deliberately NOT cached (matches HRKPIView's
         # "Real-time counts — not cached per spec": an admin acting on one of
         # these expects the number to move immediately, not after a TTL).
-        leave_pending        = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
-        expense_pending      = Expense.objects.filter(status='pending').count()
+        leave_pending        = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count() if _on('leave') else 0
+        expense_pending      = Expense.objects.filter(status='pending').count() if _on('expenses') else 0
         onboarding_submitted = User.objects.filter(
             onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
         ).count()
@@ -199,12 +220,15 @@ class SystemAdminPendingApprovalsView(APIView):
         ).count()
         separation_requests = 0  # model not yet implemented
 
+        leave_requests = leave_requests if _on('leave') else None
+        expense_claims = expense_claims if _on('expenses') else None
+        separation_requests = separation_requests if _on('separation') else None
         return success('Pending approvals retrieved.', data={
             'leave_requests':      leave_requests,
             'expense_claims':      expense_claims,
             'onboarding_reviews':  onboarding_reviews,
             'separation_requests': separation_requests,
-            'total_pending':       leave_requests + expense_claims + onboarding_reviews,
+            'total_pending':       (leave_requests or 0) + (expense_claims or 0) + onboarding_reviews,
         })
 
 
@@ -275,14 +299,19 @@ class HRKPIView(APIView):
             expense_qs    = expense_qs.filter(employee__branch=branch)
             onboarding_qs = onboarding_qs.filter(branch=branch)
             correction_qs = correction_qs.filter(employee__branch=branch)
-        leave_pending      = leave_qs.count()
-        expense_pending    = expense_qs.count()
+        leave_pending      = leave_qs.count() if _on('leave') else 0
+        expense_pending    = expense_qs.count() if _on('expenses') else 0
         onboarding_pending = onboarding_qs.count()
-        correction_pending = correction_qs.count()
+        correction_pending = correction_qs.count() if _on('attendance') else None
         pending_actions = leave_pending + expense_pending + onboarding_pending
 
         # Requesting user's own attendance today
-        today_attendance, clocked_in = _todays_attendance(request.user, today)
+        if _on('attendance'):
+            today_attendance, clocked_in = _todays_attendance(request.user, today)
+        else:
+            today_attendance, clocked_in = None, None
+        if not _on('recruitment'):
+            active_interviews = None
 
         return success('HR dashboard KPIs fetched successfully.', data={
             'total_workforce':               total_workforce,
@@ -313,7 +342,7 @@ class HRActionQueueView(APIView):
         cache_key = f'dashboard:hr:action_queue:{branch or "all"}'
         cached = cache.get(cache_key)
         if cached is not None:
-            return success('Action queue retrieved.', data=cached)
+            return success('Action queue retrieved.', data=mask_action_queue(cached))
 
         from apps.accounts.models import User
         from apps.attendance.models import AttendanceCorrection
@@ -352,7 +381,7 @@ class HRActionQueueView(APIView):
             'separation_requests':     0,
         }
         cache.set(cache_key, data, _TTL_ACTION_QUEUE)
-        return success('Action queue retrieved.', data=data)
+        return success('Action queue retrieved.', data=mask_action_queue(data))
 
 
 def push_leave_update(approving_user_id) -> None:
@@ -418,7 +447,7 @@ def push_leave_update(approving_user_id) -> None:
                 notification_group_name(approving_user_id),
                 {
                     'type':            'leave.update',
-                    'action_queue':    action_queue,
+                    'action_queue':    mask_action_queue(action_queue),
                     'pending_actions': pending_actions,
                 },
             )
@@ -562,10 +591,15 @@ class EmployeeKPIView(APIView):
             EmployeeDocument.objects.filter(user=employee).values_list('document_type', flat=True)
         )
         pending_documents    = len(required_docs - uploaded_docs)
-        pending_action_items = profile_incomplete + pending_corrections
+        attendance_on        = _on('attendance')
+        pending_action_items = profile_incomplete + (pending_corrections if attendance_on else 0)
 
         # Today's attendance
-        today_attendance, is_clocked_in = _todays_attendance(employee, today)
+        today_attendance, is_clocked_in = _todays_attendance(employee, today) if attendance_on else (None, None)
+        if not attendance_on:
+            summary = {'days_present': None, 'working_days': None, 'days_absent': None}
+        if not _on('expenses'):
+            pending_expense_claims = None
 
         return success('Employee dashboard KPIs fetched successfully.', data={
             'days_present':           summary.get('days_present', 0),

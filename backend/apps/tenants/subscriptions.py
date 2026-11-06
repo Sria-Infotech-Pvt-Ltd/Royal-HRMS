@@ -97,12 +97,21 @@ def apply_subscription(client: Client) -> list[str]:
         TenantClientCacheService.invalidate(client.schema_name)
         schema = client.schema_name
         transaction.on_commit(lambda: TenantClientCacheService.invalidate(schema))
+    _forget_state(client.schema_name)
     return modules
+
+
+def _forget_state(schema: str) -> None:
+    """Drop the cached "subscription applied" flag (apps.tenants.access), now and after commit."""
+    from apps.tenants.access import invalidate_subscription_state
+    invalidate_subscription_state(schema)
+    transaction.on_commit(lambda: invalidate_subscription_state(schema))
 
 
 def _history(sub, event, before, admin, note=''):
     SubscriptionHistory.objects.create(subscription=sub, event=event, before=before, after=summary(sub),
                                        admin=admin, note=note)
+    _forget_state(Client.objects.filter(pk=sub.client_id).values_list('schema_name', flat=True).first() or '')
 
 
 def _check_dates(starts_on: date, ends_on: date | None):
@@ -194,16 +203,13 @@ def set_status(*, sub: CompanySubscription, active: bool, admin=None, note: str 
     return sub
 
 
-def visible_modules(enabled) -> list[str]:
-    """Modules the frontend should show for a company. Until enforcement is
-    'on', the late-gated modules (documents / assets / wfh) stay reachable
-    for every company (the API doesn't gate them yet), so they stay visible
-    too — existing companies don't lose menus before their backfill."""
-    from apps.tenants.modules import LATE_GATED_MODULES
-    out = set(enabled or [])
-    if getattr(settings, 'SUBSCRIPTION_ENFORCEMENT', 'off') != 'on':
-        out |= set(LATE_GATED_MODULES)
-    return sorted(out)
+def visible_modules(enabled, client=None) -> list[str]:
+    """Modules the company's users see (and the API allows) — see
+    apps.tenants.access: documents / assets / wfh follow the plan exactly once
+    the company's subscription is applied (or enforcement is 'on'); a company
+    not yet on a plan keeps them, so it loses no menus before its backfill."""
+    from apps.tenants.access import visible_modules as _visible
+    return _visible(client, enabled or [])
 
 
 # ─── Limits (enforced only when SUBSCRIPTION_ENFORCEMENT == 'on') ───────────

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasModule, moduleForPath, modulesFromPayload } from "./modules";
+import { KIND_MODULES, hasModule, moduleForPath, modulesFromPayload } from "./modules";
 import { buildNav, isSection, type NavItem } from "./navConfig";
 
 describe("modules", () => {
@@ -39,5 +39,32 @@ describe("buildNav with modules", () => {
     expect(visible).not.toContain("payroll");
     expect(visible).not.toContain("my-payslip");
     expect(visible).not.toContain("expenses");
+  });
+});
+
+describe("subscription coverage", () => {
+  it("maps every module page, incl. candidate review, to its module", () => {
+    expect(moduleForPath("/dashboard/candidate-review")).toBe("recruitment");
+    expect(moduleForPath("/dashboard/settings/payroll-config")).toBe("payroll");
+    expect(moduleForPath("/dashboard/settings/assets")).toBe("assets");
+    expect(moduleForPath("/dashboard/employees")).toBeUndefined();          // core
+  });
+
+  it("maps request / approval kinds to modules", () => {
+    expect(KIND_MODULES).toMatchObject({ leave: "leave", wfh: "wfh", expense: "expenses",
+      attendance_correction: "attendance", payslip: "payroll", separation: "separation" });
+  });
+
+  it("a Starter company sees no payroll, recruitment, expense or asset menus", () => {
+    const starter = ["announcements", "attendance", "documents", "leave", "wfh"];
+    const all = ["recruitment.view", "payroll.view", "leave.view", "expenses.view", "attendance.create",
+      "employees.view", "documents.view", "wfh.view", "settings.view"];
+    const visible = buildNav(all, starter).filter(e => !isSection(e)).map(e => (e as NavItem).id);
+    for (const hidden of ["payroll", "my-payslip", "expenses", "interview-list", "candidate-review", "email-logs", "referrals"]) {
+      expect(visible).not.toContain(hidden);
+    }
+    for (const shown of ["leave", "attendance", "documents", "work-from-home", "employees", "settings"]) {
+      expect(visible).toContain(shown);
+    }
   });
 });

@@ -11,7 +11,7 @@ import EmployeeLifecycleTabs from "@/components/dashboard/EmployeeLifecycleTabs"
 import BirthdayWidget        from "@/components/dashboard/BirthdayWidget";
 import AuditLogsWidget       from "@/components/dashboard/AuditLogsWidget";
 import type { SessionPayload } from "@/lib/session";
-import { hasModule } from "@/lib/modules";
+import { hasModule, moduleForHref } from "@/lib/modules";
 
 interface Props { session: SessionPayload }
 
@@ -56,7 +56,7 @@ export default function AdminDashboard({ session }: Props) {
         </div>
         <div className="card-body">
           <div className="qa-grid">
-            {QUICK_ACTIONS.map(a => (
+            {QUICK_ACTIONS.filter(a => hasModule(session.modules, moduleForHref(a.href))).map(a => (
               <a key={a.href} href={a.href} className="qa-tile">
                 <div className="qa-icon" style={{ background: a.bg, color: a.color }}>
                   <i className={`ti ${a.icon}`} />

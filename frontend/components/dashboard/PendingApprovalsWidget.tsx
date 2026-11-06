@@ -3,6 +3,12 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { PendingApprovals } from "@/types/dashboard";
+import { hasModule } from "@/lib/modules";
+import { useModules } from "@/lib/modulesContext";
+
+const ROW_MODULES: Partial<Record<keyof Omit<PendingApprovals, "total_pending">, string>> = {
+  leave_requests: "leave", expense_claims: "expenses", separation_requests: "separation",
+};
 
 interface ApprovalRow {
   key:   keyof Omit<PendingApprovals, "total_pending">;
@@ -21,6 +27,7 @@ const ROWS: ApprovalRow[] = [
 ];
 
 export default function PendingApprovalsWidget() {
+  const modules = useModules();
   const { data, loading } = useFetch<PendingApprovals>(API.dashboard.pendingApprovals);
 
   const total = data?.total_pending ?? 0;
@@ -40,7 +47,7 @@ export default function PendingApprovalsWidget() {
         </div>
       ) : (
         <div style={{ padding: 0 }}>
-          {ROWS.map(row => {
+          {ROWS.filter(row => hasModule(modules, ROW_MODULES[row.key])).map(row => {
             const count = data?.[row.key] ?? 0;
             return (
               <a

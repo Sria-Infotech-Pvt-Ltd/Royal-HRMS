@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { SessionPayload } from "@/lib/session";
 import { clearAuth } from "@/lib/auth";
-import clientApi, { markIntentionalLogout } from "@/lib/clientApi";
+import clientApi, { MODULES_CHANGED_EVENT, markIntentionalLogout } from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import {
   buildNav, isSection,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/navConfig";
 import { NotificationBell } from "@/components/NotificationBell";
 import GlobalSearch from "@/components/dashboard/GlobalSearch";
+import { ModulesProvider } from "@/lib/modulesContext";
 import { useFetch } from "@/hooks/useFetch";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 
@@ -60,6 +61,15 @@ export default function DashboardShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+
+  // The company's plan changed (an API call hit a switched-off module and the
+  // token was renewed): re-render with the new module list — menus, widgets
+  // and the route guard follow straight away instead of within 15 minutes.
+  useEffect(() => {
+    const refresh = () => router.refresh();
+    window.addEventListener(MODULES_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(MODULES_CHANGED_EVENT, refresh);
+  }, [router]);
 
   // Fetched independently of the server-rendered session cookie (name/role
   // only) so a photo change shows up immediately, without needing to log in
@@ -287,7 +297,7 @@ export default function DashboardShell({
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-[var(--bg)]">
-          {children}
+          <ModulesProvider value={session.modules}>{children}</ModulesProvider>
         </main>
       </div>
     </div>

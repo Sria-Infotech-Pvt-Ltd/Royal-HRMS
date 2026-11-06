@@ -13,11 +13,18 @@ from .serializers import NotificationSerializer, NotificationSettingsSerializer
 logger = logging.getLogger(__name__)
 
 
+def _visible(qs):
+    """Notifications of modules the company doesn't have (its subscription) are not shown."""
+    from apps.tenants.access import NOTIFICATION_MODULES, hidden_names
+    hidden = hidden_names(NOTIFICATION_MODULES)
+    return qs.exclude(module__in=hidden) if hidden else qs
+
+
 class NotificationListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        base_qs     = Notification.objects.filter(user=request.user)
+        base_qs     = _visible(Notification.objects.filter(user=request.user))
         unread_count = base_qs.filter(is_read=False).count()
 
         queryset = base_qs
@@ -45,7 +52,7 @@ class NotificationUnreadCountView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        count = Notification.objects.filter(user=request.user, is_read=False).count()
+        count = _visible(Notification.objects.filter(user=request.user, is_read=False)).count()
         return success('Unread count retrieved.', {'unread_count': count})
 
 

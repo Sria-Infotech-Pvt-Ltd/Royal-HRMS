@@ -11,7 +11,7 @@ import HrEmployeeLifecycleTabs   from "@/components/dashboard/hr/HrEmployeeLifec
 import HrBirthdaysWidget         from "@/components/dashboard/hr/HrBirthdaysWidget";
 import { API }                   from "@/lib/api/endpoints";
 import type { SessionPayload }   from "@/lib/session";
-import { hasModule }             from "@/lib/modules";
+import { hasModule, moduleForHref } from "@/lib/modules";
 
 interface Props { session: SessionPayload }
 
@@ -42,7 +42,7 @@ export default function HRDashboard({ session }: Props) {
         </div>
         <div className="card-body">
           <div className="qa-grid">
-            {QUICK_ACTIONS.map(action => (
+            {QUICK_ACTIONS.filter(a => hasModule(session.modules, moduleForHref(a.href))).map(action => (
               <a key={action.href} href={action.href} className="qa-tile">
                 <div className="qa-icon" style={{ background: action.bg, color: action.color }}>
                   <i className={`ti ${action.icon}`} />
