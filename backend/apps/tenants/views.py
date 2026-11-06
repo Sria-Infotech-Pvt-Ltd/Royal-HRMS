@@ -308,6 +308,10 @@ class CompanyDetailView(APIView):
             client.is_active = bool(request.data['is_active'])
             update_fields.append('is_active')
         if 'enabled_modules' in request.data:
+            from apps.tenants.models import CompanySubscription
+            if CompanySubscription.objects.filter(client=client).exists():
+                return error("This company's modules come from its subscription. Change its plan in "
+                             'SaaS & Subscriptions instead.', http_status=status.HTTP_400_BAD_REQUEST)
             modules = request.data['enabled_modules']
             if not isinstance(modules, list) or (set(modules) - set(ALL_MODULES)):
                 return error(f'enabled_modules must be a list drawn from: {", ".join(ALL_MODULES)}')

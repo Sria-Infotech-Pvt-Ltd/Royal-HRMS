@@ -9,7 +9,7 @@ import Modal from "@/components/Modal";
 import platformAdminApi from "@/lib/platformAdminApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
-import type { CustomerRow, SubscriptionHistoryEntry, SubscriptionPaymentRecord, SubscriptionPlan } from "@/types/platformAdmin";
+import type { CustomerRow, PlanChangePreview, SubscriptionHistoryEntry, SubscriptionPaymentRecord, SubscriptionPlan } from "@/types/platformAdmin";
 import { EVENT_LABEL, PAYMENT_BADGE, PROVISION_BADGE, apiMessage, fmtDate, fmtMoney, planChange } from "./SaasTabs";
 import PaymentsSection from "./PaymentsSection";
 import FieldError from "@/components/FieldError";
@@ -24,7 +24,7 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
   const { data, refetch } = useFetch<{ company: CustomerRow; history: SubscriptionHistoryEntry[]; payments: SubscriptionPaymentRecord[] }>(
     API.platformAdmin.saas.subscription(customerId), platformAdminApi);
   const [planId, setPlanId] = useState("");
-  const [diff, setDiff] = useState<{ added: string[]; removed: string[] } | null>(null);
+  const [preview, setPreview] = useState<PlanChangePreview | null>(null);
   const [endsOn, setEndsOn] = useState<string | null>(null);
   const [retryEmail, setRetryEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -54,11 +54,11 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
 
   async function previewChange(id: string) {
     setPlanId(id);
-    setDiff(null);
+    setPreview(null);
     if (!id) return;
     try {
       const { data: r } = await platformAdminApi.post(API.platformAdmin.saas.changePlan(customerId), { plan: id, dry_run: true });
-      setDiff(r.data.difference);
+      setPreview(r.data as PlanChangePreview);
     } catch (e) {
       setMsg({ ok: false, text: apiMessage(e, "Could not preview the change.") });
     }
@@ -129,7 +129,20 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
               <PaymentsSection clientId={customerId} sub={sub} payments={data.payments}
                 onChanged={() => { refetch(); onChanged(); }} />
 
-              <div><strong>Enabled modules:</strong> {company.enabled_modules.length ? [...company.enabled_modules].sort().join(", ") : "core only"}</div>
+              {sub.plan_outdated && sub.latest_plan && (
+                <div className="alert alert-info" style={{ flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ flex: 1, minWidth: 240 }}>
+                    <strong>{sub.plan_name} was edited after this subscription was assigned.</strong> This company keeps
+                    its current terms until you apply the latest version (modules and price are recalculated).
+                  </span>
+                  <button className="btn btn-sm btn-filled" disabled={busy} onClick={() => previewChange(sub.plan)}>
+                    Review latest plan
+                  </button>
+                </div>
+              )}
+
+              <div><strong>Modules this company can use:</strong> {(company.effective_modules ?? company.enabled_modules).length
+                ? [...(company.effective_modules ?? company.enabled_modules)].sort().join(", ") : "core only"}</div>
               {(sub.extra_modules.length > 0 || sub.removed_modules.length > 0) && (
                 <div style={{ color: "var(--on-variant)" }}>
                   Overrides — added: {sub.extra_modules.join(", ") || "none"}; kept off: {sub.removed_modules.join(", ") || "none"}
@@ -143,17 +156,39 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
                     <option value="">Select a plan…</option>
                     {choices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
-                  <button className="btn btn-sm btn-filled" disabled={busy || !planId || !diff}
-                    onClick={() => run(() => platformAdminApi.post(API.platformAdmin.saas.changePlan(customerId), { plan: planId }), "Plan changed.")}>
-                    Change plan
+                  <button className="btn btn-sm btn-filled" disabled={busy || !planId || !preview}
+                    onClick={() => run(() => platformAdminApi.post(API.platformAdmin.saas.changePlan(customerId), { plan: planId }),
+                      preview?.same_plan ? "Latest plan version applied." : "Plan changed.").then(() => { setPlanId(""); setPreview(null); })}>
+                    {preview?.same_plan ? "Apply latest plan" : "Change plan"}
                   </button>
                 </div>
-                {diff && (
-                  <div style={{ marginTop: 8 }}>
-                    {diff.added.length === 0 && diff.removed.length === 0 ? "No module changes." : (
+                {preview && (
+                  <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {preview.pricing ? (
+                      <div style={{ background: "var(--bg-low)", borderRadius: 8, padding: "8px 10px" }}>
+                        <div>
+                          <strong>Price:</strong> {fmtMoney(preview.pricing.from.price_per_employee, preview.pricing.from.currency)} ({preview.pricing.from.plan})
+                          {" → "}<strong>{fmtMoney(preview.pricing.to.price_per_employee, preview.pricing.to.currency)}</strong> ({preview.pricing.to.plan}) / employee / month
+                        </div>
+                        <div>
+                          <strong>Amount due:</strong> {preview.pricing.from.amount_due !== null ? fmtMoney(preview.pricing.from.amount_due, preview.pricing.from.currency) : "not set"}
+                          {" → "}<strong>{fmtMoney(preview.pricing.to.amount_due, preview.pricing.to.currency)}</strong>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                          {preview.pricing.employee_count} employees × {preview.pricing.to.months} month(s) ({preview.pricing.billing_period})
+                          {" = "}{fmtMoney(preview.pricing.to.subtotal, preview.pricing.to.currency)}
+                          {preview.pricing.to.gst_inclusive
+                            ? ` (GST ${Number(preview.pricing.to.gst_rate)}% included: ${fmtMoney(preview.pricing.to.gst_amount, preview.pricing.to.currency)})`
+                            : ` + GST ${Number(preview.pricing.to.gst_rate)}% ${fmtMoney(preview.pricing.to.gst_amount, preview.pricing.to.currency)}`}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ color: "var(--on-variant)" }}>Employee count not set — the amount due won&apos;t be recalculated (set it in Payments).</div>
+                    )}
+                    {preview.difference.added.length === 0 && preview.difference.removed.length === 0 ? <div>No module changes.</div> : (
                       <>
-                        {diff.added.length > 0 && <div style={{ color: "var(--success)" }}>Switched on: {diff.added.join(", ")}</div>}
-                        {diff.removed.length > 0 && <div style={{ color: "var(--error)" }}><strong>Switched off: {diff.removed.join(", ")}</strong></div>}
+                        {preview.difference.added.length > 0 && <div style={{ color: "var(--success)" }}>Switched on: {preview.difference.added.join(", ")}</div>}
+                        {preview.difference.removed.length > 0 && <div style={{ color: "var(--error)" }}><strong>Switched off: {preview.difference.removed.join(", ")}</strong> — the company loses access to these.</div>}
                       </>
                     )}
                   </div>

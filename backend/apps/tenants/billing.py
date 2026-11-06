@@ -71,6 +71,11 @@ def derive_payment_status(sub) -> str:
     return Sub.PAYMENT_PENDING
 
 
+def refresh_payment_status(sub, admin=None):
+    """Public entry point (plan changes): re-derive payment status; provision when it became Paid."""
+    _refresh_status(sub, admin)
+
+
 def _refresh_status(sub, admin):
     """Re-derive payment_status; provision when it became Paid."""
     new = derive_payment_status(sub)

@@ -21,7 +21,6 @@ import re
 import secrets
 import string
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
 from django.utils import timezone
@@ -39,7 +38,6 @@ CODE_RE = re.compile(r'^[A-Z][A-Z0-9]{2,19}$')
 RESERVED_CODES = {'PUBLIC', 'ADMIN', 'PLATFORM', 'ROYAL', 'ROYALHRMS', 'TEST', 'SYSTEM', 'API', 'WWW'}
 MONTHS = {'monthly': 1, 'yearly': 12}
 OPEN_STATUSES = (CompanyRegistration.APPROVAL_PENDING, CompanyRegistration.APPROVAL_APPROVED)
-CENT = Decimal('0.01')
 
 
 class RegistrationError(Exception):
@@ -63,18 +61,12 @@ def quote(plan: SubscriptionPlan, employee_count: int, billing_period: str) -> d
         raise RegistrationError(f'The {plan.name} plan is for at least {plan.min_employees} employees.')
     if plan.max_employees and employee_count > plan.max_employees:
         raise RegistrationError(f'The {plan.name} plan is for up to {plan.max_employees} employees.')
-    months = MONTHS[billing_period]
-    subtotal = (plan.price_per_employee * employee_count * months).quantize(CENT, rounding=ROUND_HALF_UP)
-    if plan.gst_inclusive:
-        gst = (subtotal - subtotal * 100 / (100 + plan.gst_rate)).quantize(CENT, rounding=ROUND_HALF_UP)
-        total = subtotal
-    else:
-        gst = (subtotal * plan.gst_rate / 100).quantize(CENT, rounding=ROUND_HALF_UP)
-        total = subtotal + gst
+    from apps.tenants.pricing import plan_charge
+    amounts = plan_charge(plan, employee_count, billing_period)
     return {'plan_name': plan.name, 'plan_features': list(plan.features or []),
-            'price_per_employee': plan.price_per_employee, 'months': months,
-            'subtotal': subtotal, 'gst_rate': plan.gst_rate, 'gst_inclusive': plan.gst_inclusive,
-            'gst_amount': gst, 'total': total, 'currency': plan.currency}
+            'price_per_employee': plan.price_per_employee, 'months': amounts['months'],
+            'subtotal': amounts['subtotal'], 'gst_rate': plan.gst_rate, 'gst_inclusive': plan.gst_inclusive,
+            'gst_amount': amounts['gst_amount'], 'total': amounts['total'], 'currency': plan.currency}
 
 
 # ── Create ────────────────────────────────────────────────────────────────────

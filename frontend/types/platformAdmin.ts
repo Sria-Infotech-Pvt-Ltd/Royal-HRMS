@@ -106,8 +106,27 @@ export interface CompanySubscription {
   provisioning_status: SubscriptionProvisioning;
   provisioning_error: string;
   provisioned_at: string | null;
+  /** The plan was edited after this subscription's snapshot (applied on "Apply latest plan"). */
+  plan_outdated: boolean;
+  latest_plan: { modules: string[]; price_per_employee: string; currency: string; gst_rate: string;
+                 gst_inclusive: boolean; max_employees: number | null } | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PlanChangePreview {
+  from_plan: string;
+  to_plan: string;
+  same_plan: boolean;
+  modules: string[];
+  difference: { added: string[]; removed: string[] };
+  pricing: null | {
+    employee_count: number;
+    billing_period: string;
+    from: { plan: string; price_per_employee: string; currency: string; amount_due: string | null };
+    to: { plan: string; price_per_employee: string; currency: string; months: number; subtotal: string;
+          gst_rate: string; gst_inclusive: boolean; gst_amount: string; amount_due: string };
+  };
 }
 
 export type PaymentStatus = "pending" | "paid" | "partially_paid" | "failed" | "waived";
@@ -143,6 +162,8 @@ export interface CustomerRow {
   is_active: boolean;
   provisioning_status: ProvisioningStatus;
   enabled_modules: string[];
+  /** Modules the company's users can actually use (login / API gate). */
+  effective_modules?: string[];
   created_at: string;
   subscription: CompanySubscription | null;
 }

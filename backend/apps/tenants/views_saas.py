@@ -263,6 +263,23 @@ def _whole_number(raw, lo=1, hi=validators.MAX_EMPLOYEES):
     return value
 
 
+def _change_pricing(sub, plan, employee_count):
+    """Old vs new charges for a plan change preview (None when the employee count is unknown)."""
+    if not employee_count:
+        return None
+    from apps.tenants.pricing import plan_charge
+    new = plan_charge(plan, employee_count, sub.billing_period)
+    return {
+        'employee_count': employee_count, 'billing_period': sub.billing_period or 'monthly',
+        'from': {'plan': sub.plan_name, 'price_per_employee': str(sub.price_per_employee), 'currency': sub.currency,
+                 'amount_due': str(sub.amount_due) if sub.amount_due is not None else None},
+        'to': {'plan': plan.name, 'price_per_employee': str(plan.price_per_employee), 'currency': plan.currency,
+               'months': new['months'], 'subtotal': str(new['subtotal']), 'gst_rate': str(plan.gst_rate),
+               'gst_inclusive': plan.gst_inclusive, 'gst_amount': str(new['gst_amount']),
+               'amount_due': str(new['total'])},
+    }
+
+
 def _subscription_or_404(client_id):
     return get_object_or_404(CompanySubscription.objects.select_related('client', 'plan'), client_id=client_id)
 
@@ -290,19 +307,22 @@ class SubscriptionChangePlanView(_PlatformView):
             return error('Choose an active plan.')
         current = effective_modules(sub)
         new = preview_modules(plan, sub.extra_modules or [], sub.removed_modules or [])
-        if _flag(request, 'dry_run'):
-            return success('Preview ready. Nothing has been saved.', {
-                'from_plan': sub.plan_name, 'to_plan': plan.name, 'modules': new,
-                'difference': module_diff(current, new),
-            })
         try:
             employee_count = _whole_number(request.data.get('employee_count'))
         except ValueError:
             msg = f'Employee count must be a whole number from 1 to {validators.MAX_EMPLOYEES}.'
             return error(msg, data={'employee_count': [msg]})
-        problem = _plan_fit(plan, employee_count)
+        # The plan must fit the numbers billing will use: the new count, else the current one.
+        count = employee_count or sub.employee_count
+        problem = _plan_fit(plan, count, sub.billing_period)
         if problem:
             return error(problem[1], data={problem[0]: [problem[1]]})
+        if _flag(request, 'dry_run'):
+            return success('Preview ready. Nothing has been saved.', {
+                'from_plan': sub.plan_name, 'to_plan': plan.name, 'same_plan': plan.pk == sub.plan_id,
+                'modules': new, 'difference': module_diff(current, new),
+                'pricing': _change_pricing(sub, plan, count),
+            })
         try:
             sub = change_plan(sub=sub, plan=plan, admin=request.user, note=str(request.data.get('note', ''))[:500],
                               employee_count=employee_count)
@@ -310,7 +330,9 @@ class SubscriptionChangePlanView(_PlatformView):
             return error(str(exc))
         _log_platform_action(request, 'saas_plan_changed', target_company=sub.client, changes={
             'to_plan': plan.code, 'difference': module_diff(current, effective_modules(sub)),
+            'amount_due': str(sub.amount_due) if sub.amount_due is not None else None,
         })
+        sub = CompanySubscription.objects.select_related('plan', 'client').prefetch_related('payments').get(pk=sub.pk)
         return success('Plan changed.', CompanySubscriptionSerializer(sub).data)
 
 

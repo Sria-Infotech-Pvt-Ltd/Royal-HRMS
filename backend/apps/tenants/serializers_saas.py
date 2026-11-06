@@ -117,6 +117,8 @@ class CompanySubscriptionSerializer(serializers.ModelSerializer):
     modules = serializers.SerializerMethodField()
     amount_received = serializers.SerializerMethodField()
     unconfirmed_payments = serializers.SerializerMethodField()
+    plan_outdated = serializers.SerializerMethodField()
+    latest_plan = serializers.SerializerMethodField()
 
     class Meta:
         model = CompanySubscription
@@ -126,7 +128,7 @@ class CompanySubscriptionSerializer(serializers.ModelSerializer):
             'gst_inclusive', 'max_employees', 'plan_features', 'extra_modules', 'removed_modules',
             'modules', 'notes', 'payment_status', 'amount_due', 'amount_received', 'unconfirmed_payments',
             'payment_waiver_reason', 'provisioning_status', 'provisioning_error', 'provisioned_at',
-            'created_at', 'updated_at',
+            'plan_outdated', 'latest_plan', 'created_at', 'updated_at',
         ]
 
     def get_modules(self, obj):
@@ -137,6 +139,26 @@ class CompanySubscriptionSerializer(serializers.ModelSerializer):
         total = sum((p.amount for p in obj.payments.all() if p.status == SubscriptionPayment.STATUS_VERIFIED),
                     Decimal('0'))
         return f'{total:.2f}'
+
+    def get_plan_outdated(self, obj) -> bool:
+        """The plan was edited after this subscription took its snapshot. The
+        subscription keeps its terms (snapshot rule) until the plan is applied
+        again (change plan to the same plan)."""
+        plan = obj.plan
+        if plan is None or plan.is_legacy or obj.source == CompanySubscription.SOURCE_LEGACY:
+            return False
+        return (sorted(obj.plan_features or []) != sorted(plan.features or [])
+                or obj.price_per_employee != plan.price_per_employee or obj.gst_rate != plan.gst_rate
+                or obj.gst_inclusive != plan.gst_inclusive or obj.currency != plan.currency
+                or obj.max_employees != plan.max_employees)
+
+    def get_latest_plan(self, obj):
+        if not self.get_plan_outdated(obj):
+            return None
+        plan = obj.plan
+        return {'modules': preview_modules(plan), 'price_per_employee': str(plan.price_per_employee),
+                'currency': plan.currency, 'gst_rate': str(plan.gst_rate), 'gst_inclusive': plan.gst_inclusive,
+                'max_employees': plan.max_employees}
 
     def get_unconfirmed_payments(self, obj):
         return sum(1 for p in obj.payments.all() if p.status == SubscriptionPayment.STATUS_RECORDED)
@@ -179,12 +201,19 @@ class RecordPaymentSerializer(serializers.Serializer):
 class CustomerRowSerializer(serializers.ModelSerializer):
     """A company with its subscription (None when not assigned yet)."""
     subscription = serializers.SerializerMethodField()
+    # What the company's users can actually use — the same list the login
+    # module claim and the API gate use (apps.tenants.access).
+    effective_modules = serializers.SerializerMethodField()
 
     class Meta:
         model = Client
         fields = ['id', 'company_code', 'company_name', 'contact_name', 'contact_phone',
                   'expected_employee_count', 'is_active', 'provisioning_status', 'enabled_modules',
-                  'created_at', 'subscription']
+                  'effective_modules', 'created_at', 'subscription']
+
+    def get_effective_modules(self, obj):
+        from apps.tenants.access import visible_modules
+        return visible_modules(obj)
 
     def get_subscription(self, obj):
         sub = getattr(obj, 'subscription', None)

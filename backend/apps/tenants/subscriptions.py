@@ -167,9 +167,26 @@ def change_plan(*, sub: CompanySubscription, plan: SubscriptionPlan, admin=None,
         setattr(sub, field, value)
     if employee_count is not None:
         sub.employee_count = employee_count
+    # The amount due follows the new plan's price (the snapshot just taken),
+    # the subscription's employee count and billing period, and GST.
+    old_due = sub.amount_due
+    if sub.employee_count:
+        from apps.tenants.pricing import charge
+        sub.amount_due = charge(sub.price_per_employee, sub.gst_rate, sub.gst_inclusive,
+                                sub.employee_count, sub.billing_period)['total']
     sub.updated_by = admin
     sub.save()
     _history(sub, SubscriptionHistory.EVENT_PLAN_CHANGED, before, admin, note)
+    if sub.amount_due != old_due:
+        _history(sub, SubscriptionHistory.EVENT_AMOUNT_DUE_CHANGED,
+                 {'amount_due': str(old_due) if old_due is not None else None}, admin,
+                 f'Recalculated for {before["plan_name"]} → {sub.plan_name}: '
+                 f'{old_due if old_due is not None else "not set"} → {sub.amount_due} {sub.currency}')
+        if sub.source != CompanySubscription.SOURCE_WEBSITE:
+            # Paid / partially paid are re-derived against the new amount.
+            # (Website sign-ups were paid through the gateway — not tracked here.)
+            from apps.tenants import billing
+            billing.refresh_payment_status(sub, admin)
     # Not paid yet: the new plan's modules are applied when payment is settled.
     if sub.provisioning_status != CompanySubscription.PROVISION_AWAITING_PAYMENT:
         apply_subscription(sub.client)
