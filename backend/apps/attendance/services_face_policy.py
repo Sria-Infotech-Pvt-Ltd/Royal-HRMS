@@ -87,9 +87,25 @@ def can_employee_self_register() -> bool:
     return is_mandatory() and registration_mode() != Rules.MODE_HR_IN_PERSON
 
 
+def active_registration(employee) -> Optional[FaceRegistrationRequest]:
+    """The employee's one USABLE Face ID reference: a registration that is BOTH approved AND active.
+
+    The single definition of "has a valid Face ID" - the status endpoint, the fallback rule, the punch-time match
+    (FaceVerificationService) and the voice punch all go through it. Approved alone is not enough (an older approval
+    that was superseded or deactivated stays status=approved with is_active=False), and active alone is not enough (a
+    row that is active but not approved was never cleared by HR). The UniqueConstraint on is_active guarantees at most
+    one row matches.
+    """
+    return (
+        FaceRegistrationRequest.objects
+        .filter(employee=employee, status=FaceRegistrationRequest.STATUS_APPROVED, is_active=True)
+        .first()
+    )
+
+
 def employee_state(employee) -> str:
-    """approved (an active registration exists) / pending / rejected / not_registered, for this employee."""
-    if FaceRegistrationRequest.objects.filter(employee=employee, is_active=True).exists():
+    """approved (an approved AND active registration exists) / pending / rejected / not_registered, for this employee."""
+    if active_registration(employee) is not None:
         return STATE_APPROVED
     latest = FaceRegistrationRequest.objects.filter(employee=employee).order_by('-created_at').first()
     if latest is None:

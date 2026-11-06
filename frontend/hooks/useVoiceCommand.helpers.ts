@@ -1,6 +1,7 @@
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { VoiceParseResult } from "@/types/voice";
+import { voiceLockoutNotice } from "@/lib/voiceLockout";
 import { READING_MS_PER_WORD, MIN_READING_TIME_MS, LOCATION_UNSUPPORTED_MESSAGE, LOCATION_PERMISSION_DENIED_MESSAGE, LOCATION_UNAVAILABLE_MESSAGE } from "./useVoiceCommand.constants";
 import type { VoiceParseOutcome, VoiceParseExtra, LocationResult, FaceProofPendingResult } from "./useVoiceCommand.types";
 
@@ -45,6 +46,25 @@ export async function postVoiceParse(transcript: string, lang: string, extra?: V
     success: data?.success ?? true,
     result: data?.result,
     language: data?.language === "hi" ? "hi" : "en",
+    isClarification: !!data?.is_clarification,
+  };
+}
+
+// Decision A: while a valid local face lockout is active, a face-proof turn must NOT open the camera. The server has
+// already asked for a face capture (it keeps no pre-check), so this turns that response into a plain, terminal
+// "Face check locked" answer instead: no awaiting_input, no awaiting_face_proof, nothing for the modal to open on.
+// `blocked`/`retry_after_seconds` are kept on `result`. Any other response is returned untouched, and once the
+// countdown (lockoutSeconds) reaches 0 the normal face-proof flow is back. The server stays the authority.
+export function applyFaceLockoutGuard(outcome: VoiceParseOutcome, lockoutSeconds: number): VoiceParseOutcome {
+  if (lockoutSeconds <= 0 || !outcome.awaitingInput || !isAwaitingFaceProof(outcome.result)) return outcome;
+  return {
+    ...outcome,
+    message: voiceLockoutNotice(lockoutSeconds),
+    speechMessage: null,
+    awaitingInput: false,
+    success: false,
+    result: { blocked: true, retry_after_seconds: lockoutSeconds },
+    language: "en",
   };
 }
 

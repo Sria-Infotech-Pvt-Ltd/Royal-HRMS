@@ -18,6 +18,8 @@ export interface VoiceParseOutcome {
   // a locally-constructed error) rather than leaving it undefined, so speak()
   // always has a language to request TTS in.
   language: TtsLanguage;
+  // See types/voice.ts's VoiceParseResult.is_clarification. Drives the Hindi-recovery decision only.
+  isClarification: boolean;
 }
 
 export type LocationResult = { latitude: number; longitude: number } | { errorMessage: string };

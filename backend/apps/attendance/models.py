@@ -1756,9 +1756,11 @@ FACE_RECOGNITION_MODEL_VERSION = 'face-api.js-faceRecognitionNet-v1'
 # this capture happened. Bump this whenever the consent copy shown in
 # frontend/lib/faceApi/consentText.ts changes, so existing rows keep
 # recording exactly what was actually agreed to at the time, rather than
-# silently being reinterpreted under newer wording. Keep this value in sync
-# with that file's own FACE_CONSENT_TEXT_VERSION — there's no shared source
-# of truth across the Python/TS boundary, so this is maintained by convention.
+# silently being reinterpreted under newer wording.
+#
+# THE single source of truth for the consent version: the frontend has no copy (the server stamps it on every new
+# registration, the browser never sends it). attendance/tests_face_consent_version.py pins a hash of the frontend
+# wording to this value, so editing the wording without bumping this constant fails the test suite.
 FACE_CONSENT_TEXT_VERSION = 'v2'   # v2 (2026-11-03): "clock-in/out" wording -> "Punch In/Out"; existing v1 rows are untouched
 
 

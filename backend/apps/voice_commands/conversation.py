@@ -10,6 +10,11 @@ from apps.voice_commands.conversation_attendance_correction import (
     continue_request_attendance_correction,
     start_request_attendance_correction,
 )
+from apps.voice_commands.conversation_attendance_correction_approval import (
+    ATTENDANCE_CORRECTION_APPROVAL_INTENTS,
+    continue_attendance_correction_approval,
+    start_attendance_correction_approval,
+)
 from apps.voice_commands.conversation_clarification import (
     CLARIFICATION_STAGE,
     continue_clarification,
@@ -35,6 +40,7 @@ from apps.voice_commands.conversation_stt_confirmation import (
     continue_stt_confirmation,
     start_stt_confirmation,
 )
+from apps.voice_commands.correction_slot_extractor import next_missing_slot as next_missing_correction_slot
 from apps.voice_commands.correction_slot_extractor import strip_correction_slot_phrases
 from apps.voice_commands.executor import (
     INTENT_APPLY_LEAVE,
@@ -49,6 +55,7 @@ from apps.voice_commands.llm_fallback import try_llm_fallback
 from apps.voice_commands.matcher import DEFAULT_LANG, NO_MATCH_INTENT, get_conversational, match_intent
 from apps.voice_commands.mode_extractor import extract_attendance_mode
 from apps.voice_commands.normalizer import normalize_transcript
+from apps.voice_commands.payroll_period_extractor import strip_payroll_period_phrases
 from apps.voice_commands.payslip_extractor import (
     strip_employee_name_phrases as strip_payslip_employee_name_phrases,
     strip_payslip_query_phrases,
@@ -74,9 +81,19 @@ logger = logging.getLogger(__name__)
 # hardcoded string) automatically track the improved wording. Bilingual pair
 # (Phase 3.1 — Gap 1) rather than a bare string, selected through text() at
 # every call site, same pattern executor_*.py's own messages already use.
+# A plainly out-of-scope question ("what is the weather today?") also lands here (no clarification candidate, LLM
+# fallback declined), and so does a garbled-but-genuinely-HR transcript - nothing downstream can tell the two apart once
+# every tier has declined. The wording is honest that it wasn't understood as an Aira action without insisting the topic
+# itself was invalid, and without inviting endless rephrasing of a question this assistant can never answer.
 _NO_MATCH_MESSAGE = {
-    'en': "Sorry, I didn't catch that — could you say it differently?",
-    'hi': 'माफ़ कीजिए, मैं समझ नहीं पाया — क्या आप इसे दूसरे तरीके से कह सकते हैं?',
+    'en': (
+        "That doesn't seem related to Aira. I'm the assistant here to help with queries "
+        "within Aira — like attendance, leave, and payroll. Do you have anything else to ask?"
+    ),
+    'hi': (
+        'यह Aira से संबंधित नहीं लगता। मैं Aira के भीतर के सवालों में मदद के लिए यहाँ हूँ — '
+        'जैसे उपस्थिति, छुट्टी और पेरोल। क्या आपको कुछ और पूछना है?'
+    ),
 }
 # Generic on purpose — apply_leave was the only conversational intent when
 # this was first written, but request_attendance_correction is conversational
@@ -227,6 +244,7 @@ def handle_transcript(
     stripped_text = strip_employee_name_phrases(stripped_text)
     stripped_text = strip_payslip_query_phrases(stripped_text)
     stripped_text = strip_payslip_employee_name_phrases(stripped_text)
+    stripped_text = strip_payroll_period_phrases(stripped_text)
     matching_text = strip_correction_slot_phrases(stripped_text)
     fresh_match = match_intent(matching_text, lang=lang)
 
@@ -334,12 +352,27 @@ def _should_abandon_pending(pending: dict, fresh_match) -> bool:
        meaningful than it is for a plain yes/no turn).
     """
     if fresh_match.intent != NO_MATCH_INTENT:
+        if _is_correction_punch_type_answer(pending, fresh_match):
+            return False
         return fresh_match.intent != pending['intent']
 
     stage = pending['slots'].get('stage')
     if stage not in (CLARIFICATION_STAGE, STT_CONFIRMATION_STAGE):
         return False
     return fresh_match.candidate_intent is not None and fresh_match.candidate_intent != pending['intent']
+
+
+def _is_correction_punch_type_answer(pending: dict, fresh_match) -> bool:
+    """True when `fresh_match` is a false-positive clock_in/clock_out match that is actually the user answering
+    request_attendance_correction's still-pending punch-type question ("was this for your punch-in, punch-out, or both?"):
+    that answer is ALSO the literal registered phrase of the real clock_in/clock_out intents, so without this carve-out
+    answering the question would fire a real punch instead of completing the correction request. Deliberately narrow:
+    one pending intent, one slot, two intents."""
+    return (
+        pending['intent'] == INTENT_REQUEST_ATTENDANCE_CORRECTION
+        and fresh_match.intent in (INTENT_CLOCK_IN, INTENT_CLOCK_OUT)
+        and next_missing_correction_slot(pending['slots']) == 'punch_type'
+    )
 
 
 def _dispatch_pending(
@@ -367,6 +400,8 @@ def _dispatch_pending(
         )
     if pending['intent'] in LEAVE_APPROVAL_INTENTS:
         return continue_leave_approval(request, pending, normalized)
+    if pending['intent'] in ATTENDANCE_CORRECTION_APPROVAL_INTENTS:
+        return continue_attendance_correction_approval(request, pending, normalized)
     if pending['intent'] in PAYROLL_CONVERSATIONAL_INTENTS:
         return continue_payroll_conversation(request, pending, normalized)
     if pending['intent'] == INTENT_REQUEST_ATTENDANCE_CORRECTION:
@@ -395,6 +430,9 @@ def _dispatch_matched_intent(
     if intent in LEAVE_APPROVAL_INTENTS:
         return start_leave_approval(request, intent, intent_text, confidence)
 
+    if intent in ATTENDANCE_CORRECTION_APPROVAL_INTENTS:
+        return start_attendance_correction_approval(request, intent, intent_text, confidence)
+
     if intent in PAYROLL_CONVERSATIONAL_INTENTS:
         return start_payroll_conversation(request, intent, intent_text, confidence)
 
@@ -404,9 +442,11 @@ def _dispatch_matched_intent(
     if intent in (INTENT_CLOCK_IN, INTENT_CLOCK_OUT):
         return start_voice_clock_punch(request, intent, attendance_mode, confidence, latitude, longitude)
 
+    # raw_text is forwarded as slots['raw_text'] - only check_payroll_cost_summary / check_branch_payroll_breakdown read it
+    # (to extract an optional spoken period); every other intent on this generic path ignores an unknown slots key.
     outcome = execute_intent(
         intent, request, attendance_mode=attendance_mode, lang=lang,
-        latitude=latitude, longitude=longitude,
+        slots={'raw_text': intent_text}, latitude=latitude, longitude=longitude,
     )
     logger.info(
         'Voice command: user=%s intent=%s confidence=%s success=%s',
@@ -463,7 +503,7 @@ def _continue_apply_leave(request, pending: dict, answer_text: str) -> dict:
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
-    speech_message: Optional[str] = None,
+    speech_message: Optional[str] = None, is_clarification: bool = False,
 ) -> dict:
     """
     speech_message is the redacted stand-in for `message` that VoiceParseView's
@@ -505,6 +545,10 @@ def _payload(
     Hindi counterpart to select, so the frontend can rely on the key always
     being there — same reasoning speech_message's own always-present-but-
     often-None shape already follows.
+
+    is_clarification defaults False here: every call site in this module is a terminal outcome or a normal slot-filling
+    question, never the "did you mean X?" question itself (conversation_clarification.py's own _payload, the only place
+    this is ever True). Present on every response for the same always-there reasoning as language/speech_message.
     """
     return {
         'intent': intent,
@@ -516,4 +560,5 @@ def _payload(
         'awaiting_input': awaiting_input,
         'success': success,
         'language': get_current_language(),
+        'is_clarification': is_clarification,
     }

@@ -393,14 +393,9 @@ class FaceVerificationService:
 
     @staticmethod
     def _resolve_active_registration(employee) -> Optional[FaceRegistrationRequest]:
-        # is_active + the UniqueConstraint in FaceRegistrationRequest.Meta
-        # guarantee at most one row ever matches this filter — no more
-        # picking "whichever approved row happens to have the latest
-        # approved_at", which had no cap on how many rows could be approved
-        # at once. See activate_registration, called at the two places a
-        # registration becomes approved.
-        return (
-            FaceRegistrationRequest.objects
-            .filter(employee=employee, status=FaceRegistrationRequest.STATUS_APPROVED, is_active=True)
-            .first()
-        )
+        # Approved AND active - defined once in services_face_policy.active_registration, which the policy
+        # (status endpoint, fallback rule) and the voice punch use too, so they cannot disagree about what counts as
+        # a valid Face ID. See activate_registration, called at the two places a registration becomes approved.
+        from apps.attendance.services_face_policy import active_registration
+
+        return active_registration(employee)

@@ -8,7 +8,8 @@ import { useCallback, useEffect, useState } from "react";
 // precedent (frontend/app/dashboard/announcements/page.tsx already uses a
 // raw localStorage flag for a similar per-browser, non-auth setting), so
 // muting is a plain per-browser default rather than a per-account setting.
-const STORAGE_KEY = "royal_hrms_voice_muted";
+// Aira-specific key. The old Royal HRMS key is deliberately never read, migrated or kept for compatibility.
+const STORAGE_KEY = "aira_voice_muted";
 
 function readStoredPreference(): boolean {
   if (typeof window === "undefined") return false;
@@ -53,11 +54,8 @@ export function useVoiceMutePreference() {
     setIsMuted(prev => {
       const next = !prev;
       writeStoredPreference(next);
-      // Muting mid-sentence should stop the current utterance immediately,
-      // not just suppress the next one.
-      if (next && typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
+      // Stopping an utterance that is already playing is owned by useVoiceCommand (its cancelSpeech(), reacting to
+      // the isMuted value this hook returns): this hook only knows the preference, not the <audio> element.
       return next;
     });
   }, []);

@@ -10,7 +10,13 @@ declare global {
   interface SpeechRecognitionResultLike {
     readonly isFinal: boolean;
     readonly length: number;
-    [index: number]: { readonly transcript: string };
+    [index: number]: {
+      readonly transcript: string;
+      // Per spec always present (0 when the engine does not estimate one), but kept optional because Chromium's
+      // real-world behavior is not verified across engines/OS: callers must treat a missing value as "no
+      // confidence signal", never as confidence 0 (see lib/voiceHindiRecovery.ts).
+      readonly confidence?: number;
+    };
   }
 
   interface SpeechRecognitionResultListLike {
