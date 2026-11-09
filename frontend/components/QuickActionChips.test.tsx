@@ -62,3 +62,24 @@ describe("QuickActionChips rendering", () => {
     }
   });
 });
+
+describe("Punch In / Punch Out wording (Phase 5B)", () => {
+  it("the first two chips are Punch In and Punch Out with their Hindi labels and punch phrases", () => {
+    const [punchIn, punchOut] = QUICK_ACTIONS;
+    expect(punchIn).toMatchObject({ label: "Punch In", labelHi: "पंच-इन", phrase: "punch in" });
+    expect(punchOut).toMatchObject({ label: "Punch Out", labelHi: "पंच-आउट", phrase: "punch out" });
+  });
+
+  it("no chip still says Clock In / Clock Out", () => {
+    for (const action of QUICK_ACTIONS) {
+      expect(action.label).not.toMatch(/clock/i);
+      expect(action.phrase).not.toMatch(/clock/i);
+    }
+  });
+
+  it("renders the Punch In / Punch Out chips addressable by their phrases", () => {
+    const html = renderChips();
+    expect(html).toContain('data-testid="voice-quick-action-punch-in"');
+    expect(html).toContain('data-testid="voice-quick-action-punch-out"');
+  });
+});

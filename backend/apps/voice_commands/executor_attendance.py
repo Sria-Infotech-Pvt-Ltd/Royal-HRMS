@@ -10,6 +10,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from core.responses import get_client_ip
 
+from apps.attendance.services_face_matching import FaceVerificationBlockedError
 from apps.attendance.models import AttendancePunch
 from apps.attendance.serializers_my_attendance import (
     MonthlySummarySerializer,
@@ -29,12 +30,12 @@ _CORRECTION_SUBMIT_FAILED_MESSAGE = {
     'hi': 'उपस्थिति सुधार अनुरोध सबमिट नहीं हो सका।',
 }
 _CLOCK_IN_SUCCESS_MESSAGE = {
-    'en': 'You have been clocked in successfully.',
-    'hi': 'आपकी उपस्थिति सफलतापूर्वक दर्ज कर दी गई है।',
+    'en': 'Punched in successfully.',
+    'hi': 'पंच-इन सफलतापूर्वक दर्ज कर दिया गया है।',
 }
 _CLOCK_OUT_SUCCESS_MESSAGE = {
-    'en': 'You have been clocked out successfully.',
-    'hi': 'आपका क्लॉक-आउट सफलतापूर्वक दर्ज कर दिया गया है।',
+    'en': 'Punched out successfully.',
+    'hi': 'पंच-आउट सफलतापूर्वक दर्ज कर दिया गया है।',
 }
 _PUNCH_FAILED_MESSAGE = {
     'en': 'Could not process the request.',
@@ -186,6 +187,13 @@ def _execute_punch(
         PunchService.record_punch(request.user, punch_data)
     except ValueError as exc:
         return ExecutionResult(success=False, message=str(exc))
+    except FaceVerificationBlockedError as exc:
+        # Same terminal-block signal AttendancePunchView surfaces on the web: keep the countdown instead of
+        # flattening it into a plain PermissionError message (this is the path hit when a blocked outcome reaches
+        # PunchService.record_punch a second time via conversation_clock_in_face._finish_punch).
+        return ExecutionResult(
+            success=False, message=str(exc), data={'blocked': True, 'retry_after_seconds': exc.retry_after_seconds},
+        )
     except PermissionError as exc:
         return ExecutionResult(success=False, message=str(exc))
 

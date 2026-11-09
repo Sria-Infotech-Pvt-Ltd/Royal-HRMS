@@ -18,7 +18,7 @@
 // have no equivalent for a UI button label (that rollout only ever
 // produced spoken/displayed RESPONSE text), so these are new translations,
 // not reused ones — chosen to match that existing vocabulary where the
-// concepts overlap (क्लॉक-इन/क्लॉक-आउट, छुट्टी, उपस्थिति, आवेदन करना all
+// concepts overlap (पंच-इन/पंच-आउट, छुट्टी, उपस्थिति, आवेदन करना all
 // appear verbatim in the backend's own Hindi strings already) rather than
 // inventing different wording for the same thing. Flagged for the same
 // native-speaker review Phases 3/3.1 already stood for their own new
@@ -32,8 +32,8 @@ export interface QuickAction {
 }
 
 export const QUICK_ACTIONS: QuickAction[] = [
-  { label: "Clock In",        labelHi: "क्लॉक-इन",                 phrase: "clock in",                   icon: "ti-login-2" },
-  { label: "Clock Out",       labelHi: "क्लॉक-आउट",                phrase: "clock out",                  icon: "ti-logout-2" },
+  { label: "Punch In",        labelHi: "पंच-इन",                   phrase: "punch in",                   icon: "ti-login-2" },
+  { label: "Punch Out",       labelHi: "पंच-आउट",                  phrase: "punch out",                  icon: "ti-logout-2" },
   { label: "Leave Balance",   labelHi: "छुट्टी का शेष",             phrase: "check my leave balance",     icon: "ti-calendar-stats" },
   { label: "Apply for Leave", labelHi: "छुट्टी के लिए आवेदन करें",   phrase: "apply for leave",            icon: "ti-calendar-plus" },
   { label: "My Attendance",   labelHi: "मेरी उपस्थिति",             phrase: "show my attendance summary", icon: "ti-clipboard-list" },

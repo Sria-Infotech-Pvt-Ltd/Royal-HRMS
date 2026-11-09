@@ -27,6 +27,14 @@ from apps.voice_commands.conversation import handle_transcript
 from apps.voice_commands.executor import ExecutionResult
 
 
+# What services_face_policy.guidance() returns for an employee whose Face ID is approved and mandatory. The voice flow
+# reads the SAME server policy as the web punch, so tests stub that one function instead of a registration table.
+_APPROVED_POLICY = {
+    'is_mandatory': True, 'state': 'approved', 'requires_face_to_punch': True, 'fallback_active': False,
+    'message': '',
+}
+
+
 def _fake_request(user_id=42):
     request = MagicMock()
     request.META = {}
@@ -90,10 +98,11 @@ class ClockOutGeofenceReuseTests(SimpleTestCase):
         mandatory = patch('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=True)
         mandatory.start()
         self.addCleanup(mandatory.stop)
-        registration = patch('apps.voice_commands.conversation_clock_in_face.FaceRegistrationRequest')
-        mock_model = registration.start()
-        self.addCleanup(registration.stop)
-        mock_model.objects.filter.return_value.exists.return_value = True
+        policy = patch(
+            'apps.voice_commands.conversation_clock_in_face.face_policy_guidance', return_value=_APPROVED_POLICY,
+        )
+        policy.start()
+        self.addCleanup(policy.stop)
 
     def test_geofence_rejection_is_terminal_and_not_pending(self):
         rejected = GeofenceResult(
@@ -189,7 +198,7 @@ class ClockOutFacialProofTurnTests(SimpleTestCase):
         self.assertFalse(result['awaiting_input'])
         # Same manual-button fallback message clock_in gives — the dashboard's
         # Clock In/Out button is a single toggle, so the copy stays generic.
-        self.assertIn('manual clock in', result['message'].lower())
+        self.assertIn('manual punch in/out', result['message'].lower())
         self.assertIsNone(self.store.get(42))
 
     def test_blocked_outcome_is_terminal_on_the_first_attempt_not_retried(self):

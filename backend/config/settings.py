@@ -418,6 +418,11 @@ REST_FRAMEWORK = {
         'reset_password':       '10/hour',
         'otp_verify':           '10/hour',
         'resend_invite':        '5/hour',
+        # Paid voice paths (each call bills a provider), limited per signed-in user. Tunable per environment through
+        # these env vars without a code change - see apps/voice_commands/throttles.py.
+        'voice_speak':          env('VOICE_SPEAK_RATE', default='150/hour'),
+        'voice_transcribe':     env('VOICE_TRANSCRIBE_RATE', default='60/hour'),
+        'voice_llm':            env('VOICE_LLM_RATE', default='40/hour'),
         # A polling internal system (e.g. Project Budget & Tracking)
         # reasonably needs more headroom than a human-facing anon action
         # like login/forgot-password, but still capped well under
