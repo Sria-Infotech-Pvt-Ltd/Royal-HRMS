@@ -9,7 +9,8 @@ import { API } from "@/lib/api/endpoints";
 import { rowsOf } from "@/lib/listResponse";
 
 export interface PositionOption { id: string; title: string; org_unit_name: string; grade: string; job_template_name: string | null; is_active: boolean }
-export interface PersonOption { id: string; full_name: string; employee_id: string; work_location?: string }
+/** `id` is the display employee code; `uuid` is the real primary key — the one the API expects for manager fields. */
+export interface PersonOption { id: string; uuid?: string; full_name: string; employee_id: string; work_location?: string }
 export interface NamedOption { id: string; name: string }
 export interface StructureOption extends NamedOption { is_default?: boolean; is_active?: boolean }
 

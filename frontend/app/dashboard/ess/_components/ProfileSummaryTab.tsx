@@ -8,6 +8,7 @@
 // request flow (ProfileCorrectionModal) — no direct self-edit path, even
 // for accounts holding employees.edit_own_profile.
 
+import { isFutureDate } from "@/lib/employeeLifecycle";
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
@@ -185,6 +186,11 @@ export default function ProfileSummaryTab() {
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>DATE OF JOINING</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{fmtDate(data?.date_of_joining ?? data?.date_joined)}</div>
+            {isFutureDate(data?.date_of_joining) && (
+              <div style={{ fontSize: 11, color: "var(--info)", marginTop: 4 }}>
+                Attendance, leave and expenses open from your joining date. You can complete onboarding now.
+              </div>
+            )}
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>WORK LOCATION</div>

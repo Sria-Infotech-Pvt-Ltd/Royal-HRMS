@@ -89,7 +89,7 @@ export default function EssShellClient({ session: _session, viewAsEmployee }: { 
         </nav>
       </div>
 
-      {tab === "home"       && <HomeTab onNavigate={setTab} status={status} />}
+      {tab === "home"       && <HomeTab onNavigate={setTab} status={status} isReadOnly={!!viewAsEmployee} />}
       {tab === "profile"    && <ProfileSummaryTab />}
       {tab === "attendance" && <EssAttendanceTab />}
       {tab === "leave"      && <LeavePageClient />}

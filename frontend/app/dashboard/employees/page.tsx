@@ -14,10 +14,11 @@ import EmployeeDirectoryHeader from "./_components/EmployeeDirectoryHeader";
 import BulkAssignManagerModal from "./_components/BulkAssignManagerModal";
 import EmployeeStatCards from "./_components/EmployeeStatCards";
 import EmployeeToolbar from "./_components/EmployeeToolbar";
+import JoiningDateAlert from "@/components/employees/JoiningDateAlert";
 import EmployeeTable from "./_components/EmployeeTable";
 import AiAssistPanel from "./_components/AiAssistPanel";
 import HireEmployeeModal from "./_components/HireEmployeeModal";
-import BulkImportModal from "./_components/BulkImportModal";
+import BulkImportModal from "./_components/EmployeeImportModal";
 import EmployeeDrawer from "./_components/EmployeeDrawer";
 import AppraisalBanner from "./_components/AppraisalBanner";
 
@@ -28,6 +29,9 @@ const STATUS_FILTERS: { value: "all" | EmployeeStatusFilter; label: string }[] =
   { value: "probation",      label: "Probation"      },
   { value: "notice_period",  label: "Notice Period"  },
   { value: "inactive",       label: "Exited"         },
+  { value: "stage:pre_joining", label: "Pre-Joining" },
+  { value: "stage:unknown",     label: "Joining date missing" },
+  { value: "stage:terminated",  label: "Terminated" },
 ];
 
 // useSearchParams (reads ?action=hire for the admin dashboard's "Hire an
@@ -121,6 +125,10 @@ function EmployeesPageInner() {
             </span>
           </h2>
         </div>
+        <JoiningDateAlert
+          missingCount={emp.missingJoiningDates}
+          onShow={() => emp.setStatus("stage:unknown")}
+        />
         <EmployeeToolbar
           search={emp.search} onSearchChange={emp.setSearch} onSearchSubmit={emp.submitSearch} searching={emp.loading}
           branch={emp.branch} branchOptions={emp.branchOptions} onBranchChange={emp.setBranch}

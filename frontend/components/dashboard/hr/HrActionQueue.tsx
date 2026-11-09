@@ -7,11 +7,17 @@ import { API } from "@/lib/api/endpoints";
 import { useAnyPermission } from "@/hooks/usePermission";
 import type { PaginatedResponse, SeparationRequest } from "@/types/separation";
 import type { HRActionQueue, LeaveUpdatePayload } from "@/types/dashboard";
+import type { PaginatedFaceRegistrations } from "@/types/faceRegistration";
 
-const ROWS: { key: keyof Omit<HRActionQueue, "total_pending">; label: string; icon: string; href: string }[] = [
+// The server-computed queue plus the counts this component reads from the workflow lists that have their own endpoints.
+type QueueData = HRActionQueue & { face_registrations: number; wfh_requests: number };
+
+const ROWS: { key: keyof Omit<QueueData, "total_pending">; label: string; icon: string; href: string }[] = [
   { key: "candidate_reviews",      label: "Candidate Reviews",       icon: "ti-user-search",  href: "/dashboard/candidate-review" },
   { key: "leave_approvals",        label: "Leave Approvals",         icon: "ti-calendar-off", href: "/dashboard/approvals"        },
   { key: "attendance_corrections", label: "Attendance Corrections",  icon: "ti-clock-edit",   href: "/dashboard/approvals"        },
+  { key: "wfh_requests",           label: "Work From Home Requests", icon: "ti-home-2",      href: "/dashboard/approvals"        },
+  { key: "face_registrations",     label: "Face ID Registrations",   icon: "ti-face-id",      href: "/dashboard/approvals"        },
   { key: "expense_claims",         label: "Expense Claims",          icon: "ti-receipt",      href: "/dashboard/expenses"        },
   { key: "onboarding_reviews",     label: "Onboarding Reviews",      icon: "ti-id-badge",     href: "/dashboard/employees"       },
   { key: "separation_requests",    label: "Separation Requests",     icon: "ti-user-minus",   href: "/dashboard/separation"       },
@@ -33,9 +39,25 @@ export default function HrActionQueue() {
   );
   const separationCount = separationPage?.count ?? 0;
 
-  const data = fetched
-    ? { ...fetched, separation_requests: separationCount, total_pending: fetched.total_pending + separationCount }
-    : fetched;
+  // Each of these is the workflow's own list, which the server already limits to what this person may see.
+  const canApproveFace = useAnyPermission("facial_recognition.approve");
+  const { data: facePage } = useFetch<PaginatedFaceRegistrations>(
+    canApproveFace ? `${API.attendance.faceRegistration.pending}?page_size=1` : null,
+  );
+  const canApproveWfh = useAnyPermission("wfh.approve");
+  const { data: wfhPage } = useFetch<{ count: number }>(
+    canApproveWfh ? `${API.approvals.wfhRequests}?scope=team&status=pending,l2_pending&page_size=1` : null,
+  );
+  const faceCount = facePage?.count ?? 0;
+  const wfhCount = wfhPage?.count ?? 0;
+
+  const data: QueueData | null = fetched
+    ? {
+        ...fetched,
+        separation_requests: separationCount, face_registrations: faceCount, wfh_requests: wfhCount,
+        total_pending: fetched.total_pending + separationCount + faceCount + wfhCount,
+      }
+    : null;
 
   useEffect(() => {
     function handleLeaveUpdate(event: Event) {

@@ -10,6 +10,7 @@ import OnboardingHistoryModal from "./OnboardingHistoryModal";
 import PerformActionModal from "./PerformActionModal";
 import StatusPill from "@/components/employees/StatusPill";
 import { formatDateSlash } from "@/lib/formatDate";
+import { lifecycleNote } from "@/lib/employeeLifecycle";
 import { usePermission } from "@/hooks/usePermission";
 import type { ActionType } from "./PerformActionFields/types";
 
@@ -19,8 +20,10 @@ function slashDate(iso: string | null | undefined): string {
 }
 
 const STATUS_TONE: Record<DirectoryStatusLabel, StatusPillTone> = {
-  Active: "success", Onboarding: "warn", "Notice Period": "error", Exited: "neutral",
+  Active: "success", Onboarding: "warn", "Awaiting activation": "warn", "Notice Period": "error", Exited: "neutral",
 };
+
+const LIFECYCLE_TONE = { info: "var(--info)", warn: "var(--warn)", crit: "var(--crit)" } as const;
 
 interface Props {
   employee: Employee;
@@ -36,6 +39,7 @@ interface Props {
 export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEdit, toggling, onOpen, onToggleStatus, onActionApplied }: Props) {
   const router = useRouter();
   const rowStatus = directoryStatusLabel(e);
+  const lifecycle = lifecycleNote(e.employmentStage, e.dateOfJoining, e.accountLocked === true);
   const canManageOnboarding = usePermission("employees.reset_password") && canEdit;
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const isExited = e.status === "inactive";
@@ -113,6 +117,9 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
         )}
         {isHistoryOpen && e.uuid && (
           <OnboardingHistoryModal employeeUuid={e.uuid} employeeName={fullName(e)} onClose={() => setIsHistoryOpen(false)} onChanged={onActionApplied} />
+        )}
+        {lifecycle && (
+          <div className="text-[11px]" style={{ color: LIFECYCLE_TONE[lifecycle.tone], marginTop: 2 }}>{lifecycle.text}</div>
         )}
         {rowStatus === "Active" && e.employmentStatus === "probation" && (
           <div className="text-[11px]" style={{ color: "var(--muted)", marginTop: 2 }}>On probation</div>

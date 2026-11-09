@@ -7,7 +7,7 @@ export const STATUS_META: Record<CandidateStatus, { label: string; cls: string; 
   interview_scheduled:  { label: "Interview Scheduled",cls: "badge-info",    icon: "ti-calendar" },
   interview_done:       { label: "Interview Done",     cls: "badge-warn",    icon: "ti-clipboard-check" },
   selected:             { label: "Selected",           cls: "badge-success", icon: "ti-check" },
-  offer_sent:           { label: "Offer Sent",         cls: "badge-success", icon: "ti-send" },
+  offer_sent:           { label: "Onboarding Link Sent", cls: "badge-success", icon: "ti-send" },
   rejected:             { label: "Rejected",           cls: "badge-error",   icon: "ti-x" },
   converted:            { label: "Converted",          cls: "badge-neutral", icon: "ti-user-check" },
 };
@@ -53,8 +53,10 @@ export function StatusDropdown({
     try {
       const res = await RECRUITMENT_API.setStatus(candidate.id, { status: newStatus });
       onChanged(res.data?.data ?? { ...candidate, status: newStatus });
-    } catch {
-      // silently ignore — table will reflect current state on next load
+    } catch (err: unknown) {
+      // The server refuses transitions that skip the pipeline (e.g. no interview yet); say why.
+      const reason = (err as { message?: string })?.message;
+      if (reason) window.alert(reason);
     } finally {
       setUpdating(false);
     }

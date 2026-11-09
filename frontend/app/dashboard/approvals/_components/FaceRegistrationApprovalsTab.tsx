@@ -6,7 +6,8 @@ import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
-import type { FaceRegistrationDecisionPayload, PaginatedFaceRegistrations } from "@/types/faceRegistration";
+import type { FaceRegistrationDecisionPayload, FaceRegistrationRequest, PaginatedFaceRegistrations } from "@/types/faceRegistration";
+import RejectReasonModal from "./RejectReasonModal";
 
 function fmtDate(dateStr: string): string {
   if (!dateStr) return "—";
@@ -22,21 +23,31 @@ export default function FaceRegistrationApprovalsTab() {
   const [page, setPage] = useState(1);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+  const [rejecting, setRejecting] = useState<FaceRegistrationRequest | null>(null);
+  const [rejectError, setRejectError] = useState("");
+  const [isAssignedOnly, setIsAssignedOnly] = useState(false);
 
-  const listUrl = `${API.attendance.faceRegistration.pending}?page=${page}&page_size=20`;
+  const listUrl = `${API.attendance.faceRegistration.pending}?page=${page}&page_size=20${isAssignedOnly ? "&assigned_to_me=1" : ""}`;
   const { data, loading, error, status, refetch } = useFetch<PaginatedFaceRegistrations>(listUrl);
   const rows = data?.results ?? [];
 
-  async function handleReview(id: string, decision: FaceRegistrationDecisionPayload["status"]) {
+  function reviewErrorMessage(err: unknown): string {
+    return (err as { response?: { data?: { message?: string } }; message?: string })
+      ?.response?.data?.message ?? (err as { message?: string })?.message ?? "Failed to review request.";
+  }
+
+  async function handleReview(id: string, decision: FaceRegistrationDecisionPayload["status"], notes?: string) {
     setReviewingId(id);
     setRowError(null);
+    setRejectError("");
     try {
-      await clientApi.patch(API.attendance.faceRegistration.review(id), { status: decision });
+      await clientApi.patch(API.attendance.faceRegistration.review(id), notes ? { status: decision, notes } : { status: decision });
+      setRejecting(null);
       refetch();
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } }; message?: string })
-        ?.response?.data?.message ?? (err as { message?: string })?.message ?? "Failed to review request.";
-      setRowError({ id, message });
+      // A rejection keeps its dialog (and the typed reason) open and shows the server's message there.
+      if (decision === "rejected") setRejectError(reviewErrorMessage(err));
+      else setRowError({ id, message: reviewErrorMessage(err) });
     } finally {
       setReviewingId(null);
     }
@@ -55,6 +66,11 @@ export default function FaceRegistrationApprovalsTab() {
   return (
     <>
       {error && status !== 403 && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {error}</div>}
+
+      <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+        <input type="checkbox" checked={isAssignedOnly} onChange={event => { setIsAssignedOnly(event.target.checked); setPage(1); }} />
+        Only employees assigned to me
+      </label>
 
       <div className="card">
         <div className="table-wrap">
@@ -79,6 +95,9 @@ export default function FaceRegistrationApprovalsTab() {
                 <tr key={r.id}>
                   <td>
                     <div style={{ fontWeight: 500 }}>{r.employee_name}</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                      {r.employee_code || "No employee ID"}{r.branch_name ? ` · ${r.branch_name}` : ""}
+                    </div>
                     <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{r.employee_email}</div>
                   </td>
                   <td>
@@ -104,7 +123,7 @@ export default function FaceRegistrationApprovalsTab() {
                             className="btn btn-outline btn-sm"
                             style={{ padding: "3px 10px", fontSize: 11, color: "var(--error)" }}
                             disabled={reviewingId === r.id}
-                            onClick={() => handleReview(r.id, "rejected")}
+                            onClick={() => { setRejectError(""); setRejecting(r); }}
                           >
                             <i className="ti ti-x" /> Reject
                           </button>
@@ -137,6 +156,16 @@ export default function FaceRegistrationApprovalsTab() {
           </div>
         )}
       </div>
+
+      {rejecting && (
+        <RejectReasonModal
+          employeeName={rejecting.employee_name}
+          isSaving={reviewingId === rejecting.id}
+          serverError={rejectError}
+          onSubmit={remarks => handleReview(rejecting.id, "rejected", remarks)}
+          onCancel={() => { setRejecting(null); setRejectError(""); }}
+        />
+      )}
     </>
   );
 }

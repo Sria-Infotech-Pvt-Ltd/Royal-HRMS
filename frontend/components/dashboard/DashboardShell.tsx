@@ -6,7 +6,10 @@ import type { SessionPayload } from "@/lib/session";
 import { clearAuth } from "@/lib/auth";
 import clientApi, { markIntentionalLogout } from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { buildNav, groupNav, isSection, type NavItem } from "@/lib/navConfig";
+import {
+  buildNav, groupNav, HR_DASHBOARD_NAV_ITEM, isSection, profileMenuItems, TEAM_DASHBOARD_NAV_ITEM,
+  withHomeLinks, withTeamLink, workspaceNav, type NavItem,
+} from "@/lib/navConfig";
 import { NotificationBell } from "@/components/NotificationBell";
 import GlobalSearch from "@/components/dashboard/GlobalSearch";
 import DarkModeToggle from "@/components/dashboard/DarkModeToggle";
@@ -16,7 +19,7 @@ import TopNavLinks from "@/components/dashboard/TopNavLinks";
 import ProfileMenu from "@/components/dashboard/ProfileMenu";
 import { useOpenMenu } from "@/hooks/useOpenMenu";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { canOpenTeamDashboard } from "@/lib/dashboardHome";
+import { canOpenTeamDashboard, hasHrDashboardAccess, resolveDashboard } from "@/lib/dashboardHome";
 import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
 import FaceModelPreloader from "@/components/FaceModelPreloader";
 import FaceRegistrationBanner from "@/components/FaceRegistrationBanner";
@@ -61,7 +64,16 @@ export default function DashboardShell({
   // Nested paths (e.g. "/dashboard/settings/audit") match more than one nav
   // item's path prefix (both "audit" and its parent "settings"). Only the
   // item with the longest — i.e. most specific — matching path should light up.
-  const activeNavId = navItems
+  // The role-specific home links are not in the permission-built list above, so they take part in the lookup here.
+  const isSuperuser = session.is_superuser === true;
+  const hasHrDashboard = hasHrDashboardAccess(session);
+  const isTeamManager = canOpenTeamDashboard(session);
+  const activeCandidates = [
+    ...(hasHrDashboard && !isSuperuser ? [HR_DASHBOARD_NAV_ITEM] : []),
+    ...(isTeamManager ? [TEAM_DASHBOARD_NAV_ITEM] : []),
+    ...navItems,
+  ];
+  const activeNavId = activeCandidates
     .filter(item => !item.comingSoon && (pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/"))))
     .sort((a, b) => b.path.length - a.path.length)[0]?.id;
 
@@ -84,13 +96,17 @@ export default function DashboardShell({
   const menu = useOpenMenu(pathname);
   const currentUser = useCurrentUser();
   // Team managers land on their workspace like everyone else; their team dashboard is one click away here.
-  const profileItems: NavItem[] = currentUser && canOpenTeamDashboard(currentUser)
-    ? [
-        ...navGroups.profile.slice(0, 1),
-        { id: "team-dashboard", icon: "ti-users-group", label: "Team Dashboard", path: "/dashboard/team", permission: null },
-        ...navGroups.profile.slice(1),
-      ]
-    : navGroups.profile;
+  const profileItems: NavItem[] = profileMenuItems(navGroups.profile, {
+    homeIsWorkspace: resolveDashboard(session) === "employee",
+    isTeamManager,
+    hasHrDashboard: hasHrDashboardAccess(session),
+  });
+  // The workspace has its own tab bar, so its top bar carries only the modules a person's extra permissions add
+  // (empty for an ordinary employee). Everywhere else the bar is the full permission-filtered navigation.
+  // The workspace has its own tab bar, so its top bar carries only the modules a person's extra permissions add
+  // (empty for an ordinary employee). Everywhere else the bar is the full permission-filtered navigation.
+  const baseBar = isEssPage ? workspaceNav(session.permissions ?? []).bar : navGroups.bar;
+  const topBar = withTeamLink(withHomeLinks(baseBar, { hasHrDashboard, isSuperuser }), isTeamManager, { keepDashboard: isSuperuser });
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -109,9 +125,10 @@ export default function DashboardShell({
           </div>
         </div>
 
-        {/* Page links grouped into dropdowns — hidden on the ESS shell, which has its own tab bar. */}
-        {!isEssPage && <TopNavLinks bar={navGroups.bar} activeNavId={activeNavId} menu={menu} onNavigate={navigate} />}
-        {isEssPage && <div className="flex-1" />}
+        {/* Page links grouped into dropdowns. On the workspace (ESS) only the modules extra permissions add are shown. */}
+        {topBar.length > 0
+          ? <TopNavLinks bar={topBar} activeNavId={activeNavId} menu={menu} onNavigate={navigate} />
+          : <div className="flex-1" />}
 
         {/* Right-side utilities */}
         <div className="navright order-2 md:order-none">

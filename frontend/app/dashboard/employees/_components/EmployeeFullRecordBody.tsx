@@ -16,6 +16,7 @@ import type { EmployeeSalaryConfig } from "@/types/payroll";
 import { SectionCard, Row, ageYears, titleCase, STATUS_CHIP } from "./EmployeeDrawerParts";
 import EmployeeDrawerLeaveCard from "./EmployeeDrawerLeaveCard";
 import EmployeeDrawerActions from "./EmployeeDrawerActions";
+import ApprovalAssignmentsSection from "./ApprovalAssignmentsSection";
 import type { PersonnelActionRequest } from "@/types/personnelAction";
 import EmployeeDrawerAuditTrail, { type AuditTrailRow } from "./EmployeeDrawerAuditTrail";
 import WorkStatusPanel from "@/components/work-status/WorkStatusPanel";
@@ -154,6 +155,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
   const canViewPayrollPerm = usePermission("payroll.view");
   const canViewSensitive   = usePermission("employees.view_sensitive");
   const canViewLeave       = usePermission("leave.view");
+  const canViewApprovers   = usePermission("employees.view");   // HR-only section; the server also checks scope and edit rights
   const canViewPayroll = isAdmin ? canViewPayrollPerm : true;
 
   const hasEmployeeId = !!employee.id;
@@ -266,6 +268,8 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
             valueNode={<><span className={`chip ${STATUS_CHIP[directoryStatus] ?? ""}`}>{directoryStatus}</span>{directoryStatus === "Active" && employee.employmentStatus === "probation" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--muted)" }}>On probation</span>}</>}
           />
         </SectionCard>
+
+        {canViewApprovers && employee.code && <ApprovalAssignmentsSection employeeCode={employee.code} />}
 
         <SectionCard title="Contact & Address">
           <Row label="Work email" value={employee.email} />

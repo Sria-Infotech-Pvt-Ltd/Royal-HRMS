@@ -29,6 +29,8 @@ import HomeTodayPanel from "./HomeTodayPanel";
 import HomeRequestsList from "./HomeRequestsList";
 import HomePayslipsPanel from "./HomePayslipsPanel";
 import HomeProjectsPanel from "./HomeProjectsPanel";
+import ReportingApprovalsCard from "@/components/approvals/ReportingApprovalsCard";
+import EssFaceIdCard from "./EssFaceIdCard";
 import { currentFinancialYearStart } from "@/app/dashboard/my-payslip/_components/types";
 
 interface ApiPayslip {
@@ -63,9 +65,11 @@ export type EssTabId =
 interface Props {
   onNavigate: (tab: EssTabId) => void;
   status: AttendanceStatus | null;
+  /** An admin is looking at someone else's workspace: Face ID is the signed-in person's own, so it is not shown. */
+  isReadOnly?: boolean;
 }
 
-export default function HomeTab({ onNavigate, status }: Props) {
+export default function HomeTab({ onNavigate, status, isReadOnly = false }: Props) {
   const { month, year } = todayMonthYear();
 
   const { data: attStats } = useFetch<AttendanceStats>(`${API.attendance.stats}?month=${month}&year=${year}`);
@@ -161,6 +165,8 @@ export default function HomeTab({ onNavigate, status }: Props) {
     <div>
       <HomeStatTiles tiles={tiles} />
 
+      {!isReadOnly && <EssFaceIdCard />}
+
       {/* Two separate grid rows (not one pair of independently-stacked flex
           columns) so each row's two cards stretch to the SAME height as
           each other — a grid row's default align-items:stretch only works
@@ -171,6 +177,8 @@ export default function HomeTab({ onNavigate, status }: Props) {
         <HomeQuickActions primary={primaryActions} secondary={secondaryActions} />
         <HomeTodayPanel status={status} />
       </div>
+
+      <ReportingApprovalsCard />
 
       <HomeProjectsPanel onViewAll={() => onNavigate("employment")} />
 

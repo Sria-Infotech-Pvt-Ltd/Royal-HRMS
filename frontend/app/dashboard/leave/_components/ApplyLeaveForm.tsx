@@ -17,6 +17,8 @@ import LeaveSubmittedScreen from "./LeaveSubmittedScreen";
 import LeaveSupportingDocument from "./LeaveSupportingDocument";
 import LeaveHandoverFields from "./LeaveHandoverFields";
 import { notifyLeaveChanged } from "@/hooks/useLeaveRefresh";
+import { useMyApprovals } from "@/hooks/useMyApprovals";
+import ApprovalChainPreview, { chainBlocksSubmit } from "@/components/approvals/ApprovalChainPreview";
 
 const DURATION_OPTIONS: { value: DurationKey; label: string }[] = [
   { value: "full_day",       label: "Full day" },
@@ -47,6 +49,9 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const [submitting,    setSubmitting]    = useState(false);
   const [submitted,     setSubmitted]     = useState<LeaveRequest | null>(null);
   const [docFile,       setDocFile]       = useState<File | null>(null);
+  // Who will approve, shown before submitting; gaps need an explicit "submit anyway", and a chain that cannot finish blocks it.
+  const { chain, loading: chainLoading } = useMyApprovals();
+  const [chainAcknowledged, setChainAcknowledged] = useState(false);
 
   const currentYear = getLeaveYear();
   const { data: balances } = useFetch<LeaveBalance[]>(API.leave.balance + `?year=${currentYear}`);
@@ -265,6 +270,8 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
       <LeaveHandoverFields form={form} onChange={setField} />
 
+      <ApprovalChainPreview chain={chain} loading={chainLoading} acknowledged={chainAcknowledged} onAcknowledge={setChainAcknowledged} />
+
       {formError && Object.keys(errors).length === 0 && (
         <div className="alert alert-error mt-4" role="alert"><i className="ti ti-alert-circle" /> {formError}</div>
       )}
@@ -273,7 +280,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
         <p className="text-xs text-[var(--on-variant)]">Submissions are routed for approval and retained in My Requests.</p>
         <div className="flex items-center gap-2.5">
         <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={submitting}>Cancel</button>
-        <button type="button" className="btn btn-filled" onClick={handleSubmit} disabled={submitting || insufficientBalance || !isCurrentTypeAvailable || availableLeaveTypes.length === 0}>
+        <button type="button" className="btn btn-filled" onClick={handleSubmit} disabled={submitting || insufficientBalance || !isCurrentTypeAvailable || availableLeaveTypes.length === 0 || chainBlocksSubmit(chain, chainAcknowledged)}>
           {submitting ? <><i className="ti ti-loader-2 spin" /> Submitting…</> : "Submit request"}
         </button>
         </div>

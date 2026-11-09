@@ -4,19 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useNotifications } from "@/hooks/useNotifications";
-import type { Notification, NotificationModule } from "@/types/notifications";
-
-const MODULE_ROUTES: Record<NotificationModule, string> = {
-  leave:          "/dashboard/leave",
-  attendance:     "/dashboard/my-attendance",
-  regularization: "/dashboard/my-attendance",
-  announcement:   "/dashboard/announcements",
-  holiday:        "/dashboard/attendance",
-  permission:     "/dashboard/leave",
-  promotion:      "/dashboard/profile",
-  confirmation:   "/dashboard/profile",
-  payroll:        "/dashboard/payroll",
-};
+import { notificationRoute } from "@/lib/notificationRoutes";
+import type { Notification } from "@/types/notifications";
 
 function relativeTime(iso: string): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
@@ -72,7 +61,7 @@ export function NotificationBell() {
   async function handleRowClick(n: Notification) {
     setOpen(false);
     if (!n.is_read) await markRead(n.id);
-    router.push(MODULE_ROUTES[n.module] ?? "/dashboard");
+    router.push(notificationRoute(n));
   }
 
   return (

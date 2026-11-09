@@ -7,12 +7,14 @@ import TeamApprovalsSection from "./_components/TeamApprovalsSection";
 import AttendanceApprovalTab from "./_components/AttendanceApprovalTab";
 import FaceRegistrationApprovalsTab from "./_components/FaceRegistrationApprovalsTab";
 import PersonnelActionsTab from "./_components/PersonnelActionsTab";
+import MyApprovalsOverview from "./_components/MyApprovalsOverview";
+import { approvalSectionsFor, type ApprovalSectionKey } from "@/lib/approvalSections";
 
-type Section = "approvals" | "attendance" | "face_registration" | "personnel";
+type Section = ApprovalSectionKey;
 
 export default function ApprovalsPage() {
   const user = useCurrentUser();
-  const [section, setSection] = useState<Section>("approvals");
+  const [section, setSection] = useState<Section>("overview");
   const canApprove      = useAnyPermission("leave.approve", "expenses.approve", "attendance.create", "separation.approve");
   const canApproveFace  = usePermission("facial_recognition.approve");
   // employees.approve = HR step, payroll.edit = Payroll Admin step, employees.raise_action =
@@ -27,12 +29,10 @@ export default function ApprovalsPage() {
     user?.is_superuser === true ||
     hasPayrollView;
 
-  const sections: { key: Section; label: string; icon: string }[] = useMemo(() => [
-    ...(canApprove           ? [{ key: "approvals"         as Section, label: "Team Approvals",      icon: "ti-checks"         }] : []),
-    ...(canApproveAttendance ? [{ key: "attendance"         as Section, label: "Attendance Approval", icon: "ti-calendar-check" }] : []),
-    ...(canSeePersonnel      ? [{ key: "personnel"          as Section, label: "Personnel Actions",   icon: "ti-bolt"           }] : []),
-    ...(canApproveFace       ? [{ key: "face_registration"  as Section, label: "Face Registration",   icon: "ti-face-id"        }] : []),
-  ], [canApprove, canApproveAttendance, canApproveFace, canSeePersonnel]);
+  const sections = useMemo(
+    () => approvalSectionsFor({ canApprove, canApproveAttendance, canSeePersonnel, canApproveFace }),
+    [canApprove, canApproveAttendance, canApproveFace, canSeePersonnel],
+  );
 
   useEffect(() => {
     if (sections.length > 0 && !sections.some(s => s.key === section)) {
@@ -56,6 +56,12 @@ export default function ApprovalsPage() {
         ))}
       </div>
 
+      {section === "overview" && (
+        <MyApprovalsOverview
+          canApprove={canApprove} canApproveAttendance={canApproveAttendance}
+          canSeePersonnel={canSeePersonnel} canApproveFace={canApproveFace} onOpen={setSection}
+        />
+      )}
       {section === "approvals"         && canApprove           && <TeamApprovalsSection />}
       {section === "attendance"        && canApproveAttendance && <div className="settings-card"><AttendanceApprovalTab /></div>}
       {section === "personnel"         && canSeePersonnel      && <PersonnelActionsTab />}

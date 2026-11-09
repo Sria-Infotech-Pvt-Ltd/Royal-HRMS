@@ -103,12 +103,16 @@ export const MAX_PLAUSIBLE_AGE_YEARS = 100;
 export const MIN_NATIONAL_PHONE_DIGITS = 7;
 export const MAX_NATIONAL_PHONE_DIGITS = 10;
 
+/** A duplicate email/mobile found while saving a draft. The draft is still saved; an "error" one stops the wizard moving on. */
+export interface HireDraftWarning { field: string; severity: "error" | "warning"; message: string }
+
 export interface HireActionData {
   id: string; reason: string; reason_display: string; effective_from: string; position: string;
   position_title: string; org_unit_name: string; grade: string;
   employment_type: string; reserved_employee_id: string; status: string;
   draft_data: Record<string, unknown>;
   photo_url: string | null;
+  warnings?: HireDraftWarning[];
 }
 
 export const STEPS: HireStepDef[] = [

@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 export const STATUS_CHIP: Record<string, string> = {
   Active: "ok",
   Onboarding: "warn",
+  "Awaiting activation": "warn",
   "Notice Period": "crit",
   Exited: "",
 };

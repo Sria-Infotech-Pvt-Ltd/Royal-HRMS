@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
-import clientApi from "@/lib/clientApi";
+import clientApi, { isSessionKnownExpired, onSessionExpired } from "@/lib/clientApi";
+import { pollWhileSessionLive } from "@/lib/pollWhileSessionLive";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
 import { API_URL, API_BASE } from "@/lib/config";
@@ -104,11 +105,12 @@ export function useNotifications() {
     }
   }, [showToast]);
 
-  useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+  // Poll the unread count only while the session is alive: once a refresh has failed the app is heading to /login, and
+  // further polls would just be 401s (see lib/pollWhileSessionLive.ts).
+  useEffect(
+    () => pollWhileSessionLive(fetchUnreadCount, POLL_INTERVAL_MS, { isExpired: isSessionKnownExpired, onExpired: onSessionExpired }),
+    [fetchUnreadCount],
+  );
 
   // ─── Live updates over WebSocket ───────────────────────────────────────────
   // The socket is additive: on top of the poll above, it pushes new

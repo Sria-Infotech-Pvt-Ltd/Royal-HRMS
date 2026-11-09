@@ -79,7 +79,7 @@ export default function HrConsole({ firstName }: Props) {
               border: `1px solid ${isClockedIn ? "rgba(74,222,128,0.3)" : "rgba(248,113,113,0.3)"}`,
             }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: isClockedIn ? "#4ade80" : "#f87171", flexShrink: 0 }} />
-              {isClockedIn ? "Clocked In" : "Not Clocked In"}
+              {isClockedIn ? "Punched In" : "Not Punched In"}
             </span>
           )}
           <ClockInButton onPunchSuccess={refetch} />
