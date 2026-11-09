@@ -14,6 +14,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from apps.accounts.tests_employee_scope import make_branch
 from apps.accounts.factories import make_user
 from apps.attendance.models import AttendanceOvertime
 from apps.attendance.models_device import AttendanceDevice, DevicePunchLog
@@ -72,8 +73,10 @@ class GeofenceV2ParityTests(TestCase):
 
 class DevicePushTests(TestCase):
     def setUp(self):
-        self.device = AttendanceDevice.objects.create(code='DEV1', name='Lobby Biometric')
-        self.employee = make_user('devicepushemp@test.com', password='TestPass123!')
+        # A device serves only the employees of its own branch (and none if it has no branch).
+        branch = make_branch('P6B-1', 'Phase 6B Branch One')
+        self.device = AttendanceDevice.objects.create(code='DEV1', name='Lobby Biometric', branch=branch)
+        self.employee = make_user('devicepushemp@test.com', password='TestPass123!', branch=branch.branch_name)
         self.employee.employee_id = 'EMP77001'
         self.employee.save(update_fields=['employee_id'])
 
@@ -117,8 +120,9 @@ class DevicePushTests(TestCase):
 
 class DevicePushEndpointTests(TestCase):
     def setUp(self):
-        self.device = AttendanceDevice.objects.create(code='DEV2', name='Gate Kiosk')
-        self.employee = make_user('devicepushapi@test.com', password='TestPass123!')
+        branch = make_branch('P6B-2', 'Phase 6B Branch Two')
+        self.device = AttendanceDevice.objects.create(code='DEV2', name='Gate Kiosk', branch=branch)
+        self.employee = make_user('devicepushapi@test.com', password='TestPass123!', branch=branch.branch_name)
         self.employee.employee_id = 'EMP77002'
         self.employee.save(update_fields=['employee_id'])
         self.client = APIClient()

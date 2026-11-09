@@ -58,8 +58,16 @@ def _maybe_activate(user: User) -> bool:
         return False
     if not (_has_event(user, OnboardingEvent.PASSWORD_SET) and _has_event(user, OnboardingEvent.FIRST_LOGIN)):
         return False
+    now = timezone.now()
     User.objects.filter(pk=user.pk).update(activation_pending=False)
+    # "Active" needs account_activated_at as well as a cleared pending flag. The invite-link and forced-change routes stamp
+    # it when the password is set; a new account that set its password through a reset token did not, so it stayed
+    # "Awaiting activation" for good. Stamp it here, where activation completes. Only ever filled when empty, and this
+    # function returns early unless activation was pending, so an already-active employee's date is never touched.
+    User.objects.filter(pk=user.pk, account_activated_at__isnull=True).update(account_activated_at=now)
     user.activation_pending = False
+    if user.account_activated_at is None:
+        user.account_activated_at = now
     record_event(user, OnboardingEvent.ACTIVATED, detail='Password set and first login completed.')
     return True
 

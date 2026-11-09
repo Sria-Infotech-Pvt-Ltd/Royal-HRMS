@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.accounts.models import AuditLog, Permission, Position, PositionPermission
+from apps.accounts.services_access_guards import seat_permission_refusal
 from apps.accounts.services_sessions import current_holder_ids, force_relogin
 from core.permissions import has_perm as _has_perm
 from core.responses import error, get_client_ip, success
@@ -48,6 +49,9 @@ class PositionPermissionsView(APIView):
         position = self._position(pk)
         if not position:
             return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        refusal = seat_permission_refusal(request.user, [position])
+        if refusal:
+            return error(refusal, http_status=status.HTTP_403_FORBIDDEN)
 
         codenames = request.data.get('codenames')
         if not isinstance(codenames, list) or not all(isinstance(item, str) for item in codenames):

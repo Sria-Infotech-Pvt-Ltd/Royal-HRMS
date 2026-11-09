@@ -36,6 +36,9 @@ from ..serializers import (
 
 logger = logging.getLogger(__name__)
 
+from apps.recruitment.services_candidate_onboarding import close_candidate_access
+from apps.recruitment.services_interview_feedback import selection_refusal
+from apps.recruitment.services_status_flow import transition_refusal
 from apps.recruitment.views.shared import *  # noqa: F401,F403
 
 
@@ -93,12 +96,22 @@ class CandidateStatusView(APIView):
 
         if candidate.status == Candidate.STATUS_CONVERTED:
             return error('Cannot change status of a converted candidate.')
+        refusal = transition_refusal(candidate, new_status)
+        if refusal:
+            return error(refusal)
+        if new_status == Candidate.STATUS_SELECTED:
+            missing_feedback = selection_refusal(candidate)
+            if missing_feedback:
+                return error(missing_feedback)
 
         remarks    = request.data.get('remarks', '')
         actor_name = request.user.full_name or request.user.email
 
         candidate.status = new_status
         candidate.save(update_fields=['status', 'updated_at'])
+
+        if new_status == Candidate.STATUS_REJECTED:
+            close_candidate_access(candidate)
 
         CandidateLog.objects.create(
             candidate=candidate,

@@ -27,6 +27,7 @@ NOTIFICATION_TYPE_CHOICES = [
     ('employee_confirmed',     'Employee Confirmed'),
     ('salary_updated',         'Salary Updated'),
     ('project_sync_alert',     'Project Sync Alert'),
+    ('face_registration_status', 'Face ID Registration Status'),
 ]
 
 MODULE_CHOICES = [
@@ -45,6 +46,7 @@ MODULE_CHOICES = [
     ('confirmation',   'Confirmation'),
     ('payroll',        'Payroll'),
     ('system',         'System'),
+    ('facial_recognition', 'Facial Recognition'),
 ]
 
 

@@ -20,7 +20,7 @@ interface FaceRegistrationModalProps {
 }
 
 export default function FaceRegistrationModal({ onClose, mode = "register" }: FaceRegistrationModalProps) {
-  const { phase, errorMessage, submittedRequest, videoRef, canvasRef, start, retry, stop } = useFaceRegistrationCapture();
+  const { phase, errorMessage, submittedRequest, modelProgress, liveHint, livenessProgress, videoRef, canvasRef, start, retry, stop } = useFaceRegistrationCapture();
   // Gates everything below — the camera never opens (start() is never
   // called) until this is true. Reset per modal open (no persisted "don't
   // ask again"), since mode="update" is a materially new capture, not a
@@ -43,8 +43,8 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
   const headerTitle = mode === "update" ? "Update My Face" : "Register My Face";
   const idleTitle   = mode === "update" ? "Update your face ID" : "Register your face";
   const idleMessage = mode === "update"
-    ? "We'll ask for camera access, run a quick liveness check to confirm it's really you, then send your updated face ID for HR approval. No photo or video is ever sent — only a numeric face signature."
-    : "We'll ask for camera access, run a quick liveness check to confirm it's really you, then send your face ID for HR approval. No photo or video is ever sent — only a numeric face signature.";
+    ? "We'll ask for camera access, run a quick liveness check (a blink and a slight head turn) to confirm it's really you, then send your updated face ID for HR approval. No photo or video is ever sent — only a numeric face signature."
+    : "We'll ask for camera access, run a quick liveness check (a blink and a slight head turn) to confirm it's really you, then send your face ID for HR approval. No photo or video is ever sent — only a numeric face signature.";
 
   const overlay = (
     <div
@@ -83,7 +83,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
           {consentAcknowledged && (
           <>
           <div style={{ display: showCameraPreview ? "block" : "none" }}>
-            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} />
+            <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} hint={liveHint} progress={livenessProgress} />
           </div>
 
           {phase === "idle" && (
@@ -98,7 +98,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
           {phase === "loading_models" && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
-              title="Preparing face recognition" message="Loading models…"
+              title="Preparing face recognition" message="Downloading face models (first time only)…" progress={modelProgress}
             />
           )}
 
@@ -123,7 +123,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
             <FaceStatusPanel
               icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
               title="Couldn't confirm you're live"
-              message="We didn't detect a natural blink or head turn in time. Make sure you're well-lit and centered, then try again."
+              message="Registration needs both a natural blink and a slight head turn, and we didn't see both in time. Make sure you're well-lit and centered, then try again."
               action={{ label: "Try Again", onClick: retry }}
               secondaryAction={{ label: "Cancel", onClick: handleClose }}
             />

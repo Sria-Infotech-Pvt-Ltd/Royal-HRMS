@@ -10,6 +10,8 @@ import {
 import type { EmployeeStatCard } from "@/app/dashboard/employees/_components/EmployeeStatCards";
 import { downloadCsv, employeesToCsv } from "@/lib/exportEmployeesCsv";
 import { confirmDialog } from "@/components/DialogProvider";
+import { filterQueryParams } from "@/lib/employeeLifecycle";
+import type { EmploymentStageCounts } from "@/types/employeeLifecycle";
 
 // total == active + onboarding + notice_period; probation is a subset of active (see backend services_headcount).
 interface EmployeeStats {
@@ -17,6 +19,8 @@ interface EmployeeStats {
   departments: number;
   branch_names: string[]; department_names: string[];
   new_this_month: number; needs_reporting_manager: number;
+  /** Employment Stage counts (active accounts); beside, not instead of, the buckets above. */
+  stages?: EmploymentStageCounts;
 }
 
 const EMPTY_STATS: EmployeeStats = {
@@ -67,7 +71,7 @@ export function useEmployees() {
       if (q)                  params.search     = q;
       if (effBranch !== "all") params.branch     = effBranch;
       if (effDept   !== "all") params.department = effDept;
-      if (effStatus !== "all") params.status     = effStatus;
+      Object.assign(params, filterQueryParams(effStatus));
       const { data } = await clientApi.get<{
         data: { results: ApiEmployee[]; count: number; page: number; total_pages: number };
       }>(API.employees.list, { params });
@@ -103,7 +107,7 @@ export function useEmployees() {
       const params: Record<string, string> = {};
       if (br !== "all") params.branch = br;
       if (dp !== "all") params.department = dp;
-      if (st !== "all") params.status = st;
+      Object.assign(params, filterQueryParams(st, true));
       const { data } = await clientApi.get<{ data: EmployeeStats }>(
         API.employees.stats, { params },
       );
@@ -177,7 +181,7 @@ export function useEmployees() {
       if (search)          params.search     = search;
       if (branch !== "all") params.branch     = branch;
       if (dept   !== "all") params.department = dept;
-      if (status !== "all") params.status     = status;
+      Object.assign(params, filterQueryParams(status));
       const { data } = await clientApi.get<{ data: { results: ApiEmployee[] } }>(API.employees.list, { params });
       const rows = data.data?.results ?? [];
       downloadCsv(employeesToCsv(rows), `employee-directory-${new Date().toISOString().slice(0, 10)}.csv`);
@@ -250,6 +254,8 @@ export function useEmployees() {
   return {
     isAdmin, userBranch,
     employees, loading, fetchError, total: empStats.total,
+    /** Employees with no joining date (Employment Stage Unknown): HR is asked to correct these. */
+    missingJoiningDates: empStats.stages?.unknown ?? 0,
     search, setSearch: handleSearch, submitSearch,
     branch, setBranch: handleBranchChange,
     dept, setDept,

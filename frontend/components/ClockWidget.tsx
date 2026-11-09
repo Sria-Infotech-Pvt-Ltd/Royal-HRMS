@@ -116,7 +116,7 @@ export default function ClockWidget() {
                 display: "inline-block",
                 flexShrink: 0,
               }} />
-              {isClockedIn ? "Clocked In" : "Clocked Out"}
+              {isClockedIn ? "Punched In" : "Punched Out"}
             </div>
           </div>
         </div>

@@ -35,7 +35,7 @@ export default function HrAttendanceCard() {
             color:      isClockedIn ? "#16a34a"               : "#dc2626",
           }}>
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: isClockedIn ? "#16a34a" : "#dc2626", flexShrink: 0 }} />
-            {isClockedIn ? "Clocked In" : "Clocked Out"}
+            {isClockedIn ? "Punched In" : "Punched Out"}
           </span>
         )}
       </div>
@@ -47,7 +47,7 @@ export default function HrAttendanceCard() {
       ) : !data || data.punches.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center" }}>
           <i className="ti ti-clock-off" style={{ fontSize: 28, color: "var(--on-variant)", opacity: 0.4, display: "block", marginBottom: 8 }} />
-          <div style={{ fontSize: 13, color: "var(--on-variant)" }}>Not clocked in yet</div>
+          <div style={{ fontSize: 13, color: "var(--on-variant)" }}>Not punched in yet</div>
         </div>
       ) : (
         <div style={{ padding: "12px 20px 16px" }}>

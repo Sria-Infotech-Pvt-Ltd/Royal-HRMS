@@ -145,7 +145,7 @@ class CandidateListCreateView(APIView):
                 branch=candidate.branch.branch_name if candidate.branch else '',
                 ip_address=get_client_ip(request),
             )
-        _fire_interview_date_emails_if_needed(candidate, old_interview_date=None)
+        _fire_interview_date_emails_if_needed(candidate, old_interview_date=None, actor=request.user)
         logger.info('Candidate %s created by %s', candidate.id, request.user.email)
         return success('Candidate added to interview list.', data=CandidateListSerializer(candidate).data,
                   http_status=status.HTTP_201_CREATED)
@@ -256,6 +256,7 @@ class CandidateDetailView(APIView):
         old_interview_date = candidate.interview_date
         old_interview_time = candidate.interview_time
         old_meeting_link   = candidate.meeting_link
+        old_interviewer_id = candidate.interviewer_id
         try:
             updated = serializer.save()
         except Exception as exc:
@@ -270,7 +271,8 @@ class CandidateDetailView(APIView):
             branch=updated.branch.branch_name if updated.branch else '',
             ip_address=get_client_ip(request),
         )
-        _fire_interview_date_emails_if_needed(updated, old_interview_date, old_interview_time, old_meeting_link)
+        _fire_interview_date_emails_if_needed(updated, old_interview_date, old_interview_time, old_meeting_link,
+                                              actor=request.user, old_interviewer_id=old_interviewer_id)
         logger.info('Candidate %s fully updated by %s', pk, request.user.email)
         return success('Candidate updated.', data=CandidateDetailSerializer(updated).data)
 
@@ -296,6 +298,7 @@ class CandidateDetailView(APIView):
         old_interview_date = candidate.interview_date
         old_interview_time = candidate.interview_time
         old_meeting_link   = candidate.meeting_link
+        old_interviewer_id = candidate.interviewer_id
         try:
             updated = serializer.save()
         except Exception as exc:
@@ -310,7 +313,8 @@ class CandidateDetailView(APIView):
             branch=updated.branch.branch_name if updated.branch else '',
             ip_address=get_client_ip(request),
         )
-        _fire_interview_date_emails_if_needed(updated, old_interview_date, old_interview_time, old_meeting_link)
+        _fire_interview_date_emails_if_needed(updated, old_interview_date, old_interview_time, old_meeting_link,
+                                              actor=request.user, old_interviewer_id=old_interviewer_id)
         logger.info('Candidate %s partially updated by %s', pk, request.user.email)
         return success('Candidate updated.', data=CandidateDetailSerializer(updated).data)
 

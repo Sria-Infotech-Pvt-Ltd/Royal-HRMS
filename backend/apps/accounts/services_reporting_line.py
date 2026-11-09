@@ -30,13 +30,39 @@ def _usable(candidate: User | None, employee: User) -> bool:
     return candidate is not None and candidate.is_active and candidate.pk != employee.pk
 
 
-def resolve_manager_with_source(employee: User) -> ManagerResolution:
+def _chain_from_placement(placement, page_cache: dict) -> list:
+    """The org-unit chain (own unit first, root last) of an already-loaded placement, using one parent map per page."""
+    from django.utils import timezone
+
+    from apps.accounts.models import OrgUnit
+
+    if placement.effective_from > timezone.localdate():
+        return []  # not in force yet, so the employee holds no seat today
+    parents = page_cache.get('parents')
+    if parents is None:
+        parents = page_cache['parents'] = dict(OrgUnit.objects.values_list('id', 'parent_id'))
+    chain, seen, unit_id = [], set(), placement.position.org_unit_id
+    while unit_id is not None and unit_id not in seen:
+        chain.append(unit_id)
+        seen.add(unit_id)
+        unit_id = parents.get(unit_id)
+    return chain
+
+
+def resolve_manager_with_source(employee: User, *, placements: list | None = None, page_cache: dict | None = None) -> ManagerResolution:
+    """`placements` (the employee's placements in force today, possibly empty) and `page_cache` are optional: the employee
+    directory passes what it already loaded and a dict shared by the whole page, so resolving the org-chart manager costs one
+    query per org unit instead of several per employee. Without them the original per-employee queries run."""
     assigned = getattr(employee, 'reporting_manager', None)
     if _usable(assigned, employee):
         return ManagerResolution(assigned, SOURCE_ASSIGNED)
 
     from apps.accounts.services_approval import resolve_employee_org_unit_chief
-    chief = resolve_employee_org_unit_chief(employee)
+    if placements is not None and page_cache is not None:
+        chain = _chain_from_placement(placements[0], page_cache) if placements else []
+        chief = resolve_employee_org_unit_chief(employee, chain=chain, chief_cache=page_cache.setdefault('chiefs', {}))
+    else:
+        chief = resolve_employee_org_unit_chief(employee)
     if _usable(chief, employee):
         return ManagerResolution(chief, SOURCE_ORG_CHART)
     return ManagerResolution(None, SOURCE_NONE)

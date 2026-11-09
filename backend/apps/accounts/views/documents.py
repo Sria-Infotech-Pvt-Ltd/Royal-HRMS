@@ -39,6 +39,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from core.file_validation import validate_file_content as _validate_file_content
@@ -121,7 +122,7 @@ from apps.accounts.views.shared import *  # noqa: F401,F403
 
 
 class DocumentListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         qs = (
@@ -215,7 +216,7 @@ class DocumentListCreateView(APIView):
 
 
 class DocumentDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get_permissions(self):
         # Download requests authenticate via a short-lived URL token — no JWT needed.
@@ -409,7 +410,7 @@ class DocumentDetailView(APIView):
 
 
 class DocumentStatsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         rows = (

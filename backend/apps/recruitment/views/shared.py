@@ -37,6 +37,9 @@ from ..serializers import (
 
 logger = logging.getLogger(__name__)
 
+# Standard 403 message; the sibling view modules receive it through `from shared import *` (see __all__).
+_DENIED = 'You do not have permission to perform this action.'
+
 
 def _can_access_candidate(user, candidate) -> bool:
     """
@@ -115,6 +118,8 @@ def _send_candidate_email(candidate, template_slug, actor, extra_context=None):
             context=context,
             module='recruitment',
             triggered_by=actor,
+            reply_to=(actor.email or None) if actor else None,
+            hr_contact=((actor.full_name or actor.email), actor.email) if actor and actor.email else None,
         )
         sent_status = CandidateEmail.STATUS_SENT
         logger.info('Sent %s email to %s for candidate %s', template_slug, candidate.email, candidate.id)
@@ -132,7 +137,7 @@ def _send_candidate_email(candidate, template_slug, actor, extra_context=None):
     return sent_status
 
 
-def _send_referral_email(candidate, template_slug, recipient_email, context, extra_attachments=None):
+def _send_referral_email(candidate, template_slug, recipient_email, context, extra_attachments=None, actor=None):
     """Send one referral-flow email and write CandidateEmail + CandidateLog records."""
     sent_status = CandidateEmail.STATUS_FAILED
     try:
@@ -142,6 +147,8 @@ def _send_referral_email(candidate, template_slug, recipient_email, context, ext
             context=context,
             extra_attachments=extra_attachments,
             module='recruitment',
+            reply_to=(actor.email or None) if actor else None,
+            hr_contact=((actor.full_name or actor.email), actor.email) if actor and actor.email else None,
         )
         sent_status = CandidateEmail.STATUS_SENT
         logger.info('Sent %s to %s for candidate %s', template_slug, recipient_email, candidate.id)
@@ -199,7 +206,7 @@ def _send_referral_submission_emails(candidate):
     )
 
 
-def _send_interview_scheduled_emails(candidate):
+def _send_interview_scheduled_emails(candidate, actor=None):
     """Background: notify referred candidate + referrer when interview_date is first set."""
     context = {**universal_context(), **candidate_context(candidate)}
     referrer     = candidate.referral_by
@@ -213,6 +220,7 @@ def _send_interview_scheduled_emails(candidate):
         recipient_email=candidate.email,
         context=context,
         extra_attachments=[ics] if ics else None,
+        actor=actor,
     )
 
     # Email B — to the referring employee (no calendar invite — it's not their interview)
@@ -222,10 +230,12 @@ def _send_interview_scheduled_emails(candidate):
             template_slug='referral_interview_scheduled_referrer',
             recipient_email=referrer.email,
             context={**context, 'referrer_name': referrer_name},
+            actor=actor,
         )
+    _send_interviewer_email(candidate, actor)
 
 
-def _send_interview_scheduled_email_general(candidate):
+def _send_interview_scheduled_email_general(candidate, actor=None):
     """Background: notify a non-referred candidate when their interview date is first set."""
     context = {**universal_context(), **candidate_context(candidate)}
     ics = _build_interview_ics(candidate)
@@ -236,6 +246,21 @@ def _send_interview_scheduled_email_general(candidate):
         recipient_email=candidate.email,
         context=context,
         extra_attachments=[ics] if ics else None,
+        actor=actor,
+    )
+    _send_interviewer_email(candidate, actor)
+
+
+def _send_interviewer_email(candidate, actor=None):
+    """Tell the assigned interviewer about the interview, with the calendar invite and where to submit their feedback."""
+    interviewer = candidate.interviewer
+    if interviewer is None or not interviewer.email or not interviewer.is_active:
+        return
+    context = {**universal_context(), **candidate_context(candidate), 'interviewer_name': interviewer.full_name or interviewer.email}
+    ics = _build_interview_ics(candidate)
+    _send_referral_email(
+        candidate=candidate, template_slug='interview_scheduled_interviewer', recipient_email=interviewer.email,
+        context=context, extra_attachments=[ics] if ics else None, actor=actor,
     )
 
 
@@ -313,7 +338,8 @@ def _advance_status_on_interview_scheduled(candidate):
         candidate.save(update_fields=['status'])
 
 
-def _fire_interview_date_emails_if_needed(candidate, old_interview_date, old_interview_time=None, old_meeting_link=None):
+def _fire_interview_date_emails_if_needed(candidate, old_interview_date, old_interview_time=None, old_meeting_link=None,
+                                          actor=None, old_interviewer_id=None):
     """
     Fire interview scheduled emails when interview_date, interview_time, or
     meeting_link changes — a candidate needs to be re-notified if the time
@@ -322,24 +348,27 @@ def _fire_interview_date_emails_if_needed(candidate, old_interview_date, old_int
     """
     if candidate.interview_date is None:
         return
+    # A newly assigned interviewer must hear about an interview that is already scheduled, even if nothing else moved.
+    interviewer_changed = old_interviewer_id is not None and old_interviewer_id != candidate.interviewer_id
     unchanged = (
         old_interview_date == candidate.interview_date
         and old_interview_time == candidate.interview_time
         and old_meeting_link == candidate.meeting_link
+        and not interviewer_changed
     )
     if unchanged:
         return
 
     from apps.recruitment.tasks import send_interview_scheduled_emails_task
 
-    def _dispatch(candidate_id=candidate.pk):
+    def _dispatch(candidate_id=candidate.pk, actor_id=(actor.pk if actor else None)):
         try:
             # retry=False + ignore_result=True — see the referral-submission
             # dispatch above for why: apply_async() otherwise subscribes to
             # a Redis pub/sub result channel nothing here reads, retrying up
             # to 20 times against the result backend if Redis is unreachable.
             send_interview_scheduled_emails_task.apply_async(
-                args=[candidate_id], retry=False, ignore_result=True,
+                args=[candidate_id, actor_id], retry=False, ignore_result=True,
             )
         except Exception as exc:
             logger.error(
@@ -483,6 +512,7 @@ def _parse_xlsx_rows(file) -> tuple:
 
 
 __all__ = [
+    '_DENIED',
     '_IMPORT_COL_MAP',
     '_can_access_candidate',
     '_scoped_candidate_branch',

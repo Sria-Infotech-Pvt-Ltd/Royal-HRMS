@@ -123,7 +123,11 @@ _STT_TIMEOUT_SECONDS = 10
 # TTS_MAX_TEXT_LENGTH in practice) synthesizes fast — sized between the two
 # above, not given chat's 20s headroom since there's no hidden-reasoning-
 # token failure mode here to protect against.
-_TTS_TIMEOUT_SECONDS = 15
+# Trimmed from 15s x 3 attempts to 8s x 2 (approved for Aira, Phase 4B): the whole app shares one ASGI process and one
+# thread pool, so a slow-but-responding (retryable) TTS call used to hold a slot for up to 46.5s (15+0.5+15+1.0+15); the new
+# worst case is 16.5s (8+0.5+8) while still retrying once on a genuine transient blip. Deliberately NOT applied to the chat
+# or STT timeouts above (see their own comments).
+_TTS_TIMEOUT_SECONDS = 8
 
 # Phase 5 retry/backoff for text_to_speech(). Sarvam's own docs recommend
 # retrying 429/500/503-class responses with backoff; this client could not
@@ -136,8 +140,8 @@ _TTS_TIMEOUT_SECONDS = 15
 # branches in text_to_speech() below): none of those are made more likely to
 # succeed by trying again, and retrying a hung request would only multiply
 # _TTS_TIMEOUT_SECONDS' already-real wait per extra attempt.
-_TTS_MAX_ATTEMPTS = 3
-_TTS_RETRY_BACKOFF_SECONDS = (0.5, 1.0)  # before attempt 2, then before attempt 3
+_TTS_MAX_ATTEMPTS = 2
+_TTS_RETRY_BACKOFF_SECONDS = (0.5,)  # before attempt 2
 _TTS_RETRYABLE_STATUS_CODES = frozenset({429, 500, 503})
 
 

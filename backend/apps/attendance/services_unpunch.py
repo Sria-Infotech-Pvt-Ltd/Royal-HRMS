@@ -98,8 +98,9 @@ def detect_and_mark_unpunches(
             'reason': f'shift_not_ended (deadline={deadline.strftime("%H:%M")})',
         }
 
-    # Onboarding employees (not yet activated) have no attendance to auto-punch-out — see User.onboarded_q().
-    employee_qs = User.objects.filter(is_active=True).filter(User.onboarded_q())
+    # Whoever was expected to attend on target_date (joined, not past an approved last day), whatever their onboarding state.
+    from apps.accounts.services_lifecycle_status import attendance_eligible_q
+    employee_qs = User.objects.filter(attendance_eligible_q(as_of=target_date))
     if branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:

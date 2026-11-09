@@ -91,6 +91,14 @@ class FaceRegistrationDecisionSerializer(serializers.Serializer):
     ])
     notes  = serializers.CharField(max_length=1000, required=False, allow_blank=True, default='')
 
+    def validate(self, attrs):
+        # An employee is told why a rejection happened (in-app and by email); "no reason" is not an answer. Approving
+        # needs no remarks.
+        attrs['notes'] = (attrs.get('notes') or '').strip()
+        if attrs['status'] == FaceRegistrationRequest.STATUS_REJECTED and not attrs['notes']:
+            raise serializers.ValidationError({'notes': 'Please give a reason for rejecting this Face ID registration.'})
+        return attrs
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Read serializers
@@ -104,12 +112,14 @@ class FaceRegistrationReadSerializer(serializers.ModelSerializer):
     """
     employee_name    = serializers.SerializerMethodField()
     employee_email   = serializers.SerializerMethodField()
+    employee_code    = serializers.SerializerMethodField()
+    branch_name      = serializers.SerializerMethodField()
     approved_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model  = FaceRegistrationRequest
         fields = [
-            'id', 'employee_name', 'employee_email',
+            'id', 'employee_name', 'employee_email', 'employee_code', 'branch_name',
             'liveness_passed', 'liveness_score', 'embedding_model_version',
             'capture_frame_count', 'capture_variance',
             'status', 'approved_by_name', 'approved_at', 'notes', 'created_at',
@@ -120,6 +130,14 @@ class FaceRegistrationReadSerializer(serializers.ModelSerializer):
 
     def get_employee_email(self, obj: FaceRegistrationRequest) -> str:
         return obj.employee.email if obj.employee_id else ''
+
+    def get_employee_code(self, obj: FaceRegistrationRequest) -> str:
+        return obj.employee.employee_id if obj.employee_id else ''
+
+    def get_branch_name(self, obj: FaceRegistrationRequest) -> str:
+        if obj.branch_id:
+            return obj.branch.branch_name
+        return (obj.employee.branch or '') if obj.employee_id else ''
 
     def get_approved_by_name(self, obj: FaceRegistrationRequest) -> str:
         return obj.approved_by.full_name if obj.approved_by_id else ''

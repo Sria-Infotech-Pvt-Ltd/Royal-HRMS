@@ -3,6 +3,7 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
@@ -24,7 +25,7 @@ class HRHelpRequestListCreateView(APIView):
     their own requests; hr_help.respond holders see everyone's (optionally
     filtered by status), mirroring ExpenseListCreateView's own
     submitter-vs-approver split."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         can_respond = _has_perm(request.user, 'hr_help.respond')
@@ -71,7 +72,7 @@ class HRHelpRequestListCreateView(APIView):
 class HRHelpRequestDetailView(APIView):
     """GET (submitter or hr_help.respond) / PATCH (hr_help.respond only —
     status, response, assignment) /hr-help/requests/<id>/."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_request(self, pk, user):
         try:

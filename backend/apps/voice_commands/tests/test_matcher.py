@@ -87,6 +87,67 @@ class MatchIntentTests(SimpleTestCase):
         self.assertNotEqual(result.intent, 'raise_payslip_query')
         self.assertGreaterEqual(result.confidence, 80)
 
+    def test_i_want_to_cancel_my_leave_matches_confidently(self):
+        """
+        Regression guard: "i want to cancel my leave" scored only 76.92
+        against cancel_leave's closest phrase ("i'd like to cancel my
+        leave") — below DEFAULT_CONFIDENCE_THRESHOLD (80), landing in the
+        clarification band instead of matching directly. cancel_leave had
+        every "i'd like to"/"i need to"/"please"/"can you" framing but no
+        "i want to" one. Confirmed via direct rapidfuzz scoring, not a
+        matcher bug.
+        """
+        result = match_intent(normalize_transcript('i want to cancel my leave'))
+        self.assertEqual(result.intent, 'cancel_leave')
+        self.assertGreaterEqual(result.confidence, DEFAULT_CONFIDENCE_THRESHOLD)
+
+    def test_go_ahead_and_approve_the_pending_leave_request_matches_confidently(self):
+        """
+        Regression guard: "go ahead and approve the pending leave request
+        for <name>" scored only 75.00 against approve_leave's closest phrase
+        ("go ahead and approve the leave") once the name span was stripped —
+        below threshold. approve_leave's only "go ahead" variant was the
+        short form; there was no variant combining it with "leave request"/
+        "pending" framing. Confirmed via direct rapidfuzz scoring.
+        """
+        result = match_intent(normalize_transcript('go ahead and approve the pending leave request'))
+        self.assertEqual(result.intent, 'approve_leave')
+        self.assertGreaterEqual(result.confidence, DEFAULT_CONFIDENCE_THRESHOLD)
+
+    def test_approve_the_leave_request_pending_for_matches_confidently(self):
+        """
+        This phrasing already cleared DEFAULT_CONFIDENCE_THRESHOLD before
+        (80.65, only 0.65 points above it) — a fragile pass, not a gap.
+        "approve the pending leave request" (added alongside the "go ahead"
+        fix above) now anchors it with real margin instead.
+        """
+        result = match_intent(normalize_transcript('approve the leave request pending for'))
+        self.assertEqual(result.intent, 'approve_leave')
+        self.assertGreaterEqual(result.confidence, DEFAULT_CONFIDENCE_THRESHOLD)
+
+
+class PayrollAnalyticsIntentMatchTests(SimpleTestCase):
+    """New intents (Phase 5) — voice front doors for payroll cost analytics."""
+
+    def test_matches_check_pending_payroll_cycles(self):
+        result = match_intent(normalize_transcript('what payroll cycles are pending'))
+        self.assertEqual(result.intent, 'check_pending_payroll_cycles')
+        self.assertGreaterEqual(result.confidence, DEFAULT_CONFIDENCE_THRESHOLD)
+
+    def test_matches_check_payroll_cost_summary(self):
+        result = match_intent(normalize_transcript('what is our payroll cost'))
+        self.assertEqual(result.intent, 'check_payroll_cost_summary')
+        self.assertGreaterEqual(result.confidence, DEFAULT_CONFIDENCE_THRESHOLD)
+
+    def test_matches_check_branch_payroll_breakdown(self):
+        result = match_intent(normalize_transcript('show branch payroll breakdown'))
+        self.assertEqual(result.intent, 'check_branch_payroll_breakdown')
+        self.assertGreaterEqual(result.confidence, DEFAULT_CONFIDENCE_THRESHOLD)
+
+    def test_cost_summary_not_confused_with_my_payslip(self):
+        result = match_intent(normalize_transcript('what is our payroll cost'))
+        self.assertNotEqual(result.intent, 'check_my_payslip')
+
     def test_matches_i_wanted_toclockout_myself_as_clock_out(self):
         """Symmetric case of the toclockin fix above."""
         result = match_intent(normalize_transcript('i wanted toclockout myself'))
@@ -428,6 +489,34 @@ class MatchIntentTests(SimpleTestCase):
     def test_check_attendance_stats_not_confused_with_check_team_attendance(self):
         result = match_intent(normalize_transcript('show attendance dashboard'))
         self.assertEqual(result.intent, 'check_team_attendance')
+
+    def test_matches_whats_my_teams_attendance_today_as_check_team_attendance(self):
+        """
+        Regression guard for a reported bug (2026-09-23, HR/manager voice
+        testing): "what's my team's attendance today?" was read as the
+        caller's OWN attendance instead of the team's. It scored 85.19
+        against check_attendance_stats' own "what's my attendance rate" —
+        this intent's closest phrase at the time, "check the team's
+        attendance", only scored 71.43 — because no phrase here used "my
+        team" (only "the team"/bare "team"), so a manager's completely
+        natural way of referring to their own team collided with this app's
+        many "my attendance ..." personal phrases. Confirmed via direct
+        rapidfuzz scoring, not a matcher bug. Now registered directly as
+        "what's my team's attendance [today]" and near variants."""
+        result = match_intent(normalize_transcript("what's my team's attendance today?"))
+        self.assertEqual(result.intent, 'check_team_attendance')
+        self.assertNotEqual(result.intent, 'check_attendance_stats')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_whats_my_teams_attendance_not_confused_with_check_attendance_summary(self):
+        result = match_intent(normalize_transcript("what's my team's attendance"))
+        self.assertEqual(result.intent, 'check_team_attendance')
+        self.assertNotEqual(result.intent, 'check_attendance_summary')
+
+    def test_hows_my_teams_attendance_today_as_check_team_attendance(self):
+        result = match_intent(normalize_transcript("how's my team's attendance today"))
+        self.assertEqual(result.intent, 'check_team_attendance')
+        self.assertGreaterEqual(result.confidence, 80)
 
     # ── Payroll intents ──────────────────────────────────────────────────────
 

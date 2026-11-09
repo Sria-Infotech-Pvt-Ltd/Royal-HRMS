@@ -37,6 +37,7 @@ from ..serializers import (
 
 logger = logging.getLogger(__name__)
 
+from apps.recruitment.services_candidate_onboarding import send_onboarding_link
 from apps.recruitment.views.shared import *  # noqa: F401,F403
 
 
@@ -64,110 +65,31 @@ class SendPortalLoginView(APIView):
         if not _can_access_candidate(request.user, candidate):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
-        if candidate.status not in (
-            Candidate.STATUS_SELECTED,
-            Candidate.STATUS_INTERVIEW_DONE,
-        ):
-            return error('Candidate must be at least at Interview Done stage before sending portal login.')
-
+        if candidate.status != Candidate.STATUS_SELECTED:
+            return error('Only a candidate who has been marked Selected can be sent the onboarding link.')
         if candidate.portal_credentials_sent and candidate.portal_user_id:
-            return error('Portal login already sent. Use resend if you want to issue new credentials.')
-
+            return error('The onboarding link was already sent. Use Resend to send a new one.')
         if not candidate.email or not candidate.email.strip():
             return error('Candidate does not have a valid email address.')
-
         if User.objects.filter(email__iexact=candidate.email).exists():
-            return error(
-                'A portal account already exists for this email address.',
-                http_status=status.HTTP_409_CONFLICT,
-            )
+            return error('An account already exists for this email address.', http_status=status.HTTP_409_CONFLICT)
 
-        # portal_url: request body overrides company setting
-        portal_url_override = (request.data.get('portal_url') or '').strip()
-        if portal_url_override and not portal_url_override.startswith(('http://', 'https://')):
-            return error('portal_url must start with http:// or https://.')
-
-        # Generate a temporary password
-        alphabet = string.ascii_letters + string.digits
-        temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
-
-        # Create portal user account
+        # A record to hold the onboarding form: no usable password, no employee ID, not activated, not an active employee.
         portal_user = User.objects.create_user(
-            email            = candidate.email,
-            password         = temp_password,
-            full_name        = candidate.name,
-            must_change_password = True,
-            onboarding_status    = User.ONBOARDING_PENDING,
-            requires_self_service_onboarding = True,
+            email=candidate.email, password=None, full_name=candidate.name, must_change_password=False,
+            onboarding_status=User.ONBOARDING_PENDING, requires_self_service_onboarding=True,
         )
-
-        candidate.portal_user             = portal_user
-        candidate.portal_credentials_sent = True
-        candidate.status                  = Candidate.STATUS_OFFER_SENT
-        candidate.save(update_fields=['portal_user', 'portal_credentials_sent', 'status', 'updated_at'])
-
-        # Assessments are assigned after HR approval, not at portal login.
-        # Set complete so the candidate goes straight to the onboarding wizard.
         portal_user.assessment_status = User.ASSESSMENT_COMPLETE
         portal_user.save(update_fields=['assessment_status', 'updated_at'])
+        candidate.portal_user = portal_user
+        candidate.portal_credentials_sent = True
+        candidate.status = Candidate.STATUS_OFFER_SENT
+        candidate.save(update_fields=['portal_user', 'portal_credentials_sent', 'status', 'updated_at'])
 
-        company      = Company.objects.first()
-        company_name = company.company_name if company else ''
-        portal_url   = portal_url_override or (company.portal_url if company else '') or ''
-
-        CandidateLog.objects.create(
-            candidate=candidate,
-            log_type=CandidateLog.TYPE_INFO,
-            title='Portal login sent',
-            description=f'Account created for {candidate.email}. Sent by {request.user.full_name or request.user.email}.',
-        )
-
-        sent_status = CandidateEmail.STATUS_FAILED
-        try:
-            send_template_email(
-                recipient_email=candidate.email,
-                template_name='portal_invite',
-                context={
-                    'candidate_name': candidate.name,
-                    'position':       candidate.position_applied,
-                    'company_name':   company_name,
-                    'login_email':    candidate.email,
-                    'temp_password':  temp_password,
-                    'portal_url':     portal_url,
-                },
-                module='recruitment',
-                triggered_by=request.user,
-            )
-            sent_status = CandidateEmail.STATUS_SENT
-        except Exception as exc:
-            logger.exception('Failed to send portal invite to %s: %s', candidate.email, exc)
-
-        CandidateEmail.objects.create(
-            candidate=candidate,
-            template_used='portal_invite',
-            subject=f'Your Portal Login — {company_name}',
-            to_email=candidate.email,
-            status=sent_status,
-            sent_by=request.user,
-        )
-        CandidateLog.objects.create(
-            candidate=candidate,
-            log_type=(CandidateLog.TYPE_SUCCESS
-                      if sent_status == CandidateEmail.STATUS_SENT
-                      else CandidateLog.TYPE_WARN),
-            title=('Portal invite email sent'
-                   if sent_status == CandidateEmail.STATUS_SENT
-                   else 'Portal invite email failed — check SMTP settings'),
-            description=f'To: {candidate.email}',
-        )
-        AuditLog.objects.create(
-            user=request.user, action='portal_login_sent', module='recruitment',
-            object_id=str(candidate.pk),
-            changes={'email': candidate.email},
-            branch=candidate.branch.branch_name if candidate.branch else '',
-            ip_address=get_client_ip(request),
-        )
-        return success('Portal login sent successfully.', data={'email': candidate.email})
+        delivered = send_onboarding_link(candidate, portal_user, request.user, ip_address=get_client_ip(request))
+        message = ('Onboarding link sent.' if delivered
+                   else 'Onboarding link created, but the email could not be sent. Check SMTP settings, then use Resend.')
+        return success(message, data={'email': candidate.email, 'delivered': delivered})
 
     def get(self, request, pk):
         if not _has_perm(request.user, 'recruitment.view'):
@@ -209,79 +131,15 @@ class ResendPortalLoginView(APIView):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         if not candidate.portal_credentials_sent or not candidate.portal_user_id:
-            return error(
-                'Portal login has not been sent yet. Use Send Portal Login first.',
-                http_status=status.HTTP_400_BAD_REQUEST,
-            )
-
+            return error('The onboarding link has not been sent yet. Use Send onboarding link first.')
         portal_user = candidate.portal_user
-        if not portal_user:
-            return error('Linked portal user account no longer exists.')
-
         if portal_user.onboarding_status == User.ONBOARDING_COMPLETE:
-            return error('This candidate has already completed onboarding and cannot receive new credentials.')
+            return error("This candidate's onboarding is already approved. Resend the activation link from their onboarding history instead.")
 
-        # Generate and set a fresh temporary password
-        alphabet      = string.ascii_letters + string.digits
-        temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
-        portal_user.set_password(temp_password)
-        portal_user.must_change_password = True
-        portal_user.save(update_fields=['password', 'must_change_password'])
-
-        company      = Company.objects.first()
-        company_name = company.company_name if company else ''
-        portal_url_override = (request.data.get('portal_url') or '').strip()
-        if portal_url_override and not portal_url_override.startswith(('http://', 'https://')):
-            return error('portal_url must start with http:// or https://.')
-        portal_url = portal_url_override or (company.portal_url if company else '') or ''
-
-        context = {
-            'candidate_name': candidate.name,
-            'position':       candidate.position_applied,
-            'company_name':   company_name,
-            'login_email':    candidate.email,
-            'temp_password':  temp_password,
-            'portal_url':     portal_url,
-        }
-        sent_status = CandidateEmail.STATUS_FAILED
-        try:
-            send_template_email(
-                recipient_email=candidate.email,
-                template_name='portal_invite',
-                context=context,
-                module='recruitment',
-                triggered_by=request.user,
-            )
-            sent_status = CandidateEmail.STATUS_SENT
-        except Exception as exc:
-            logger.exception('Failed to resend portal invite to %s: %s', candidate.email, exc)
-
-        CandidateEmail.objects.create(
-            candidate=candidate,
-            template_used='portal_invite',
-            subject=f'Your Portal Login (Resent) — {company_name}',
-            to_email=candidate.email,
-            status=sent_status,
-            sent_by=request.user,
-        )
-        CandidateLog.objects.create(
-            candidate=candidate,
-            log_type=(CandidateLog.TYPE_SUCCESS
-                      if sent_status == CandidateEmail.STATUS_SENT
-                      else CandidateLog.TYPE_WARN),
-            title=('Portal credentials resent'
-                   if sent_status == CandidateEmail.STATUS_SENT
-                   else 'Portal credentials resend failed — check SMTP settings'),
-            description=f'New credentials issued to {candidate.email} by {request.user.full_name or request.user.email}.',
-        )
-        AuditLog.objects.create(
-            user=request.user, action='portal_login_resent', module='recruitment',
-            object_id=str(candidate.pk),
-            changes={'email': candidate.email},
-            branch=candidate.branch.branch_name if candidate.branch else '',
-            ip_address=get_client_ip(request),
-        )
-        return success('Portal credentials resent successfully.', data={'email': candidate.email})
+        delivered = send_onboarding_link(candidate, portal_user, request.user, ip_address=get_client_ip(request), resend=True)
+        message = ('A new onboarding link was sent. The previous link no longer works.' if delivered
+                   else 'A new link was created, but the email could not be sent. Check SMTP settings and try again.')
+        return success(message, data={'email': candidate.email, 'delivered': delivered})
 
     def get(self, request, pk):
         if not _has_perm(request.user, 'recruitment.view'):

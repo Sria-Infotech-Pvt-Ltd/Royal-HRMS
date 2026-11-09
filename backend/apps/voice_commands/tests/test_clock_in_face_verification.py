@@ -6,7 +6,7 @@ test_conversational_signaling.py/test_clarification_dispatch_matrix.py,
 which predate this module and assert the "feature off" behaviour is
 unchanged).
 
-All DB-touching collaborators (FaceRegistrationRequest, GeofencingService,
+All DB-touching collaborators (the Face ID policy, GeofencingService,
 FaceVerificationService, the actual punch executors) are mocked at their
 conversation_clock_in_face.py import site, same convention the rest of this
 SimpleTestCase-based package uses — see e.g. test_clarification_dispatch_matrix.py.
@@ -21,6 +21,14 @@ from apps.attendance.services_face_matching import FaceVerificationOutcome
 from apps.attendance.services_geofencing import GeofenceResult
 from apps.voice_commands.conversation import handle_transcript
 from apps.voice_commands.executor import ExecutionResult
+
+
+# What services_face_policy.guidance() returns for an employee whose Face ID is approved and mandatory. The voice flow
+# reads the SAME server policy as the web punch, so tests stub that one function instead of a registration table.
+_APPROVED_POLICY = {
+    'is_mandatory': True, 'state': 'approved', 'requires_face_to_punch': True, 'fallback_active': False,
+    'message': '',
+}
 
 
 def _fake_request(user_id=42):
@@ -74,33 +82,6 @@ _BLOCKED_OUTCOME = FaceVerificationOutcome(
 )
 
 
-class NoRegistrationTests(SimpleTestCase):
-    """Item 5 — an employee with no approved face ID is told to contact HR/
-    their manager, not left stuck in a dead-end dialogue."""
-
-    def setUp(self):
-        self.store = _FakePendingStore()
-        for p in _patch_pending_store(self.store):
-            p.start()
-            self.addCleanup(p.stop)
-        mandatory = patch('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=True)
-        mandatory.start()
-        self.addCleanup(mandatory.stop)
-        registration = patch('apps.voice_commands.conversation_clock_in_face.FaceRegistrationRequest')
-        mock_model = registration.start()
-        self.addCleanup(registration.stop)
-        mock_model.objects.filter.return_value.exists.return_value = False
-        mock_model.STATUS_APPROVED = 'approved'
-
-    def test_no_registration_points_to_hr_and_does_not_stay_pending(self):
-        result = handle_transcript(_fake_request(), 'clock in')
-
-        self.assertFalse(result['success'])
-        self.assertIn('hr', result['message'].lower())
-        self.assertIn('manager', result['message'].lower())
-        self.assertIsNone(self.store.get(42))
-
-
 class GeofenceReuseTests(SimpleTestCase):
     """The facial-proof flow must reuse GeofencingService.validate as-is —
     a rejection surfaces before the camera step, in the same shape the
@@ -114,10 +95,11 @@ class GeofenceReuseTests(SimpleTestCase):
         mandatory = patch('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=True)
         mandatory.start()
         self.addCleanup(mandatory.stop)
-        registration = patch('apps.voice_commands.conversation_clock_in_face.FaceRegistrationRequest')
-        mock_model = registration.start()
-        self.addCleanup(registration.stop)
-        mock_model.objects.filter.return_value.exists.return_value = True
+        policy = patch(
+            'apps.voice_commands.conversation_clock_in_face.face_policy_guidance', return_value=_APPROVED_POLICY,
+        )
+        policy.start()
+        self.addCleanup(policy.stop)
 
     def test_geofence_rejection_is_terminal_and_not_pending(self):
         rejected = GeofenceResult(
@@ -207,7 +189,7 @@ class FacialProofTurnTests(SimpleTestCase):
 
         self.assertFalse(result['success'])
         self.assertFalse(result['awaiting_input'])
-        self.assertIn('manual clock in', result['message'].lower())
+        self.assertIn('manual punch in/out', result['message'].lower())
         self.assertIsNone(self.store.get(42))
 
     def test_blocked_outcome_is_terminal_on_the_first_attempt_not_retried(self):

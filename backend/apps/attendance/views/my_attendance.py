@@ -24,6 +24,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -50,6 +51,7 @@ from apps.attendance.services_attendance import (
     AttendanceDashboardService,
     PunchService,
 )
+from apps.attendance.services_face_matching import FaceVerificationBlockedError
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +122,7 @@ class AttendancePunchView(APIView):
     the updated today-session so ClockWidget can refresh in one round-trip.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request: Request) -> Response:
         serializer = PunchWriteSerializer(data=request.data)
@@ -141,6 +143,15 @@ class AttendancePunchView(APIView):
             PunchService.record_punch(request.user, punch_data)
         except ValueError as exc:
             return error(str(exc), http_status=status.HTTP_400_BAD_REQUEST)
+        except FaceVerificationBlockedError as exc:
+            # A terminal block (attempt cap, replay, low-confidence), not an
+            # ordinary retryable mismatch — carries retry_after_seconds so the
+            # frontend can disable the punch button and show a countdown
+            # instead of repeating the same error toast on every click.
+            return error(
+                str(exc), data={'blocked': True, 'retry_after_seconds': exc.retry_after_seconds},
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
         except PermissionError as exc:
             return error(str(exc), http_status=status.HTTP_403_FORBIDDEN)
 
@@ -177,7 +188,7 @@ class TodayAttendanceView(APIView):
       is_clocked_in, punches[], total_seconds, session_seconds, date_display
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request: Request) -> Response:
         session = PunchService.get_today_session(request.user)
@@ -200,7 +211,7 @@ class MyShiftView(APIView):
     their own working hours.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request: Request) -> Response:
         policy = WorkingHoursPolicy.objects.filter(is_active=True, is_default=True).first()
@@ -222,7 +233,7 @@ class MyWeeklyTimesheetView(APIView):
          by WeeklyTimesheetSubmission (idempotent per employee+week).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     @staticmethod
     def _week_bounds(today):
@@ -263,7 +274,7 @@ class AttendanceStatsView(APIView):
     Attendance %.  Defaults to the current month if params omitted.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request: Request) -> Response:
         qp = MonthYearQuerySerializer(data=request.query_params)
@@ -292,7 +303,7 @@ class AttendanceSummaryView(APIView):
       Working Days, Days Present, Days Absent, Leave Days, Half Days, OT Hours.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request: Request) -> Response:
         qp = MonthYearQuerySerializer(data=request.query_params)
@@ -325,7 +336,7 @@ class AttendanceCalendarView(APIView):
     Also returns the detail-table rows (used by MonthDetail component).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request: Request) -> Response:
         qp = MonthYearQuerySerializer(data=request.query_params)
@@ -357,7 +368,7 @@ class AttendanceCalendarView(APIView):
 class RecentPunchesView(APIView):
     """GET /api/attendance/recent-punches/?limit=3 — ESS "Recent punches" card."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request: Request) -> Response:
         target, err = _resolve_target_user(request)
@@ -389,7 +400,7 @@ class AttendanceCorrectionView(APIView):
     - Cannot submit if a pending correction already exists for the same date.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request: Request) -> Response:
         serializer = CorrectionWriteSerializer(data=request.data)
@@ -402,6 +413,13 @@ class AttendanceCorrectionView(APIView):
 
         data     = serializer.validated_data
         employee = request.user
+
+        # A correction is a claim about a punch, so it follows the punch rule (Pre-Joining, Unknown joining date, Terminated).
+        from apps.accounts.services_lifecycle_status import ACTION_PUNCH, block_message
+
+        blocked = block_message(employee, ACTION_PUNCH)
+        if blocked:
+            return error(blocked, http_status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
             # select_for_update prevents a race where two concurrent submissions
@@ -458,7 +476,7 @@ class MyCorrectionsListView(APIView):
     Query params: status, date_from, date_to; ?page=&page_size= for pagination.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request: Request) -> Response:
         ser = MyCorrectionsFilterSerializer(data=request.query_params)

@@ -94,6 +94,8 @@ def _patch_pending_store(store):
         patch('apps.voice_commands.conversation_clarification.clear_pending', side_effect=store.clear),
         patch('apps.voice_commands.conversation_leave_approval.set_pending', side_effect=store.set),
         patch('apps.voice_commands.conversation_leave_approval.clear_pending', side_effect=store.clear),
+        patch('apps.voice_commands.conversation_attendance_correction_approval.set_pending', side_effect=store.set),
+        patch('apps.voice_commands.conversation_attendance_correction_approval.clear_pending', side_effect=store.clear),
         patch('apps.voice_commands.conversation_payroll.set_pending', side_effect=store.set),
         patch('apps.voice_commands.conversation_payroll.clear_pending', side_effect=store.clear),
         patch('apps.voice_commands.conversation_attendance_correction.set_pending', side_effect=store.set),
@@ -120,6 +122,8 @@ BORDERLINE = {
     'check_team_attendance': 'show dashboard',
     'approve_leave': 'approve for',
     'reject_leave': 'reject',
+    'approve_attendance_correction': 'go ahead approve correction',
+    'reject_attendance_correction': 'reject correction for',
     'check_my_payslip': 'my salary',
     'acknowledge_payslip': 'acknowledge my',
     'raise_payslip_query': 'raise a query about',
@@ -154,11 +158,11 @@ class DidYouMeanYesMatrixTests(SimpleTestCase):
             self.addCleanup(p.stop)
         self.request = _fake_request()
 
-    def _run(self, intent, transcript, patch_target, extra_patches=None):
+    def _run(self, intent, transcript, patch_target, extra_patches=None, matched=None):
         with patch(patch_target) as mock_execute:
             mock_execute.return_value = ExecutionResult(
                 success=True, message=f'{intent}-DONE',
-                data={'outcome': 'single_match', 'matched': {'request_id': 'r1'}},
+                data={'outcome': 'single_match', 'matched': matched or {'request_id': 'r1'}},
             )
             if extra_patches:
                 for target, retval in extra_patches:
@@ -264,6 +268,31 @@ class DidYouMeanYesMatrixTests(SimpleTestCase):
         second, mock = self._run('reject_leave', BORDERLINE['reject_leave'], 'apps.voice_commands.conversation_leave_approval.execute_intent')
         mock.assert_called_once()
         self.assertEqual(mock.call_args.args[0], 'reject_leave')
+        self.assertNotEqual(second['message'], _NO_MATCH_MESSAGE)
+
+    def test_approve_attendance_correction(self):
+        # matched=... overrides _run's default {'request_id': 'r1'} fixture —
+        # approve_attendance_correction/reject_attendance_correction read
+        # matched['correction_id'], a deliberately distinct key from leave's
+        # matched['request_id'] (see executor.py's own execute_intent
+        # docstring for why).
+        second, mock = self._run(
+            'approve_attendance_correction', BORDERLINE['approve_attendance_correction'],
+            'apps.voice_commands.conversation_attendance_correction_approval.execute_intent',
+            matched={'correction_id': 'c1'},
+        )
+        mock.assert_called_once()
+        self.assertEqual(mock.call_args.args[0], 'approve_attendance_correction')
+        self.assertNotEqual(second['message'], _NO_MATCH_MESSAGE)
+
+    def test_reject_attendance_correction(self):
+        second, mock = self._run(
+            'reject_attendance_correction', BORDERLINE['reject_attendance_correction'],
+            'apps.voice_commands.conversation_attendance_correction_approval.execute_intent',
+            matched={'correction_id': 'c1'},
+        )
+        mock.assert_called_once()
+        self.assertEqual(mock.call_args.args[0], 'reject_attendance_correction')
         self.assertNotEqual(second['message'], _NO_MATCH_MESSAGE)
 
     def test_check_employee_payslip(self):

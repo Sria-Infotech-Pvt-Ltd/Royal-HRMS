@@ -233,17 +233,23 @@ class PayrollFunctionalTests(_LanguageIsolatedTestCase):
 
 
 class ClockInFaceFunctionalTests(_LanguageIsolatedTestCase):
-    @patch('apps.voice_commands.conversation_clock_in_face.FaceRegistrationRequest')
+    # Voice no longer carries its own (bilingual) "no face ID" text: it passes the server's Face ID policy message
+    # through unchanged, exactly as the web does. Those policy messages are English-only (as are all server-side face
+    # messages), so a Hindi caller currently gets the English server text - recorded as a known limitation.
+    @patch('apps.voice_commands.conversation_clock_in_face.face_policy_guidance', return_value={
+        'state': 'not_registered', 'requires_face_to_punch': False, 'fallback_active': False,
+        'message': 'Please register your Face ID first, then come back to punch in.',
+    })
     @patch('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=True)
-    def test_no_registration_message_is_hindi_when_set(self, _mock_mandatory, mock_model):
-        mock_model.objects.filter.return_value.exists.return_value = False
+    def test_no_registration_message_is_the_server_policy_message_even_when_hindi_is_set(self, _mandatory, _policy):
         language.set_current_language(language.LANG_HI)
 
         result = conversation_clock_in_face.start_voice_clock_punch(
             _fake_request(), 'clock_in', 'office', 90.0, None, None,
         )
 
-        self.assertIn('फेस आईडी', result['message'])
+        self.assertEqual(result['message'], 'Please register your Face ID first, then come back to punch in.')
+        self.assertFalse(result['success'])
 
 
 class SlotExtractorFunctionalTests(_LanguageIsolatedTestCase):

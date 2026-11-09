@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+from core.access import employee_in_scope
+
 import csv
 import io
 import logging
@@ -135,8 +137,13 @@ class EmployeeDocumentView(APIView):
             doc = ED.objects.get(id=doc_id)
         except ED.DoesNotExist:
             return None, error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
-        if doc.user_id != request.user.id and not _has_perm(request.user, 'employees.edit'):
-            return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        if doc.user_id != request.user.id:
+            if not _has_perm(request.user, 'employees.edit'):
+                return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+            # HR/manager access to someone else's document is limited to employees in the requester's scope; anything
+            # outside it looks like a missing document.
+            if not employee_in_scope(request.user, doc.user):
+                return None, error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
         return doc, None
 
     def get(self, request, doc_id: str = None):

@@ -22,12 +22,13 @@ interface CandidateTableProps {
   onStatusChanged: (updated: Candidate) => void;
   onMarkRequest: (candidate: Candidate, targetStatus: "selected" | "rejected") => void;
   onSendPortalLogin: (candidate: Candidate) => void;
+  onOpenFeedback: (candidate: Candidate) => void;
 }
 
 export default function CandidateTable({
   candidates, loading, error, activeBranch, totalCount, statusFilter, statusChoices,
   onStatusFilter, canEditRec, sendingPortal, page, totalPages, onPageChange,
-  onOpenLogs, onEdit, onStatusChanged, onMarkRequest, onSendPortalLogin,
+  onOpenLogs, onEdit, onStatusChanged, onMarkRequest, onSendPortalLogin, onOpenFeedback,
 }: CandidateTableProps) {
   return (
     <div className="card">
@@ -106,6 +107,10 @@ export default function CandidateTable({
                         <i className="ti ti-history" /> Logs
                       </button>
 
+                      <button className="btn btn-ghost btn-sm" onClick={() => onOpenFeedback(c)}>
+                        <i className="ti ti-message-2-star" /> Feedback
+                      </button>
+
                       {/* Edit — update interview details; not applicable once converted to an employee */}
                       {canEditRec && c.status !== "converted" && (
                         <button className="btn btn-ghost btn-sm" onClick={() => onEdit(c)} suppressHydrationWarning
@@ -125,7 +130,7 @@ export default function CandidateTable({
                         />
                       )}
 
-                      {/* Selected: send onboarding portal login */}
+                      {/* Selected: send the password-less onboarding link */}
                       {canEditRec && c.status === "selected" && (
                         <button
                           className="btn btn-filled btn-sm"
@@ -136,7 +141,7 @@ export default function CandidateTable({
                         >
                           {sendingPortal === c.id
                             ? <><i className="ti ti-loader-2 animate-spin" /> Sending…</>
-                            : <><i className="ti ti-send" /> Send Login</>
+                            : <><i className="ti ti-send" /> Send Onboarding Link</>
                           }
                         </button>
                       )}
@@ -144,7 +149,7 @@ export default function CandidateTable({
                       {/* Offer sent: portal credentials already sent */}
                       {c.status === "offer_sent" && (
                         <span className="badge badge-success" style={{ fontSize: ".75rem" }}>
-                          <i className="ti ti-mail-check" /> Login Sent
+                          <i className="ti ti-mail-check" /> Link Sent
                         </span>
                       )}
 

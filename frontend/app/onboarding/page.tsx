@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import clientApi, { markIntentionalLogout, refreshAccessToken } from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser, setOnboardingStatus, clearAuth } from "@/lib/auth";
+import { useHrContact } from "@/hooks/useHrContact";
+import HrContactNote from "@/components/HrContactNote";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
 import type { FaceIdGuidance, FaceIdMode } from "@/types/faceId";
@@ -41,6 +43,8 @@ export default function OnboardingPage() {
   const [panSaving,    setPanSaving]    = useState(false);
   const [submitted,          setSubmitted]          = useState(false);
   const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
+  const [isApprovedAwaitingActivation, setIsApprovedAwaitingActivation] = useState(false);
+  const hrContact = useHrContact(submitted || isAlreadySubmitted);
   // HR's exact "what needs fixing" text (see onboarding_rejection_remarks on
   // the User model) — shown as a banner once the employee is actually back
   // on the editable wizard, not just a status they have to guess at.
@@ -536,10 +540,15 @@ export default function OnboardingPage() {
   async function checkAndHandleApproval(): Promise<boolean> {
     try {
       const { data } = await clientApi.get<{ data: {
-        onboarding_status: string; assessment_status: string; onboarding_rejection_remarks?: string;
+        onboarding_status: string; assessment_status: string; onboarding_rejection_remarks?: string; awaiting_activation?: boolean;
       } }>(API.employees.me);
       const info = data?.data;
       if (!info) return false;
+      if (info.onboarding_status === "complete" && info.awaiting_activation) {
+        // HR approved, but the account is only activated when the candidate sets a password from the emailed link.
+        setIsApprovedAwaitingActivation(true);
+        return true;
+      }
       if (info.onboarding_status === "complete") {
         await refreshAccessToken().catch(() => {});
         if (info.assessment_status === "pending") {
@@ -918,14 +927,22 @@ export default function OnboardingPage() {
           <div style={{ width: 72, height: 72, borderRadius: "50%", background: "var(--success-c)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.5rem", fontSize: 32 }}>
             <i className="ti ti-check" style={{ color: "var(--success)", fontSize: 36 }} />
           </div>
-          <h2 style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--on-bg)", marginBottom: ".75rem" }}>Profile Submitted!</h2>
+          <h2 style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--on-bg)", marginBottom: ".75rem" }}>
+            {isApprovedAwaitingActivation ? "Approved — check your email" : "Profile Submitted!"}
+          </h2>
           <p style={{ color: "var(--on-variant)", lineHeight: 1.6, marginBottom: "1.5rem" }}>
-            Your onboarding details have been sent for HR review.<br />
-            You will receive access once approved.
+            {isApprovedAwaitingActivation ? (
+              <>HR has approved your onboarding.<br />We have emailed you a link to set your password and activate your account.</>
+            ) : (
+              <>Your onboarding details have been sent for HR review.<br />You will receive access once approved.</>
+            )}
           </p>
           <p style={{ fontSize: ".82rem", color: "var(--outline)", background: "var(--bg-low)", padding: ".75rem 1rem", borderRadius: 8, marginBottom: "1.5rem" }}>
-            You can close this tab. We will notify you by email when approved.
+            {isApprovedAwaitingActivation
+              ? "You can close this tab and continue from the email."
+              : "You can close this tab. We will notify you by email when approved."}
           </p>
+          <HrContactNote contact={hrContact} />
           {checkApprovalMsg && (
             <p style={{ fontSize: ".82rem", color: "var(--on-variant)", marginBottom: "1rem" }}>{checkApprovalMsg}</p>
           )}

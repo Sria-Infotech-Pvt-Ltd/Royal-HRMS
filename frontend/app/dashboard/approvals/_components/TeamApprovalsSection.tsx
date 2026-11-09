@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
+import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
@@ -41,8 +42,10 @@ export default function TeamApprovalsSection() {
     useFetch<LeaveListResponse>(`${API.approvals.leaveRequests}?scope=team&page_size=100`);
   const { data: expenseRaw,    loading: expenseLoading,    error: expenseError,    refetch: refetchExpense } =
     useFetch<ExpenseListResponse>(`${API.approvals.expenseList}?page_size=100`);
+  // The corrections list needs attendance.view; without it the request is not made (the server would refuse it).
+  const canSeeCorrections = usePermission("attendance.view");
   const { data: correctionRaw, loading: correctionLoading, error: correctionError, refetch: refetchCorrections } =
-    useFetch<CorrectionListResponse>(`${API.attendance.corrections}?page_size=100`);
+    useFetch<CorrectionListResponse>(canSeeCorrections ? `${API.attendance.corrections}?page_size=100` : null);
   const { data: separationRaw, loading: separationLoading, error: separationError, refetch: refetchSeparation } =
     useFetch<SeparationListResponse>(`${API.separation.list}?scope=team&page_size=100`);
   const { data: wfhRaw,        loading: wfhLoading,        error: wfhError,        refetch: refetchWfh } =

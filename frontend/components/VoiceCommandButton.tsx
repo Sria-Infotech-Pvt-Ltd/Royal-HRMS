@@ -50,7 +50,7 @@ export default function VoiceCommandButton() {
   const {
     status, interimTranscript, isDisabled, startListening, stopListening,
     submitTranscript, submitFaceProof, conversation, closeConversation,
-    isListeningForInterruption, history,
+    isListeningForInterruption, history, lockoutSecondsRemaining,
   } = useVoiceCommand(isMuted, isAuthenticated);
 
   // Opens the same VoiceConversationPanel used for the rest of the exchange
@@ -168,6 +168,7 @@ export default function VoiceCommandButton() {
           onToggleMute={toggleMuted}
           isListeningForInterruption={isListeningForInterruption}
           history={history}
+          lockoutSecondsRemaining={lockoutSecondsRemaining}
         />
         {/* Opens on top of the panel above for clock_in/clock_out's "taking
             facial proof" turn (see conversation_clock_in_face.py) — same
@@ -178,7 +179,7 @@ export default function VoiceCommandButton() {
             the pending state on the backend expires on its own (120s TTL). */}
         <FaceVerificationModal
           key={conversation.faceProofTurn}
-          isOpen={conversation.awaitingFaceProof}
+          isOpen={conversation.awaitingFaceProof && lockoutSecondsRemaining === 0}
           onCaptured={submitFaceProof}
           onClose={closeConversation}
         />
@@ -220,6 +221,7 @@ export default function VoiceCommandButton() {
         onToggleMute={toggleMuted}
         isListeningForInterruption={false}
         history={history}
+        lockoutSecondsRemaining={lockoutSecondsRemaining}
       />
     );
   }

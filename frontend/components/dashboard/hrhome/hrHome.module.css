@@ -1,0 +1,98 @@
+/* HR dashboard (/dashboard/hr). Cards use the app's theme tokens so dark mode follows; the banner keeps its brand purple. */
+.page { display: grid; gap: 16px; }
+
+.banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding: 22px 26px; border-radius: 16px; color: #fff;
+  background: linear-gradient(100deg, #4c1d95 0%, #6d28d9 55%, #7c3aed 100%);
+  box-shadow: 0 10px 28px rgba(76, 29, 149, 0.28);
+}
+.bannerLeft { display: flex; align-items: center; gap: 18px; min-width: 0; }
+.avatar {
+  width: 58px; height: 58px; border-radius: 14px; flex: none; display: grid; place-items: center;
+  font-size: 22px; font-weight: 700; background: rgba(255, 255, 255, 0.16); border: 2px solid rgba(255, 255, 255, 0.55);
+}
+.bannerTitle { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 700; }
+.bannerSub { margin: 6px 0 0; font-size: 14px; opacity: 0.92; }
+.bannerSub span { margin: 0 8px; opacity: 0.7; }
+.bannerButton {
+  display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 10px; border: 0; cursor: pointer;
+  background: #fff; color: #1f1147; font-weight: 600; font-size: 14px;
+}
+.bannerButton:hover { background: #f3edff; }
+
+.tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.tile {
+  display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; min-width: 0;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(24, 20, 48, 0.04);
+}
+.tileIcon {
+  width: 42px; height: 42px; border-radius: 12px; flex: none; display: grid; place-items: center; font-size: 20px;
+  background: rgba(124, 58, 237, 0.1); color: #6d28d9;
+}
+.tileLabel { font-size: 12.5px; color: var(--on-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tileValue { font-size: 26px; font-weight: 700; line-height: 1.15; color: var(--on-bg); }
+.tileSub { font-size: 11.5px; color: var(--on-variant); }
+.tileSubGood { color: var(--success); font-weight: 600; }
+
+/* Three equal columns; every card stretches to the height of its row, so each row is a clean line of same-height boxes. */
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+.card { border-radius: 14px; padding: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(24, 20, 48, 0.04); min-width: 0; min-height: 250px; display: flex; flex-direction: column; }
+.cardHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.cardTitle { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 700; color: var(--on-bg); }
+.cardTitle i { color: #6d28d9; }
+.viewAll { font-size: 12.5px; font-weight: 600; color: #6d28d9; background: none; border: 0; cursor: pointer; padding: 0; }
+.viewAll:hover { text-decoration: underline; }
+
+.row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left;
+  padding: 10px 4px; background: none; border: 0; border-top: 1px solid var(--line); cursor: pointer; color: inherit;
+}
+.row:first-of-type { border-top: 0; }
+.row:hover { background: rgba(124, 58, 237, 0.05); }
+.rowLeft { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rowIcon { width: 36px; height: 36px; border-radius: 10px; flex: none; display: grid; place-items: center; font-size: 17px; background: rgba(124, 58, 237, 0.1); color: #6d28d9; }
+.rowLabel { font-size: 14px; font-weight: 600; color: var(--on-bg); }
+.rowSub { font-size: 12px; color: var(--on-variant); }
+.badge { min-width: 28px; height: 28px; padding: 0 9px; border-radius: 14px; display: inline-grid; place-items: center; font-size: 13px; font-weight: 700; background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
+.badgeZero { background: rgba(124, 58, 237, 0.08); color: var(--on-variant); }
+.badgeWarn { background: rgba(217, 119, 6, 0.14); color: #b45309; }
+
+.stage { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px; border-radius: 12px; margin-bottom: 9px; font-size: 14px; font-weight: 600; color: var(--on-bg); }
+.stage i { margin-right: 10px; }
+.stageValue { font-weight: 700; }
+.stageViolet { background: rgba(124, 58, 237, 0.14); width: 100%; }
+.stageBlue { background: rgba(37, 99, 235, 0.12); width: 92%; }
+.stageGreen { background: rgba(23, 144, 90, 0.14); width: 84%; }
+.stageAmber { background: rgba(217, 119, 6, 0.14); width: 76%; }
+.stageOrange { background: rgba(234, 88, 12, 0.14); width: 68%; }
+
+.actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-content: start; }
+.action {
+  display: grid; justify-items: center; gap: 8px; padding: 16px 8px; border-radius: 12px; cursor: pointer; text-align: center;
+  background: var(--surface); border: 1px solid var(--line); font-size: 13px; font-weight: 600; color: var(--on-bg);
+}
+.action:hover { background: rgba(124, 58, 237, 0.06); border-color: rgba(124, 58, 237, 0.4); }
+.actionIcon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; background: rgba(124, 58, 237, 0.1); color: #6d28d9; }
+
+.activity { display: flex; align-items: flex-start; gap: 12px; padding: 11px 2px; border-top: 1px solid var(--line); }
+.activity:first-of-type { border-top: 0; }
+.activityText { font-size: 13.5px; color: var(--on-bg); }
+.activityText strong { font-weight: 700; }
+.activityTime { font-size: 12px; color: var(--on-variant); margin-top: 2px; }
+.empty { padding: 16px 2px; font-size: 13px; color: var(--on-variant); }
+.emptyFill { flex: 1; display: grid; place-content: center; text-align: center; padding: 16px; font-size: 13px; color: var(--on-variant); }
+
+@media (max-width: 1280px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } .grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid3 { grid-template-columns: 1fr; } .bannerTitle { font-size: 22px; } }
+
+/* Manager dashboard (shares this sheet): team donut and legend. */
+.donutWrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 22px; flex-wrap: wrap; padding: 6px 4px 10px; }
+.donut { position: relative; width: 168px; height: 168px; flex: none; }
+.donutCentre { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.donutTotal { font-size: 34px; font-weight: 800; line-height: 1; color: var(--on-bg); }
+.donutCaption { font-size: 12.5px; color: var(--on-variant); margin-top: 4px; }
+.legend { flex: 1; min-width: 150px; display: grid; gap: 10px; }
+.legendRow { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--on-bg); }
+.legendDot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 10px; }
+.legendValue { font-weight: 700; }

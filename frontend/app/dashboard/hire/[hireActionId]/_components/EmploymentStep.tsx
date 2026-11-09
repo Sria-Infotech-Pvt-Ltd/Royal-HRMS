@@ -1,7 +1,7 @@
 "use client";
 
 import { EMPLOYMENT_TYPES } from "@/lib/employmentType";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { rowsOf } from "@/lib/listResponse";
@@ -13,6 +13,9 @@ export interface EmploymentDraft {
   branch: string;
   reporting_manager_id: string;
   dotted_line_manager_id: string;
+  // Hire wizard: the L1 approver (blank = follow the approval rule) and the L2 HR approver (blank = not assigned).
+  l1_approver_id?: string;
+  hr_id?: string;
   work_location: string;
   work_mode: string;
   probation_period_months: string;
@@ -71,11 +74,13 @@ interface Props {
   orgUnitName: string;
   grade: string;
   costCenter: string;
+  /** Hire wizard only: the Reporting & approvals fields, which replace the plain reporting-manager box. */
+  approverSection?: ReactNode;
 }
 
 export default function EmploymentStep({
   value, onChange, onSetEmploymentType, reservedEmployeeId,
-  positionTitle, orgUnitName, grade, costCenter,
+  positionTitle, orgUnitName, grade, costCenter, approverSection,
 }: Props) {
   const [branches, setBranches] = useState<{ id: number; branch_name: string }[]>([]);
   const [people, setPeople] = useState<{ id: string; full_name: string; employee_id: string }[]>([]);
@@ -199,11 +204,13 @@ export default function EmploymentStep({
           <label>Grade / band <span className="tag">FROM POSITION</span></label>
           <div className="finput auto" style={{ display: "flex", alignItems: "center" }}>{grade || "—"}</div>
         </div>
-        <div className="f">
-          <label>Reporting manager</label>
-          <SearchableSelect value={value.reporting_manager_id} onChange={v => set("reporting_manager_id", v)}
-            placeholder="Auto-assign" options={people.map(p => ({ value: p.id, label: p.full_name }))} />
-        </div>
+        {!approverSection && (
+          <div className="f">
+            <label>Reporting manager</label>
+            <SearchableSelect value={value.reporting_manager_id} onChange={v => set("reporting_manager_id", v)}
+              placeholder="Auto-assign" options={people.map(p => ({ value: p.id, label: p.full_name }))} />
+          </div>
+        )}
         <div className="f">
           <label>Dotted-line manager <span className="tag">OPTIONAL</span></label>
           <SearchableSelect value={value.dotted_line_manager_id} onChange={v => set("dotted_line_manager_id", v)}
@@ -214,6 +221,14 @@ export default function EmploymentStep({
           <div className="finput auto" style={{ display: "flex", alignItems: "center" }}>{costCenter || "—"}</div>
         </div>
       </div>
+
+      {approverSection && (
+        <>
+          <div className="divider" />
+          <div className="sechead">REPORTING &amp; APPROVALS</div>
+          {approverSection}
+        </>
+      )}
 
       <div className="divider" />
       <div className="sechead">WORK SETUP</div>

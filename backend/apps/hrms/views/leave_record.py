@@ -16,6 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.permissions import has_perm as _has_perm
@@ -102,7 +103,7 @@ def _lop_for_shortfall(policy, balance, total_days):
 
 
 class LeaveRecordView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request):
         if not _has_perm(request.user, 'leave.record'):

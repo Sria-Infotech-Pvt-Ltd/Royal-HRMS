@@ -82,7 +82,7 @@ export const VOICE_LOCALE = "en-US";
 // single value the rule engine AND the sarvam-105b LLM fallback tier both
 // have to agree on before either gives up (see conversation.py's
 // handle_transcript).
-export const NO_MATCH_INTENT = "no_match";
+export { NO_MATCH_INTENT } from "@/lib/voiceHindiRecovery";
 
 // The two intents that ever hit PunchService.record_punch() server-side —
 // only these can come back with the geofencing rejection below.
@@ -104,7 +104,7 @@ export const GEOFENCE_REQUIRED_MESSAGE =
 // wordings for the same underlying browser-permission problem.
 export const LOCATION_UNSUPPORTED_MESSAGE = "Your browser does not support location access.";
 export const LOCATION_PERMISSION_DENIED_MESSAGE =
-  "Location access is required for office clock-in. Please allow location in your browser settings.";
+  "Location access is required for office punch in/out. Please allow location in your browser settings.";
 export const LOCATION_UNAVAILABLE_MESSAGE =
   "Unable to determine your location. Please check your device's location settings and try again.";
 

@@ -4,6 +4,7 @@
 // workforce snapshot). Extracted here so both produce byte-identical column
 // layouts instead of two independently-maintained CSV builders drifting apart.
 import type { ApiEmployee } from "@/app/dashboard/employees/_data";
+import { ACCOUNT_LABEL, ONBOARDING_LABEL, STAGE_LABEL } from "@/lib/employeeLifecycle";
 
 /** Same row-status precedence StatusBadge/EmployeeTableRow render, applied to
  * the raw list-API shape so the exported CSV's Status column reads the same
@@ -21,6 +22,7 @@ export function employeesToCsv(rows: ApiEmployee[]): string {
   const headers = [
     "Employee ID", "Name", "Email", "Phone", "Department", "Designation", "Branch",
     "Date of Joining", "Status", "Reporting Manager", "Org Unit",
+    "Employment Stage", "Account Status", "Onboarding",
   ];
   const csvRows = rows.map(r => [
     r.employee_id, r.full_name, r.email, r.phone,
@@ -33,6 +35,9 @@ export function employeesToCsv(rows: ApiEmployee[]): string {
     exportStatusLabel(r),
     r.reporting_manager?.name ?? "",
     r.org_unit_name ?? "",
+    r.employment_stage ? STAGE_LABEL[r.employment_stage] : "",
+    r.account_status ? ACCOUNT_LABEL[r.account_status] : "",
+    r.onboarding_stage ? ONBOARDING_LABEL[r.onboarding_stage] : "",
   ]);
   const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   return [headers, ...csvRows].map(row => row.map(escape).join(",")).join("\r\n");

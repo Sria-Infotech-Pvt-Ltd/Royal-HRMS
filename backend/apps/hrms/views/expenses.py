@@ -6,6 +6,7 @@ from django.db.models import Count, Max, Q, Sum
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from apps.accounts.utils import send_template_email
@@ -71,7 +72,7 @@ def _can_access_expense(user, expense) -> bool:
 
 
 class ExpenseListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
@@ -121,6 +122,11 @@ class ExpenseListCreateView(APIView):
         return success('Expenses retrieved.', paginated_data(paginator, page_obj, serializer.data))
 
     def post(self, request):
+        from apps.accounts.services_lifecycle_status import ACTION_EXPENSE, block_message
+
+        blocked = block_message(request.user, ACTION_EXPENSE)
+        if blocked:
+            return error(blocked, http_status=403)
         receipt_files = request.FILES.getlist('receipts') or request.FILES.getlist('receipt')
         if not receipt_files:
             return error('At least one receipt is required.')
@@ -182,7 +188,7 @@ class ExpenseListCreateView(APIView):
 
 
 class ExpenseDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
 
     def _get_expense(self, expense_number: int, user):
@@ -375,7 +381,7 @@ class ExpenseDetailView(APIView):
 
 
 class ExpenseCategoryListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         categories = [
@@ -386,7 +392,7 @@ class ExpenseCategoryListView(APIView):
 
 
 class ExpenseStatusListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         statuses = [
@@ -397,7 +403,7 @@ class ExpenseStatusListView(APIView):
 
 
 class ExpenseStatsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         has_approve = _has_perm(request.user, 'expenses.approve')

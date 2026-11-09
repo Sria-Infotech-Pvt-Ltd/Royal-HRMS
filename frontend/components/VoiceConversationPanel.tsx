@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { VoiceHistoryEntry, VoicePanelPhase, VoiceResultStatus } from "@/hooks/useVoiceCommand";
 import VoiceInputControls from "@/components/VoiceInputControls";
 import QuickActionChips from "@/components/QuickActionChips";
+import { voiceLockoutNotice } from "@/lib/voiceLockout";
 
 // Static placeholder shown only in the "greeting" phase, before any command
 // has been typed or spoken yet — never sent through speak() (see
@@ -108,6 +109,9 @@ interface VoiceConversationPanelProps {
   // continuous chat rather than a single-turn popup. Empty on a fresh
   // session/after a reload; not cleared just because the panel closes.
   history: VoiceHistoryEntry[];
+  // Whole seconds left on the shared face lockout (0 = none). While > 0 the panel shows the countdown; the mic and
+  // typed input stay usable for every other command. Optional so existing callers are unaffected.
+  lockoutSecondsRemaining?: number;
 }
 
 const PANEL_WIDTH = 300;
@@ -121,7 +125,7 @@ export default function VoiceConversationPanel({
   transcript, message, phase,
   isListening, isProcessing, interimTranscript,
   onStartListening, onStopListening, onSubmitText, onClose,
-  isMuted, onToggleMute, isListeningForInterruption, history,
+  isMuted, onToggleMute, isListeningForInterruption, history, lockoutSecondsRemaining = 0,
 }: VoiceConversationPanelProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -210,6 +214,20 @@ export default function VoiceConversationPanel({
         }}
       >
         <HistoryList history={history} />
+
+        {lockoutSecondsRemaining > 0 && (
+          <div
+            role="status"
+            data-testid="voice-lockout-status"
+            style={{
+              display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10,
+              background: "var(--bg-low)", color: "var(--on-bg)", fontSize: 12.5, lineHeight: 1.4,
+            }}
+          >
+            <i className="ti ti-lock" aria-hidden="true" style={{ fontSize: 15 }} />
+            {voiceLockoutNotice(lockoutSecondsRemaining)}
+          </div>
+        )}
 
         {phase === "greeting" ? (
           <>

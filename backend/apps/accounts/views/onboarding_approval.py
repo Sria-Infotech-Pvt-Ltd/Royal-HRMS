@@ -1,7 +1,9 @@
 
 from __future__ import annotations
 
-from core.access import can_manage_team, users_with_permission
+from apps.accounts.services_access_guards import assignment_refusal
+
+from core.access import can_manage_team, employees_in_scope, users_with_permission
 import csv
 import io
 import logging
@@ -69,6 +71,7 @@ from apps.accounts.models import (
     EmailTemplateCategory,
     EmployeeApprovalOverride,
     EmployeeCodeSeries,
+    EmployeeIdSeriesExhausted,
     EmployeeCodeSettings,
     EmployeeDocument,
     HireAction,
@@ -219,6 +222,9 @@ class OnboardingApprovalView(APIView):
                     ).get(pk=req_position_id, is_active=True)
                 except (Position.DoesNotExist, ValueError, ValidationError):
                     return error('Select a valid, active position.', data={'position': 'Position not found.'})
+                refusal = assignment_refusal(request.user, target, req_position_obj)
+                if refusal:
+                    return error(refusal.message, http_status=refusal.status)
 
             if req_pan_number:
                 # Validated before any state changes below — an invalid/duplicate
@@ -257,8 +263,11 @@ class OnboardingApprovalView(APIView):
                 if not target.date_of_joining:
                     from django.utils import timezone as tz
                     target.date_of_joining = tz.now().date()
-                # One numbering series per employment type (e.g. EMP/CON/FRL).
-                target.employee_id = EmployeeCodeSeries.generate_employee_id_for_type(target.employee_type or 'Permanent')
+                # One 8-digit numeric ID range per employment type.
+                try:
+                    target.employee_id = EmployeeCodeSeries.generate_employee_id_for_type(target.employee_type or 'Permanent')
+                except EmployeeIdSeriesExhausted as exc:
+                    return error(str(exc))
 
                 if linked_candidate and not target.branch and linked_candidate.branch:
                     target.branch = linked_candidate.branch.branch_name
@@ -289,19 +298,14 @@ class OnboardingApprovalView(APIView):
                     return error('Reporting manager not found or is inactive.')
 
             target.onboarding_status    = User.ONBOARDING_COMPLETE
-            target.must_change_password = False
             target.onboarding_rejection_remarks = ''
-            # The portal account already logged in to build this profile
-            # (that's how self-service onboarding works), so there's no
-            # separate "first login" event left to wait for here — approval
-            # itself is the activation moment, unlike the other two creation
-            # paths where it genuinely hasn't happened yet.
-            if target.account_activated_at is None:
-                target.account_activated_at = timezone.now()
+            # Approval does NOT activate the account. The candidate worked in a password-less session; they become an
+            # active employee only by setting their own password through the activation link sent below.
+            needs_activation = target.account_activated_at is None
             auto_fields = _auto_assign_managers(target)
             target.save(update_fields=list(dict.fromkeys([
-                'onboarding_status', 'must_change_password', 'onboarding_rejection_remarks',
-                'account_activated_at', 'employee_id', 'date_of_joining',
+                'onboarding_status', 'onboarding_rejection_remarks',
+                'employee_id', 'date_of_joining',
                 'designation', 'department', 'branch',
                 'reporting_manager', 'reporting_manager_from_org_chart', 'hr',
                 *auto_fields,
@@ -446,6 +450,15 @@ class OnboardingApprovalView(APIView):
 
             transaction.on_commit(_queue_approval_notification)
 
+            if needs_activation:
+                # The ONLY moment a candidate is sent an account activation link: after HR has approved (reuses the same
+                # single-use invite, resend and status tracking the direct-hire path uses).
+                from apps.accounts.services_onboarding import start_onboarding
+
+                def _send_activation(user_id=target.pk, approver=request.user):
+                    start_onboarding(User.objects.get(pk=user_id), actor=approver)
+                transaction.on_commit(_send_activation)
+                return success(f'{target.full_name} onboarding approved. An account activation link has been sent to them.')
             return success(f'{target.full_name} onboarding approved.')
 
         else:
@@ -499,6 +512,9 @@ class OnboardingApprovalView(APIView):
             .distinct()
             .order_by('-date_joined')
         )
+        # Same scope as every other employee-data endpoint: the stats below are computed from this queryset, so they
+        # only count what the requester may see.
+        base_qs = base_qs.filter(employees_in_scope(request.user)).distinct()
         if not _has_perm(request.user, 'settings.edit'):
             base_qs = base_qs.exclude(users_with_permission('settings.edit'))
 

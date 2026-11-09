@@ -13,6 +13,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
+import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import type { DashboardOverview, LifecycleActionRow } from "@/types/dashboard";
 import { Skel, WfIcon } from "@/components/dashboard/WorkforceWidgets";
@@ -58,14 +59,20 @@ export default function WorkforceOperations({ overview, overviewLoading }: Props
 
   const register = useFetch<LifecycleActionRow[]>(API.dashboard.lifecycleRegister);
   const funnel = useFetch<RecruitmentFunnel>(API.dashboard.hrRecruitmentFunnel);
-  const attendance = useFetch<AttendanceOverview>(API.dashboard.attendanceOverview);
+  // Each overview is requested only when its own API would allow it, so a role without the permission never sends a request
+  // that is certain to be refused (and the card for it stays hidden).
+  const canSeeAttendance = usePermission("attendance.view");
+  const canSeePayroll = usePermission("payroll.view");
+  const canSeePerformance = usePermission("performance.manage_cycles");
+  const canSeeHealth = usePermission("settings.edit");
+  const attendance = useFetch<AttendanceOverview>(canSeeAttendance ? API.dashboard.attendanceOverview : null);
   const leave = useFetch<LeaveOverview>(API.dashboard.leaveOverview);
-  const payroll = useFetch<PayrollOverview>(API.dashboard.payrollOverview);
-  const performance = useFetch<PerformanceOverview>(API.dashboard.performanceOverview);
+  const payroll = useFetch<PayrollOverview>(canSeePayroll ? API.dashboard.payrollOverview : null);
+  const performance = useFetch<PerformanceOverview>(canSeePerformance ? API.dashboard.performanceOverview : null);
   const reports = useFetch<ReportsOverview>(API.dashboard.reportsOverview);
   const settings = useFetch<SettingsOverview>(API.dashboard.settingsOverview);
-  // Admin-only endpoint — HR users get a 403, in which case the health pills are omitted.
-  const health = useFetch<SystemHealth>(API.dashboard.kpis);
+  // Needs settings.edit: without it the request is not made and the health pills are omitted.
+  const health = useFetch<SystemHealth>(canSeeHealth ? API.dashboard.kpis : null);
   const currentYear = new Date().getFullYear();
   const holidaysThisYear = useFetch<{ holidays: unknown[]; total: number }>(`${API.leave.holidays}?year=${currentYear}`);
 
@@ -83,13 +90,13 @@ export default function WorkforceOperations({ overview, overviewLoading }: Props
     { key: "people", name: "Employees", blurb: "Records, profiles and documents.", icon: WfIcon.people, tone: "info", href: "/dashboard/employees",
       loading: overviewLoading, hidden: false, metric: overview?.total_headcount ?? 0, metricLabel: "active employees", note: `${overview?.new_this_month ?? 0} joined this month` },
     { key: "attendance", name: "Attendance", blurb: "Presence, shifts and exceptions.", icon: WfIcon.clock, tone: "ok", href: "/dashboard/attendance",
-      loading: attendance.loading, hidden: attendance.status === 403, metric: `${attendance.data?.present_pct ?? 0}%`, metricLabel: "present today", note: `${attendance.data?.late_arrivals ?? 0} late · ${attendance.data?.missing_punch ?? 0} missing punch` },
+      loading: attendance.loading, hidden: !canSeeAttendance || attendance.status === 403, metric: `${attendance.data?.present_pct ?? 0}%`, metricLabel: "present today", note: `${attendance.data?.late_arrivals ?? 0} late · ${attendance.data?.missing_punch ?? 0} missing punch` },
     { key: "leave", name: "Leave", blurb: "Requests, balances and holidays.", icon: WfIcon.calendar, tone: "info", href: "/dashboard/leave",
       loading: leave.loading, hidden: leave.status === 403, metric: leave.data?.pending ?? 0, metricLabel: "requests pending", note: `${leave.data?.on_leave_today ?? 0} on leave today` },
     { key: "payroll", name: "Payroll", blurb: "Pay cycles, payslips and checks.", icon: WfIcon.wallet, tone: "warn", href: "/dashboard/payroll",
-      loading: payroll.loading, hidden: payroll.status === 403, metric: payroll.data?.blocked ?? 0, metricLabel: "records blocked", note: payroll.data?.cycle_label ?? "" },
+      loading: payroll.loading, hidden: !canSeePayroll || payroll.status === 403, metric: payroll.data?.blocked ?? 0, metricLabel: "records blocked", note: payroll.data?.cycle_label ?? "" },
     { key: "performance", name: "Performance", blurb: "Review cycles, goals and feedback.", icon: Icon.star, tone: "brand", href: "/dashboard/performance",
-      loading: performance.loading, hidden: performance.status === 403, metric: `${performance.data?.self_reviews_pct ?? 0}%`, metricLabel: "self-reviews done", note: performance.data?.active_cycle ?? "" },
+      loading: performance.loading, hidden: !canSeePerformance || performance.status === 403, metric: `${performance.data?.self_reviews_pct ?? 0}%`, metricLabel: "self-reviews done", note: performance.data?.active_cycle ?? "" },
     { key: "reports", name: "Reports", blurb: "Workforce analytics and exports.", icon: Icon.chart, tone: "info", href: "/dashboard/reports",
       loading: reports.loading, hidden: reports.status === 403, metric: reports.data?.exports_today ?? 0, metricLabel: "exports today", note: `${reports.data?.audit_events_30d ?? 0} audit events (30 days)` },
     { key: "settings", name: "Settings", blurb: "Roles, policies and configuration.", icon: Icon.gear, tone: "crit", href: "/dashboard/settings",

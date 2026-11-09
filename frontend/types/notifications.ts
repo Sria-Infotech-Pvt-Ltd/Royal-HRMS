@@ -1,6 +1,6 @@
 export type NotificationModule =
   | "leave" | "attendance" | "regularization" | "permission" | "holiday" | "announcement" | "promotion"
-  | "confirmation" | "payroll";
+  | "confirmation" | "payroll" | "system";
 
 export interface Notification {
   id:                 string;

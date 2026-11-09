@@ -196,35 +196,9 @@ class LoginView(APIView):
         )
         logger.info('User %s logged in from %s', email, ip)
 
-        permissions = effective_permission_codenames(user)
-
-        resp = success('Login successful.', data={
-            'user': {
-                'id':                  str(user.id),
-                'email':               user.email,
-                'full_name':           user.full_name,
-                'employee_id':         user.employee_id,
-                'department':          user.department,
-                'designation':         user.designation,
-                'branch':              user.branch,
-                'must_change_password': user.must_change_password,
-                'onboarding_status':   user.onboarding_status,
-                'requires_self_service_onboarding': user.requires_self_service_onboarding,
-                'assessment_status':   _login_assessment_status(user),
-                'permissions':         permissions,
-                'can_manage_team':     can_manage_team(user),
-                'can_manage_branch':   can_manage_branch(user),
-                'is_superuser':        user.is_superuser or 'settings.edit' in permissions,
-            },
-        })
-        resp.set_cookie(
-            'royal_access_token', str(refresh.access_token),
-            max_age=900, httponly=True, secure=not settings.DEBUG, samesite='Lax', domain=None,
-        )
-        resp.set_cookie(
-            'royal_refresh_token', str(refresh),
-            max_age=604800, httponly=True, secure=not settings.DEBUG, samesite='Lax', domain=None,
-        )
+        from apps.accounts.services_session import login_user_payload, set_auth_cookies
+        resp = success('Login successful.', data={'user': login_user_payload(user)})
+        set_auth_cookies(resp, refresh)
         if settings.DEBUG:
             for name, morsel in resp.cookies.items():
                 attrs = '; '.join(filter(None, [

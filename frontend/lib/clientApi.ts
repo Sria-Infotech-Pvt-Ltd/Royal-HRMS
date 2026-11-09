@@ -27,6 +27,16 @@ export function markIntentionalLogout() { _intentionalLogout = true; }
 let _sessionKnownExpired = false;
 export function resetSessionExpired() { _sessionKnownExpired = false; }
 
+/** True once a refresh attempt has failed: the session is over, so background work (polling) should stop. */
+export function isSessionKnownExpired(): boolean { return _sessionKnownExpired; }
+
+/** Calls `listener` when the session expires (the same event that shows the session-expired overlay). Returns an unsubscribe. */
+export function onSessionExpired(listener: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("session:expired", listener);
+  return () => window.removeEventListener("session:expired", listener);
+}
+
 const clientApi = axios.create({
   baseURL: API_BASE,
   timeout: 15000,

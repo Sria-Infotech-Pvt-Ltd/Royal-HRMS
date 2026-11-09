@@ -92,7 +92,7 @@ export default function EditRecordEmploymentStep({ value, onChange, positionTitl
         <div className="f"><label>Reporting manager <Required /> <Tag text="FROM UNIT" /></label>
           <select className="finput" value={value.reporting_manager_id} onChange={e => set("reporting_manager_id", e.target.value)}>
             <option value="">Assign later</option>
-            {lookups.people.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {lookups.people.filter(p => p.uuid).map(p => <option key={p.uuid} value={p.uuid}>{p.full_name}</option>)}
           </select>
           {!value.reporting_manager_id && (
             <div className="hint" style={{ color: "var(--crit)", fontWeight: 600 }}>
@@ -102,7 +102,7 @@ export default function EditRecordEmploymentStep({ value, onChange, positionTitl
         <div className="f"><label>Dotted-line manager <Tag text="OPTIONAL" /></label>
           <select className="finput" value={value.dotted_line_manager_id} onChange={e => set("dotted_line_manager_id", e.target.value)}>
             <option value="">None</option>
-            {lookups.people.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {lookups.people.filter(p => p.uuid).map(p => <option key={p.uuid} value={p.uuid}>{p.full_name}</option>)}
           </select>
           <div className="hint">Any unit — cross-functional reporting.</div></div>
         <div className="f"><label>Cost center <Tag text="FROM UNIT" /></label>

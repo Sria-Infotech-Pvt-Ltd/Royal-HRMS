@@ -24,6 +24,8 @@ from core.permissions import has_perm as _has_perm
 from core.responses import error, success, get_client_ip
 from apps.accounts.models import AuditLog, EmployeeDocument, HireAction, HireActionDocument, User
 from apps.accounts.services_placement import assign_position
+from apps.accounts.services_access_guards import assignment_refusal
+from apps.accounts.services_approver_assignment import FIELD_KINDS, AssignmentError, set_leave_l1_override, validate_assignments
 from apps.accounts.services_hire_duplicates import blocking_message, check_hire_duplicates
 from apps.accounts.services_work_location import work_location_for_branch
 from apps.accounts.views_pincode import fill_state_and_district
@@ -322,6 +324,16 @@ class HireActionCompleteView(APIView):
         # Access comes from the position they are hired into; full org-wide access is never handed out by hiring.
         if action.position.position_permissions.filter(permission__codename='settings.edit').exists():
             return error('Positions with full access cannot be filled through the Hire flow.')
+        refusal = assignment_refusal(request.user, None, action.position)  # sensitive seats need the hirer to hold those permissions
+        if refusal:
+            return error(refusal.message, http_status=refusal.status)
+
+        # The chosen reporting manager / L1 approver / L2 HR approver must be people who can actually do that job (active, an
+        # employee, able to approve leave); checked before anything is created so a bad choice leaves no half-made hire.
+        try:
+            chosen_approvers = validate_assignments(None, {key: draft[key] for key in FIELD_KINDS if draft.get(key)})
+        except AssignmentError as exc:
+            return error(exc.message, data={exc.field: exc.message})
 
         # Never emailed: the new hire sets their own password through the onboarding invite link (see
         # services_onboarding.start_onboarding). This random value only keeps the account unusable until then.
@@ -361,16 +373,18 @@ class HireActionCompleteView(APIView):
             if action.photo:
                 user.profile_photo.name = action.photo.name
                 update_fields.append('profile_photo')
-            if draft.get('reporting_manager_id'):
-                user.reporting_manager = User.objects.filter(pk=draft['reporting_manager_id']).first()
+            if chosen_approvers.get('reporting_manager_id'):
+                user.reporting_manager = chosen_approvers['reporting_manager_id']
                 user.reporting_manager_from_org_chart = False
                 update_fields += ['reporting_manager', 'reporting_manager_from_org_chart']
             if draft.get('dotted_line_manager_id'):
                 user.dotted_line_manager = User.objects.filter(pk=draft['dotted_line_manager_id']).first()
                 update_fields.append('dotted_line_manager')
-            if draft.get('hr_id'):
-                user.hr = User.objects.filter(pk=draft['hr_id']).first()
+            if chosen_approvers.get('hr_id'):
+                user.hr = chosen_approvers['hr_id']
                 update_fields.append('hr')
+            if chosen_approvers.get('l1_approver_id'):
+                set_leave_l1_override(request.user, user, chosen_approvers['l1_approver_id'])
 
             from apps.accounts.views import _auto_assign_managers
             auto_fields = _auto_assign_managers(user)

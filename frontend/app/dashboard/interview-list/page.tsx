@@ -7,6 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
+import { canRequestCandidates, initialBranchRequest } from "@/lib/interviewListScope";
 import {
   Branch,
   Candidate,
@@ -20,6 +21,7 @@ import { LogsModal }                  from "./LogsModal";
 import { EditCandidateModal }         from "./EditCandidateModal";
 import { CandidateBulkImportModal }   from "./CandidateBulkImportModal";
 import CandidateTable from "./CandidateTable";
+import { FeedbackModal } from "./FeedbackModal";
 import ConfirmModal from "@/components/ConfirmModal";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -47,6 +49,10 @@ export default function InterviewListPage() {
   const [totalCount,    setTotalCount]    = useState(0);
 
   const [showAdd,       setShowAdd]       = useState(false);
+  // The HR dashboard's "Add Candidate" shortcut links here with ?action=add; it only opens the form for someone who may create.
+  useEffect(() => {
+    if (canCreate && new URLSearchParams(window.location.search).get("action") === "add") setShowAdd(true);
+  }, [canCreate]);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [markData,      setMarkData]      = useState<{ candidate: Candidate; targetStatus: "selected" | "rejected" } | null>(null);
   const [logsFor,       setLogsFor]       = useState<Candidate | null>(null);
@@ -54,6 +60,7 @@ export default function InterviewListPage() {
   const [portalMsg,     setPortalMsg]     = useState<string | null>(null);
   const [portalErr,     setPortalErr]     = useState<string | null>(null);
   const [editTarget,    setEditTarget]    = useState<Candidate | null>(null);
+  const [feedbackFor, setFeedbackFor] = useState<Candidate | null>(null);
   const [portalConfirm, setPortalConfirm] = useState<Candidate | null>(null);
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -82,6 +89,12 @@ export default function InterviewListPage() {
     b?: number | "",
     p?: number,
   ) => {
+    // A restricted user with no branch gets no candidate request at all (the server would not restrict them).
+    if (!canRequestCandidates({ unrestricted, effectiveBranch })) {
+      setCandidates([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -109,19 +122,20 @@ export default function InterviewListPage() {
     } catch {
       // stats are cosmetic — ignore failure
     }
-  }, []);
+  }, [unrestricted, effectiveBranch]);
 
-  // Wait for the user (and, if branch-restricted, the branch list) to resolve
-  // before the very first fetch — otherwise it would briefly go out unscoped.
-  // If a restricted user's branch name has no matching Branch record, fail
-  // closed (fetch nothing) rather than falling back to "All Branches".
+  // Wait for the user (and, if branch-restricted, the branch list) to resolve before the very first fetch.
+  // A restricted user whose own branch is unknown makes no request at all (fail closed). If the branch LIST is merely
+  // unavailable to them, the request carries no branch and the server applies their own branch (lib/interviewListScope.ts).
   useEffect(() => {
     if (initialFetchDone.current || !user || !branchesLoaded) return;
     initialFetchDone.current = true;
-    const initialBranch = unrestricted ? "" : (myBranch ? myBranch.id : -1);
-    if (!unrestricted) setBranchFilter(initialBranch);
-    fetchAll(search, statusFilter, initialBranch, 1);
-  }, [user, branchesLoaded, unrestricted, myBranch, fetchAll, search, statusFilter]);
+    // When the branch list was refused (no branches.view) there is no branch id: send none, and the server scopes the
+    // candidates to the signed-in user's own branch (see lib/interviewListScope.ts for why that is safe).
+    const initial = initialBranchRequest({ unrestricted, effectiveBranch, branchId: myBranch ? myBranch.id : null });
+    if (!unrestricted) setBranchFilter(initial.branch);
+    fetchAll(search, statusFilter, initial.branch, 1);
+  }, [user, branchesLoaded, unrestricted, effectiveBranch, myBranch, fetchAll, search, statusFilter]);
 
   function handleSearch(val: string) {
     setSearch(val);
@@ -163,11 +177,11 @@ export default function InterviewListPage() {
     setPortalErr(null);
     try {
       const res = await RECRUITMENT_API.sendPortalLogin(candidateId);
-      setPortalMsg(res.data?.message ?? "Portal login sent.");
+      setPortalMsg(res.data?.message ?? "Onboarding link sent.");
       fetchAll(search, statusFilter, branchFilter);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Failed to send portal login.";
+        ?.response?.data?.message ?? "Failed to send the onboarding link.";
       setPortalErr(msg);
     } finally {
       setSendingPortal(null);
@@ -313,18 +327,21 @@ export default function InterviewListPage() {
         onStatusChanged={onStatusChanged}
         onMarkRequest={(cand, status) => setMarkData({ candidate: cand, targetStatus: status })}
         onSendPortalLogin={setPortalConfirm}
+        onOpenFeedback={setFeedbackFor}
       />
 
       {portalConfirm && (
         <ConfirmModal
-          title="Send portal login?"
-          body={`This emails ${portalConfirm.name} (${portalConfirm.email}) their portal login credentials and opens the nine-step self-service onboarding wizard after they change their temporary password.`}
-          confirmLabel="Send Login"
+          title="Send onboarding link?"
+          body={`This emails ${portalConfirm.name} (${portalConfirm.email}) a one-time link, valid for a limited time, to complete the onboarding wizard and upload documents. No account or password is created until you approve the onboarding.`}
+          confirmLabel="Send Link"
           saving={sendingPortal === portalConfirm.id}
           onConfirm={confirmSendPortalLogin}
           onCancel={() => setPortalConfirm(null)}
         />
       )}
+
+      {feedbackFor && <FeedbackModal candidateId={feedbackFor.id} candidateName={feedbackFor.name} onClose={() => setFeedbackFor(null)} />}
 
       {/* Modals */}
       {showAdd && <AddCandidateModal onClose={() => setShowAdd(false)} onSaved={onCandidateAdded} />}

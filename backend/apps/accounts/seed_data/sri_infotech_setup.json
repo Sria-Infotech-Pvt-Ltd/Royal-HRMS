@@ -1,0 +1,22 @@
+{
+  "company": {
+    "company_name": "Sri Infotech",
+    "address": "Hyderabad, Telangana",
+    "city": "Hyderabad"
+  },
+  "branches": [
+    {"branch_name": "Kondapur", "state": "Telangana", "city": "Hyderabad", "address": "Kondapur, Hyderabad, Telangana"},
+    {"branch_name": "Mulugu", "state": "Telangana", "city": "Mulugu", "address": "Mulugu, Telangana"}
+  ],
+  "departments": {
+    "parent_path": ["SRIA", "Software Services"],
+    "units": [
+      {"name": "SAP"},
+      {"name": "Web Development", "children": [{"name": "Frontend Development"}, {"name": "Backend Development"}]},
+      {"name": "AI / ML", "aliases": ["AI & ML"]},
+      {"name": "Data Analytics"},
+      {"name": "Software Testing / QA", "aliases": ["Testing / QA"]},
+      {"name": "Deployment"}
+    ]
+  }
+}

@@ -163,7 +163,10 @@ class CandidatePortalOnboardingTests(TestCase):
         self.assertIsNotNone(portal_user)
         self.assertTrue(portal_user.requires_self_service_onboarding)
         self.assertEqual(portal_user.onboarding_status, User.ONBOARDING_PENDING)
-        self.assertTrue(portal_user.must_change_password)
+        # Password-less link: no temporary password is issued, so there is nothing to change; the account is
+        # activated only after HR approves the onboarding.
+        self.assertFalse(portal_user.must_change_password)
+        self.assertIsNone(portal_user.account_activated_at)
 
 
 class CandidateCreateValidationTests(TestCase):

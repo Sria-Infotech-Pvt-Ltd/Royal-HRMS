@@ -208,8 +208,9 @@ def list_corrections(
 
     status_filter: 'pending' | 'l2_pending' | 'approved' | 'rejected' | '' (all)
     """
-    # Onboarding employees (not yet activated) have no attendance to correct yet — see User.onboarded_q().
-    employee_qs = User.objects.filter(is_active=True).filter(User.onboarded_q())
+    # Everyone whose joining date has arrived, whatever their onboarding state. Leavers stay (they have history to correct).
+    from apps.accounts.services_lifecycle_status import joined_q
+    employee_qs = User.objects.filter(is_active=True).filter(joined_q())
     if branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
@@ -287,6 +288,15 @@ def _act_on_correction(correction_id: str, actioning_user, *, approve: bool, rem
             raise PermissionError(
                 f'You are not authorised to act on this request at the {stage.upper()} stage.'
             )
+
+        # Approving creates attendance, so the correction's DATE must fall inside the employee's employment. Rejecting is always
+        # allowed. There is no override: the request stays pending until it is rejected or the joining date is corrected.
+        if approve:
+            from apps.accounts.services_lifecycle_status import attendance_date_problem
+
+            not_employed = attendance_date_problem(correction.employee, correction.date)
+            if not_employed:
+                raise PermissionError(f'{not_employed} This correction cannot be approved; reject it instead.')
 
         now = timezone.now()
         stage_status = AttendanceCorrection.STAGE_APPROVED if approve else AttendanceCorrection.STAGE_REJECTED

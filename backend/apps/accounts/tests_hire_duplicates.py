@@ -1,4 +1,8 @@
-"""UAT-010: the same email or mobile as an existing employee (or another open draft) is caught at hire, with a clear message."""
+"""UAT-010: the same email or mobile as an existing employee (or another open draft) is flagged on the draft and refused at hire.
+
+Saving the draft is never refused for a duplicate (so two drafts cannot lock each other out); the finding comes back as a
+warning with severity "error", the wizard will not advance past it, and completing the hire is what blocks it.
+See tests_hire_draft_autosave for the save/complete contract."""
 import datetime
 from io import StringIO
 
@@ -33,15 +37,25 @@ class HireDuplicateTests(TestCase):
     def _patch(self, action, body):
         return self.client.patch(reverse('hire-action-detail', args=[action.pk]), body, format='json')
 
-    def test_same_email_is_refused_inline_naming_the_employee_and_status(self):
-        response = self._patch(self._draft(), {'email': 'Already.Here@test.com'})
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()['data']['email'], 'This email already belongs to EMPDUP001 (active).')
+    def test_same_email_is_flagged_inline_naming_the_employee_and_status_but_still_saved(self):
+        draft = self._draft()
+        response = self._patch(draft, {'email': 'Already.Here@test.com'})
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertEqual(response.json()['data']['warnings'], [
+            {'field': 'email', 'severity': 'error', 'message': 'This email already belongs to EMPDUP001 (active).'},
+        ])
+        draft.refresh_from_db()
+        self.assertEqual(draft.draft_data['email'], 'Already.Here@test.com')
 
-    def test_same_mobile_in_any_format_is_refused(self):
-        response = self._patch(self._draft(), {'phone': '9876543210'})
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()['data']['phone'], 'This mobile number already belongs to EMPDUP001 (active).')
+    def test_same_mobile_in_any_format_is_flagged_but_still_saved(self):
+        draft = self._draft()
+        response = self._patch(draft, {'phone': '9876543210'})
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertEqual(response.json()['data']['warnings'], [
+            {'field': 'phone', 'severity': 'error', 'message': 'This mobile number already belongs to EMPDUP001 (active).'},
+        ])
+        draft.refresh_from_db()
+        self.assertEqual(draft.draft_data['phone'], '9876543210')
 
     def test_a_clean_email_and_mobile_pass(self):
         response = self._patch(self._draft(), {'email': 'new.person@test.com', 'phone': '9123456789'})
@@ -57,13 +71,18 @@ class HireDuplicateTests(TestCase):
         self.assertIn('EMPDUP002', warning['message'])
         self.assertIn('rehire', warning['message'])
 
-    def test_another_open_draft_with_the_same_email_is_refused_but_your_own_resave_is_fine(self):
+    def test_another_open_draft_with_the_same_email_is_flagged_but_both_drafts_still_save(self):
         mine, other = self._draft(), self._draft()
-        self.assertEqual(self._patch(mine, {'email': 'twice@test.com'}).status_code, 200)
+        first = self._patch(mine, {'email': 'twice@test.com'})
+        self.assertEqual((first.status_code, first.json()['data']['warnings']), (200, []))
         self.assertEqual(self._patch(mine, {'email': 'twice@test.com'}).status_code, 200)  # saving the same draft again
-        refused = self._patch(other, {'email': 'twice@test.com'})
-        self.assertEqual(refused.status_code, 400)
-        self.assertEqual(refused.json()['data']['email'], 'Another open hire draft already uses this email.')
+        flagged = self._patch(other, {'email': 'twice@test.com'})
+        self.assertEqual(flagged.status_code, 200, flagged.json())
+        self.assertEqual(flagged.json()['data']['warnings'], [
+            {'field': 'email', 'severity': 'error', 'message': 'Another open hire draft already uses this email.'},
+        ])
+        # ...and the first draft, which now sees the other one, is not locked out either
+        self.assertEqual(self._patch(mine, {'email': 'twice@test.com', 'first_name': 'Still'}).status_code, 200)
 
     def test_completion_checks_again_on_the_server(self):
         draft = self._draft()

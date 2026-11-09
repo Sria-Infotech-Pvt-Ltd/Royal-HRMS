@@ -15,6 +15,9 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+from apps.accounts.services_approval_chain import describe_chain
+from apps.accounts.services_approver_assignment import LEAVE as LEAVE_WORKFLOW
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
@@ -51,7 +54,7 @@ from apps.hrms.views.leave_shared import *  # noqa: F401,F403
 # ─── Leave Requests ────────────────────────────────────────────────────────────
 
 class LeaveRequestListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
@@ -110,6 +113,11 @@ class LeaveRequestListCreateView(APIView):
         return success('Leave requests retrieved.', paginated_data(paginator, page_obj, serializer.data))
 
     def post(self, request):
+        from apps.accounts.services_lifecycle_status import ACTION_LEAVE, block_message
+
+        blocked = block_message(request.user, ACTION_LEAVE)
+        if blocked:
+            return error(blocked, http_status=403)
         serializer = LeaveRequestCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
@@ -205,6 +213,10 @@ class LeaveRequestListCreateView(APIView):
                         held_note = f' ({held_by_pending:g} more day(s) are held by your pending requests)' if held_by_pending else ''
                         return error(f'Insufficient balance. You have {max(available, 0):g} day(s) available{held_note}.')
 
+            # Never submit into a chain that cannot finish (nobody to decide, or a named approver who cannot approve leave).
+            chain = describe_chain(request.user, LEAVE_WORKFLOW)
+            if not chain['can_submit']:
+                return error(' '.join(chain['blocking']), data={'approval_chain': chain})
             l1, l2 = _resolve_approval_chain(request.user)
 
             # Managers skip L1 — their leave routes directly to HR (L2).
@@ -252,7 +264,7 @@ class LeaveRequestListCreateView(APIView):
 
 
 class LeaveRequestDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_request(self, request_id: str, user):
         try:
@@ -316,7 +328,7 @@ class LeaveRequestDetailView(APIView):
 
 
 class LeaveApprovalView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request, request_id: str):
         if not _has_perm(request.user, 'leave.approve'):

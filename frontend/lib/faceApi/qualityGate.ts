@@ -36,6 +36,9 @@ export interface QualityGateResult {
   /** Empty when passed — human-readable reasons otherwise, e.g. shown to
    *  the employee as "move closer" / "face the camera directly". */
   reasons: string[];
+  /** Short machine-readable code per entry in `reasons` (same order) — used
+   *  only for diagnostics/telemetry, never shown to the employee. */
+  codes: string[];
   metrics: FrameQualityMetrics;
 }
 
@@ -66,27 +69,29 @@ export const QUALITY_THRESHOLDS = {
 
 export function assessFrameQuality(metrics: FrameQualityMetrics): QualityGateResult {
   const reasons: string[] = [];
+  const codes: string[] = [];
+  const add = (code: string, reason: string) => { codes.push(code); reasons.push(reason); };
 
   if (metrics.detectionScore < QUALITY_THRESHOLDS.MIN_DETECTION_SCORE) {
-    reasons.push('Face detection confidence too low — hold still and make sure your face is unobstructed.');
+    add('detection_low', 'Face detection confidence too low — hold still and make sure your face is unobstructed.');
   }
   if (metrics.faceWidthRatio < QUALITY_THRESHOLDS.MIN_FACE_WIDTH_RATIO) {
-    reasons.push('Face too far from the camera — move closer.');
+    add('too_far', 'Face too far from the camera — move closer.');
   }
   if (metrics.faceWidthRatio > QUALITY_THRESHOLDS.MAX_FACE_WIDTH_RATIO) {
-    reasons.push('Face too close to the camera — move back a little.');
+    add('too_close', 'Face too close to the camera — move back a little.');
   }
   if (metrics.frontality < QUALITY_THRESHOLDS.MIN_FRONTALITY) {
-    reasons.push('Face not centered/frontal enough — look directly at the camera.');
+    add('not_frontal', 'Face not centered/frontal enough — look directly at the camera.');
   }
   if (metrics.meanLuminance < QUALITY_THRESHOLDS.MIN_MEAN_LUMINANCE) {
-    reasons.push('Lighting too dark — move to a better-lit area.');
+    add('too_dark', 'Lighting too dark — move to a better-lit area.');
   }
   if (metrics.meanLuminance > QUALITY_THRESHOLDS.MAX_MEAN_LUMINANCE) {
-    reasons.push('Lighting too bright/overexposed — avoid direct backlight or glare.');
+    add('too_bright', 'Lighting too bright/overexposed — avoid direct backlight or glare.');
   }
 
-  return { passed: reasons.length === 0, reasons, metrics };
+  return { passed: reasons.length === 0, reasons, codes, metrics };
 }
 
 interface Point { x: number; y: number }

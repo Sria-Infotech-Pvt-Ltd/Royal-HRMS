@@ -5,6 +5,7 @@ import { useClockWidget } from "@/hooks/useClockWidget";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
+import { formatLockoutCountdown } from "@/lib/faceApi/lockout";
 import type { PunchLocation } from "@/types/attendance";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import { useAfterMount } from "@/hooks/useAfterMount";
@@ -49,7 +50,10 @@ function browserDate(): string {
 
 export default function ClockWidget() {
   const clientDate = useAfterMount(browserDate, "");
-  const { session, isLoading, isPunching, isLocating, faceVerificationRequired, prepareLocation, punch } = useClockWidget();
+  const {
+    session, isLoading, isPunching, isLocating, faceVerificationRequired, prepareLocation, punch,
+    ensureFaceReady, isLockedOut, lockoutSecondsRemaining,
+  } = useClockWidget();
   const [showFaceModal, setShowFaceModal] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
 
@@ -66,6 +70,9 @@ export default function ClockWidget() {
   const isClockedIn = session?.is_clocked_in ?? false;
 
   async function handlePunch() {
+    // Not registered / pending / rejected: stop here with the server's instruction. No location request, no camera.
+    if (!ensureFaceReady()) return;
+
     // Location is fetched and geofence-validated BEFORE face verification —
     // same order the voice clock-in/out flow enforces.
     const { ok, location } = await prepareLocation(MODE);
@@ -113,7 +120,7 @@ export default function ClockWidget() {
             }}
           >
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block", animation: isClockedIn ? "clockPulse 2s ease-in-out infinite" : "none" }} />
-            {isClockedIn ? "Clocked In" : "Clocked Out"}
+            {isClockedIn ? "Punched In" : "Punched Out"}
           </span>
           {MODE === "wfh" && (
             <span
@@ -140,20 +147,22 @@ export default function ClockWidget() {
 
         <button
           onClick={handlePunch}
-          disabled={isPunching}
+          disabled={isPunching || isLockedOut}
           style={{
-            width: "100%", height: 44, borderRadius: 8, border: "none", cursor: isPunching ? "not-allowed" : "pointer",
+            width: "100%", height: 44, borderRadius: 8, border: "none", cursor: isPunching || isLockedOut ? "not-allowed" : "pointer",
             background: isClockedIn ? "var(--error)" : "var(--success)",
             color: "#fff", fontSize: 14, fontWeight: 700, marginBottom: 16,
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            opacity: isPunching ? 0.7 : 1, transition: "background 0.15s, opacity 0.15s",
+            opacity: isPunching || isLockedOut ? 0.7 : 1, transition: "background 0.15s, opacity 0.15s",
           }}
         >
-          {isLocating
+          {isLockedOut
+            ? <><i className="ti ti-lock" /> Please wait {formatLockoutCountdown(lockoutSecondsRemaining)}</>
+            : isLocating
             ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Getting location…</>
             : isPunching
             ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Please wait…</>
-            : <><i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} /> {isClockedIn ? "Clock Out" : "Clock In"}</>}
+            : <><i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} /> {isClockedIn ? "Punch Out" : "Punch In"}</>}
         </button>
 
         {displayPunches.length > 0 && (

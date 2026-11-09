@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import AuditLog, Permission, PermissionTemplate, Position, PositionPermission
 from apps.accounts.serializers import PermissionTemplateSerializer
+from apps.accounts.services_access_guards import seat_permission_refusal
 from apps.accounts.services_sessions import current_holder_ids, force_relogin
 from apps.accounts.views.position_permissions import _seat_payload
 from core.permissions import has_perm as _has_perm
@@ -113,6 +114,9 @@ class PermissionTemplateApplyView(APIView):
         if missing:
             return error(f'Position(s) not found: {", ".join(str(m) for m in missing)}.', http_status=status.HTTP_404_NOT_FOUND)
 
+        refusal = seat_permission_refusal(request.user, positions)
+        if refusal:
+            return error(refusal, http_status=status.HTTP_403_FORBIDDEN)
         wanted_codenames = set(template.permissions.values_list('codename', flat=True))
         all_holder_ids: set[str] = set()
         with transaction.atomic():

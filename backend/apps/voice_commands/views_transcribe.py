@@ -34,6 +34,7 @@ from adrf.views import APIView
 from asgiref.sync import sync_to_async
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.settings import api_settings
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -43,6 +44,7 @@ from core.responses import error, success
 logger = logging.getLogger(__name__)
 
 from apps.voice_commands import sarvam_client
+from apps.voice_commands.throttles import VoiceTranscribeRateThrottle
 from apps.voice_commands.audit import log_no_match
 from apps.voice_commands.language import LANG_EN, LANG_HI
 
@@ -153,6 +155,8 @@ class VoiceTranscribeFallbackView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    # Project-wide default throttles stay in force, plus this paid path's own per-user limit (VOICE_TRANSCRIBE_RATE).
+    throttle_classes = [*api_settings.DEFAULT_THROTTLE_CLASSES, VoiceTranscribeRateThrottle]
 
     async def post(self, request: Request) -> Response:
         """Scale-1 (2026-08-25 scalability-audit fix) — see

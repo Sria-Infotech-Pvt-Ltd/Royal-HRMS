@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from core.access import can_manage_team, team_managers, users_with_permission
+from core.access import can_manage_team, employee_in_scope, team_managers, users_with_permission
 import csv
 import io
 import logging
@@ -203,7 +203,7 @@ class EmployeeReportingManagerView(APIView):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
 
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or not employee_in_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         if can_manage_team(employee):

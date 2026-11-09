@@ -38,7 +38,8 @@ export const FIELD_LABELS: Record<string, string> = {
 };
 
 // Keys of the envelope itself, never field names.
-const RESERVED_KEYS = new Set(["message", "detail", "status", "data", "non_field_errors", "error"]);
+// `saved_fields` and `warnings` ride along on a partly-saved draft (the hire wizard) and are not field errors.
+const RESERVED_KEYS = new Set(["message", "detail", "status", "data", "non_field_errors", "error", "saved_fields", "warnings"]);
 const PREFIX_PATTERN = /^([a-z][a-z0-9_]*): ([\s\S]+)$/;
 
 function humanise(key: string): string {

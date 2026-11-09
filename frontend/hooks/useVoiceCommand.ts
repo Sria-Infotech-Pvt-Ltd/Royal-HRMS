@@ -5,16 +5,19 @@ import { useToast } from "@/components/ToastProvider";
 import { captureAndTranscribeViaSarvam } from "@/lib/voiceSttFallback";
 import { fetchSpeechAudio, type TtsLanguage } from "@/lib/voiceTts";
 import { createAutoListenScheduler, shouldAutoListenAfterSpeaking } from "@/lib/voiceAutoListen";
+import { shouldAttemptHindiRecovery, shouldDeferForLowConfidence } from "@/lib/voiceHindiRecovery";
+import { activeLockoutSeconds } from "@/lib/voiceLockout";
+import { useVoiceLockout } from "./useVoiceLockout";
 import type { VoiceCommandStatus } from "@/types/voice";
 import {
   SILENCE_TIMEOUT_MS, CONVERSATION_AUTO_CLOSE_MS, IMMEDIATE_RESULT_AUTO_CLOSE_MS, AUTO_LISTEN_DELAY_MS,
-  HISTORY_IDLE_CLEAR_MS, TTS_END_BUFFER_MS, VOICE_LANG, VOICE_LOCALE, NO_MATCH_INTENT, CLOCK_INTENTS,
+  HISTORY_IDLE_CLEAR_MS, TTS_END_BUFFER_MS, VOICE_LANG, VOICE_LOCALE, CLOCK_INTENTS,
   GEOFENCE_REQUIRED_MESSAGE, TTS_CANCEL_SETTLE_MS, BARGE_IN_ENABLED, BARGE_IN_SAMPLE_INTERVAL_MS,
   BARGE_IN_ENERGY_THRESHOLD, BARGE_IN_CONSECUTIVE_SAMPLES,
 } from "./useVoiceCommand.constants";
 import {
   estimateReadingTimeMs, isAwaitingFaceProof, postVoiceParse, captureLocationOrErrorMessage,
-  getSpeechRecognitionConstructor,
+  getSpeechRecognitionConstructor, applyFaceLockoutGuard,
 } from "./useVoiceCommand.helpers";
 import type {
   NormalisedError, VoiceResultStatus, VoiceHistoryEntry, VoiceConversationState,
@@ -24,6 +27,8 @@ export type { VoicePanelPhase, VoiceResultStatus, VoiceHistoryEntry, VoiceConver
 
 export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
   const { showToast } = useToast();
+  // Shared face lockout (same storage as the manual Punch In/Out button) - see useVoiceLockout.ts.
+  const { lockoutSecondsRemaining, recordLockout } = useVoiceLockout();
   const [status, setStatus] = useState<VoiceCommandStatus>("idle");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [conversation, setConversation] = useState<VoiceConversationState | null>(null);
@@ -51,6 +56,10 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const transcriptRef = useRef({ final: "", interim: "" });
+  // Lowest browser confidence seen across every FINAL recognition chunk of the current listening session. Undefined
+  // until a chunk reports one (Chromium does not always) - undefined means "no signal", never "low confidence".
+  // Reset at the start of each session; read in onend by shouldDeferForLowConfidence.
+  const minConfidenceRef = useRef<number | undefined>(undefined);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -318,6 +327,13 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     autoListenSchedulerRef.current?.cancel();
   }, [stopVadTap]);
 
+  // Muting while a reply is still playing must stop it now, not just suppress the next one. useVoiceMutePreference
+  // only knows the preference (not the <audio> element cancelSpeech() owns), so the interruption lives here.
+  // Un-muting has nothing playing to resume.
+  useEffect(() => {
+    if (isMuted) cancelSpeech();
+  }, [isMuted, cancelSpeech]);
+
   // Speaks the same message text shown in the panel/toast, via POST
   // /api/voice/speak/ (Sarvam Bulbul TTS, always voiced as "shubh"
   // server-side) in `language` — the response's own detected language
@@ -366,6 +382,8 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           // existing dismiss-timer behavior so nothing hangs" half of that
           // failure handling (see speakThenDismiss's own onEnd, which sizes
           // its delay off the DISPLAYED text's reading time, not a guess).
+          // The text is already on screen; tell the user why nothing was spoken instead of failing silently.
+          showToast("Voice response unavailable, showing text only", "error");
           settle();
           return;
         }
@@ -402,7 +420,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
 
       return true;
     },
-    [isMuted, cancelSpeech, stopVadTap, startVadTap]
+    [isMuted, cancelSpeech, stopVadTap, startVadTap, showToast]
   );
 
   // Speaks spokenText in `language`, then dismisses the panel — timed to the
@@ -523,7 +541,10 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         // normal failure. Exactly one retry — if Sarvam can't help either,
         // or the resubmitted transcript still no-matches, everything below
         // behaves exactly as if this retry had never been attempted.
-        if (sourceIsVoice && !outcome.success && outcome.intent === NO_MATCH_INTENT) {
+        // One retry at most: the resubmission below is sent with no sourceIsVoice, so it can never trigger another.
+        // shouldAttemptHindiRecovery covers a final no-match AND a mic-sourced "did you mean X?" question
+        // (is_clarification) - nothing has executed in either case, so discarding the transcript is safe.
+        if (shouldAttemptHindiRecovery(sourceIsVoice, outcome)) {
           const sarvamResult = await captureAndTranscribeViaSarvam();
           if (sarvamResult) {
             displayTranscript = sarvamResult.transcript;
@@ -534,6 +555,11 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
             });
           }
         }
+
+        // Decision A: remember a face lockout the server just reported (shared with the web punch button) and, if one is
+        // active, never open the camera for a face-proof turn - answer with the countdown instead.
+        recordLockout(outcome.result);
+        outcome = applyFaceLockoutGuard(outcome, activeLockoutSeconds());
 
         const { message, speechMessage, conversational, awaitingInput, success: isSuccess } = outcome;
         // TTS confidentiality: sensitive intents (payslip figures, leave
@@ -617,7 +643,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         setInterimTranscript("");
       }
     },
-    [showToast, clearAutoCloseTimer, speak, speakThenDismiss, isDisabled, cancelSpeech, appendHistory]
+    [showToast, clearAutoCloseTimer, speak, speakThenDismiss, isDisabled, cancelSpeech, appendHistory, recordLockout]
   );
 
   // Browser SpeechRecognition is locked to VOICE_LOCALE ("en-US") — genuine
@@ -649,6 +675,24 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     }
   }, [showToast, submitTranscript]);
 
+  // Low browser confidence on a mic transcript: ask Sarvam Hindi STT BEFORE the first parse, so a confident-looking but
+  // wrong transcript cannot dispatch a stateful action (punch in/out, a leave cancellation) first. Runs once per
+  // listening session. A usable Sarvam transcript is submitted as typed-like input (no further recovery); if Sarvam
+  // returns nothing, the ORIGINAL transcript is submitted - also without recovery, since the Sarvam attempt was
+  // already spent - so this can never loop or reopen the mic a second time.
+  const attemptHindiRecoveryThenSubmit = useCallback(async (originalTranscript: string) => {
+    setStatus("processing");
+    const sarvamResult = await captureAndTranscribeViaSarvam();
+    if (sarvamResult) {
+      await submitTranscript(
+        sarvamResult.transcript, false, sarvamResult.languageProbability, sarvamResult.wasLanguageHinted,
+        sarvamResult.detectedLanguage
+      );
+    } else {
+      await submitTranscript(originalTranscript, false);
+    }
+  }, [submitTranscript]);
+
   // Second+ turn of the clock_in/clock_out facial-proof dialogue —
   // VoiceCommandButton calls this once FaceVerificationModal produces a
   // captured descriptor, resubmitting the SAME original transcript
@@ -664,10 +708,14 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
       clearAutoCloseTimer();
 
       try {
-        const outcome = await postVoiceParse(transcript, VOICE_LANG, {
+        const rawOutcome = await postVoiceParse(transcript, VOICE_LANG, {
           face_embedding: embedding, liveness_passed: true,
           liveness_score: livenessScore, capture_session_id: captureSessionId,
         });
+        // A blocked answer (attempt cap) carries { blocked, retry_after_seconds }: record it so the countdown shows and
+        // the next face-proof turn skips the camera until it expires. Same guard as submitTranscript.
+        recordLockout(rawOutcome.result);
+        const outcome = applyFaceLockoutGuard(rawOutcome, activeLockoutSeconds());
         const { message, speechMessage, conversational, awaitingInput, success: isSuccess } = outcome;
         const spokenText = speechMessage ?? message;
 
@@ -714,7 +762,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         setStatus("idle");
       }
     },
-    [conversation, clearAutoCloseTimer, speak, speakThenDismiss, appendHistory]
+    [conversation, clearAutoCloseTimer, speak, speakThenDismiss, appendHistory, recordLockout]
   );
 
   const clearPendingStartTimer = useCallback(() => {
@@ -752,14 +800,22 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
       recognition.lang = VOICE_LOCALE;
 
       transcriptRef.current = { final: "", interim: "" };
+      minConfidenceRef.current = undefined;
       setInterimTranscript("");
 
       recognition.onresult = (event) => {
         let interim = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const piece = event.results[i][0].transcript;
+          const alternative = event.results[i][0];
+          const piece = alternative.transcript;
           if (event.results[i].isFinal) {
             transcriptRef.current.final += piece;
+            if (typeof alternative.confidence === "number") {
+              minConfidenceRef.current =
+                minConfidenceRef.current === undefined
+                  ? alternative.confidence
+                  : Math.min(minConfidenceRef.current, alternative.confidence);
+            }
           } else {
             interim += piece;
           }
@@ -796,10 +852,14 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         recognitionRef.current = null;
         const transcript = (transcriptRef.current.final || transcriptRef.current.interim).trim();
         if (transcript) {
-          // sourceIsVoice=true — this transcript came from the mic, so a
-          // final no-match is eligible for the Sarvam-STT retry (see
-          // submitTranscript's own comment on that branch).
-          submitTranscript(transcript, true);
+          // Checked BEFORE the first dispatch - see shouldDeferForLowConfidence's docstring.
+          if (shouldDeferForLowConfidence(minConfidenceRef.current)) {
+            void attemptHindiRecoveryThenSubmit(transcript);
+          } else {
+            // sourceIsVoice=true - this transcript came from the mic, so a final no-match or a "did you mean" question
+            // is eligible for the single Sarvam-STT retry (see submitTranscript's own comment on that branch).
+            submitTranscript(transcript, true);
+          }
         } else {
           // Recognition ended (e.g. the silence timeout fired) with nothing
           // usable ever recognized — same non-English-speech case onerror's
@@ -837,7 +897,10 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     } else {
       beginRecognition();
     }
-  }, [showToast, submitTranscript, attemptSilentSpeechFallback, resetSilenceTimer, clearSilenceTimer, cancelSpeech]);
+  }, [
+    showToast, submitTranscript, attemptSilentSpeechFallback, attemptHindiRecoveryThenSubmit,
+    resetSilenceTimer, clearSilenceTimer, cancelSpeech,
+  ]);
 
   // Breaks the declaration-order cycle noted at startListeningRef's own
   // declaration above. A ref write belongs in an effect, not render body
@@ -887,5 +950,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     // Session-only chat transcript — see VoiceHistoryEntry.
     history,
     clearHistory,
+    // Whole seconds left on the shared face lockout (0 = none) - the panel shows the countdown while > 0.
+    lockoutSecondsRemaining,
   };
 }

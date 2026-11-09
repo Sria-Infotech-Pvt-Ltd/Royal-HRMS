@@ -76,8 +76,8 @@ export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false 
   const shiftLabel = shift?.start_time
     ? `${shift.name} · ${shift.start_time}–${shift.end_time}`
     : status?.clocked_in
-      ? `Clocked in · ${status.clock_in_time ?? "—"}`
-      : "Not clocked in yet";
+      ? `Punched in · ${status.clock_in_time ?? "—"}`
+      : "Not punched in yet";
 
   return (
     <section className="ess-hero">

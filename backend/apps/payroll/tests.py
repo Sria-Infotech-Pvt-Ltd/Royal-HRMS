@@ -13,6 +13,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from apps.accounts.models import User
 from apps.accounts.factories import make_role, make_user
 from apps.attendance.models import AttendanceRecord
 from apps.branch.models import Branch, City, State
@@ -116,6 +117,7 @@ class PayrollCycleCreationNotifiesManagersTests(TestCase):
             branch=branch.branch_name,
             employee_id='REPORT001',
             reporting_manager=self.manager,
+            onboarding_status=User.ONBOARDING_COMPLETE,  # payroll only counts onboarded employees (User.onboarded_q())
         )
 
         _login(self.client, 'hr@test.com')

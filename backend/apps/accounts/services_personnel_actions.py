@@ -211,6 +211,17 @@ def _current_ctc(employee: User) -> str:
 
 
 @transaction.atomic
+def _check_position_authority(actor: User, employee: User, position_id) -> None:
+    """The actor must be allowed to hand out the position's sensitive permissions (same rule as the hiring and edit doors)."""
+    from apps.accounts.models import Position
+    from apps.accounts.services_access_guards import assignment_refusal
+
+    position = Position.objects.filter(pk=position_id).first()
+    refusal = assignment_refusal(actor, employee, position) if position is not None else None
+    if refusal:
+        raise ActionRequestError(refusal.message, refusal.status)
+
+
 def raise_request(raiser: User, employee: User, data: dict) -> PAR:
     action_type = str(data.get('action_type') or '').strip()
     if action_type not in dict(PAR.TYPE_CHOICES):
@@ -226,6 +237,8 @@ def raise_request(raiser: User, employee: User, data: dict) -> PAR:
         raise ActionRequestError('Select one of the recognised reasons for this action.')
     effective_from = _parse_date(data.get('effective_from'))
     payload, before = _clean_payload(action_type, data, employee)
+    if payload.get('position'):
+        _check_position_authority(raiser, employee, payload['position'])
     if PAR.objects.filter(employee=employee, action_type=action_type, status=PAR.STATUS_PENDING).exists():
         raise ActionRequestError(
             f'There is already a pending {dict(PAR.TYPE_CHOICES)[action_type].lower()} for this employee awaiting approval.', 409,
@@ -257,6 +270,8 @@ def decide(req_id, user: User, decision: str, note: str = '') -> PAR:
     note = (note or '').strip()
     if decision == 'reject' and not note:
         raise ActionRequestError('Add a reason for rejecting this request.')
+    if decision == 'approve' and step['key'] == STEP_HR and req.payload.get('position'):
+        _check_position_authority(user, req.employee, req.payload['position'])  # the HR approver is the one who applies it
 
     step.update(
         status='approved' if decision == 'approve' else 'rejected',

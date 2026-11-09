@@ -124,3 +124,85 @@ def excluded_from_payroll(prefix: str = '') -> Q:
 
 def excluded_from_headcount(prefix: str = '') -> Q:
     return _users_with_flag('exclude_from_headcount', prefix)
+
+
+# ── Which employees an actor may act on ────────────────────────────────────────
+# Default-deny: an actor with no valid scope matches nobody. Superuser is the only company-wide rule — settings.edit
+# is deliberately NOT consulted here (it gives Settings, not every employee; see is_full_access above).
+# employee_in_scope() (one employee) and employees_in_scope() (a User filter) implement the same rules.
+
+def _is_saved(instance) -> bool:
+    """A User() that was never saved already has a UUID pk, so look at the instance state, not the pk."""
+    return bool(instance is not None and getattr(instance, 'pk', None) and not instance._state.adding)
+
+
+def _actor_is_usable(actor) -> bool:
+    return bool(_is_saved(actor) and getattr(actor, 'is_active', False))
+
+
+def _branch_name(value) -> str:
+    return value or ''
+
+
+def _same_branch(actor_fk_id, actor_name: str, employee_fk_id, employee_name: str) -> bool:
+    """Both branch FKs set => compare them. If either FK is null, fall back to legacy name equality, but only when
+    both names are non-blank (a blank never matches a blank)."""
+    if actor_fk_id and employee_fk_id:
+        return actor_fk_id == employee_fk_id
+    return bool(actor_name.strip()) and actor_name == employee_name
+
+
+def _employee_branches(employee) -> list[tuple]:
+    """(branch_fk_id, branch_name) pairs for the employee. A candidate still being onboarded has no branch of its own
+    yet (it is copied over from the Candidate on approval), so the linked candidate's branch stands in for it."""
+    if employee.branch_fk_id or employee.branch:
+        return [(employee.branch_fk_id, _branch_name(employee.branch))]
+    return [
+        (candidate.branch_id, _branch_name(candidate.branch.branch_name if candidate.branch_id else ''))
+        for candidate in employee.candidate_portal.select_related('branch')
+    ]
+
+
+def employee_in_scope(actor, employee) -> bool:
+    """True if `actor` may act on `employee`. Rules, in order:
+    1. unusable actor (missing / unsaved / inactive) or missing employee -> no
+    2. superuser -> yes
+    3. seat has can_manage_team -> only the actor's direct reports (even if the seat also manages a branch)
+    4. same branch (branch_fk, legacy name only when an FK is null and both names are non-blank)
+    5. otherwise no — including an actor with no branch.
+    """
+    if not _actor_is_usable(actor) or not _is_saved(employee):
+        return False
+    if is_full_access(actor):
+        return True
+    if can_manage_team(actor):
+        return employee.reporting_manager_id == actor.pk
+    actor_name = _branch_name(actor.branch)
+    if not (actor.branch_fk_id or actor_name.strip()):
+        return False
+    return any(_same_branch(actor.branch_fk_id, actor_name, fk_id, name) for fk_id, name in _employee_branches(employee))
+
+
+def employees_in_scope(actor) -> Q:
+    """Q for User.objects.filter(...) matching exactly the employees employee_in_scope() allows. Joins the candidate
+    relation, so callers that combine it with other filters should call .distinct()."""
+    if not _actor_is_usable(actor):
+        return Q(pk__in=[])
+    if is_full_access(actor):
+        return Q()
+    if can_manage_team(actor):
+        return Q(reporting_manager_id=actor.pk)
+    actor_fk_id, actor_name = actor.branch_fk_id, _branch_name(actor.branch)
+    if not (actor_fk_id or actor_name.strip()):
+        return Q(pk__in=[])
+    no_own_branch = Q(branch_fk__isnull=True, branch='')
+    condition = Q(pk__in=[])
+    if actor_fk_id:
+        condition |= Q(branch_fk_id=actor_fk_id)
+        if actor_name.strip():
+            condition |= Q(branch_fk__isnull=True, branch=actor_name)
+        condition |= no_own_branch & Q(candidate_portal__branch_id=actor_fk_id)
+    else:
+        condition |= Q(branch=actor_name)
+        condition |= no_own_branch & Q(candidate_portal__branch__branch_name=actor_name)
+    return condition

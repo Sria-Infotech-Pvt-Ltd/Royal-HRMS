@@ -82,6 +82,7 @@ from apps.attendance.views.face_registration import (
     FaceRegistrationReviewView,
     FaceVerificationStatusView,
 )
+from apps.attendance.views.face_capture_telemetry import FaceCaptureTelemetryView
 from apps.attendance.views.face_registration_hr import (
     FaceRegistrationEmployeePickerView,
     FaceRegistrationEmployeeStatusView,
@@ -147,4 +148,5 @@ __all__ = [
     'FaceRegistrationEmployeePickerView',
     'FaceRegistrationEmployeeStatusView',
     'FaceRegistrationHRRegisterView',
+    'FaceCaptureTelemetryView',
 ]

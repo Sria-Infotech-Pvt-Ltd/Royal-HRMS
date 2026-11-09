@@ -23,6 +23,7 @@ from asgiref.sync import sync_to_async
 from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.settings import api_settings
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -31,6 +32,7 @@ from core.responses import error
 logger = logging.getLogger(__name__)
 
 from apps.voice_commands import sarvam_client
+from apps.voice_commands.throttles import VoiceSpeakRateThrottle
 
 # Sarvam's own bulbul:v3 REST cap (sarvam_client.TTS_MAX_TEXT_LENGTH) is
 # enforced inside text_to_speech() itself; this is just the request-body
@@ -82,6 +84,9 @@ class VoiceSpeakView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    # The project-wide default throttles stay in force (setting throttle_classes replaces them), plus this paid
+    # path's own per-user limit (VOICE_SPEAK_RATE). A 429 is the standard error envelope the client already handles.
+    throttle_classes = [*api_settings.DEFAULT_THROTTLE_CLASSES, VoiceSpeakRateThrottle]
 
     async def post(self, request: Request) -> Response:
         """

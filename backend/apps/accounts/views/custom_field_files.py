@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+from core.access import employee_in_scope
+
 import csv
 import io
 import logging
@@ -146,8 +148,13 @@ class CustomFieldFileValueView(APIView):
             value = CustomFieldFileValue.objects.get(id=value_id)
         except CustomFieldFileValue.DoesNotExist:
             return None, error('File not found.', http_status=status.HTTP_404_NOT_FOUND)
-        if value.user_id != request.user.id and not _has_perm(request.user, 'employees.edit'):
-            return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        if value.user_id != request.user.id:
+            if not _has_perm(request.user, 'employees.edit'):
+                return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+            # HR/manager access to someone else's file is limited to employees in the requester's scope; anything
+            # outside it looks like a missing file.
+            if not employee_in_scope(request.user, value.user):
+                return None, error('File not found.', http_status=status.HTTP_404_NOT_FOUND)
         return value, None
 
     def get(self, request, value_id: str = None):

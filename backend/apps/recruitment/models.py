@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 
@@ -28,7 +30,7 @@ class Candidate(models.Model):
         (STATUS_INTERVIEW_SCHEDULED, 'Interview Scheduled'),
         (STATUS_INTERVIEW_DONE,      'Interview Done'),
         (STATUS_SELECTED,            'Selected'),
-        (STATUS_OFFER_SENT,          'Offer Sent'),
+        (STATUS_OFFER_SENT,          'Onboarding Link Sent'),
         (STATUS_CONVERTED,           'Converted to Employee'),
         (STATUS_REJECTED,            'Rejected'),
     ]
@@ -220,3 +222,40 @@ from apps.recruitment.models_v2 import (  # noqa: E402,F401
 
 # Phase 8A gap-closure — duplicate merge, consent, retention policy (additive).
 from apps.recruitment.models_v2b import CandidateDuplicateMerge, CandidateConsent, CandidateRetentionPolicy  # noqa: E402,F401
+
+
+class InterviewFeedback(models.Model):
+    """One interviewer's structured feedback on one candidate: a 1-5 rating, a recommendation and written comments.
+
+    HR reads every entry before deciding; a candidate cannot be marked Selected until at least one has been submitted.
+    An interviewer can only ever reach the candidates assigned to them (Candidate.interviewer).
+    """
+    RECOMMEND = 'recommend'
+    HOLD = 'hold'
+    NOT_RECOMMEND = 'not_recommend'
+    RECOMMENDATION_CHOICES = [
+        (RECOMMEND, 'Recommend'),
+        (HOLD, 'Undecided'),
+        (NOT_RECOMMEND, 'Do not recommend'),
+    ]
+    RATING_CHOICES = [(value, str(value)) for value in range(1, 6)]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='feedback')
+    interviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='interview_feedback')
+    interviewer_name = models.CharField(max_length=200, blank=True)  # kept even if the interviewer's account is later removed
+    rating = models.PositiveSmallIntegerField(choices=RATING_CHOICES)
+    recommendation = models.CharField(max_length=20, choices=RECOMMENDATION_CHOICES)
+    comments = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_interview_feedback'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['candidate', 'interviewer'], name='uniq_interview_feedback_per_interviewer'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.interviewer_name or "Interviewer"} on {self.candidate_id}: {self.rating}/5 ({self.recommendation})'

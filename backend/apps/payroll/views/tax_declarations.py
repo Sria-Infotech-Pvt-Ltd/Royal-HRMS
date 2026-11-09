@@ -2,6 +2,7 @@ import logging
 
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.permissions import has_perm as _has_perm
@@ -32,7 +33,7 @@ def _serializer_context(user) -> dict:
 class TaxDeclarationSchemaView(APIView):
     """GET /payroll/tax-declarations/schema/ — the items an employee can declare and their limits,
     so the form is driven by the same definitions the server validates and calculates with."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         return success('Tax declaration form retrieved.', schema_payload())
@@ -44,7 +45,7 @@ class MyTaxDeclarationView(APIView):
     (defaults: new regime, no investments declared) rather than requiring a
     separate "create" step — there's exactly one row per employee per FY, so
     get-or-create is simpler than a real list/create split here."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_or_create(self, user):
         declaration, _ = EmployeeTaxDeclaration.objects.get_or_create(
@@ -78,7 +79,7 @@ class SubmitTaxDeclarationView(APIView):
     for HR review. A submitted (not yet approved) declaration can still be
     edited (re-submitting just updates submitted_at), matching how a leave
     request stays editable until an approver actually acts on it."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request):
         # Form 124 is a signed statement — the employee must confirm the information is true.

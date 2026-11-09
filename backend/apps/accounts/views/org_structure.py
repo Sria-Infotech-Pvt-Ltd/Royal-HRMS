@@ -41,6 +41,8 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from apps.accounts.services_access_guards import placement_refusal
+from apps.accounts.services_sessions import current_holder_ids, force_relogin
 from core.file_validation import validate_file_content as _validate_file_content
 from core.pagination import paginate, paginated_data
 from core.permissions import HasSettingsPermission, has_perm as _has_perm
@@ -696,11 +698,17 @@ class PositionPlacementListCreateView(APIView):
         except (User.DoesNotExist, ValueError, TypeError):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
+        refusal = placement_refusal(request.user, employee, position)
+        if refusal:
+            return error(refusal, http_status=status.HTTP_403_FORBIDDEN)
+        displaced_holder_ids = set(current_holder_ids(position))
         placement = assign_position(
             employee, position,
             effective_from=effective_from, effective_to=effective_to,
             note=(request.data.get('note') or '').strip(), created_by=request.user,
         )
+        if effective_from <= timezone.localdate():
+            force_relogin(displaced_holder_ids | {employee.pk})  # the new and the displaced holder pick up their new access
         AuditLog.objects.create(
             user=request.user, action='update', module='org_structure',
             object_id=str(position.pk),
@@ -744,6 +752,8 @@ class PositionPlacementEndView(APIView):
             placement.note = note
         placement.full_clean()
         placement.save(update_fields=['effective_to', 'note', 'updated_at'])
+        if effective_to <= timezone.localdate():
+            force_relogin([placement.employee_id])
         # Deliberately does not touch the former holder's User.designation —
         # vacating a seat means "no longer occupying this org-chart slot,"
         # not "no longer has a job." Blanking or reverting it here would
@@ -802,6 +812,8 @@ class PlacementDetailView(APIView):
                 reopened.effective_to = None
                 reopened.save(update_fields=['effective_to', 'updated_at'])
                 details['reopened_placement'] = str(reopened.pk)
+        if not is_scheduled:
+            force_relogin({placement.employee_id} | ({reopened.employee_id} if reopened is not None else set()))
         AuditLog.objects.create(
             user=request.user, action='delete', module='org_structure',
             object_id=str(position.pk), changes=details,

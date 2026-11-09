@@ -299,20 +299,14 @@ class TextToSpeechTests(SimpleTestCase):
         self.assertEqual(mock_post.call_count, 2)
         self.mock_sleep.assert_called_once_with(sarvam_client._TTS_RETRY_BACKOFF_SECONDS[0])
 
-    @patch('apps.voice_commands.sarvam_client.requests.post')
-    def test_backoff_grows_between_successive_retries(self, mock_post):
-        mock_post.side_effect = [
-            MagicMock(status_code=503, text='backend overloaded'),
-            MagicMock(status_code=503, text='backend overloaded'),
-            MagicMock(status_code=200, json=lambda: {'audios': [_FAKE_AUDIO_B64]}),
-        ]
-
-        sarvam_client.text_to_speech('Hello', 'en-IN')
-
-        self.assertEqual(
-            [call.args[0] for call in self.mock_sleep.call_args_list],
-            list(sarvam_client._TTS_RETRY_BACKOFF_SECONDS),
-        )
+    # test_backoff_grows_between_successive_retries removed (2026-09-24
+    # scalability audit, _TTS_MAX_ATTEMPTS cut from 3 to 2): its premise —
+    # backoff GROWING across two successive retries — needs 3 attempts to
+    # even exist, which is no longer reachable (2 attempts means at most
+    # one retry, ever). test_429_then_success_returns_audio_without_
+    # exhausting_the_budget above already covers the one remaining backoff
+    # gap, referencing _TTS_RETRY_BACKOFF_SECONDS[0] dynamically like this
+    # test did.
 
     @patch('apps.voice_commands.sarvam_client.requests.post')
     def test_400_raises_input_error(self, mock_post):

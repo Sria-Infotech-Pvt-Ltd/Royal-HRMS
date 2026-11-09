@@ -8,6 +8,8 @@ under test here.
 """
 from __future__ import annotations
 
+import datetime
+
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
@@ -77,7 +79,7 @@ class FaceVerificationPunchTests(TestCase):
         cache.clear()
         self.client   = APIClient()
         role          = make_role('employee')
-        self.employee = make_user('faceverify@test.com', role=role, password='TestPass123!')
+        self.employee = make_user('faceverify@test.com', role=role, password='TestPass123!', date_of_joining=datetime.date(2020, 1, 1))
         _login(self.client, 'faceverify@test.com')
 
     def tearDown(self):
@@ -209,7 +211,7 @@ class FaceVerificationLowConfidenceFailClosedTests(TestCase):
         cache.clear()
         self.client   = APIClient()
         role          = make_role('employee_low_conf')
-        self.employee = make_user('lowconf@test.com', role=role, password='TestPass123!')
+        self.employee = make_user('lowconf@test.com', role=role, password='TestPass123!', date_of_joining=datetime.date(2020, 1, 1))
         _login(self.client, 'lowconf@test.com')
         _set_face_verification_mandatory(True)
         _make_approved_request(self.employee)
@@ -302,7 +304,7 @@ class FaceRegistrationHRRegisterTests(TestCase):
         # the picker/register endpoints are NOT branch-scoped.
         self.employee = make_user(
             'hrregister-employee@test.com', role=make_role('employee_hr_target'),
-            branch='Remote Branch',
+            branch='Remote Branch', date_of_joining=datetime.date(2020, 1, 1),
         )
         _login(self.client, 'hrregister-hr@test.com')
 

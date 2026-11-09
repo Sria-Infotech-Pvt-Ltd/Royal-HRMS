@@ -10,6 +10,9 @@ export interface SessionPayload {
   name:              string;
   designation:       string;
   permissions:       string[];
+  /** Present in the login cookie; read by the home-screen choice (lib/dashboardHome.ts). */
+  is_superuser?:     boolean;
+  can_manage_team?:  boolean;
 }
 
 export async function getSession(): Promise<SessionPayload | null> {

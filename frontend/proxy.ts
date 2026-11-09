@@ -6,6 +6,7 @@ const ACCESS_COOKIE = "royal_access_token";
 const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/announcements": "announcements.view",
   "/dashboard/interview-list": "recruitment.view",
+  "/dashboard/hr": "employees.view",
   // Also hosts the Onboarding Approvals tab (?tab=onboarding) — an HR user
   // with onboarding.approve but not recruitment.view must still be able to
   // reach it; recruitment.view alone would otherwise gate out anyone whose
@@ -28,14 +29,16 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/payroll": "payroll.view",
   "/dashboard/leave": "leave.view",
   "/dashboard/expenses": "expenses.view",
-  "/dashboard/approvals": ["leave.approve", "expenses.approve", "payroll.edit", "employees.approve", "employees.raise_action"],
+  "/dashboard/approvals": ["leave.approve", "expenses.approve", "payroll.edit", "employees.approve", "employees.raise_action", "facial_recognition.approve"],
   // /dashboard/separation intentionally absent — every employee can create
   // and view their own separation request, not just Manager/HR (same
   // self-service reasoning as my-payslip/my-attendance above). The page
   // itself scopes what each viewer sees and can do
   // (see app/dashboard/separation/_access.ts).
   "/dashboard/documents": "documents.view",
-  "/dashboard/reports": "reports.view",
+  // Anyone who can run at least one report. Each report still needs its own permission on the server, so this only
+  // decides who may open the screen; a person with none of them sees an empty list.
+  "/dashboard/reports": ["reports.view", "employees.export", "attendance.view", "leave.approve", "wfh.approve", "separation.approve", "facial_recognition.approve", "recruitment.view"],
   "/dashboard/audit": "audit.view",
   "/dashboard/performance": ["performance.manage_cycles", "performance.review_team"],
   "/dashboard/settings": "settings.view",
@@ -138,8 +141,10 @@ export function proxy(request: NextRequest) {
   // employee's existing session was invalidated when HR reset it, and
   // this page validates its own one-time token against the backend.
   const isAdminResetPage = pathname.startsWith("/reset-password/");
+  // The candidate's one-time onboarding link is opened signed out too; the page exchanges it for a limited session.
+  const isOnboardingStartPage = pathname.startsWith("/onboarding/start/");
 
-  if (!isAuthenticated && !isLoginPage && !isActivatePage && !isAdminResetPage) {
+  if (!isAuthenticated && !isLoginPage && !isActivatePage && !isAdminResetPage && !isOnboardingStartPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

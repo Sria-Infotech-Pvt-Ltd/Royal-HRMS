@@ -77,6 +77,10 @@ def make_user(email: str, role: AccessProfile | None = None, password: str = 'Te
     # account_activated_at (including None) to opt out.
     from django.utils import timezone
     extra.setdefault('account_activated_at', timezone.now())
+    # Likewise an ordinary employee has a joining date in the past. A blank one means "Unknown (Date Missing)" and a future one
+    # "Pre-Joining": neither may punch, request leave/WFH/expenses or be eligible for attendance or payroll (see
+    # services_lifecycle_status), so a test that wants one of those states passes its own date_of_joining (None included).
+    extra.setdefault('date_of_joining', date(2020, 1, 1))
     user = User.objects.create_user(email=email, password=password, full_name=full_name, **extra)
     if role is not None and role.has_access:
         place_in_seat(user, role)

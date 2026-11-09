@@ -9,8 +9,13 @@ import type { FaceIdGuidance } from "@/types/faceId";
  * organisation's mode), this person's state, the one instruction to show, and whether a punch without a face match is
  * currently allowed. Every Face ID screen reads this, so they all say the same thing.
  */
-export function useFaceVerificationStatus() {
-  const { data, loading, refetch } = useFetch<FaceIdGuidance>(API.attendance.faceVerification.status);
+export function useFaceVerificationStatus(options?: { asSignedInUser?: boolean }) {
+  // asSignedInUser: answer for the person signed in even while an admin is viewing another employee's workspace -
+  // for UI whose actions apply to the signed-in person themselves (the dashboard registration banner, the preloader).
+  const { data, loading, refetch } = useFetch<FaceIdGuidance>(
+    API.attendance.faceVerification.status,
+    options?.asSignedInUser ? { asSignedInUser: true } : undefined,
+  );
   return {
     isMandatory: data?.is_mandatory ?? false,
     registrationMode: data?.registration_mode ?? "self_service_hr_approval",

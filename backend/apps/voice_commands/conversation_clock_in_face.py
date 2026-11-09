@@ -21,15 +21,15 @@ Turn shape when face verification IS mandatory:
      verify_for_punch (the SAME check every punch goes through, so its
      attempt-cap/replay defenses apply identically here) -> either the punch
      completes, or after up to MAX_VOICE_FACE_ATTEMPTS mismatches the flow
-     gives up and points the employee at the manual Clock In button.
+     gives up and points the employee at the manual Punch In/Out button.
 """
 from __future__ import annotations
 
 import logging
 from typing import Optional
 
-from apps.attendance.models import FaceRegistrationRequest
 from apps.attendance.services_face_matching import FaceVerificationService, is_face_verification_mandatory
+from apps.attendance.services_face_policy import guidance as face_policy_guidance
 from apps.attendance.services_geofencing import GeofencingService
 
 from apps.voice_commands.clarification import clear_pending, set_pending
@@ -43,23 +43,6 @@ logger = logging.getLogger(__name__)
 AWAITING_FACE_PROOF_STAGE = 'awaiting_face_proof'
 MAX_VOICE_FACE_ATTEMPTS = 3
 
-# Item 5 — directs the employee to HR/their manager rather than leaving them
-# stuck: only FaceRegistrationHRRegisterView (facial_recognition.approve) can
-# create an approved registration, so self-service voice can't resolve this.
-# Bilingual pairs (Phase 3.1 — Gap 1), selected through text() at every call
-# site — same pattern executor_*.py's own messages already use.
-_NO_REGISTRATION_MESSAGE = {
-    'en': (
-        "You don't have a registered face ID yet, so I can't verify you by voice. Please contact "
-        "your HR representative or manager to get your face ID registered, or use the manual "
-        "Clock In button once it's set up."
-    ),
-    'hi': (
-        'आपकी अभी तक कोई फेस आईडी दर्ज नहीं है, इसलिए मैं आवाज़ से आपकी पहचान सत्यापित नहीं कर सकता। '
-        'कृपया अपनी फेस आईडी दर्ज करवाने के लिए अपने एचआर प्रतिनिधि या मैनेजर से संपर्क करें, या सेटअप होने के '
-        'बाद मैन्युअल क्लॉक इन बटन का उपयोग करें।'
-    ),
-}
 _TAKING_FACIAL_PROOF_MESSAGE = {
     'en': 'Taking facial proof — please look at the camera.',
     'hi': 'चेहरे की पुष्टि की जा रही है — कृपया कैमरे की ओर देखें।',
@@ -70,12 +53,12 @@ _RETRY_MESSAGE = {
 }
 _GIVE_UP_MESSAGE = {
     'en': (
-        "We couldn't verify your face after {attempts} attempts. Please use the manual Clock In "
+        "We couldn't verify your face after {attempts} attempts. Please use the manual Punch In/Out "
         "button on your dashboard, or contact HR if this keeps happening."
     ),
     'hi': (
         '{attempts} प्रयासों के बाद भी हम आपके चेहरे की पुष्टि नहीं कर सके। कृपया अपने डैशबोर्ड पर मैन्युअल '
-        'क्लॉक इन बटन का उपयोग करें, या यह बार-बार होने पर एचआर से संपर्क करें।'
+        'पंच इन/आउट बटन का उपयोग करें, या यह बार-बार होने पर एचआर से संपर्क करें।'
     ),
 }
 
@@ -104,12 +87,22 @@ def start_voice_clock_punch(
         outcome = _executor_for(intent)(request, attendance_mode, latitude=latitude, longitude=longitude)
         return _payload(intent, confidence, outcome.data, outcome.message, success=outcome.success)
 
-    has_registration = FaceRegistrationRequest.objects.filter(
-        employee=request.user, status=FaceRegistrationRequest.STATUS_APPROVED,
-    ).exists()
-    if not has_registration:
-        logger.info('Voice clock punch blocked — no approved face registration for user=%s', request.user.pk)
-        return _payload(intent, confidence, None, text(_NO_REGISTRATION_MESSAGE), success=False)
+    # The SAME server policy the web punch uses (services_face_policy.guidance) - voice keeps no Face ID rules of its own.
+    policy = face_policy_guidance(request.user)
+    if not policy['requires_face_to_punch']:
+        if policy['fallback_active']:
+            # Not approved yet, but the organisation's fallback allows a punch without a face match (as on the web).
+            # PunchService.record_punch -> FaceVerificationService decides and flags the punch for HR; voice never
+            # re-implements that, it just takes the same same-turn path as when Face ID is not required.
+            logger.info('Voice clock punch via Face ID fallback: user=%s state=%s', request.user.pk, policy['state'])
+            outcome = _executor_for(intent)(request, attendance_mode, latitude=latitude, longitude=longitude)
+            return _payload(intent, confidence, outcome.data, outcome.message, success=outcome.success)
+        # Not registered / pending / rejected: the same "register first, then come back and punch" message as the web.
+        # English-only, like every other server-side face message (see the retry branch below).
+        logger.info(
+            'Voice clock punch blocked - Face ID state=%s for user=%s', policy['state'], request.user.pk,
+        )
+        return _payload(intent, confidence, None, policy['message'], success=False)
 
     geo = GeofencingService.validate(
         employee=request.user, attendance_mode=attendance_mode or 'office',
@@ -176,7 +169,14 @@ def continue_voice_clock_punch(
             'Voice clock punch face verification exhausted: user=%s intent=%s attempt=%s blocked=%s',
             request.user.pk, intent, attempt, outcome.blocked,
         )
-        return _payload(intent, None, None, message, success=False)
+        # retry_after_seconds (only ever set alongside blocked=True from the
+        # attempt-cap gate) lets useVoiceCommand.ts disable the voice
+        # Punch In/Out trigger with a countdown instead of just letting the
+        # employee start a brand-new "clock me in" conversation immediately,
+        # which would hit this same block again — see ClockInButton's web
+        # equivalent (useClockWidget.ts) for the same lockout shape.
+        result = {'blocked': True, 'retry_after_seconds': outcome.retry_after_seconds} if outcome.blocked else None
+        return _payload(intent, None, result, message, success=False)
 
     slots['attempt'] = attempt
     set_pending(request.user.id, intent, slots)
@@ -226,7 +226,7 @@ def _finish_punch(
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
-    conversational: Optional[bool] = None,
+    conversational: Optional[bool] = None, is_clarification: bool = False,
 ) -> dict:
     """Small, deliberate duplicate of conversation.py's own private _payload —
     same reasoning conversation_clarification.py's own copy gives (avoids a
@@ -234,7 +234,12 @@ def _payload(
     registry lookup: clock_in/clock_out are registered conversational: false
     (a single-turn command in the common case), true only for the mid-dialogue
     turns this module itself produces. language (Phase 3): see conversation.py's
-    own _payload docstring."""
+    own _payload docstring.
+
+    is_clarification defaults False — every awaiting_input turn in this
+    module asks for facial proof (or retries it), never a "did you mean
+    intent X?" question; kept for payload shape-consistency across every
+    builder."""
     return {
         'intent': intent,
         'confidence': confidence,
@@ -245,4 +250,5 @@ def _payload(
         'awaiting_input': awaiting_input,
         'success': success,
         'language': get_current_language(),
+        'is_clarification': is_clarification,
     }

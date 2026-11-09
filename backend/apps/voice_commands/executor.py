@@ -15,12 +15,21 @@ from apps.voice_commands.executor_attendance import (
     execute_clock_out,
     execute_request_attendance_correction,
 )
+from apps.voice_commands.executor_correction_approval import (
+    execute_confirm_attendance_correction_approval,
+    execute_identify_attendance_correction_approval_target,
+)
 from apps.voice_commands.executor_greeting import execute_greeting
 from apps.voice_commands.executor_leave import (
     execute_apply_leave,
     execute_cancel_leave,
     execute_check_leave_balance,
     execute_check_leave_status,
+)
+from apps.voice_commands.executor_payroll_analytics import (
+    execute_check_branch_payroll_breakdown,
+    execute_check_payroll_cost_summary,
+    execute_check_pending_payroll_cycles,
 )
 from apps.voice_commands.executor_payroll import (
     execute_acknowledge_payslip,
@@ -51,9 +60,17 @@ INTENT_CHECK_MY_PAYSLIP = 'check_my_payslip'
 INTENT_ACKNOWLEDGE_PAYSLIP = 'acknowledge_payslip'
 INTENT_RAISE_PAYSLIP_QUERY = 'raise_payslip_query'
 INTENT_CHECK_EMPLOYEE_PAYSLIP = 'check_employee_payslip'
+INTENT_APPROVE_ATTENDANCE_CORRECTION = 'approve_attendance_correction'
+INTENT_REJECT_ATTENDANCE_CORRECTION = 'reject_attendance_correction'
+INTENT_CHECK_PENDING_PAYROLL_CYCLES = 'check_pending_payroll_cycles'
+INTENT_CHECK_PAYROLL_COST_SUMMARY = 'check_payroll_cost_summary'
+INTENT_CHECK_BRANCH_PAYROLL_BREAKDOWN = 'check_branch_payroll_breakdown'
 INTENT_GREETING = 'greeting'
 
 _LEAVE_APPROVAL_INTENT_ACTIONS = {INTENT_APPROVE_LEAVE: 'approve', INTENT_REJECT_LEAVE: 'reject'}
+_ATTENDANCE_CORRECTION_APPROVAL_INTENT_ACTIONS = {
+    INTENT_APPROVE_ATTENDANCE_CORRECTION: 'approve', INTENT_REJECT_ATTENDANCE_CORRECTION: 'reject',
+}
 
 _PERMISSION_DENIED_MESSAGE = {
     'en': "You don't have permission to do that.",
@@ -86,6 +103,11 @@ def execute_intent(
         check_leave_status, cancel_leave
       - executor_approval.py    — check_team_leave_queue, check_team_attendance,
         approve_leave, reject_leave
+      - executor_correction_approval.py — approve_attendance_correction,
+        reject_attendance_correction (slots['correction_id'] on the confirm stage)
+      - executor_payroll_analytics.py — check_pending_payroll_cycles,
+        check_payroll_cost_summary, check_branch_payroll_breakdown (the last two read
+        slots['raw_text'] for an optional spoken period, via payroll_period_extractor.py)
       - executor_payroll.py     — check_my_payslip, acknowledge_payslip,
         raise_payslip_query, check_employee_payslip
       - executor_greeting.py    — greeting
@@ -186,6 +208,12 @@ def execute_intent(
         if slots.get('stage') == 'confirm':
             return execute_confirm_leave_approval(request, action, slots.get('request_id'))
         return execute_identify_leave_approval_target(request, action, slots.get('name_query'))
+    if intent in _ATTENDANCE_CORRECTION_APPROVAL_INTENT_ACTIONS:
+        action = _ATTENDANCE_CORRECTION_APPROVAL_INTENT_ACTIONS[intent]
+        slots = slots or {}
+        if slots.get('stage') == 'confirm':
+            return execute_confirm_attendance_correction_approval(request, action, slots.get('correction_id'))
+        return execute_identify_attendance_correction_approval_target(request, action, slots.get('name_query'))
     if intent == INTENT_CHECK_MY_PAYSLIP:
         return execute_check_my_payslip(request)
     if intent == INTENT_ACKNOWLEDGE_PAYSLIP:
@@ -194,6 +222,12 @@ def execute_intent(
         return execute_raise_payslip_query(request, (slots or {}).get('description', ''))
     if intent == INTENT_CHECK_EMPLOYEE_PAYSLIP:
         return execute_identify_employee_payslip(request, (slots or {}).get('name_query'))
+    if intent == INTENT_CHECK_PENDING_PAYROLL_CYCLES:
+        return execute_check_pending_payroll_cycles(request)
+    if intent == INTENT_CHECK_PAYROLL_COST_SUMMARY:
+        return execute_check_payroll_cost_summary(request, (slots or {}).get('raw_text', ''))
+    if intent == INTENT_CHECK_BRANCH_PAYROLL_BREAKDOWN:
+        return execute_check_branch_payroll_breakdown(request, (slots or {}).get('raw_text', ''))
     if intent == INTENT_GREETING:
         return execute_greeting(request)
     return ExecutionResult(success=False, message=text(_UNRECOGNIZED_INTENT_MESSAGE))

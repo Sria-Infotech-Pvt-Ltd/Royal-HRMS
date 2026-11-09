@@ -7,6 +7,8 @@
 import type { OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import { STATES } from "@/app/dashboard/settings/company/_data";
+import type { StageFilterValue } from "@/lib/employeeLifecycle";
+import type { AccountStatus, EmployeeLifecycle, EmploymentStage, OnboardingStage } from "@/types/employeeLifecycle";
 
 export type EmployeeStatus = "active" | "onboarding" | "inactive";
 
@@ -16,7 +18,8 @@ export type EmployeeStatus = "active" | "onboarding" | "inactive";
 // backend buckets (EmployeeListCreateView.get()'s status_param) that don't
 // have their own per-row status value since the table shows them via
 // employmentStatus / the Notice Period pill instead.
-export type EmployeeStatusFilter = EmployeeStatus | "probation" | "notice_period";
+// Stage values ("stage:pre_joining" ...) are sent as the `employment_stage` parameter instead (see lib/employeeLifecycle).
+export type EmployeeStatusFilter = EmployeeStatus | "probation" | "notice_period" | StageFilterValue;
 export type Gender = "male" | "female" | "transgender";
 
 /** A single field's value bag — every detail value lives here keyed by FieldDef.key */
@@ -44,11 +47,21 @@ export interface Employee {
   location: string;
   gender: Gender;
   status: EmployeeStatus;
+  /** Hire is complete but the account is not activated yet — shown as "Awaiting activation", not "Onboarding". */
+  awaitingActivation?: boolean;
   /** Self-service onboarding data is still incomplete — decoupled from
    * `status` above (which is "has this account ever been activated"), so
    * the "Complete onboarding" wizard redirect doesn't fire just because an
    * otherwise-fully-onboarded employee hasn't logged in yet. */
   needsOnboardingData: boolean;
+  /** Derived Employment Stage (Pre-Joining / Active / Terminated / Unknown). Separate from `status` and from `employmentStatus`. */
+  employmentStage?: EmploymentStage;
+  /** Derived Account Status (Invitation Pending / Active / Disabled). */
+  accountStatus?: AccountStatus;
+  /** Temporarily locked after failed logins; not the same as Disabled. */
+  accountLocked?: boolean;
+  /** Display label for the raw onboarding status (Not Started ... Completed). */
+  onboardingStage?: OnboardingStage;
   /** "probation" | "confirmed" — flipped exactly once by the Confirmation action. */
   employmentStatus: string;
   confirmationDate: string | null;
@@ -525,7 +538,7 @@ export const SECTION_TINT: Record<string, TintKey> = {
 //  Directory list API mapping — EmployeeListCreateView.get()'s
 //  per-row shape, converted into this module's Employee type.
 // ────────────────────────────────────────────────────────────
-export interface ApiEmployee {
+export interface ApiEmployee extends EmployeeLifecycle {
   id: string; employee_id: string;
   first_name: string; last_name: string; full_name: string;
   email: string; phone: string;
@@ -540,6 +553,8 @@ export interface ApiEmployee {
   profile_photo_url?: string | null;
   has_edit_draft?: boolean;
   needs_onboarding_data?: boolean;
+  /** Hire/approval complete, but the person has not yet set their password. */
+  awaiting_activation?: boolean;
 }
 
 export function apiToEmployee(u: ApiEmployee): Employee {
@@ -560,6 +575,11 @@ export function apiToEmployee(u: ApiEmployee): Employee {
     gender:        "male",
     status:        (u.status as EmployeeStatus) || (u.is_active ? "active" : "inactive"),
     needsOnboardingData: u.needs_onboarding_data === true,
+    awaitingActivation: u.awaiting_activation === true,
+    employmentStage: u.employment_stage,
+    accountStatus: u.account_status,
+    accountLocked: u.account_locked === true,
+    onboardingStage: u.onboarding_stage,
     employmentStatus: u.employment_status || "probation",
     confirmationDate: u.confirmation_date ?? null,
     reportingManagerName: u.reporting_manager?.name ?? null,
@@ -610,11 +630,11 @@ export function reportingManagerDisplay(name: string | null | undefined, noManag
 
 /** The word the Employee Directory shows for someone's status — one definition for the table pill, the
     drawer and the action modal, mirroring the status filter / stat cards (probation is shown as a tag next to Active, not instead of it). */
-export type DirectoryStatusLabel = "Active" | "Onboarding" | "Notice Period" | "Exited";
+export type DirectoryStatusLabel = "Active" | "Onboarding" | "Awaiting activation" | "Notice Period" | "Exited";
 
-export function directoryStatusLabel(e: Pick<Employee, "status" | "lastWorkingDay">): DirectoryStatusLabel {
+export function directoryStatusLabel(e: Pick<Employee, "status" | "lastWorkingDay" | "awaitingActivation">): DirectoryStatusLabel {
   if (e.status === "inactive") return "Exited";
-  if (e.status === "onboarding") return "Onboarding";
+  if (e.status === "onboarding") return e.awaitingActivation ? "Awaiting activation" : "Onboarding";
   if (e.lastWorkingDay) return "Notice Period";
   return "Active";
 }

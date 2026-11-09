@@ -65,6 +65,48 @@ class ParseYesNoTests(SimpleTestCase):
     def test_answer_containing_both_yes_and_no_words_is_ambiguous(self):
         self.assertIsNone(parse_yes_no('no wait yes'))
 
+    def test_recognizes_hindi_yes_words_romanized(self):
+        for answer in ('haan', 'Haan', 'haanji', 'theek hai', 'thik hai', 'bilkul'):
+            with self.subTest(answer=answer):
+                self.assertTrue(parse_yes_no(answer))
+
+    def test_recognizes_hindi_no_words_romanized(self):
+        for answer in ('nahi', 'nahin'):
+            with self.subTest(answer=answer):
+                self.assertFalse(parse_yes_no(answer))
+
+    def test_recognizes_hindi_yes_words_devanagari(self):
+        # Regression guard for a real bug this fix caught: Python's \b/\w
+        # classify a Devanagari nasalization mark (चंद्रबिंदु ँ, अनुस्वार ं —
+        # both common WORD-FINAL letters) as "non-word", so \b immediately
+        # after a word ending in one never matches — 'हाँ'/'हां' both failed
+        # under a plain \b-bounded pattern despite 'बिल्कुल' (ends in a plain
+        # consonant, no mark) working fine. The Devanagari alternatives use
+        # whitespace/danda-aware lookarounds instead of \b for exactly this
+        # reason — see _YES_RE/_NO_RE's own comments.
+        for answer in ('हाँ', 'हां', 'ठीक है', 'बिल्कुल'):
+            with self.subTest(answer=answer):
+                self.assertTrue(parse_yes_no(answer))
+
+    def test_recognizes_hindi_no_words_devanagari(self):
+        self.assertFalse(parse_yes_no('नहीं'))
+
+    def test_devanagari_words_followed_by_danda_still_match(self):
+        # "।" (पूर्ण विराम / danda) is Devanagari's own sentence-final
+        # punctuation — the equivalent of an English ".". A plain whitespace
+        # boundary would reject "नहीं।" the same way \b already correctly
+        # allows English "no." — this must not regress that.
+        self.assertTrue(parse_yes_no('हाँ।'))
+        self.assertTrue(parse_yes_no('ठीक है।'))
+        self.assertFalse(parse_yes_no('नहीं।'))
+
+    def test_hindi_word_as_a_substring_does_not_false_positive(self):
+        self.assertIsNone(parse_yes_no('haanish'))
+        self.assertIsNone(parse_yes_no('bilkuls'))
+
+    def test_hindi_answer_containing_both_yes_and_no_words_is_ambiguous(self):
+        self.assertIsNone(parse_yes_no('बिल्कुल नहीं'))
+
 
 class MatchEmployeeNameTests(SimpleTestCase):
     def _candidates(self):

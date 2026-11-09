@@ -37,6 +37,7 @@ import ScanFillModal, { type ScanSuggestions } from "./ScanFillModal";
 import EmployeePhotoUpload from "./EmployeePhotoUpload";
 import HireWizardSidebar from "./HireWizardSidebar";
 import EmploymentStep, { EMPTY_EMPLOYMENT, type EmploymentDraft } from "./EmploymentStep";
+import ApprovalAssignmentFields from "@/components/approvals/ApprovalAssignmentFields";
 import BasicPayStep, { EMPTY_BASIC_PAY, type BasicPayDraft } from "./BasicPayStep";
 import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "./StatutoryAccountsStep";
 import DocumentsChecklistStep, { REQUIRED_DOC_KEYS, REQUIRED_DOC_LABELS, EMPTY_VERIFICATION, type VerificationDraft, type HireDocument } from "./DocumentsChecklistStep";
@@ -59,13 +60,24 @@ import {
   MIN_NATIONAL_PHONE_DIGITS, MAX_NATIONAL_PHONE_DIGITS,
 } from "./_wizardData";
 
+const APPROVER_FIELDS = ["reporting_manager_id", "l1_approver_id", "hr_id"] as const;
+
+/** Just the messages that belong beside the reporting manager / L1 / L2 boxes. */
+function approverErrorsOf(fieldErrors: Record<string, string>): Record<string, string> {
+  const own: Record<string, string> = {};
+  for (const key of APPROVER_FIELDS) if (fieldErrors[key]) own[key] = fieldErrors[key];
+  return own;
+}
+
 export default function HireWizardClient({ hireActionId, onClose, onHired }: { hireActionId: string; onClose: () => void; onHired: () => void }) {
   const [action, setAction] = useState<HireActionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
   const [highestSaved, setHighestSaved] = useState(-1);
   const [stepErr, setStepErr] = useState("");
-  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "warning" | "error">("idle");
+  // Why the last autosave did not fully succeed (which field, or that the server could not be reached).
+  const [autosaveMessage, setAutosaveMessage] = useState("");
 
   const [salutation, setSalutation] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -78,6 +90,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [phone, setPhone] = useState("");
   // Server messages for the two fields it checks for duplicates (email / mobile already belong to someone), shown inline.
   const [contactErrors, setContactErrors] = useState<{ email?: string; phone?: string }>({});
+  // The server's message for a reporting manager / L1 / L2 choice it would not accept, shown beside that box.
+  const [approverErrors, setApproverErrors] = useState<Record<string, string>>({});
   // True while a step is being saved on its way to the next one: the button shows it and ignores clicks.
   const [isNavigating, setIsNavigating] = useState(false);
   const [identityExtras, setIdentityExtras] = useState<IdentityExtras>(EMPTY_IDENTITY_EXTRAS);
@@ -491,6 +505,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       display_name: displayName, nationality, place_of_birth: placeOfBirth, email, phone,
       branch: employment.branch, work_email: employment.work_email,
       reporting_manager_id: employment.reporting_manager_id, dotted_line_manager_id: employment.dotted_line_manager_id,
+      l1_approver_id: employment.l1_approver_id ?? "", hr_id: employment.hr_id ?? "",
       work_location: employment.work_location, work_mode: employment.work_mode,
       probation_period_months: employment.probation_period_months, notice_period_days: employment.notice_period_days,
       weekly_off_policy: employment.weekly_off_policy, working_hours_policy: employment.working_hours_policy,
@@ -513,34 +528,57 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   // the tab/browser closes mid-step). No dependency array: this effect must
   // see every render, since buildFullDraftPayload() reads dozens of pieces
   // of state and listing them all would be as fragile as missing one.
-  // lastSavedDraftRef starts at null so the very first run (right after the
+  // lastAttemptedRef starts at null so the very first run (right after the
   // initial GET finishes loading) primes the baseline instead of firing a
   // spurious save of data that was just loaded from the server, untouched.
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSavedDraftRef = useRef<string | null>(null);
+  // The last snapshot an autosave was SENT for, whether or not it succeeded. A snapshot is never re-sent on its own: this
+  // effect re-runs on every render, so without this a refused save re-rendered, re-sent and looped (it filled the log with
+  // identical 400s). The next edit, or the Retry button, sends again.
+  const lastAttemptedRef = useRef<string | null>(null);
   useEffect(() => {
     if (loading) return;
     const payload = buildFullDraftPayload();
     const serialized = JSON.stringify(payload);
-    if (lastSavedDraftRef.current === null) {
-      lastSavedDraftRef.current = serialized;
+    if (lastAttemptedRef.current === null) {
+      lastAttemptedRef.current = serialized;
       return;
     }
-    if (serialized === lastSavedDraftRef.current) return;
+    if (serialized === lastAttemptedRef.current) return;
 
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => {
+      lastAttemptedRef.current = serialized;
       setAutosaveStatus("saving");
+      setAutosaveMessage("");
       patchAction(payload)
-        .then(() => {
-          lastSavedDraftRef.current = serialized;
-          setAutosaveStatus("saved");
+        .then(result => {
+          // Duplicate email/mobile: the draft IS saved, but the person must hear about it (and cannot move on until fixed).
+          const blocking = result.warnings?.find(w => w.severity === "error");
+          setApproverErrors({});
+          setAutosaveStatus(blocking ? "warning" : "saved");
+          setAutosaveMessage(blocking ? `${blocking.message} Your changes are saved.` : "");
         })
-        .catch(() => setAutosaveStatus("error"));
+        .catch((e: unknown) => {
+          const parsed = parseApiError(e, "Could not reach the server.");
+          // A 400 means the server refused only the fields named in the message and still saved the rest of the form.
+          const partlySaved = parsed.status === 400 && Object.keys(parsed.fieldErrors).length > 0;
+          setApproverErrors(approverErrorsOf(parsed.fieldErrors));
+          setAutosaveStatus("error");
+          setAutosaveMessage(partlySaved
+            ? `Not saved: ${parsed.message} Everything else was saved.`
+            : `${parsed.message} Your entries are still on this screen but are not saved yet.`);
+        });
     }, 1200);
 
     return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
   });
+
+  function retryAutosave() {
+    lastAttemptedRef.current = null;  // forget the failed snapshot so the effect above sends the current form again
+    setAutosaveStatus("idle");
+    setAutosaveMessage("");
+  }
 
   // Jumping to another step via the sidebar (HireWizardSidebar's own
   // onStepClick) previously called setTab directly with no save at all —
@@ -573,12 +611,21 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     setStepErr("");
     setIsNavigating(true);
     try {
-      await patchAction(buildFullDraftPayload());
+      const saved = await patchAction(buildFullDraftPayload());
+      setApproverErrors({});
+      // Saving never fails because of a duplicate any more, but the person still cannot move on with someone else's email.
+      const duplicate = saved.warnings?.find(w => w.severity === "error");
+      if (duplicate) {
+        setContactErrors({ email: duplicate.field === "email" ? duplicate.message : undefined, phone: duplicate.field === "phone" ? duplicate.message : undefined });
+        setStepErr(`${duplicate.message} Your changes are saved; change it to continue.`);
+        return;
+      }
       setHighestSaved(h => Math.max(h, tab));
       setTab(t => Math.min(t + 1, STEPS.length - 1));
     } catch (e) {
       const parsed = parseApiError(e, "Could not save this step.");
       setContactErrors({ email: parsed.fieldErrors.email, phone: parsed.fieldErrors.phone });
+      setApproverErrors(approverErrorsOf(parsed.fieldErrors));
       setStepErr(parsed.message);
     } finally {
       setIsNavigating(false);
@@ -743,7 +790,14 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 <span className="text-[11.5px]" style={{ color: autosaveStatus === "error" ? "var(--error)" : "var(--on-variant)", display: "flex", alignItems: "center", gap: 4 }}>
                   {autosaveStatus === "saving" && <><i className="ti ti-loader-2 animate-spin" /> Saving…</>}
                   {autosaveStatus === "saved" && <><i className="ti ti-circle-check" /> All changes saved</>}
-                  {autosaveStatus === "error" && <><i className="ti ti-alert-circle" /> Autosave failed</>}
+                  {autosaveStatus === "warning" && <><i className="ti ti-alert-circle" /> Saved, with a problem</>}
+                  {autosaveStatus === "error" && <><i className="ti ti-alert-circle" /> Autosave problem</>}
+                  {(autosaveStatus === "error" || autosaveStatus === "warning") && autosaveMessage && (
+                    <span role="alert" title={autosaveMessage} style={{ maxWidth: 360, whiteSpace: "normal" }}>{autosaveMessage}</span>
+                  )}
+                  {autosaveStatus === "error" && (
+                    <button type="button" className="btn btn-ghost" style={{ padding: "2px 8px", fontSize: 11.5 }} onClick={retryAutosave}>Retry</button>
+                  )}
                 </span>
               )}
               <div className="stepcount">{String(tab + 1).padStart(2, "0")} / {String(STEPS.length).padStart(2, "0")}</div>
@@ -972,6 +1026,13 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               reservedEmployeeId={action.reserved_employee_id}
               positionTitle={action.position_title} orgUnitName={action.org_unit_name} grade={action.grade}
               costCenter=""
+              approverSection={
+                <ApprovalAssignmentFields
+                  value={{ reporting_manager_id: employment.reporting_manager_id, l1_approver_id: employment.l1_approver_id ?? "", hr_id: employment.hr_id ?? "" }}
+                  onChange={next => setEmployment(e => ({ ...e, ...next }))}
+                  errors={approverErrors}
+                />
+              }
             />
           )}
 

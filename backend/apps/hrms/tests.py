@@ -251,6 +251,8 @@ class LeaveRequestPolicyValidationTests(TestCase):
         self.client = APIClient()
         employee_role = make_role('employee_policy_test')
         self.employee = make_user('policyemp@test.com', role=employee_role, password='TestPass123!')
+        # Someone must be able to decide the request: a leave request is no longer accepted when nobody could approve it.
+        make_user('policy_approver@test.com', role=make_role('policy_leave_approver', permission_codenames=['leave.approve']), employee_id='POLAPP1')
         # Confirmed, not probation — see LeaveRequestFlowTests.setUp's comment.
         from apps.accounts.models import User
         self.employee.employment_status = User.EMPLOYMENT_STATUS_CONFIRMED
@@ -500,6 +502,8 @@ class ProbationLeaveEligibilityTests(TestCase):
         cache.clear()
         self.client = APIClient()
         from apps.accounts.models import User
+        # Someone must be able to decide the request: a leave request is no longer accepted when nobody could approve it.
+        make_user('probation_approver@test.com', role=make_role('probation_leave_approver', permission_codenames=['leave.approve']), employee_id='PROAPP1')
         self.probation_employee = make_user(
             'probation_leave_employee@test.com', role=make_role('employee_probation'), password='TestPass123!',
         )
@@ -696,4 +700,6 @@ class ExpireUnusedCarryForwardTaskTests(TestCase):
 
         balance.refresh_from_db()
         self.assertEqual(balance.total_days, Decimal('10.0'), 'second run must not deduct again')
-        self.assertEqual(CarryForwardLog.objects.filter(process_mode='expire').count(), 2)
+        # Only a sweep that actually did something writes a log row (see expire_unused_carry_forward): the empty second run
+        # leaves none, so the two runs together produce exactly one.
+        self.assertEqual(CarryForwardLog.objects.filter(process_mode='expire').count(), 1)

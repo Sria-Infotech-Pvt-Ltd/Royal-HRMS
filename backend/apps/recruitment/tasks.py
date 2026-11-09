@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def send_interview_scheduled_emails_task(self, candidate_id):
+def send_interview_scheduled_emails_task(self, candidate_id, actor_id=None):
     """
     Background delivery for "interview scheduled" notification email(s).
 
@@ -36,7 +36,7 @@ def send_interview_scheduled_emails_task(self, candidate_id):
 
     try:
         try:
-            candidate = Candidate.objects.select_related('branch', 'referral_by').get(pk=candidate_id)
+            candidate = Candidate.objects.select_related('branch', 'referral_by', 'interviewer').get(pk=candidate_id)
         except Candidate.DoesNotExist:
             logger.warning(
                 'send_interview_scheduled_emails_task: candidate %s no longer exists — skipping.',
@@ -46,11 +46,13 @@ def send_interview_scheduled_emails_task(self, candidate_id):
 
         from apps.recruitment.views import _send_interview_scheduled_email_general, _send_interview_scheduled_emails
 
+        from apps.accounts.models import User
+        actor = User.objects.filter(pk=actor_id).first() if actor_id else None   # the HR user who scheduled it: Reply-To and contact
         try:
             if candidate.referral_by_id:
-                _send_interview_scheduled_emails(candidate)
+                _send_interview_scheduled_emails(candidate, actor)
             else:
-                _send_interview_scheduled_email_general(candidate)
+                _send_interview_scheduled_email_general(candidate, actor)
         except Exception as exc:
             logger.error(
                 'send_interview_scheduled_emails_task: error sending for candidate %s: %s',

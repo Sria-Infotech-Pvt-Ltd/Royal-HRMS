@@ -59,8 +59,9 @@ def get_invalid_punches(
     """
     from apps.attendance.models import AttendanceRecord
 
-    # Onboarding employees (not yet activated) have no attendance to audit yet — see User.onboarded_q().
-    employee_qs = User.objects.filter(is_active=True).filter(User.onboarded_q())
+    # Everyone whose joining date has arrived, whatever their onboarding state (leavers keep their history).
+    from apps.accounts.services_lifecycle_status import joined_q
+    employee_qs = User.objects.filter(is_active=True).filter(joined_q())
     if employee_ids is not None:
         employee_qs = employee_qs.filter(id__in=employee_ids)
     elif branch:
@@ -153,8 +154,9 @@ def get_unpunch_count(
     """Count employees whose AttendanceRecord is STATUS_INCOMPLETE for target_date."""
     from apps.attendance.models import AttendanceRecord
 
-    # Onboarding employees (not yet activated) have no attendance to audit yet — see User.onboarded_q().
-    employee_qs = User.objects.filter(is_active=True).filter(User.onboarded_q())
+    # Everyone whose joining date has arrived, whatever their onboarding state (leavers keep their history).
+    from apps.accounts.services_lifecycle_status import joined_q
+    employee_qs = User.objects.filter(is_active=True).filter(joined_q())
     if employee_ids is not None:
         employee_qs = employee_qs.filter(id__in=employee_ids)
     elif branch:
@@ -197,8 +199,9 @@ def get_unpunches(
     from apps.attendance.models import AttendanceCorrection, AttendanceRecord
     from apps.attendance.services_unpunch import _expected_out_display, _get_settings
 
-    # Onboarding employees (not yet activated) have no attendance to audit yet — see User.onboarded_q().
-    employee_qs = User.objects.filter(is_active=True).filter(User.onboarded_q())
+    # Everyone whose joining date has arrived, whatever their onboarding state (leavers keep their history).
+    from apps.accounts.services_lifecycle_status import joined_q
+    employee_qs = User.objects.filter(is_active=True).filter(joined_q())
     if employee_ids is not None:
         employee_qs = employee_qs.filter(id__in=employee_ids)
     elif branch:

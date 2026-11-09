@@ -13,6 +13,9 @@ export interface FaceRegistrationRequest {
   id:                      string;
   employee_name:           string;
   employee_email:          string;
+  /** Employee ID and branch, so an approver can tell people apart without opening anything. */
+  employee_code:           string;
+  branch_name:             string;
   liveness_passed:         boolean;
   liveness_score:          number | null;
   embedding_model_version: string;

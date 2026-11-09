@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+from apps.accounts.services_access_guards import assignment_refusal
+
 import csv
 import io
 import logging
@@ -328,6 +330,11 @@ class EmployeeBulkImportView(APIView):
                     'identifier': email,
                     'message':    f'"{title_raw}" carries full access and cannot be filled via bulk import.',
                 })
+                continue
+            refusal = assignment_refusal(request.user, None, Position.objects.get(pk=position_id_for_row))
+            if refusal:  # sensitive seats need the importer to hold those permissions
+                failed_row_ids.add(idx)
+                row_errors.append({'row': idx, 'field': 'position', 'identifier': email, 'message': refusal.message})
                 continue
 
             # Create the employee.
