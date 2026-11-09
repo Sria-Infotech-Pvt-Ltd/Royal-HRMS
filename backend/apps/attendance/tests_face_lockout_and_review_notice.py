@@ -165,7 +165,7 @@ class FaceReviewNotificationTests(TestCase):
         self.client   = APIClient()
         hr_role       = make_role('hr', permission_codenames=['facial_recognition.approve'])
         self.hr_user  = make_user('review-hr@test.com', role=hr_role)
-        self.employee = make_user('review-employee@test.com', role=make_role('employee'))
+        self.employee = make_user('review-employee@test.com', role=make_role('employee'), hr=self.hr_user)
         _login(self.client, 'review-hr@test.com')
 
     def tearDown(self):

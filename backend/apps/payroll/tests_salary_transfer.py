@@ -14,7 +14,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import EmployeeProfile
+from apps.accounts.models import EmployeeProfile, User
 from apps.payroll.models import (
     EmployeePayslip, PayrollCycle, PayrollSettings,
     SalaryTransferBatch, SalaryTransferItem,
@@ -79,6 +79,7 @@ class SalaryTransferConfirmationTests(TestCase):
             role=make_role('missing_payslip_employee'),
             password='TestPass123!',
             employee_id='MISSING001',
+            onboarding_status=User.ONBOARDING_COMPLETE,  # payroll only counts onboarded employees (User.onboarded_q())
         )
         self._acknowledge_payslip()
 

@@ -156,7 +156,8 @@ class FaceRegistrationApprovalTests(TestCase):
         self.client    = APIClient()
         self.hr_role   = make_role('hr', permission_codenames=['facial_recognition.approve'])
         self.hr_user   = make_user('facereg-hr@test.com', role=self.hr_role)
-        self.employee  = make_user('facereg-target@test.com')
+        # The employee's assigned HR is the reviewer (see services_face_approval for the full scope rules).
+        self.employee  = make_user('facereg-target@test.com', hr=self.hr_user)
 
     def _review(self, pk, payload):
         return self.client.patch(
@@ -181,7 +182,7 @@ class FaceRegistrationApprovalTests(TestCase):
         _login(self.client, 'facereg-hr@test.com')
         face_request = _make_pending_request(self.employee)
 
-        resp = self._review(face_request.pk, {'status': 'rejected'})
+        resp = self._review(face_request.pk, {'status': 'rejected', 'notes': 'The photo was too dark.'})
 
         self.assertEqual(resp.status_code, 200, resp.data)
         face_request.refresh_from_db()
@@ -205,7 +206,7 @@ class FaceRegistrationApprovalTests(TestCase):
         face_request.status = FaceRegistrationRequest.STATUS_APPROVED
         face_request.save(update_fields=['status'])
 
-        resp = self._review(face_request.pk, {'status': 'rejected'})
+        resp = self._review(face_request.pk, {'status': 'rejected', 'notes': 'Too late to reject.'})
 
         self.assertEqual(resp.status_code, 409)
         face_request.refresh_from_db()
@@ -297,7 +298,7 @@ class FaceRegistrationPendingListTests(TestCase):
         self.client   = APIClient()
         self.hr_role  = make_role('hr', permission_codenames=['facial_recognition.approve'])
         self.hr_user  = make_user('facereg-list-hr@test.com', role=self.hr_role)
-        self.employee = make_user('facereg-list-employee@test.com')
+        self.employee = make_user('facereg-list-employee@test.com', hr=self.hr_user)
 
     def test_permission_denied_for_holder_without_approve_permission(self):
         no_perm_role = make_role('employee_no_facial_perm_2')

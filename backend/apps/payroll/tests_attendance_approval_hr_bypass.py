@@ -25,7 +25,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import AuditLog
+from apps.accounts.models import AuditLog, User
 from apps.branch.models import Branch, City, State
 from apps.payroll.models import ManagerAttendanceApproval, PayrollCycle, PayrollSettings
 
@@ -68,6 +68,7 @@ class NoManagersConfiguredHrBypassTests(TestCase):
         make_user(
             'employee-nomgr@test.com', role=make_role('employee_nomgr_test'), password='TestPass123!',
             branch=self.branch.branch_name, employee_id='NOMGR001',
+            onboarding_status=User.ONBOARDING_COMPLETE,  # payroll only counts onboarded employees (User.onboarded_q())
         )
         _login(self.client, 'hr-nomgr@test.com')
 
@@ -173,6 +174,7 @@ class ManagersConfiguredExistingFlowTests(TestCase):
         make_user(
             'report-mgr@test.com', role=make_role('employee_mgr_test'), password='TestPass123!',
             branch=self.branch.branch_name, employee_id='MGR001', reporting_manager=self.manager,
+            onboarding_status=User.ONBOARDING_COMPLETE,  # payroll only counts onboarded employees (User.onboarded_q())
         )
         _login(self.client, 'hr-mgr@test.com')
         resp = self.client.post(

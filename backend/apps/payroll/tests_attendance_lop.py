@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from apps.accounts.models import User
 from apps.accounts.factories import make_role, make_user
 from apps.attendance.models import AttendanceRecord
 from apps.hrms.models import LeaveRequest, REQ_APPROVED, REQ_PENDING
@@ -21,6 +22,7 @@ class PayrollApprovedLeaveLOPTests(TestCase):
             'payroll-lop@example.com',
             role=role,
             employee_id='LOP0001',
+            onboarding_status=User.ONBOARDING_COMPLETE,  # payroll only counts onboarded employees (User.onboarded_q())
         )
         self.cycle = PayrollCycle.objects.create(
             cycle_start=datetime.date(2026, 11, 1),

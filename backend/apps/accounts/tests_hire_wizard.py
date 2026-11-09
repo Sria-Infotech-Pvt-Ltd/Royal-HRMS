@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import datetime
 import io
+from unittest.mock import patch
 
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -24,6 +25,7 @@ from apps.accounts.factories import make_permission, make_role, make_user
 from apps.accounts.models import (
     DocumentTypeConfig, EmployeeCodeSeries, HireAction, HireActionDocument, OrgUnit, Position,
 )
+from core.storage import ImageKitStorage
 
 # A real, minimal, valid PNG — used everywhere a file upload needs to pass
 # the format/content-sniffing check. Padded past the 2KB minimum-size floor
@@ -46,11 +48,24 @@ def _tomorrow_iso() -> str:
     return (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
 
 
+def _in_memory_save(storage, name, content):
+    """Stands in for ImageKitStorage._save: keeps the upload local instead of calling the ImageKit API."""
+    content.seek(0)
+    content.read()
+    return name.replace('\\', '/')
+
+
 class HireWizardTestCase(TestCase):
     """Shared fixtures: an HR user with employees.create, a Position to hire
     into, and the URL helpers every test below reuses."""
 
     def setUp(self):
+        # The wizard uploads hire documents. Without this, every upload is a real request to ImageKit (a 403 with the
+        # dummy keys used for local runs, a real upload with real ones). Only the two network calls are replaced.
+        for method, replacement in (('_save', _in_memory_save), ('delete', lambda storage, name: None)):
+            patcher = patch.object(ImageKitStorage, method, replacement)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         cache.clear()
         self.client = APIClient()
         self.hr_role = make_role('hr_admin_test', permission_codenames=['employees.create'])
@@ -443,9 +458,13 @@ class HireCompletionRequiredFieldTests(HireWizardTestCase):
 
     def test_duplicate_email_blocks_hire(self):
         make_user('arjun.mehta@test.com', role=self.plain_role, password='TestPass123!')
-        # UAT-010: caught as soon as the email is entered (every Next), not only at final submit. The completion-time check is
-        # covered by tests_hire_duplicates.HireDuplicateTests.test_completion_checks_again_on_the_server.
-        resp = self._patch(self.action, {'email': 'arjun.mehta@test.com'})
+        # UAT-010: flagged as soon as the email is entered (every Next) but the draft is still SAVED, so a duplicate can never
+        # lock a draft; completing the hire is what refuses it (tests_hire_draft_autosave has the full save/complete contract).
+        saved = self._patch(self.action, {'email': 'arjun.mehta@test.com'})
+        self.assertEqual(saved.status_code, 200, saved.data)
+        self.assertEqual(saved.data['data']['warnings'][0]['severity'], 'error')
+        self.assertIn('already belongs to', saved.data['data']['warnings'][0]['message'])
+        resp = self._complete_with({})  # full valid draft carrying that same email
         self.assertEqual(resp.status_code, 400)
         self.assertIn('already belongs to', resp.data['message'])
 
