@@ -17,5 +17,6 @@ from .candidates_core import *  # noqa: F401,F403
 from .candidate_status import *  # noqa: F401,F403
 from .candidate_review_email import *  # noqa: F401,F403
 from .candidate_portal import *  # noqa: F401,F403
+from .interview_feedback import *  # noqa: F401,F403
 from .referrals import *  # noqa: F401,F403
 from .bulk_import import *  # noqa: F401,F403

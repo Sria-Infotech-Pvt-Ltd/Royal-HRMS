@@ -277,8 +277,17 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
     if emp_ids_in_file:
         for emp in User.objects.filter(
             employee_id__in=emp_ids_in_file,
-        ).only('id', 'employee_id', 'full_name'):
+        ).only('id', 'employee_id', 'full_name', 'date_of_joining'):
             emp_map[emp.employee_id] = emp
+
+    # Approved last working days of those employees, in ONE query, for the employment-dates check below.
+    from apps.hrms.models import SEP_APPROVED, SeparationRequest
+    last_days_by_employee: dict = {}
+    if emp_map:
+        for employee_pk, last_day in SeparationRequest.objects.filter(
+            employee_id__in=[e.pk for e in emp_map.values()], status=SEP_APPROVED,
+        ).values_list('employee_id', 'proposed_last_working_day'):
+            last_days_by_employee.setdefault(employee_pk, []).append(last_day)
 
     # ── Phase 3: Row-level validation (ImportRowSerializer, no DB hits) ────────
     errors: list[dict] = []
@@ -307,6 +316,18 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
                 str(v.get('date', raw_date)),
                 f"Employee ID '{raw_emp_id}' was not found.",
                 'Verify the Employee ID or create the employee before importing attendance.',
+            ))
+            continue
+
+        # A day outside the employee's employment (before joining, no joining date, after the last working day) is refused
+        # per row, with the same reasons as manual creation. No override: correct the joining date, then import again.
+        from apps.accounts.services_lifecycle_status import ATTENDANCE_DATE_PROBLEMS, attendance_date_problem_code
+        problem_code = attendance_date_problem_code(emp_obj.date_of_joining, last_days_by_employee.get(emp_obj.pk, []), v['date'])
+        if problem_code:
+            failed_count += 1
+            errors.append(_make_error_entry(
+                i, raw_emp_id, emp_name, str(v['date']), ATTENDANCE_DATE_PROBLEMS[problem_code],
+                "Correct the employee's joining date, or remove this row, then import again.",
             ))
             continue
 

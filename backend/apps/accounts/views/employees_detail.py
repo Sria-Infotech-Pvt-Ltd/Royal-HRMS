@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from core.access import can_manage_team, employee_in_scope, users_with_permission
+from apps.accounts.services_access_guards import assignment_refusal
 from core.permissions import has_perm
 import csv
 import io
@@ -232,6 +233,7 @@ class EmployeeDetailView(APIView):
         data          = request.data
         update_fields = ['updated_at']
         changes       = {}
+        joining_date_audit = None   # set when the joining date changes on someone with separations on record
         # full_name/phone/date_of_joining are shown as read-only on the
         # employee detail page once onboarding is complete ("set by system,
         # not editable" — see PROFILE_SECTIONS in the frontend's _data.ts).
@@ -267,6 +269,9 @@ class EmployeeDetailView(APIView):
                 ).get(pk=position_id, is_active=True)
             except (Position.DoesNotExist, ValueError, ValidationError):
                 return error('Select a valid, active position.', data={'position': 'Position not found.'})
+            refusal = assignment_refusal(request.user, employee, position_obj)
+            if refusal:
+                return error(refusal.message, http_status=refusal.status)
 
         # Mobile and personal email are HR-correctable after hire (a typo at hire had no other fix). The caller already
         # holds employees.edit; same validation as the hire wizard plus uniqueness, every change audit-logged below.
@@ -422,7 +427,14 @@ class EmployeeDetailView(APIView):
                     http_status=status.HTTP_409_CONFLICT,
                 )
             if str(employee.date_of_joining) != doj:
+                from apps.accounts.services_lifecycle_status import joining_date_change_audit, validate_joining_date_change
+
+                new_doj = datetime.strptime(doj, '%Y-%m-%d').date()
+                overlap = validate_joining_date_change(employee, new_doj)
+                if overlap:
+                    return error(overlap, data={'date_of_joining': overlap})
                 changes['date_of_joining'] = {'from': str(employee.date_of_joining), 'to': doj}
+                joining_date_audit = joining_date_change_audit(employee, new_doj)
             employee.date_of_joining = doj
             update_fields.append('date_of_joining')
 
@@ -601,6 +613,17 @@ class EmployeeDetailView(APIView):
                         'full_name':   employee.full_name,
                         **changes,
                     },
+                    branch     = employee.branch,
+                    ip_address = get_client_ip(request),
+                )
+
+            if joining_date_audit is not None:
+                AuditLog.objects.create(
+                    user       = request.user,
+                    action     = 'employee_joining_date_changed',
+                    module     = 'employees',
+                    object_id  = str(employee.id),
+                    changes    = {'employee_id': employee.employee_id, **joining_date_audit},
                     branch     = employee.branch,
                     ip_address = get_client_ip(request),
                 )

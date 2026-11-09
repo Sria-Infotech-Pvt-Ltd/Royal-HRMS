@@ -396,6 +396,12 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.accounts.tasks.apply_scheduled_employment_actions',
         'schedule': crontab(hour=0, minute=20),
     },
+    # Runs daily at 06:00 IST — tells the employee, their manager and in-scope HR that a joining date has arrived. Only a
+    # notification: the employee's Employment Stage is derived and does not depend on this running.
+    'notify-joining-today': {
+        'task':     'apps.accounts.tasks.notify_joining_today',
+        'schedule': crontab(hour=6, minute=0),
+    },
 }
 
 # ─── DRF ─────────────────────────────────────────────────────────────────────

@@ -1,10 +1,10 @@
 """
 Face Registration views.
 
-Single-approver workflow: the facial_recognition.approve permission grant IS
-the approver pool — no manager/HR approval-chain resolution like leave or
-expenses, since this is an identity-verification control, not a delegated
-approval.
+Single-approver workflow: a reviewer needs facial_recognition.approve AND must be in the request's scope — the
+employee's assigned HR, else (no assigned HR who can approve) anyone with the permission on the employee's branch;
+a superuser sees everything, and nobody reviews their own request. See services_face_approval.py, which the pending
+list, the review endpoint and the submission notification all share.
 
 Endpoints:
   POST  /api/attendance/face-registration/         — Employee submits embedding for approval
@@ -44,6 +44,7 @@ from apps.attendance.serializers_face_registration import (
     FaceRegistrationSubmitSerializer,
 )
 from apps.attendance.models import AttendanceFaceVerificationRules as FaceRules
+from apps.attendance.services_face_approval import can_review, notify_approvers_of_submission, visible_to
 from apps.attendance.services_face_matching import activate_registration, is_face_verification_mandatory
 from apps.attendance.services_face_policy import guidance, registration_mode
 
@@ -152,6 +153,7 @@ class FaceRegistrationSubmitView(APIView):
                 http_status=status.HTTP_201_CREATED,
             )
 
+        notify_approvers_of_submission(face_request)
         return success(
             'Face registration request submitted for approval.',
             FaceRegistrationReadSerializer(face_request).data,
@@ -189,8 +191,8 @@ class FaceRegistrationPendingListView(APIView):
     """
     GET /api/attendance/face-registration/pending/
 
-    HR/admin queue backing the approval UI — gated by the same
-    facial_recognition.approve permission required to act on a request.
+    The reviewer's own queue — gated by facial_recognition.approve and limited to the requests that reviewer may act on
+    (see services_face_approval). ?assigned_to_me=1 narrows it to employees whose assigned HR is the reviewer.
     """
 
     permission_classes = [IsAuthenticated]
@@ -199,10 +201,11 @@ class FaceRegistrationPendingListView(APIView):
         if not _has_perm(request.user, 'facial_recognition.approve'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
+        assigned_only = request.query_params.get('assigned_to_me') in ('1', 'true')
         queryset = (
-            FaceRegistrationRequest.objects
+            visible_to(request.user, assigned_to_me_only=assigned_only)
             .filter(status=FaceRegistrationRequest.STATUS_PENDING)
-            .select_related('employee', 'approved_by')
+            .select_related('employee', 'approved_by', 'branch')
             .order_by('-created_at')
         )
         page_obj, paginator = paginate(queryset, request)
@@ -236,6 +239,9 @@ class FaceRegistrationReviewView(APIView):
                 'You cannot approve or reject your own face registration request.',
                 http_status=status.HTTP_403_FORBIDDEN,
             )
+        if not can_review(request.user, face_request):
+            # Outside this reviewer's scope: indistinguishable from a request that does not exist.
+            return error('Face registration request not found.', http_status=status.HTTP_404_NOT_FOUND)
         if face_request.status != FaceRegistrationRequest.STATUS_PENDING:
             return error(
                 f'Request is already {face_request.status}. Only pending requests can be actioned.',

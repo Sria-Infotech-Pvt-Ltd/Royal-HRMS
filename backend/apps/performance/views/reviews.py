@@ -2,6 +2,7 @@ import logging
 
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -28,7 +29,7 @@ class MyReviewView(APIView):
     """GET/PATCH — the current employee's own review for the active cycle,
     created on first GET (same get-or-create-on-read convention as
     MyTaxDeclarationView — there's exactly one row per employee per cycle)."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_or_create(self, user, cycle):
         review, created = PerformanceReview.objects.get_or_create(
@@ -64,7 +65,7 @@ class MyReviewView(APIView):
 
 
 class SubmitMyReviewView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request):
         cycle = _active_cycle()

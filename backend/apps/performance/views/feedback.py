@@ -11,6 +11,7 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
@@ -56,7 +57,7 @@ def _dict(item: FeedbackRequest, viewer: User) -> dict:
 
 
 class FeedbackColleaguesView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         rows = [{'id': str(person.id), 'name': person.full_name, 'employee_id': person.employee_id, 'relation': relation}
@@ -66,7 +67,7 @@ class FeedbackColleaguesView(APIView):
 
 class FeedbackRequestListCreateView(APIView):
     """GET ?scope=mine (default) | for-me — POST creates a request."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         scope = request.query_params.get('scope', 'mine')
@@ -108,7 +109,7 @@ class FeedbackRequestListCreateView(APIView):
 
 class FeedbackRequestRespondView(APIView):
     """POST {response} to give feedback, or {decline: true} to decline."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     @transaction.atomic
     def post(self, request, pk):

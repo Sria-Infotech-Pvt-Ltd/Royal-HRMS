@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 
 from core.responses import success, error
 from core.pagination import paginate, paginated_data
@@ -377,14 +378,24 @@ class DispatchPayslipsView(APIView):
         )
 
 
+def _payslip_block(user):
+    """Own-payslip access stays closed until the joining date (see services_lifecycle_status)."""
+    from apps.accounts.services_lifecycle_status import ACTION_PAYSLIP, block_message
+
+    return block_message(user, ACTION_PAYSLIP)
+
+
 class MyPayslipsView(APIView):
     """Employee view — list their own payslips."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         if not _has_perm(request.user, 'payroll.view_own'):
             return error('You do not have permission to view payslips.', http_status=403)
+        blocked = _payslip_block(request.user)
+        if blocked:
+            return error(blocked, http_status=403)
 
         payslips = EmployeePayslip.objects.filter(
             employee=request.user,
@@ -401,11 +412,14 @@ class MyPayslipsView(APIView):
 class AcknowledgePayslipView(APIView):
     """Employee acknowledges their payslip (no query)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, pk):
         if not _has_perm(request.user, 'payroll.view_own'):
             return error('You do not have permission to view payslips.', http_status=403)
+        blocked = _payslip_block(request.user)
+        if blocked:
+            return error(blocked, http_status=403)
 
         payslip = get_object_or_404(EmployeePayslip, pk=pk, employee=request.user)
         if payslip.status != EmployeePayslip.STATUS_SENT:
@@ -422,7 +436,7 @@ class MyPayslipPdfView(APIView):
     payslip_pdf FileField, so this generates from the payslip's real
     stored figures instead of relying on that field)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request, pk):
         from datetime import date
@@ -431,6 +445,9 @@ class MyPayslipPdfView(APIView):
 
         if not _has_perm(request.user, 'payroll.view_own'):
             return error('You do not have permission to view payslips.', http_status=403)
+        blocked = _payslip_block(request.user)
+        if blocked:
+            return error(blocked, http_status=403)
 
         payslip = get_object_or_404(EmployeePayslip, pk=pk, employee=request.user)
 
@@ -475,7 +492,7 @@ class MyForm16PdfView(APIView):
     EmployeePayslip rows and EmployeeTaxDeclaration — see
     services_form16_pdf.py for exactly what this is (and is not)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request, fy_start_year: int):
         from datetime import date
@@ -530,7 +547,7 @@ class LogPayslipDownloadView(APIView):
     employee's payslip already goes through payroll.view-gated endpoints and
     isn't logged here."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, pk):
         from apps.accounts.models import AuditLog

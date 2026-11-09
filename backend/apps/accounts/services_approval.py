@@ -22,30 +22,40 @@ def resolve_approver(kind: str, employee: 'User') -> 'User | None':
         from apps.accounts.services_reporting_line import resolve_manager
         return resolve_manager(employee)
     if kind == 'hr':
-        return getattr(employee, 'hr', None)
+        hr = getattr(employee, 'hr', None)
+        # An inactive HR partner is the same as no HR partner: the HR stage then falls back (see resolve_approval_chain)
+        # instead of waiting on someone who can no longer act.
+        return hr if hr is not None and hr.is_active and hr.pk != employee.pk else None
     return None
+
+
+def _usable_override(approver: 'User | None', employee: 'User') -> 'User | None':
+    return approver if approver is not None and approver.is_active and approver.pk != employee.pk else None
 
 
 def resolve_approval_chain(employee: 'User', workflow_type: str) -> tuple:
     """
     Return (l1_approver, l2_approver) for the given employee and workflow.
-    Checks EmployeeApprovalOverride first, falls back to ApprovalWorkflowRule.
+
+    Each level is decided on its own: a per-employee EmployeeApprovalOverride for that level wins, otherwise the global
+    ApprovalWorkflowRule applies (as the override model documents: "if l1_override or l2_override is null, the global rule
+    applies"). An override pointing at someone inactive counts as no override.
     """
     from apps.accounts.models import EmployeeApprovalOverride
 
     override = EmployeeApprovalOverride.objects.filter(
         employee=employee, workflow_type=workflow_type,
-    ).first()
-    if override:
-        return override.l1_override, override.l2_override
+    ).select_related('l1_override', 'l2_override').first()
+    l1 = _usable_override(override.l1_override if override else None, employee)
+    l2 = _usable_override(override.l2_override if override else None, employee)
 
     from core.cache_service import ApprovalWorkflowCacheService
     rule = ApprovalWorkflowCacheService.get_rule(workflow_type)
     if not rule:
-        return None, None
+        return l1, l2
 
-    l1 = resolve_approver(rule.l1_approver_kind, employee)
-    l2 = resolve_approver(rule.l2_approver_kind, employee)
+    l1 = l1 or resolve_approver(rule.l1_approver_kind, employee)
+    l2 = l2 or resolve_approver(rule.l2_approver_kind, employee)
     if l2 is None:
         # The HR stage must never be left with nobody: fall back along the configured chain (reporting approver, branch HR,
         # company HR/admin). The manager is excluded because that is the first stage, not this one.
@@ -81,7 +91,7 @@ def resolve_employee_department_name(employee: 'User') -> str:
     return employee.department or ''
 
 
-def resolve_employee_org_unit_chief(employee: 'User') -> 'User | None':
+def resolve_employee_org_unit_chief(employee: 'User', *, chain: 'list | None' = None, chief_cache: 'dict | None' = None) -> 'User | None':
     """The department-level approver for `employee` — whoever currently
     holds the 'chief' Position for the nearest unit in their chain
     (self-first, via resolve_employee_org_unit_chain()), not necessarily
@@ -93,7 +103,13 @@ def resolve_employee_org_unit_chief(employee: 'User') -> 'User | None':
     from apps.accounts.models import Placement
 
     today = timezone.localdate()
-    for unit_id in resolve_employee_org_unit_chain(employee):
+    # `chain` and `chief_cache` are optional and only passed by the employee directory, which resolves a whole page of people:
+    # the unit chain comes from the placement it already loaded, and each unit's chief is looked up once per page, not per row.
+    for unit_id in (chain if chain is not None else resolve_employee_org_unit_chain(employee)):
+        if chief_cache is not None and unit_id in chief_cache:
+            if chief_cache[unit_id] is not None:
+                return chief_cache[unit_id]
+            continue
         chief_placement = (
             Placement.objects.filter(
                 position__org_unit_id=unit_id, position__is_chief=True,
@@ -103,6 +119,8 @@ def resolve_employee_org_unit_chief(employee: 'User') -> 'User | None':
             .select_related('employee')
             .first()
         )
+        if chief_cache is not None:
+            chief_cache[unit_id] = chief_placement.employee if chief_placement else None
         if chief_placement:
             return chief_placement.employee
     return None

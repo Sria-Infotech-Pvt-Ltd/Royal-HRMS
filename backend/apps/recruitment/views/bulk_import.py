@@ -215,7 +215,7 @@ class CandidateBulkImportView(APIView):
                 # as a candidate created one at a time via CandidateListCreateView.
                 for candidate in to_create:
                     if candidate.interview_date:
-                        _fire_interview_date_emails_if_needed(candidate, old_interview_date=None)
+                        _fire_interview_date_emails_if_needed(candidate, old_interview_date=None, actor=request.user)
 
         total         = len(rows)
         skipped_count = len(skipped_rows)

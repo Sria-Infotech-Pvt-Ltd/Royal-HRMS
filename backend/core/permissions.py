@@ -118,30 +118,68 @@ class HasSettingsPermission(BasePermission):
         return has_perm(request.user, codename)
 
 
-class HasCompletedOnboarding(BasePermission):
-    """
-    Blocks employee-portal resources (employee dashboard, leave, etc.) until
-    the user has finished onboarding and cleared all assigned assessments.
+def _is_exempt_from_onboarding(user) -> bool:
+    """Superusers and anyone holding employees.view (system_admin, branch_admin, HR — every admin-tier role) or
+    managing a team are exempt from onboarding and assessments: they're never a new hire going through that flow."""
+    from core.access import can_manage_team
+    return bool(user.is_superuser or has_perm(user, 'employees.view') or can_manage_team(user))
 
-    This mirrors the redirect gate in the Next.js proxy, so a direct API
-    call cannot bypass it. HR and system_admin roles are exempt — they do
-    not go through the onboarding/assessment flow themselves.
+
+class HasCompletedOnboardingStatus(BasePermission):
     """
-    message = 'Complete onboarding and your assigned assessments before accessing this resource.'
+    Blocks employee-portal resources for a candidate-portal user until HR has approved their onboarding AND they have
+    activated their own account (set a password through the activation link and logged in). A candidate's one-time
+    onboarding link only ever opens the onboarding form. Says nothing about assessments: a completed employee with
+    assessments still pending is NOT blocked by this class.
+
+    Same exemptions as HasCompletedOnboarding.
+    """
+    message = 'Complete onboarding before accessing this resource.'
 
     def has_permission(self, request, view) -> bool:
         user = request.user
         if not (user and user.is_authenticated):
             return False
-        # Superusers and anyone holding employees.view (system_admin, branch_admin,
-        # HR — every admin-tier role) are exempt from onboarding: they're never
-        # a new hire going through this flow themselves.
-        from core.access import can_manage_team
-        if user.is_superuser or has_perm(user, 'employees.view') or can_manage_team(user):
+        if _is_exempt_from_onboarding(user):
             return True
-        if (user.requires_self_service_onboarding
-                and user.onboarding_status != user.ONBOARDING_COMPLETE):
+        if not user.requires_self_service_onboarding:
+            return True
+        approved = user.onboarding_status == user.ONBOARDING_COMPLETE
+        return approved and user.account_activated_at is not None and not user.activation_pending
+
+
+class HasClearedAssessments(BasePermission):
+    """
+    Blocks a user who still has assigned assessments to complete (assessment_status == pending), whatever their
+    onboarding status. Same exemptions as HasCompletedOnboarding.
+    """
+    message = 'Complete your assigned assessments before accessing this resource.'
+
+    def has_permission(self, request, view) -> bool:
+        user = request.user
+        if not (user and user.is_authenticated):
             return False
-        if user.assessment_status == user.ASSESSMENT_PENDING:
-            return False
-        return True
+        if _is_exempt_from_onboarding(user):
+            return True
+        return user.assessment_status != user.ASSESSMENT_PENDING
+
+
+class HasCompletedOnboarding(BasePermission):
+    """
+    Blocks employee-portal resources (employee dashboard, etc.) until the user has finished onboarding AND cleared
+    all assigned assessments: HasCompletedOnboardingStatus and HasClearedAssessments together.
+
+    This mirrors the redirect gate in the Next.js proxy, so a direct API
+    call cannot bypass it. HR and system_admin roles are exempt — they do
+    not go through the onboarding/assessment flow themselves.
+
+    Module views that should only keep unapproved candidates out (leave, expenses, attendance, ...) use
+    HasCompletedOnboardingStatus instead, so a pending assessment does not lock an employee out of them.
+    """
+    message = 'Complete onboarding and your assigned assessments before accessing this resource.'
+
+    def has_permission(self, request, view) -> bool:
+        return (
+            HasCompletedOnboardingStatus().has_permission(request, view)
+            and HasClearedAssessments().has_permission(request, view)
+        )

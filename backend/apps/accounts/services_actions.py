@@ -34,10 +34,21 @@ class ActionConflictError(Exception):
 
 def _handle_set_placement(action: EmploymentAction, effect: dict) -> dict:
     from apps.accounts.models import Position
+    from apps.accounts.services_access_guards import anonymous_assignment_refusal, assignment_refusal
     from apps.accounts.services_placement import assign_position
 
     position_id = effect.get('position_id') or action.payload.get('position_id')
     position = Position.objects.get(pk=position_id)
+
+    actors = {person for person in (action.created_by, action.applied_by) if person is not None}
+    for actor in actors:
+        refusal = assignment_refusal(actor, action.employee, position)  # re-checked now, whoever raised or applies it
+        if refusal:
+            raise ActionConflictError(refusal.message)
+    if not actors:  # nobody on record: only an everyday seat may be granted
+        anonymous_refusal = anonymous_assignment_refusal(position)
+        if anonymous_refusal:
+            raise ActionConflictError(anonymous_refusal)
 
     prior = action.employee.placements.filter(effective_to__isnull=True).select_related('position').first()
     previous = {'position_id': str(prior.position_id), 'effective_from': prior.effective_from.isoformat()} if prior else None

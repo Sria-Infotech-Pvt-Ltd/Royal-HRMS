@@ -6,6 +6,7 @@ from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.permissions import has_perm as _has_perm
@@ -32,7 +33,7 @@ def _is_unrestricted(user) -> bool:
 
 
 class HolidayListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         year     = request.query_params.get('year')
@@ -98,7 +99,7 @@ class HolidayListCreateView(APIView):
 
 
 class HolidayDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_holiday(self, holiday_id: str):
         try:

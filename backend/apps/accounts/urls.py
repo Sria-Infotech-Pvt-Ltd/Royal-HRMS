@@ -66,6 +66,11 @@ from apps.accounts.views import (
     DocumentTypeConfigPublicView,
     DocumentTypeConfigView,
     EmployeeApprovalMatrixView,
+    ApproverOptionsView,
+    OnboardingHrContactView,
+    OnboardingLinkExchangeView,
+    EmployeeApproverAssignmentsView,
+    MyApprovalsView,
     EmployeeBulkImportView,
     EmployeeCodeSettingsView,
     EmployeeCodeSeriesListView,
@@ -153,6 +158,9 @@ from apps.accounts.views import (
     EmailTemplatePreviewView,
     ResolveTemplateVariablesView,
 )
+from apps.accounts.views.employee_import import (
+    EmployeeImportCommitView, EmployeeImportErrorsView, EmployeeImportInvitesView, EmployeeImportPreviewView, EmployeeImportTemplateView,
+)
 from apps.accounts.views_lifecycle import EmployeeAsOfView, EmployeeLifecycleTimelineView
 from apps.accounts.views_profile_photo import ProfilePhotoView
 from apps.accounts.views_employee_photo import EmployeePhotoView
@@ -182,7 +190,14 @@ urlpatterns = [
     path('employees/bulk-import/',                               EmployeeBulkImportView.as_view(),       name='employee-bulk-import'),
     path('employees/bulk-import/sample/',                        EmployeeBulkImportSampleView.as_view(), name='employee-bulk-import-sample'),
     path('employees/bulk-import/status/<uuid:batch_id>/',        EmployeeBulkImportStatusView.as_view(), name='employee-bulk-import-status'),
+    path('employees/bulk-import/template/',                      EmployeeImportTemplateView.as_view(),   name='employee-import-template'),
+    path('employees/bulk-import/preview/',                       EmployeeImportPreviewView.as_view(),    name='employee-import-preview'),
+    path('employees/bulk-import/errors/',                        EmployeeImportErrorsView.as_view(),     name='employee-import-errors'),
+    path('employees/bulk-import/invites/<uuid:batch_id>/',        EmployeeImportInvitesView.as_view(),    name='employee-import-invites'),
+    path('employees/bulk-import/commit/',                        EmployeeImportCommitView.as_view(),     name='employee-import-commit'),
     path('employees/me/',                                        MyProfileView.as_view(),                name='my-profile'),
+    path('employees/me/approvals/',                              MyApprovalsView.as_view(),              name='my-approvals'),
+    path('employees/approver-options/',                          ApproverOptionsView.as_view(),          name='approver-options'),
     path('employees/me/photo/',                                  ProfilePhotoView.as_view(),             name='my-profile-photo'),
     path('employees/me/employment-letter/',                      MyEmploymentLetterPdfView.as_view(),    name='my-employment-letter-pdf'),
     path('employees/hrs/',                                       HRListView.as_view(),                   name='employee-hr-list'),
@@ -199,6 +214,7 @@ urlpatterns = [
     path('employees/<str:employee_id>/audit-trail/',              EmployeeAuditTrailView.as_view(), name='employee-audit-trail'),
     path('employees/<str:employee_id>/reporting-manager/',       EmployeeReportingManagerView.as_view(), name='employee-reporting-manager'),
     path('employees/<str:employee_id>/approval-matrix/',         EmployeeApprovalMatrixView.as_view(),   name='employee-approval-matrix'),
+    path('employees/<str:employee_id>/approver-assignments/',    EmployeeApproverAssignmentsView.as_view(), name='employee-approver-assignments'),
     path('employees/<str:employee_id>/documents/',               EmployeeProfileDocumentView.as_view(),  name='employee-documents'),
     path('employees/<str:employee_id>/photo/',                   EmployeePhotoView.as_view(),             name='employee-photo'),
     path('employees/<str:employee_id>/custom-file-fields/',      EmployeeCustomFieldFileValueView.as_view(), name='employee-custom-file-fields'),
@@ -223,6 +239,8 @@ urlpatterns = [
     path('onboarding/custom-file-fields/',              CustomFieldFileValueView.as_view(), name='onboarding-custom-file-fields'),
     path('onboarding/custom-file-fields/<str:value_id>/', CustomFieldFileValueView.as_view(), name='onboarding-custom-file-field-detail'),
     path('onboarding/approvals/',                    OnboardingApprovalView.as_view(), name='onboarding-approvals'),
+    path('onboarding/link/',                         OnboardingLinkExchangeView.as_view(), name='onboarding-link-exchange'),
+    path('onboarding/hr-contact/',                   OnboardingHrContactView.as_view(),    name='onboarding-hr-contact'),
     path('onboarding/approvals/<str:user_id>/',      OnboardingApprovalView.as_view(), name='onboarding-approve'),
     path('onboarding/documents/<int:doc_id>/verify/', OnboardingDocumentVerifyView.as_view(), name='onboarding-document-verify'),
     path('onboarding/field-config/',                 OnboardingFieldConfigPublicView.as_view(), name='onboarding-field-config'),

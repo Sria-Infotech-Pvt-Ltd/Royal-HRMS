@@ -99,8 +99,11 @@ def _count_consecutive_absent_days(
 
     consecutive = 0
     current = today - timedelta(days=1)
+    joined_on = getattr(employee, 'date_of_joining', None)
 
     while current >= start:
+        if joined_on is not None and current < joined_on:
+            break  # days before the joining date are not absences
         if current.strftime('%A').lower() in off_days_by_date[current]:
             current -= timedelta(days=1)
             continue
@@ -184,9 +187,13 @@ def detect_absence_alerts() -> dict:
     today       = timezone.localdate()
 
     from apps.accounts.models import User
+    from apps.accounts.services_lifecycle_status import attendance_eligible_q
+
+    # Expected to attend today: account active, joining date arrived, not past an approved last working day. Pre-Joining,
+    # Unknown (no joining date) and Terminated employees never raise an absence alert.
     employees = (
         User.objects
-        .filter(is_active=True, onboarding_status='complete', activation_pending=False)
+        .filter(attendance_eligible_q(as_of=today))
         .exclude(employee_id='')
         .select_related('reporting_manager', 'hr')
     )
@@ -227,13 +234,11 @@ def finalize_missing_attendance(target_date: date) -> dict:
     if target_date >= today:
         return {'created': 0, 'skipped': 0, 'reason': 'target_date_not_closed'}
 
+    # Expected to attend that day: joined, account active, not past an approved last day. Onboarding state no longer matters.
+    from apps.accounts.services_lifecycle_status import attendance_eligible_q
+
     employees = list(
-        User.objects.filter(
-            is_active=True,
-            onboarding_status=User.ONBOARDING_COMPLETE,
-            activation_pending=False,
-            date_of_joining__lte=target_date,
-        )
+        User.objects.filter(attendance_eligible_q(as_of=target_date))
         .exclude(employee_id='')
         .only('id', 'branch', 'employee_id', 'date_of_joining')
     )

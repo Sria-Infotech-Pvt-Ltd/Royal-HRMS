@@ -251,13 +251,27 @@ class EmployeeApprovalMatrixView(APIView):
         if l2_err:
             return error(l2_err)
 
+        # Same rules as the Approval Assignments screens: an approver must be active, an employee, and able to approve leave.
+        from apps.accounts.services_approver_assignment import KIND_L1, KIND_L2_HR, approver_refusal
+        for chosen, kind, field in ((l1_user, KIND_L1, 'l1_override_id'), (l2_user, KIND_L2_HR, 'l2_override_id')):
+            refusal = approver_refusal(chosen, employee, kind) if chosen is not None else None
+            if refusal:
+                return error(refusal, data={field: refusal})
         override, _ = EmployeeApprovalOverride.objects.get_or_create(
             employee=employee, workflow_type=workflow_type,
         )
+        before = (override.l1_override_id, override.l2_override_id)
         override.l1_override = l1_user
         override.l2_override = l2_user
         override.updated_by  = request.user
         override.save(update_fields=['l1_override', 'l2_override', 'updated_by', 'updated_at'])
+        if before != (override.l1_override_id, override.l2_override_id):
+            AuditLog.objects.create(
+                user=request.user, action='approver_assignment_changed', module='accounts', object_id=str(employee.pk),
+                changes={'employee': employee.employee_id, 'workflow': workflow_type,
+                         'l1_override': l1_user.full_name if l1_user else None, 'l2_override': l2_user.full_name if l2_user else None},
+                branch=employee.branch or '', ip_address=get_client_ip(request),
+            )
 
         _ensure_default_rules()
         rule = ApprovalWorkflowRule.objects.get(workflow_type=workflow_type)

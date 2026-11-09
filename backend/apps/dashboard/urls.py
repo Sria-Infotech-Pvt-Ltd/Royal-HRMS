@@ -1,6 +1,9 @@
 from django.urls import path
 
 from apps.dashboard import views
+from apps.dashboard.views.reports import (
+    ReportCatalogView, ReportDownloadView, ReportPreviewView, ReportRecipientSearchView, ReportSendView,
+)
 from apps.dashboard.views.module_overviews import (
     AttendanceOverviewView,
     LeaveOverviewView,
@@ -44,6 +47,11 @@ urlpatterns = [
     path('module/payroll-overview/',           PayrollOverviewView.as_view()),
     path('module/performance-overview/',       PerformanceOverviewView.as_view()),
     path('module/reports-overview/',           ReportsOverviewView.as_view()),
+    path('reports/',                           ReportCatalogView.as_view(),  name='report-catalog'),
+    path('reports/recipients/',                ReportRecipientSearchView.as_view(), name='report-recipients'),
+    path('reports/<str:key>/preview/',         ReportPreviewView.as_view(),  name='report-preview'),
+    path('reports/<str:key>/download/',        ReportDownloadView.as_view(), name='report-download'),
+    path('reports/<str:key>/send/',            ReportSendView.as_view(),     name='report-send'),
     path('module/settings-overview/',          SettingsOverviewView.as_view()),
 
     # ── Manager / Team Lead Dashboard ────────────────────────────────────────

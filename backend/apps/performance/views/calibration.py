@@ -2,6 +2,7 @@ import logging
 
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.permissions import has_perm as _has_perm
@@ -98,7 +99,7 @@ class PublishReviewView(APIView):
 class AcknowledgeReviewView(APIView):
     """POST — the review's own employee acknowledges the published outcome,
     setting acknowledged_at. Only allowed once published_at is set."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, pk):
         try:

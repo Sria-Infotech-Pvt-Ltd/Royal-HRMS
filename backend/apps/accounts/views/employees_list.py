@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+from apps.accounts.services_access_guards import assignment_refusal
+
 from core.access import can_manage_team
 import csv
 import io
@@ -140,6 +142,62 @@ def _with_edit_draft_flag(viewer, rows: list[dict]) -> list[dict]:
     return rows
 
 
+
+def _apply_lifecycle_filters(request, qs):
+    """Narrow `qs` by ?employment_stage=, ?account_status= and ?onboarding_stage=. Returns the queryset, or an error string."""
+    from apps.accounts import services_lifecycle_status as lifecycle
+
+    stage = request.query_params.get('employment_stage', '').strip()
+    account = request.query_params.get('account_status', '').strip()
+    onboarding = request.query_params.get('onboarding_stage', '').strip()
+    if stage:
+        if stage not in lifecycle.STAGES:
+            return 'employment_stage must be one of: ' + ', '.join(lifecycle.STAGES) + '.'
+        qs = qs.filter(lifecycle.stage_q(stage))
+    if account:
+        if account not in lifecycle.ACCOUNT_STATUSES:
+            return 'account_status must be one of: ' + ', '.join(lifecycle.ACCOUNT_STATUSES) + '.'
+        qs = qs.filter(lifecycle.account_status_q(account))
+    if onboarding:
+        if onboarding not in lifecycle.ONBOARDING_STAGES:
+            return 'onboarding_stage must be one of: ' + ', '.join(lifecycle.ONBOARDING_STAGES) + '.'
+        qs = qs.filter(lifecycle.onboarding_stage_q(onboarding))
+    return qs
+
+
+def _directory_prefetches() -> list:
+    """Every placement still in force or starting later (with seat and org unit) and the active notice-period separation of
+    every listed employee. An empty list therefore means 'no seat', so no per-employee fallback query is ever needed."""
+    from django.db.models import Prefetch, Q
+
+    from apps.hrms.models import SEP_APPROVED, SeparationRequest
+
+    today = timezone.localdate()
+    return [
+        Prefetch(
+            'placements',
+            queryset=Placement.objects.filter(
+                Q(effective_to__isnull=True) | Q(effective_to__gte=timezone.localdate()),
+            ).order_by('pk').select_related('position', 'position__org_unit', 'position__org_unit__parent'),
+            to_attr='directory_placements',
+        ),
+        Prefetch(
+            'separation_requests',
+            queryset=SeparationRequest.objects.filter(
+                status=SEP_APPROVED, proposed_last_working_day__gte=timezone.localdate(),
+            ).order_by('proposed_last_working_day'),
+            to_attr='directory_active_separations',
+        ),
+        # Every approved separation: whether one ends the employment depends on the person's current joining date (an older
+        # separation from before a rehire does not), so the Employment Stage rule is applied per person in Python.
+        Prefetch(
+            'separation_requests',
+            queryset=SeparationRequest.objects.filter(status=SEP_APPROVED),
+            to_attr='directory_approved_separations',
+        ),
+    ]
+
+
 class EmployeeListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -151,9 +209,12 @@ class EmployeeListCreateView(APIView):
 
         qs = (
             User.objects
-            .select_related('profile', 'reporting_manager')
+            # One batched query per relation for the whole page: _employee_dict() reads these per row, and each lookup
+            # used to be its own query (~6 per employee), which made the page take tens of seconds on a remote database.
+            .select_related('profile', 'reporting_manager', 'hr', 'reporting_approver', 'dotted_line_manager')
             .prefetch_related('employee_documents')
             .prefetch_related('custom_field_files')
+            .prefetch_related(*_directory_prefetches())
             .filter(is_active__in=[True, False])
             .exclude(employee_id='')   # portal candidates have no employee_id until onboarding is approved
             .order_by('-date_joined')
@@ -255,6 +316,12 @@ class EmployeeListCreateView(APIView):
             else:
                 return error('status must be one of: active, onboarding, probation, notice_period, inactive.')
 
+        # Lifecycle filters (additive; the `status` filter above keeps its meaning). See services_lifecycle_status.
+        lifecycle_error = _apply_lifecycle_filters(request, qs)
+        if isinstance(lifecycle_error, str):
+            return error(lifecycle_error)
+        qs = lifecycle_error
+
         # Used to check "does anyone currently report to this person, or have
         # them as HR" before a caller re-roles/re-branches them elsewhere —
         # only the count matters, so callers pass page_size=1.
@@ -277,13 +344,14 @@ class EmployeeListCreateView(APIView):
 
         paginator = Paginator(qs, page_size)
         page_obj  = paginator.get_page(page_num)
+        page_cache: dict = {}  # shared by every row of this page: org-unit parents and each unit's chief are looked up once
 
         return success('Employees retrieved.', data={
             'count':       paginator.count,
             'page':        page_obj.number,
             'page_size':   page_size,
             'total_pages': paginator.num_pages,
-            'results':     _with_edit_draft_flag(request.user, [_employee_dict(u) for u in page_obj.object_list]),
+            'results':     _with_edit_draft_flag(request.user, [_employee_dict(u, page_cache=page_cache) for u in page_obj.object_list]),
         })
 
     def post(self, request):
@@ -393,6 +461,9 @@ class EmployeeListCreateView(APIView):
         # Full org-wide access is never handed out by creating an employee into a seat that carries it.
         if position_obj.position_permissions.filter(permission__codename='settings.edit').exists():
             return error(f'"{position_obj.title}" carries full access and cannot be filled via employee creation.')
+        refusal = assignment_refusal(request.user, None, position_obj)  # sensitive seats need the creator to hold those permissions
+        if refusal:
+            return error(refusal.message, http_status=refusal.status)
 
         selected_hr = None
         if hr_id:
@@ -655,4 +726,6 @@ class EmployeeStatsView(APIView):
             'department_names':  department_names,
             'new_this_month':          new_this_month,
             'needs_reporting_manager': onboarding_or_probation_qs.filter(reporting_manager__isnull=True).count(),
+            # Employment Stage counts (active accounts). Separate from the buckets above, which keep their definitions.
+            'stages':            counts['stages'],
         })

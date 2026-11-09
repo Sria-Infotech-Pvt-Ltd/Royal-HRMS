@@ -14,6 +14,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
@@ -49,7 +50,7 @@ from apps.hrms.views.leave_shared import *  # noqa: F401,F403
 # ─── Stats & Calendar ──────────────────────────────────────────────────────────
 
 class LeaveStatsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         has_approve = _has_perm(request.user, 'leave.approve')
@@ -120,7 +121,7 @@ class LeaveStatsView(APIView):
 
 
 class LeaveCalendarView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         try:

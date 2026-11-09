@@ -95,8 +95,10 @@ def get_dashboard_stats(
     # new joiner with no AttendanceRecord yet for days before their DOJ (or
     # a leaver's days after their last working day) got silently counted
     # as Absent below, the exact "new joiners flagged Absent" bug.
+    # A blank joining date is NOT eligible (it is flagged for HR to correct, see services_lifecycle_status), so only people
+    # whose joining date has arrived count.
     employee_qs = employee_qs.filter(
-        Q(date_of_joining__isnull=True) | Q(date_of_joining__lte=target_date)
+        Q(date_of_joining__lte=target_date)
     ).filter(
         Q(alumni_record__isnull=True) | Q(alumni_record__last_working_day__gte=target_date)
     )
@@ -263,7 +265,8 @@ def get_attendance_list(filters: dict) -> list[dict]:
     sort_by      = filters.get('sort_by', 'name')
     sort_dir     = filters.get('sort_dir', 'asc')
 
-    employee_qs = current_workforce()
+    # Blank joining date: not listed (flagged in the directory for HR correction) rather than shown Absent every day.
+    employee_qs = current_workforce().exclude(date_of_joining__isnull=True)
     if employee_ids is not None:
         employee_qs = employee_qs.filter(id__in=employee_ids)
     elif branch:
@@ -302,7 +305,7 @@ def get_attendance_list(filters: dict) -> list[dict]:
                 Q(_status='absent')
                 | (
                     Q(_status__isnull=True)
-                    & (Q(date_of_joining__isnull=True) | Q(date_of_joining__lte=target_date))
+                    & Q(date_of_joining__lte=target_date)
                     & (Q(_lwd__isnull=True) | Q(_lwd__gte=target_date))
                 )
             )

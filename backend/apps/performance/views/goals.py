@@ -1,4 +1,5 @@
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.responses import error, first_error, success
@@ -11,7 +12,7 @@ from ._shared import _active_cycle
 # ─── Goals (self-service) ───────────────────────────────────────────────────────
 
 class MyGoalsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         cycle = _active_cycle()
@@ -32,7 +33,7 @@ class MyGoalsView(APIView):
 
 
 class MyGoalDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_goal(self, pk, user):
         try:

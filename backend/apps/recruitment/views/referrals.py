@@ -13,6 +13,7 @@ from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 from core.date_utils import format_date_display
 from core.permissions import has_perm as _has_perm
@@ -46,7 +47,7 @@ from apps.recruitment.views.shared import *  # noqa: F401,F403
 
 class ReferralListCreateView(APIView):
    
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         queryset = (
@@ -104,7 +105,7 @@ class ReferralListCreateView(APIView):
 
 class ReferralAllView(APIView):
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         if not _has_perm(request.user, 'recruitment.view'):
@@ -144,7 +145,7 @@ class ReferralAllView(APIView):
 
 class ReferralRuleListCreateView(APIView):
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         qs = ReferralRule.objects.all().order_by('order', 'id')
@@ -179,7 +180,7 @@ class ReferralRuleListCreateView(APIView):
 
 class ReferralRuleDetailView(APIView):
    
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_rule(self, pk):
         try:
@@ -216,7 +217,7 @@ class ReferralRuleDetailView(APIView):
 
 class ReferralBonusListView(APIView):
    
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         scope = request.query_params.get('scope', '')
@@ -246,7 +247,7 @@ class ReferralBonusListView(APIView):
 
 class ReferralBonusDetailView(APIView):
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_bonus(self, pk):
         try:
@@ -296,7 +297,7 @@ class ReferralBonusDetailView(APIView):
 
 class ReferralBonusApproveView(APIView):
    
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, pk):
         from django.utils import timezone as tz
@@ -346,7 +347,7 @@ class ReferralBonusApproveView(APIView):
 
 class ReferralBonusPayView(APIView):
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, pk):
         from django.utils import timezone as tz

@@ -5,6 +5,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.responses import error, first_error, success
@@ -92,7 +93,7 @@ def _can_action_stage(user, sep_request, stage) -> bool:
 # ─── Approval stages ────────────────────────────────────────────────────────────
 
 class SeparationApprovalStageActionView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, request_id: str, stage_id: str):
         try:
@@ -157,7 +158,7 @@ class SeparationApprovalStageActionView(APIView):
 # ─── KT / Handover tasks ────────────────────────────────────────────────────────
 
 class SeparationHandoverTaskListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request, request_id: str):
         sep_request, err = _get_visible_request(request_id, request.user)
@@ -199,7 +200,7 @@ class SeparationHandoverTaskListCreateView(APIView):
 
 
 class SeparationHandoverTaskDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_task(self, request_id: str, task_id: str, user):
         try:
@@ -261,7 +262,7 @@ class SeparationHandoverTaskDetailView(APIView):
 # ─── Clearances ─────────────────────────────────────────────────────────────────
 
 class SeparationClearanceListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request, request_id: str):
         sep_request, err = _get_visible_request(request_id, request.user)
@@ -272,7 +273,7 @@ class SeparationClearanceListView(APIView):
 
 
 class SeparationClearanceActionView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, request_id: str, clearance_id: str):
         try:
@@ -332,7 +333,7 @@ class SeparationClearanceActionView(APIView):
 # SeparationSettlementSerializer.get_can_edit()).
 
 class SeparationSettlementView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _current_settlement(self, sep_request):
         """A finalized settlement is a frozen record — returned as-is.
@@ -377,7 +378,7 @@ class SeparationSettlementView(APIView):
 
 
 class SeparationSettlementFinalizeView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, request_id: str):
         sep_request, err = _get_visible_request(request_id, request.user)
@@ -416,7 +417,7 @@ class SeparationSettlementFinalizeView(APIView):
 # ─── Documents ──────────────────────────────────────────────────────────────────
 
 class SeparationDocumentListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request, request_id: str):
@@ -449,7 +450,7 @@ class SeparationDocumentListCreateView(APIView):
 
 
 class SeparationDocumentDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def delete(self, request, request_id: str, document_id: str):
         try:
@@ -467,7 +468,7 @@ class SeparationDocumentDetailView(APIView):
 # ─── Activity log ───────────────────────────────────────────────────────────────
 
 class SeparationActivityListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request, request_id: str):
         sep_request, err = _get_visible_request(request_id, request.user)

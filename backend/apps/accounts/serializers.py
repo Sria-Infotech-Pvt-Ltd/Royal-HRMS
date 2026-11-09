@@ -2260,6 +2260,7 @@ class OnboardingApprovalSerializer(serializers.ModelSerializer):
 
 class MyProfileSerializer(serializers.ModelSerializer):
     profile         = EmployeeProfileSerializer(read_only=True)
+    awaiting_activation = serializers.SerializerMethodField()
     assessment_status  = serializers.SerializerMethodField()
     reporting_manager  = serializers.SerializerMethodField()
     reporting_approver = serializers.SerializerMethodField()
@@ -2286,7 +2287,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'department', 'designation', 'branch', 'employee_type',
             'org_unit_name', 'position_title',
             'date_of_joining', 'date_joined',
-            'work_location', 'onboarding_status', 'onboarding_rejection_remarks', 'assessment_status',
+            'work_location', 'onboarding_status', 'onboarding_rejection_remarks', 'assessment_status', 'awaiting_activation',
             'employment_status', 'employment_status_display', 'notice_period_days',
             'reporting_manager', 'reporting_approver', 'hr',
             'profile', 'profile_photo_url',
@@ -2344,6 +2345,11 @@ class MyProfileSerializer(serializers.ModelSerializer):
         if not assigned_hr:
             return None
         return {'id': assigned_hr.employee_id, 'name': assigned_hr.full_name}
+
+    def get_awaiting_activation(self, obj) -> bool:
+        """HR has approved / the hire is complete, but the person has not yet set a password and signed in."""
+        from apps.accounts.services_onboarding import is_onboarding
+        return obj.onboarding_status == obj.ONBOARDING_COMPLETE and is_onboarding(obj)
 
     def get_assessment_status(self, obj):
         from apps.assessments.models import CandidateAssignment

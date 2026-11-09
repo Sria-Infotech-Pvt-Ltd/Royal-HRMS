@@ -53,6 +53,8 @@ class EmployeePermissionsView(APIView):
         employee = User.objects.filter(pk=pk).first()
         if not employee:
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if employee.pk == request.user.pk:
+            return error('You cannot change your own permissions.', http_status=status.HTTP_403_FORBIDDEN)
 
         codenames = request.data.get('codenames')
         if not isinstance(codenames, list) or not all(isinstance(item, str) for item in codenames):

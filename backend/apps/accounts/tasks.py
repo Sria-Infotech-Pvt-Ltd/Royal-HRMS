@@ -95,6 +95,20 @@ def send_onboarding_submitted_notification_task(self, user_id):
 
 
 @shared_task
+def notify_joining_today():
+    """
+    Daily side effect for employees whose joining date has arrived: notify the employee, their reporting manager and the
+    in-scope HR reviewers (see services_joining_notifications). It writes no status: Employment Stage is derived from the joining
+    date, so it is correct even if this never runs. Idempotent per (employee, recipient), with a short catch-up window.
+    """
+    from apps.accounts.services_joining_notifications import notify_joiners
+
+    result = notify_joiners()
+    logger.info('notify_joining_today completed: %s', result)
+    return result
+
+
+@shared_task
 def apply_scheduled_employment_actions():
     """
     Phase 5B Task F.1 — the daily job that applies due `EmploymentAction`

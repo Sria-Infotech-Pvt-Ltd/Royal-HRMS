@@ -32,6 +32,7 @@ def assign_invalid_punch(punch_id: str, assigned_to_id: str, performed_by) -> di
     with transaction.atomic():
         invalid = _get_or_register(punch_id)
         _guard_resolved(invalid, allow_reassign=True)
+        _require_employed_on_punch_date(invalid)
 
         try:
             assignee = User.objects.get(id=assigned_to_id)
@@ -95,6 +96,8 @@ def convert_invalid_punch(
         if invalid.status == InvalidPunch.STATUS_CONVERTED:
             raise ValueError('Punch is already converted.')
 
+        _require_employed_on_punch_date(invalid)
+
         punch       = invalid.punch
         target_time = _parse_time(target_time_str)
         new_punched_at = datetime.datetime.combine(punch.punch_date, target_time).replace(tzinfo=_IST)
@@ -146,6 +149,17 @@ def _guard_resolved(invalid: InvalidPunch, allow_reassign: bool = False) -> None
         raise ValueError('Cannot act on a converted punch.')
     if not allow_reassign and invalid.status == InvalidPunch.STATUS_ASSIGNED:
         raise ValueError('Punch is already assigned.')
+
+
+def _require_employed_on_punch_date(invalid: InvalidPunch) -> None:
+    """An invalid punch of someone who was not employed that day (before joining, no joining date, after the last working day)
+    can only be discarded: assigning or converting it would put attendance on a day they were not employed."""
+    from apps.accounts.services_lifecycle_status import attendance_date_problem
+
+    punch = invalid.punch
+    problem = attendance_date_problem(punch.employee, punch.punch_date)
+    if problem:
+        raise ValueError(f'{problem} Discard this punch instead.')
 
 
 def _parse_time(time_str: str) -> datetime.time:

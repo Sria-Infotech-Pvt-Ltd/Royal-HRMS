@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.accounts.services_headcount import current_workforce
-from core.permissions import HasCompletedOnboarding, has_perm as _has_perm
+from core.permissions import HasCompletedOnboarding, has_perm as _has_perm, HasCompletedOnboardingStatus
 from core.responses import error, success
 
 logger = logging.getLogger(__name__)
@@ -746,7 +746,7 @@ class HRLifecycleActionRegisterView(APIView):
 # ─── Shared Announcement (all authenticated users) ───────────────────────────
 
 class SharedAnnouncementView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         from apps.announcements.models import Announcement

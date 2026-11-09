@@ -120,6 +120,12 @@ class PunchService:
         source     = punch_data.get('source', AttendancePunch.SOURCE_WEB)
         mode       = punch_data.get('attendance_mode', AttendancePunch.MODE_OFFICE)
 
+        # ── Employment stage: nobody may punch before joining, with no joining date, or after an approved last day ──
+        from apps.accounts.services_lifecycle_status import ACTION_PUNCH, block_message
+        blocked = block_message(employee, ACTION_PUNCH)
+        if blocked:
+            raise ValueError(blocked)
+
         # ── Consecutive punch validation ──────────────────────────────────────
         if punch_type == AttendancePunch.PUNCH_IN and cls._is_clocked_in(employee, today):
             raise ValueError(

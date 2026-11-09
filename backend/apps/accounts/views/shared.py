@@ -241,7 +241,26 @@ def _custom_field_file_dict(v) -> dict:
     }
 
 
-def _employee_dict(user: User) -> dict:
+from apps.accounts.services_lifecycle_status import lifecycle_summary  # noqa: E402  (kept beside its only user)
+
+
+def _covering_placements(prefetched):
+    """Placements in force today out of the directory's prefetched ones; None when nothing was prefetched."""
+    if prefetched is None:
+        return None
+    today = timezone.localdate()
+    return [p for p in prefetched if p.effective_from <= today and (p.effective_to is None or p.effective_to >= today)]
+
+
+def _holds_manager_seat(user: User, covering) -> bool:
+    """can_manage_team(user), answered from the directory's prefetched placements when it has them."""
+    if covering is None:
+        return can_manage_team(user)
+    # Same rule as core.access.current_seat: a placement in force today, on an active position.
+    return bool(covering and covering[0].position.is_active and covering[0].position.can_manage_team)
+
+
+def _employee_dict(user: User, page_cache: dict | None = None) -> dict:
     parts = user.full_name.strip().split(' ', 1)
     first = parts[0]
     last  = parts[1] if len(parts) > 1 else ''
@@ -387,7 +406,9 @@ def _employee_dict(user: User) -> dict:
     except Exception:
         custom_file_fields = []
     from apps.accounts.services_reporting_line import SOURCE_ORG_CHART, resolve_manager_with_source
-    manager_resolution = resolve_manager_with_source(user)
+    prefetched_placements = getattr(user, 'directory_placements', None)
+    covering = _covering_placements(prefetched_placements)
+    manager_resolution = resolve_manager_with_source(user, placements=covering, page_cache=page_cache)
     mgr = manager_resolution.user
     _hr = getattr(user, 'hr', None)
     approver = getattr(user, 'reporting_approver', None)
@@ -397,9 +418,16 @@ def _employee_dict(user: User) -> dict:
     # what this employee already holds, instead of always starting blank.
     # None for a Company Code Admin (no Position at all) or anyone with no
     # open Placement.
-    current_placement = user.placements.filter(effective_to__isnull=True).select_related(
-        'position', 'position__org_unit', 'position__org_unit__parent',
-    ).first()
+    # The directory list prefetches these for the whole page (see _directory_prefetches); every other caller falls back
+    # to the per-employee query, so single-employee reads behave exactly as before.
+    prefetched_placements = getattr(user, 'directory_placements', None)
+    if prefetched_placements is not None:
+        open_placements = [p for p in prefetched_placements if p.effective_to is None]
+        current_placement = open_placements[0] if open_placements else None
+    else:
+        current_placement = user.placements.filter(effective_to__isnull=True).select_related(
+            'position', 'position__org_unit', 'position__org_unit__parent',
+        ).first()
     current_org_unit = current_placement.position.org_unit if current_placement else None
 
     # The Employee Directory table shows the org unit's own name bold with
@@ -418,12 +446,16 @@ def _employee_dict(user: User) -> dict:
     from apps.hrms.models import SEP_APPROVED
 
     today = timezone.localdate()
-    active_separation = (
-        user.separation_requests
-        .filter(status=SEP_APPROVED, proposed_last_working_day__gte=today)
-        .order_by('proposed_last_working_day')
-        .first()
-    )
+    prefetched_separations = getattr(user, 'directory_active_separations', None)
+    if prefetched_separations is not None:
+        active_separation = prefetched_separations[0] if prefetched_separations else None
+    else:
+        active_separation = (
+            user.separation_requests
+            .filter(status=SEP_APPROVED, proposed_last_working_day__gte=today)
+            .order_by('proposed_last_working_day')
+            .first()
+        )
 
     result = {
         'id':             user.employee_id,
@@ -465,6 +497,8 @@ def _employee_dict(user: User) -> dict:
         'date_joined':    user.date_joined.date().isoformat(),
         'is_active':      user.is_active,
         'status':         emp_status,
+        # Hire/onboarding is complete but the person has not set their password and logged in yet.
+        'awaiting_activation': emp_status == 'onboarding' and user.onboarding_status == User.ONBOARDING_COMPLETE,
         'needs_onboarding_data': needs_onboarding_data,
         'hr': {
             'id':   _hr.employee_id if _hr else None,
@@ -490,8 +524,12 @@ def _employee_dict(user: User) -> dict:
         'position_grade': current_placement.position.grade if (current_placement and current_placement.position.grade) else None,
     }
 
+    # Derived lifecycle statuses (Employment Stage, Account Status, Onboarding stage). Additive: the legacy `status`,
+    # `is_active`, `employment_status` (probation/confirmed) and `onboarding_status` above are unchanged.
+    result.update(lifecycle_summary(user))
+
     # Managers ARE the reporting manager for others — they have no reporting manager themselves.
-    if not can_manage_team(user):
+    if not _holds_manager_seat(user, covering):
         result['reporting_manager'] = {
             'id':   mgr.employee_id if mgr else None,
             'uuid': str(mgr.id)     if mgr else None,
@@ -831,6 +869,19 @@ def _compute_completed_steps(profile, user) -> list:
     return completed
 
 
+def _audit_onboarding_event(request, target_user, action: str) -> None:
+    """AuditLog entry for a candidate-side onboarding step. The actor is whoever made the request: the employee, or HR
+    acting on their behalf (`on_behalf` says which). Never blocks the step itself if the audit write fails."""
+    try:
+        AuditLog.objects.create(
+            user=request.user, action=action, module='accounts', object_id=str(target_user.pk),
+            changes={'employee': target_user.email, 'on_behalf': request.user.pk != target_user.pk},
+            branch=target_user.branch, ip_address=get_client_ip(request),
+        )
+    except Exception:
+        logger.warning('AuditLog write failed for %s target=%s', action, target_user.pk)
+
+
 def _submit_onboarding(target_user):
     """
     Validate and submit target_user's onboarding wizard. Extracted from
@@ -1158,7 +1209,11 @@ def _save_profile_step(request, step: int, target_user=None):
     # Move status to 'draft' (in-progress) on the very first step save
     if target_user.onboarding_status == User.ONBOARDING_PENDING:
         try:
-            User.objects.filter(pk=target_user.pk).update(onboarding_status=User.ONBOARDING_DRAFT)
+            started = User.objects.filter(
+                pk=target_user.pk, onboarding_status=User.ONBOARDING_PENDING,
+            ).update(onboarding_status=User.ONBOARDING_DRAFT)
+            if started:
+                _audit_onboarding_event(request, target_user, 'onboarding_draft_started')
         except Exception as exc:
             logger.warning('_save_profile_step status→draft update failed user=%s: %s',
                            target_user.pk, exc, exc_info=True)
@@ -1462,6 +1517,7 @@ __all__ = [
     '_missing_education_experience',
     '_compute_completed_steps',
     '_submit_onboarding',
+    '_audit_onboarding_event',
     '_save_profile_step',
     '_can_manage_employee_documents',
     '_get_document_type_config',

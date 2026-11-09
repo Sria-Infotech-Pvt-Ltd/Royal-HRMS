@@ -8,6 +8,7 @@ from django.db.models import Count, F, Prefetch, Q, QuerySet, Sum
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import BasePermission, IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
@@ -97,7 +98,7 @@ def _visible_qs(request) -> 'QuerySet[Announcement]':
 # ─── Views ────────────────────────────────────────────────────────────────────
 
 class AnnouncementListCreateView(APIView):
-    permission_classes = [IsAuthenticated, CanPostAnnouncement]
+    permission_classes = [IsAuthenticated, CanPostAnnouncement, HasCompletedOnboardingStatus]
 
     def get(self, request):
         qs = _visible_qs(request)
@@ -202,7 +203,7 @@ class AnnouncementListCreateView(APIView):
 
 
 class AnnouncementDetailView(APIView):
-    permission_classes = [IsAuthenticated, CanPostAnnouncement]
+    permission_classes = [IsAuthenticated, CanPostAnnouncement, HasCompletedOnboardingStatus]
 
     def _get_object(self, request, pk: int) -> Announcement:
         qs  = _visible_qs(request)
@@ -304,7 +305,7 @@ class AnnouncementDetailView(APIView):
 
 class AnnouncementReactView(APIView):
     """Toggle a like reaction on an announcement. One reaction per user."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, pk: int):
         from apps.accounts.services_approval import resolve_employee_org_unit_chain
@@ -339,7 +340,7 @@ class AnnouncementReactView(APIView):
 
 class AnnouncementViewTrackView(APIView):
     """Increment view count. Called by the frontend once per card per session."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, pk: int):
         if not Announcement.objects.filter(pk=pk).exists():

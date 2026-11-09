@@ -14,6 +14,7 @@ import logging
 
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -41,7 +42,7 @@ class AttendanceGeofenceCheckView(APIView):
     and face independently — this view changes nothing about that.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request: Request) -> Response:
         serializer = GeofenceCheckSerializer(data=request.data)

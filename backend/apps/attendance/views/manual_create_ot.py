@@ -96,6 +96,14 @@ class HRAttendanceCreateView(APIView):
 
         target_date = data['date']
 
+        # No attendance for a day before the employee joined, with no joining date on record, or after their last working day.
+        # There is no override: HR corrects the joining date first (which is audited), then records the day.
+        from apps.accounts.services_lifecycle_status import attendance_date_problem
+
+        not_employed = attendance_date_problem(employee, target_date)
+        if not_employed:
+            return error(not_employed, http_status=400)
+
         locked = PayrollCycle.objects.filter(
             cycle_start__lte=target_date,
             cycle_end__gte=target_date,

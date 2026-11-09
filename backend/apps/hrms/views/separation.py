@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
@@ -30,7 +31,7 @@ _ACTIVE_STATUSES = (SEP_PENDING, SEP_STAGE2_PENDING, SEP_APPROVED)
 
 
 class SeparationTypeListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         # Same gate the frontend's "Employee" picker itself uses
@@ -59,7 +60,7 @@ class SeparationTypeListView(APIView):
 
 
 class SeparationReasonListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         reasons = [{'value': key, 'label': label} for key, label in SEPARATION_REASON_CHOICES]
@@ -132,7 +133,7 @@ def _log(sep_request, user, message: str) -> None:
 
 
 class SeparationRequestListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
@@ -225,7 +226,7 @@ class SeparationRequestListCreateView(APIView):
 
 
 class SeparationRequestDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
 
     def _get_object(self, request, request_id: str):

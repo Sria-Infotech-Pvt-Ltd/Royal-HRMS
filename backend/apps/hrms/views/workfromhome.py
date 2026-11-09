@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
@@ -110,7 +111,7 @@ def _approval_scope_filter(user) -> 'Q':
 
 
 class WorkFromHomeRequestListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         has_approve = _has_perm(request.user, 'wfh.approve')
@@ -144,6 +145,11 @@ class WorkFromHomeRequestListCreateView(APIView):
         return success('Work from home requests retrieved.', paginated_data(paginator, page_obj, serializer.data))
 
     def post(self, request):
+        from apps.accounts.services_lifecycle_status import ACTION_WFH, block_message
+
+        blocked = block_message(request.user, ACTION_WFH)
+        if blocked:
+            return error(blocked, http_status=403)
         serializer = WorkFromHomeRequestCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
@@ -230,7 +236,7 @@ class WorkFromHomeRequestListCreateView(APIView):
 
 
 class WorkFromHomeRequestDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_request(self, request_id: str, user):
         try:
@@ -280,7 +286,7 @@ class WorkFromHomeRequestDetailView(APIView):
 
 
 class WorkFromHomeApprovalView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request, request_id: str):
         if not _has_perm(request.user, 'wfh.approve'):

@@ -386,7 +386,10 @@ class OnboardingView(APIView):
         return success(f'Step {step} data cleared successfully.')
 
     def _submit(self, request):
-        return _submit_onboarding(request.user)
+        result = _submit_onboarding(request.user)
+        if result.status_code < 300:
+            _audit_onboarding_event(request, request.user, 'onboarding_submitted')
+        return result
 
 
 

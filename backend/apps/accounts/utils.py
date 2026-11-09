@@ -126,6 +126,7 @@ def _build_message(
     from_email: str,
     to: list[str],
     connection: object | None = None,
+    reply_to: str | None = None,
 ) -> EmailMultiAlternatives:
     
     msg = EmailMultiAlternatives(
@@ -134,9 +135,20 @@ def _build_message(
         from_email=from_email,
         to=to,
         connection=connection,
+        reply_to=[reply_to] if reply_to else None,
     )
     msg.attach_alternative(html_body, 'text/html')
     return msg
+
+
+def hr_contact_block(name: str, email: str) -> str:
+    """The "your HR contact" line candidate-facing emails end with, so the candidate always knows who to write to."""
+    if not email:
+        return ''
+    from django.utils.html import escape
+    who = escape(name or email)
+    return (f'<p style="margin-top:18px;font-size:13px;color:#555;">Your HR contact: <strong>{who}</strong> '
+            f'(<a href="mailto:{escape(email)}">{escape(email)}</a>). Replies to this email go to them.</p>')
 
 
 # ─── Public send functions ────────────────────────────────────────────────────
@@ -380,6 +392,7 @@ def _company_email_wrapper(body: str, company_name: str, logo_url: str,
 _SENSITIVE_CONTEXT_KEYS = {
     'password', 'temp_password', 'otp', 'token', 'secret',
     'api_key', 'access_token', 'refresh_token', 'pin',
+    'onboarding_link',   # a live, single-use link into the candidate's session: never stored in the email log
 }
 
 
@@ -397,8 +410,12 @@ def send_template_email(
     extra_attachments: list[tuple[str, bytes, str]] | None = None,
     module: str = '',
     triggered_by=None,
+    reply_to: str | None = None,
+    hr_contact: tuple[str, str] | None = None,
 ) -> None:
     """
+    reply_to: where replies go (the acting HR user, for candidate-facing mail). hr_contact: (name, email) shown at the foot of
+    the message. Both are optional, so every existing caller behaves exactly as before.
     extra_attachments: optional list of (filename, content_bytes, mime_type) —
     for per-send dynamic attachments (e.g. a calendar invite whose date/time
     differs on every send) that can't be a static EmailTemplateAttachment row.
@@ -435,11 +452,12 @@ def send_template_email(
         raise exc
 
     subject, html_body = tpl.render(context)
-    html_body = _company_email_wrapper(html_body, *_get_company_branding())
+    contact_html = hr_contact_block(*hr_contact) if hr_contact else ''
+    html_body = _company_email_wrapper(html_body + contact_html, *_get_company_branding())
 
     # Redacted copy of the same content, for the log row only — never sent.
     log_subject, log_body = tpl.render(log_context)
-    log_body = _company_email_wrapper(log_body, *_get_company_branding())
+    log_body = _company_email_wrapper(log_body + contact_html, *_get_company_branding())
 
     attachment_names = [att.filename for att in tpl.attachments.all()]
     attachment_names += [a[0] for a in (extra_attachments or [])]
@@ -453,6 +471,7 @@ def send_template_email(
             from_email=from_email,
             to=[recipient_email],
             connection=connection,
+            reply_to=reply_to,
         )
 
         for att in tpl.attachments.all():

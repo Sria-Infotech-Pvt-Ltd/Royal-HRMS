@@ -11,8 +11,6 @@ import hashlib
 import logging
 from datetime import datetime
 
-from django.core.exceptions import ValidationError as DjangoValidationError
-from django.core.validators import validate_email
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -28,7 +26,8 @@ from apps.accounts.models import (
 from apps.accounts.serializers import HireActionDocumentSerializer
 from apps.accounts.serializers_profile_photo import ProfilePhotoUploadSerializer
 from apps.accounts.services_hire_drafts import discard_draft, existing_employee_match
-from apps.accounts.services_hire_duplicates import blocking_message, check_hire_duplicates
+from apps.accounts.services_hire_draft_fields import validate_draft_fields
+from apps.accounts.services_hire_duplicates import check_hire_duplicates
 from apps.accounts.services_placement import assign_position
 from apps.accounts.views.shared import _get_document_type_config
 
@@ -177,15 +176,47 @@ class HireActionDetailView(APIView):
         # The real wizard always PATCHes as JSON so request.data is already a
         # plain dict there, but this must not assume that unconditionally.
         data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
-        update_fields = []
+        update_fields: list[str] = []
+        rejected: dict[str, str] = {}
 
-        if 'position' in data:
-            position = Position.objects.filter(pk=data.pop('position'), is_active=True).first()
-            if not position:
-                return error('Position not found or inactive.')
-            action.position = position
-            update_fields.append('position')
+        # A draft is saved field by field: a value that cannot be saved is reported (rejected) and left out, and everything
+        # else in the same request is still stored. The wizard autosaves the WHOLE form, so one bad field must never stop
+        # the rest of the form from being kept.
+        self._apply_position(action, data, update_fields, rejected)
+        self._apply_employment_type(action, data, update_fields, rejected)
+        data, field_errors = validate_draft_fields(data)
+        rejected.update(field_errors)
 
+        # Same email or mobile as an existing employee / another open draft: a WARNING on the draft (shown to the person,
+        # and the wizard will not advance past it), never a reason to refuse saving. Completing the hire is what blocks it.
+        warnings = self._duplicate_warnings(action, data)
+
+        if data:
+            action.draft_data = {**action.draft_data, **data}
+            update_fields.append('draft_data')
+        if update_fields:
+            action.save(update_fields=[*update_fields, 'updated_at'])
+
+        if rejected:
+            logger.warning('Hire draft %s: %d field(s) not saved (%s); the other fields in the request were saved.',
+                           action.pk, len(rejected), ', '.join(sorted(rejected)))  # names only, never the values
+            saved = sorted(set(data) | (set(update_fields) & {'position', 'employment_type'}))
+            return error(next(iter(rejected.values())), data={**rejected, 'saved_fields': saved, 'warnings': warnings})
+        return success('Hire action updated.', {**_hire_action_dict(action, request), 'warnings': warnings})
+
+    @staticmethod
+    def _apply_position(action, data: dict, update_fields: list, rejected: dict) -> None:
+        if 'position' not in data:
+            return
+        position = Position.objects.filter(pk=data.pop('position'), is_active=True).first()
+        if not position:
+            rejected['position'] = 'Position not found or inactive.'
+            return
+        action.position = position
+        update_fields.append('position')
+
+    @staticmethod
+    def _apply_employment_type(action, data: dict, update_fields: list, rejected: dict) -> None:
         # The employee number is reserved the moment employment_type is set,
         # and re-reserved (against the new type's own series) if HR corrects
         # the selection before completing the hire — this used to be locked
@@ -197,59 +228,27 @@ class HireActionDetailView(APIView):
         # than reused — matches how real HRMS/payroll number series already
         # tolerate voided/skipped numbers rather than risk ever reusing one.
         employment_type = data.pop('employment_type', None)
-        if employment_type is not None and employment_type != action.employment_type:
-            if employment_type not in dict(User.EMPLOYMENT_TYPE_CHOICES):
-                return error('Select a valid employment type.')
-            action.employment_type = employment_type
-            try:
-                action.reserved_employee_id = EmployeeCodeSeries.generate_employee_id_for_type(employment_type)
-            except EmployeeIdSeriesExhausted as exc:
-                return error(str(exc))
-            update_fields += ['employment_type', 'reserved_employee_id']
+        if employment_type is None or employment_type == action.employment_type:
+            return
+        if employment_type not in dict(User.EMPLOYMENT_TYPE_CHOICES):
+            rejected['employment_type'] = 'Select a valid employment type.'
+            return
+        try:
+            reserved = EmployeeCodeSeries.generate_employee_id_for_type(employment_type)
+        except EmployeeIdSeriesExhausted as exc:
+            rejected['employment_type'] = str(exc)
+            return
+        action.employment_type = employment_type
+        action.reserved_employee_id = reserved
+        update_fields += ['employment_type', 'reserved_employee_id']
 
-        # Client-side <input type="email"> and the wizard's own EMAIL_RE
-        # check are both bypassable (direct API call, e.g. this PATCH) — the
-        # QA report's "bad-email accepted and saved" bug was exactly that,
-        # so the same format check is enforced again here server-side for
-        # every email-shaped field the wizard's draft_data ever carries.
-        for email_field in ('email', 'work_email'):
-            value = data.get(email_field)
-            if value:
-                try:
-                    validate_email(value.strip())
-                except DjangoValidationError:
-                    return error(f'Enter a valid {"work " if email_field == "work_email" else ""}email address.')
-
-        # The mobile follows the same rule as Edit full record and Edit my details; stored normalised (10 digits).
-        if 'phone' in data and str(data.get('phone') or '').strip():
-            from apps.accounts.services_contact_change import ContactChangeError, normalise_mobile
-            try:
-                data['phone'] = normalise_mobile(str(data['phone']))
-            except ContactChangeError as exc:
-                return error(exc.message, data={'phone': exc.message})
-
-        # UAN is optional, but an entered one must be 12 digits; rejected here so a bad value is never stored in the draft.
-        uan = str(data.get('uan_number') or '').strip()
-        if uan and (len(uan) != 12 or not uan.isdigit()):
-            return error('UAN must be 12 digits', data={'uan_number': 'UAN must be 12 digits'})
-
-        # Same email or mobile as an existing employee / another open draft: caught here (every Next) and again at completion.
-        warnings = []
-        if 'email' in data or 'phone' in data:
-            merged = {**action.draft_data, **data}
-            hits = check_hire_duplicates(str(merged.get('email') or ''), str(merged.get('phone') or ''), exclude_action=action)
-            message, field_errors = blocking_message(hits)
-            if message:
-                return error(message, data=field_errors)
-            warnings = [hit.as_dict() for hit in hits]  # only warnings remain (an exited person: a possible rehire)
-
-        if data:
-            action.draft_data = {**action.draft_data, **data}
-            update_fields.append('draft_data')
-
-        if update_fields:
-            action.save(update_fields=[*update_fields, 'updated_at'])
-        return success('Hire action updated.', {**_hire_action_dict(action, request), 'warnings': warnings})
+    @staticmethod
+    def _duplicate_warnings(action, data: dict) -> list[dict]:
+        if 'email' not in data and 'phone' not in data:
+            return []
+        merged = {**action.draft_data, **data}
+        hits = check_hire_duplicates(str(merged.get('email') or ''), str(merged.get('phone') or ''), exclude_action=action)
+        return [hit.as_dict() for hit in hits]
 
     def delete(self, request, pk):
         """Discard a draft — the Stage 1 modal's "Discard" action."""

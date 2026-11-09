@@ -414,10 +414,83 @@ def _eligible_employees_qs(cycle: PayrollCycle):
 
     employees_qs = (active_qs | leaver_qs)
 
+    # Joining-date gate (added to the onboarding / bank-data gate above, which is unchanged): nobody joining after the cycle
+    # ends is processed, and a blank joining date is never eligible (HR is asked to correct it, see services_lifecycle_status).
+    # Joining on the first day or during the cycle stays eligible and is prorated in _run_payroll_processing.
+    employees_qs = employees_qs.filter(date_of_joining__lte=cycle.cycle_end)
+
+    # Leaving gate: an approved last working day BEFORE the cycle starts means nothing is owed for this cycle (a last working
+    # day inside the cycle stays eligible and is prorated to that day in _run_payroll_processing). Accounts are not deactivated
+    # automatically at the last working day, so without this a terminated employee would be paid every month.
+    from apps.accounts.services_lifecycle_status import ended_separation_q
+
+    employees_qs = employees_qs.exclude(ended_separation_q(as_of=cycle.cycle_start))
+
     if cycle.branch:
         employees_qs = employees_qs.filter(branch=cycle.branch.branch_name)
 
     return employees_qs
+
+
+def _proration_start(employee, cycle):
+    """First day of the cycle this employee is employed. Joining on or before the cycle start means the whole cycle; joining
+    mid-cycle means from the joining date; joining AFTER the cycle end gives a start past the end, so the employed window is
+    empty and the proration factor is 0 (such people are also filtered out of _eligible_employees_qs)."""
+    joined = employee.date_of_joining
+    if joined and joined > cycle.cycle_start:
+        return joined
+    return cycle.cycle_start
+
+
+def _approved_last_working_days(employee_ids) -> dict:
+    """employee id -> the latest approved last working day of the CURRENT employment (one query for everyone in the cycle).
+    A separation from before the employee's current joining date (a rehire) is history and is ignored, and a later approved
+    separation (an extension) replaces an earlier one."""
+    from django.db.models import F, Max
+
+    from apps.hrms.models import SEP_APPROVED, SeparationRequest
+
+    return dict(
+        SeparationRequest.objects.filter(
+            employee_id__in=employee_ids, status=SEP_APPROVED, proposed_last_working_day__gte=F('employee__date_of_joining'),
+        ).values('employee_id').annotate(last_day=Max('proposed_last_working_day')).values_list('employee_id', 'last_day')
+    )
+
+
+def _proration_end(employee, cycle, effective_start, *, last_working_day=None, attendance_dates=()):
+    """Last day of the cycle this employee is employed, never past the cycle end:
+      * an approved last working day inside the cycle ends the window on that day (the days after are not paid);
+      * a deactivated account is bounded by its latest attendance record in the cycle, as before (and falls back to
+        effective_start, zero employed days, when it has none);
+      * otherwise the whole cycle to its end."""
+    effective_end = cycle.cycle_end
+    if not employee.is_active:
+        effective_end = min(cycle.cycle_end, max(attendance_dates)) if attendance_dates else effective_start
+    if last_working_day is not None and last_working_day < effective_end:
+        effective_end = last_working_day
+    return effective_end
+
+
+def _proration_windows(employees, cycle, records_by_emp, last_working_day_by_emp) -> tuple[dict, dict]:
+    """employee id -> (first day employed, last day employed) in the cycle, and employee id -> fraction of the cycle worked.
+    Joining mid-cycle starts the window at the joining date; an approved last working day inside the cycle ends it on that day;
+    anyone with an empty window (joined after the cycle, or last day before it) gets 0."""
+    total_days_in_cycle = (cycle.cycle_end - cycle.cycle_start).days + 1
+    window_by_emp: dict = {}
+    factor_by_emp: dict = {}
+    for employee in employees:
+        effective_start = _proration_start(employee, cycle)
+        effective_end = _proration_end(
+            employee, cycle, effective_start,
+            last_working_day=last_working_day_by_emp.get(employee.id),
+            attendance_dates=[d for d, _ in records_by_emp.get(employee.id, [])],
+        )
+        window_by_emp[employee.id] = (effective_start, effective_end)
+        if effective_end < effective_start or total_days_in_cycle <= 0:
+            factor_by_emp[employee.id] = Decimal('0')
+        else:
+            factor_by_emp[employee.id] = Decimal((effective_end - effective_start).days + 1) / Decimal(total_days_in_cycle)
+    return window_by_emp, factor_by_emp
 
 
 def _leave_workdays_in_range(employee, leave_request, start: date, end: date, policy) -> Decimal:
@@ -621,33 +694,9 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     # work. Both are fixed here via the same mechanism: prorate every
     # earning component by employed_days_in_cycle / total_days_in_cycle,
     # and bound the LOP/working-days calculation to that same window.
-    total_days_in_cycle = (cycle.cycle_end - cycle.cycle_start).days + 1
-    proration_factor_by_emp: dict = {}
-    window_by_emp: dict = {}  # employee_id -> (effective_start, effective_end)
-    for employee in employees:
-        effective_start = cycle.cycle_start
-        if employee.date_of_joining and employee.date_of_joining > cycle.cycle_start:
-            effective_start = min(employee.date_of_joining, cycle.cycle_end)
-
-        effective_end = cycle.cycle_end
-        if not employee.is_active:
-            # Proxy "last day employed" — the latest date this employee has
-            # a real attendance record for within the cycle. Falls back to
-            # effective_start (zero employed days) if they somehow have none
-            # at all, though _eligible_employees_qs only includes inactive
-            # employees who do have at least one such record.
-            emp_dates = [d for d, _ in records_by_emp.get(employee.id, [])]
-            effective_end = min(cycle.cycle_end, max(emp_dates)) if emp_dates else effective_start
-
-        window_by_emp[employee.id] = (effective_start, effective_end)
-
-        if effective_end < effective_start or total_days_in_cycle <= 0:
-            proration_factor_by_emp[employee.id] = Decimal('0')
-        else:
-            employed_days = (effective_end - effective_start).days + 1
-            proration_factor_by_emp[employee.id] = (
-                Decimal(employed_days) / Decimal(total_days_in_cycle)
-            )
+    window_by_emp, proration_factor_by_emp = _proration_windows(
+        employees, cycle, records_by_emp, _approved_last_working_days(employee_ids),
+    )
 
     absent_count_by_emp:   dict = defaultdict(int)
     half_day_count_by_emp: dict = defaultdict(int)

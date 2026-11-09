@@ -988,9 +988,13 @@ class OTPVerification(models.Model):
 class PasswordResetToken(models.Model):
     PURPOSE_RESET  = 'reset'
     PURPOSE_INVITE = 'invite'
+    # A candidate's one-time link into the onboarding wizard. It opens a limited session only: no password is set and
+    # the account is not activated (that is the separate PURPOSE_INVITE link, sent only after HR approves).
+    PURPOSE_ONBOARDING = 'onboarding'
     PURPOSE_CHOICES = (
         (PURPOSE_RESET,  'Forgot-password reset'),
         (PURPOSE_INVITE, 'New-hire account activation invite'),
+        (PURPOSE_ONBOARDING, 'Candidate onboarding-wizard link'),
     )
 
     STATUS_SENT      = 'sent'

@@ -14,6 +14,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
@@ -88,7 +89,7 @@ from apps.hrms.views.leave_shared import *  # noqa: F401,F403
 # ─── Leave Policy ──────────────────────────────────────────────────────────────
 
 class LeavePolicyView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _ensure_policies(self):
         existing = set(LeavePolicy.objects.values_list('leave_type', flat=True))
@@ -177,7 +178,7 @@ class LeavePolicyView(APIView):
 # ─── Leave Balance ─────────────────────────────────────────────────────────────
 
 class LeaveBalanceView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
         try:
@@ -250,7 +251,7 @@ class LeaveBalanceView(APIView):
 
 
 class LeaveBalanceAdjustView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _get_balance(self, balance_id: str):
         try:

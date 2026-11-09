@@ -42,6 +42,14 @@ def current_workforce(branch=None) -> QuerySet:
     return _in_branch(User.objects.filter(is_active=True).exclude(employee_id=''), branch)
 
 
+def _stage_counts(active_accounts: QuerySet, day: date) -> dict:
+    """Employment Stage counts over active accounts (services_lifecycle_status). They add up to the same people as the
+    legacy `total`, only grouped by joining date and separations instead of onboarding state."""
+    from apps.accounts.services_lifecycle_status import STAGES, stage_q
+
+    return {stage: active_accounts.filter(stage_q(stage, day)).count() for stage in STAGES}
+
+
 def get_headcount(branch=None, as_of: date | None = None, base_queryset: QuerySet | None = None) -> dict:
     """The headcount buckets described in the module docstring.
 
@@ -77,6 +85,7 @@ def get_headcount(branch=None, as_of: date | None = None, base_queryset: QuerySe
     onboarding = not_on_notice_count - active
     notice_period = on_notice.count()
     return {
+        'stages': _stage_counts(records.filter(is_active=True), day),
         'total': active + onboarding + notice_period,
         'active': active,
         'probation': onboarded.filter(employment_status=User.EMPLOYMENT_STATUS_PROBATION).count(),
