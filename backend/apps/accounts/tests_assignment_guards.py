@@ -215,7 +215,9 @@ class BulkImportDoorTests(_GuardFixtures):
 
 class OnboardingApprovalDoorTests(_GuardFixtures):
     def _submitted(self, email: str, employee_id: str) -> User:
-        user = make_user(email, employee_id=employee_id, branch=BRANCH, onboarding_status=User.ONBOARDING_SUBMITTED)
+        # A candidate whose onboarding was just submitted has no joining date yet: approval sets it (today) before placing them in
+        # the seat. (make_user's default past joining date would make that placement overlap a seat the test already assigned.)
+        user = make_user(email, employee_id=employee_id, branch=BRANCH, onboarding_status=User.ONBOARDING_SUBMITTED, date_of_joining=None)
         return user
 
     def _approve(self, actor, user, position) -> int:
