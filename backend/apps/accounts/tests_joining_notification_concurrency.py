@@ -1,12 +1,21 @@
 """
 Joining notifications are safe to run from several workers at once: at most ONE notification per recipient per joining event
 (an employee plus a joining date), however many tasks race. Uses real threads on real connections, so it is a TransactionTestCase.
+
+OPT-IN: a TransactionTestCase empties EVERY table when it ends, including the rows the migrations seed (permissions, baseline
+permissions, org seeds). On a kept test database (--keepdb) that breaks every later run. Django's serialized_rollback does not
+help (it restores rows at the START of a test, never after the last one). So these tests are skipped unless you ask for them, and
+you should only ask on a throwaway database, i.e. WITHOUT --keepdb, which destroys the test database afterwards:
+
+    RUN_DB_FLUSHING_TESTS=1 python manage.py test apps.accounts.tests_joining_notification_concurrency --noinput
 """
 from __future__ import annotations
 
 import datetime
+import os
 import threading
 import time
+import unittest
 from concurrent.futures import ThreadPoolExecutor
 from unittest import mock
 
@@ -25,11 +34,13 @@ DAY = datetime.timedelta(days=1)
 WORKERS = 6
 
 
+@unittest.skipUnless(
+    os.environ.get('RUN_DB_FLUSHING_TESTS') == '1',
+    'Flushes the whole test database (including migration-seeded rows). Opt in with RUN_DB_FLUSHING_TESTS=1 on a throwaway '
+    'test database (no --keepdb); see the module docstring.',
+)
 class JoiningNotificationConcurrencyTests(TransactionTestCase):
-    # Real threads need COMMITTED rows, so this is a TransactionTestCase, and Django empties every table afterwards. That would
-    # also wipe the rows the migrations seed (permissions, baseline permissions, org seeds) from a kept test database and break
-    # every later run that relies on them. serialized_rollback puts the seeded rows back after each test.
-    serialized_rollback = True
+    """Real threads need COMMITTED rows, hence TransactionTestCase and the opt-in above."""
 
     def setUp(self):
         branch = make_branch('JC-A', 'Joining Concurrency Branch').branch_name
