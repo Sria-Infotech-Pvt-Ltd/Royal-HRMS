@@ -71,6 +71,7 @@ export interface CompanyData {
   primary_email: string;
   website: string;
   official_phone: string;
+  portal_url: string;
   updated_at?: string;
 }
 

@@ -5311,3 +5311,22 @@ Result matrix (proven by `ModeStateFallbackMatrixTests`, all 3 modes x 2 fallbac
 **IMPORTANT for whoever runs this environment:** the Celery worker imports code when it starts. A worker started before this fix keeps sending OLD links. After deploying: restart the worker. And a Company row with `portal_url` = `https://aira.nxsys.in` MUST exist (Settings -> Company); with the fix, no invitation is sent until it does. Existing invitations already emailed keep the broken link: use Resend Invite for those employees. The database used on 2026-11-10 (Neon project `tiny-dawn-89898883`, branch `br-cold-rain-a1w7h21b`) had 0 Company rows when checked.
 
 Also on 2026-11-10: the new Neon database was migrated from empty (521 migrations; `branch.0002_initial_data` is recorded twice because two `migrate` runs overlapped; harmless, no duplicate rows). The old UAT cleanup (179 employee rows) was prepared, exported and restore-tested but NOT executed; the old UAT host rejected the password afterwards.
+
+
+## Employee Portal URL field in Company Settings (2026-11-10)
+
+**Problem:** bulk-import activation emails fail with "The company portal URL is missing or not a valid web address" and there was NO Portal URL field in Company Settings, so an administrator could not fix it.
+
+**What already existed:** `Company.portal_url` (accounts, CharField 255) and `CompanySerializer` (field list + `validate_portal_url`); `PUT/PATCH /api/settings/company/` (`CompanyRetrieveUpdateView`, needs `settings.edit`, audited, cache invalidated). The system has ONE company (`Company.objects.first()`), so there is no per-tenant selection; the invitation service reads the same record. (`platform_core.LegalEntity.portal_url` is a separate, unused field.) No model change, no migration needed.
+
+**What was missing / added (frontend):**
+- `lib/portalUrl.ts` (+ test): `validatePortalUrl`, same rules as the backend: https required; localhost over http only outside production; rejects missing scheme, `http://`, single-word hosts, spaces, `?`/`#`.
+- `types/company.ts`: `portal_url`. `settings/company/_data.ts`: default value + validation on full and draft saves. `ContactBrandingCard.tsx`: new "Employee Portal URL" field (placeholder `https://aira.nxsys.in`, help text, error message, read-only without `settings.edit`). The page already sends every form field, so it saves.
+
+**Backend change:** `services_frontend_url.check_portal_url` now allows plain http ONLY for localhost AND only while `DEBUG` is on (before, localhost http was accepted in production too).
+
+**Gotcha found by the tests:** saving the Company form runs the WHOLE company validation. A save that only sets the Portal URL fails with "PAN is required for an Indian entity" unless the company details are complete; "Save draft" (`is_draft=true`) skips those required fields and still validates the portal URL. On a fresh server, either complete the company profile or use Save draft. A company record must exist at all (with 0 Company rows the PUT creates one and needs the full set of required fields, or draft).
+
+**Tests:** backend `tests_company_portal_url.py` 10 (save, read back, trailing slash removed, audit, only `settings.edit` can change, malformed values refused and nothing saved, http only in DEBUG, link built as `https://aira.nxsys.in/activate/<token>/`, cleared value stops invitations with a clear message and creates no token) + `tests_activation_url.py` 17 + `tests_employee_activation_lifecycle.py` 10 + `tests_activation_invite.py` 7 = 44 OK (private test DB, no email sent). Frontend: `lib/portalUrl.test.ts` + `ContactBrandingCard.test.tsx` 22 tests OK, `tsc` clean, ESLint clean. NOT run: full frontend suite and `npm run build` (the build was failing earlier because of a corrupted generated file in `frontend/.next/dev/types`, caused by `next dev` and `next build` writing at the same time; delete `.next` and build with no dev server running).
+
+**To use on the deployed server (needs approval, nothing applied by this work):** deploy this commit; open Settings -> Company -> Contact & branding; set Employee Portal URL to `https://aira.nxsys.in` and save (Save draft if the company profile is incomplete); restart the Celery worker (it imports code at start); set `EMPLOYEE_IMPORT_INVITES_ENABLED=true` for the web and worker processes; then use Retry / Resend Invite for the waiting invitations, testing one mailbox you control first.

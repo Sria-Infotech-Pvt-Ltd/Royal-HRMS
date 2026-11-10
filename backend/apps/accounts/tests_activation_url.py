@@ -61,6 +61,7 @@ class CorrectUrlTests(_Case):
             set_portal(stored)
             self.assertEqual(_activation_link('T'), f'{PRODUCTION}/activate/T/', stored)
 
+    @override_settings(DEBUG=True)                                           # http://localhost is accepted only in development
     def test_a_path_prefix_is_kept_and_a_local_test_address_is_allowed(self):
         set_portal('https://example.org/hr/')
         self.assertEqual(frontend_url('/activate/T/'), 'https://example.org/hr/activate/T/')

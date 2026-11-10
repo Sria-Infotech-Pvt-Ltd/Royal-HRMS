@@ -32,7 +32,7 @@ def check_portal_url(value: str) -> str:
         raise ValueError('The portal URL must not contain spaces.')
     parts = urlsplit(raw)
     if parts.scheme not in ('http', 'https'):
-        raise ValueError('The portal URL must start with https:// (or http:// for a local test).')
+        raise ValueError('The portal URL must start with https://, for example https://aira.nxsys.in.')
     host = (parts.hostname or '').lower()
     if not host:
         raise ValueError('The portal URL must include the website name, for example https://aira.nxsys.in.')
@@ -40,8 +40,9 @@ def check_portal_url(value: str) -> str:
         raise ValueError('The portal URL must be a full website name such as aira.nxsys.in, not a single word.')
     if parts.query or parts.fragment:
         raise ValueError('The portal URL must not contain ? or # parts.')
-    if parts.scheme == 'http' and host not in LOCAL_HOSTS and not settings.DEBUG:
-        raise ValueError('The portal URL must use https:// outside local testing.')
+    # Plain http is for local development only: localhost, and only while DEBUG is on. Anything else must be https.
+    if parts.scheme == 'http' and not (host in LOCAL_HOSTS and settings.DEBUG):
+        raise ValueError('The portal URL must use https://. Plain http:// is only allowed for localhost during development.')
     return f'{parts.scheme}://{parts.netloc}{parts.path.rstrip("/")}'
 
 
