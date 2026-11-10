@@ -5345,3 +5345,18 @@ Also on 2026-11-10: the new Neon database was migrated from empty (521 migration
 **Known wording issue (not changed):** the confirmation dialog says "Approve and activate ... full access immediately", which is not what approval does (see above).
 
 **Not committed in this change:** the dark-mode "new UI" bridge for the activation/onboarding/change-password screens (`app/new-ui-bridge.css` + three `layout.tsx` + one import in `app/layout.tsx`) is still uncommitted, awaiting a visual check of the onboarding wizard by someone logged in as an employee.
+
+
+## Dark-mode fix for the activation / onboarding / change-password screens (2026-11-10)
+
+**Symptom:** after a bulk import, a new hire who set their password saw dark, hard-to-read screens (labels almost invisible, light rules box on a dark card).
+
+**Cause:** these screens use the older palette in `globals.css` (`--bg`, `--on-bg`, `--on-variant`, `--outline-v`, `--primary`...), which only has a dark version when the in-app toggle sets `html[data-theme="dark"]`. The new design (`aira-theme.css`) also follows the browser/OS dark setting on its own, and redefines the shared `--surface`. A new hire has no saved choice, so on a dark-mode PC they got dark card backgrounds with the old palette's dark text. Reproduced in headless Chrome with the dark colour scheme emulated (dark card `#14151e`, text `#14151f`, labels `#5c6377`).
+
+**Fix:** `frontend/app/new-ui-bridge.css` re-points the old variable names at the new design's tokens (`--ground`, `--surface-2`, `--ink`, `--muted`, `--line`, `--brand`, ...) inside `.new-ui`, which is `display: contents` so it does not affect layout. `.new-ui` wraps three routes via new `layout.tsx` files: `app/onboarding/`, `app/activate/[token]/`, `app/change-password/`; the CSS is imported in `app/layout.tsx`. The activation page was screenshotted in dark and light after the change and reads correctly in both.
+
+**Not verified:** the onboarding wizard itself (needs a logged-in employee, so not screenshotted), the assessments page (uses fixed light colours of its own, not covered), other browsers / mobile.
+
+**Related findings, not changed (ask before doing):**
+- Org-chart "Assign holder" dropdown is empty for newly imported teams: `OrgStructureClient.tsx` loads employees with `status=active` (account enabled AND onboarding complete AND activated), so employees still in Onboarding are not offered. Proposed small frontend change: also offer Onboarding employees. Assigning someone already seated moves them (their old seat is closed).
+- Reporting manager after import comes from the org chart: the person holding the unit's chief seat (or the nearest ancestor's), same branch name, active. In the checked database 43 chief seats existed and none was held, so nobody resolved. Alternatives: the Excel column "Reporting Manager Employee ID", or assign by hand.
