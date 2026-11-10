@@ -188,3 +188,34 @@ class ActivationLifecycleTests(_ImportCase):
         User.objects.filter(pk=self.employee.pk).update(is_active=False)
         self.assertEqual(lifecycle_summary(self.refresh())['account_status'], 'disabled')
         self.assertEqual(self.login()[1].status_code, 403)                            # is_active=False is "deactivated", not "not activated yet"
+
+
+class SuperuserApprovalTests(_ImportCase):
+    """A superuser (the main admin) can see and approve a submitted onboarding, whether or not the employee has set a password yet."""
+
+    def setUp(self):
+        super().setUp()
+        Company.objects.create(company_name='Test Co', portal_url='https://aira.nxsys.in')
+        with mock.patch(DELAY), mock.patch(SMTP, smtp_to_outbox):
+            self.assertEqual(self.commit(self.hr, [self.row(1)]).status_code, 201)
+        self.employee = User.objects.get(email='asha1@import.test')
+
+    def test_the_superuser_sees_a_submitted_onboarding_in_the_approvals_list(self):
+        User.objects.filter(pk=self.employee.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)
+        response = self.client_for(self.admin).get('/api/onboarding/approvals/')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn(self.employee.email, str(response.data))
+
+    def test_the_superuser_can_approve_even_if_the_employee_has_not_set_a_password_yet(self):
+        User.objects.filter(pk=self.employee.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)
+        with self.captureOnCommitCallbacks(execute=False):
+            response = self.client_for(self.admin).post(f'/api/onboarding/approvals/{self.employee.pk}/', {'decision': 'approve'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.onboarding_status, User.ONBOARDING_COMPLETE)
+        self.assertIsNone(self.employee.account_activated_at)          # approval alone does not activate: the password link does
+
+    def test_nothing_can_be_approved_before_the_employee_submits(self):
+        response = self.client_for(self.admin).post(f'/api/onboarding/approvals/{self.employee.pk}/', {'decision': 'approve'}, format='json')
+        self.assertEqual((response.status_code, self.employee.onboarding_status), (400, 'pending'))
+        self.assertIn('not submitted', response.data['message'])

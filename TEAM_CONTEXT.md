@@ -5330,3 +5330,18 @@ Also on 2026-11-10: the new Neon database was migrated from empty (521 migration
 **Tests:** backend `tests_company_portal_url.py` 10 (save, read back, trailing slash removed, audit, only `settings.edit` can change, malformed values refused and nothing saved, http only in DEBUG, link built as `https://aira.nxsys.in/activate/<token>/`, cleared value stops invitations with a clear message and creates no token) + `tests_activation_url.py` 17 + `tests_employee_activation_lifecycle.py` 10 + `tests_activation_invite.py` 7 = 44 OK (private test DB, no email sent). Frontend: `lib/portalUrl.test.ts` + `ContactBrandingCard.test.tsx` 22 tests OK, `tsc` clean, ESLint clean. NOT run: full frontend suite and `npm run build` (the build was failing earlier because of a corrupted generated file in `frontend/.next/dev/types`, caused by `next dev` and `next build` writing at the same time; delete `.next` and build with no dev server running).
 
 **To use on the deployed server (needs approval, nothing applied by this work):** deploy this commit; open Settings -> Company -> Contact & branding; set Employee Portal URL to `https://aira.nxsys.in` and save (Save draft if the company profile is incomplete); restart the Celery worker (it imports code at start); set `EMPLOYEE_IMPORT_INVITES_ENABLED=true` for the web and worker processes; then use Retry / Resend Invite for the waiting invitations, testing one mailbox you control first.
+
+
+## Onboarding approval screen could not confirm (2026-11-10)
+
+**Symptom:** on the server, HR/superuser opened Candidate Reviews -> Onboarding -> Review, pressed "Approve & Activate", then "Confirm & Activate", and nothing happened (no request in the Network tab).
+
+**Root cause (found by reading the code; not reproduced on the server):** the approval payload always returns the PAN masked (`ABCDE••••F`, `OnboardingApprovalSerializer.get_profile`). `OnboardingDrawer` checked that masked text against the PAN format, which can never match, so `handleConfirm` returned early with "Enter a valid PAN". That message was only rendered inside the "Assign Position" box, which is not shown for already-positioned employees (every bulk-imported employee has an employee ID), so the button silently did nothing. Anyone who had entered a PAN was affected.
+
+**Fix (frontend only):** `lib/onboardingApproval.ts` (`usablePan`, `approvalFieldError`): a masked PAN is not validated and not re-sent (the server keeps the stored PAN when none is sent); a real malformed PAN or a wrong-length UAN is still refused. `OnboardingDrawer.tsx` uses it and now also shows the refusal message at the top for already-positioned employees. 5 vitest tests; tsc and ESLint clean. Deploy = rebuild/redeploy the frontend; no backend change.
+
+**Also verified (backend):** a superuser sees a submitted onboarding in `/api/onboarding/approvals/` and can approve it, even if the employee has not set a password yet (approval does not activate the account; the employee becomes Active only by setting a password through the activation link, which needs `Company.portal_url`). Approving someone who has not submitted is refused. 3 tests in `tests_employee_activation_lifecycle.py` (`SuperuserApprovalTests`).
+
+**Known wording issue (not changed):** the confirmation dialog says "Approve and activate ... full access immediately", which is not what approval does (see above).
+
+**Not committed in this change:** the dark-mode "new UI" bridge for the activation/onboarding/change-password screens (`app/new-ui-bridge.css` + three `layout.tsx` + one import in `app/layout.tsx`) is still uncommitted, awaiting a visual check of the onboarding wizard by someone logged in as an employee.

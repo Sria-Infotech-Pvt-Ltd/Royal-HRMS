@@ -11,6 +11,7 @@ import { usePermission } from "@/hooks/usePermission";
 import { maritalStatusLabel } from "@/lib/maritalStatus";
 import { SectionCard, Row } from "@/app/dashboard/employees/_components/EmployeeDrawerParts";
 import { confirmDialog } from "@/components/DialogProvider";
+import { approvalFieldError, usablePan } from "@/lib/onboardingApproval";
 
 interface OnboardingDocument {
   id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number;
@@ -64,8 +65,6 @@ interface Props {
   onAction:        (userId: string, decision: "approve" | "reject", extras?: { position?: string; assessmentId?: string; uanNumber?: string; aadharName?: string; panNumber?: string }) => void;
   onClose:         () => void;
 }
-
-const PAN_RE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 
 export default function OnboardingDrawer({ user, remarks, acting, actionErr, onRemarksChange, onAction, onClose }: Props) {
   // A Hire-wizard-hired employee already has a Position (assigned at hire
@@ -159,7 +158,9 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   // onboarding submission is what gets forwarded on approve, unchanged.
   const uanNumber  = user.profile?.uan_number ?? "";
   const aadharName = user.profile?.name_as_per_aadhar ?? "";
-  const panNumber  = user.profile?.pan_number ?? "";
+  // The approval payload carries the PAN masked ("ABCDE••••F"); only a real PAN is sent, otherwise the stored one is kept.
+  const rawPan     = user.profile?.pan_number ?? "";
+  const panNumber  = usablePan(rawPan);
 
   // Fetch assessments when assessment step becomes visible
   useEffect(() => {
@@ -188,13 +189,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   // should also collapse the assessment step (dept/desig do; UAN/PAN don't,
   // matching this function's pre-existing behavior for UAN).
   function fieldValidationError(): string | null {
-    if (uanNumber && uanNumber.length !== 12) {
-      return "UAN must be exactly 12 digits, or leave it blank.";
-    }
-    if (panNumber && !PAN_RE.test(panNumber)) {
-      return "Enter a valid PAN (e.g. ABCDE1234F), or leave it blank.";
-    }
-    return null;
+    return approvalFieldError(uanNumber, rawPan);
   }
 
   // Position is only required from this picker for a genuinely
@@ -312,6 +307,13 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       }
     >
           {actionErr && <div className="alert alert-error" style={{ marginBottom: "1rem" }}>{actionErr}</div>}
+          {/* For an already-positioned employee the "Assign Position" box (which normally shows assignErr) is not rendered, so a
+              refused Confirm used to look like a button that does nothing. */}
+          {alreadyPositioned && assignErr && (
+            <div className="alert alert-error" role="alert" style={{ marginBottom: "1rem" }}>
+              <i className="ti ti-alert-circle" /><span>{assignErr}</span>
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             <SectionCard icon="ti-briefcase" title="Basic Info">
