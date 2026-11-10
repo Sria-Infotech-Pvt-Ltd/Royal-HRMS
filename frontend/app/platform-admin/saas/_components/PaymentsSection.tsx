@@ -3,8 +3,8 @@
 // Payments for one subscription: subscription amount, paid (confirmed),
 // awaiting confirmation and outstanding — all calculated by the server —
 // the full payment history (who recorded / confirmed each), receipts, and the
-// actions — record, confirm, reject (with reason), waive, edit the
-// subscription amount. Recording asks only for the payment amount (pre-filled
+// actions — record, confirm, reject (with reason), waive; the subscription
+// amount is changed through Edit subscription (onEdit). Recording asks only for the payment amount (pre-filled
 // with what is still open); a payment above the outstanding balance needs an
 // explicit "Record anyway". Payments are never edited or deleted; a wrong
 // entry is rejected.
@@ -25,17 +25,18 @@ const RECORD_BADGE: Record<SubscriptionPaymentRecord["status"], { label: string;
   rejected: { label: "Rejected", cls: "badge-error" },
 };
 
-type Panel = null | "record" | "due" | "waive";
+type Panel = null | "record" | "waive";
 
-export default function PaymentsSection({ clientId, sub, payments, onChanged }: {
+export default function PaymentsSection({ clientId, sub, payments, onChanged, onEdit }: {
   clientId: string;
   sub: CompanySubscription;
   payments: SubscriptionPaymentRecord[];
   onChanged: () => void;
+  /** Opens Edit subscription at the amount (employee count / manual amount). */
+  onEdit: () => void;
 }) {
   const [panel, setPanel] = useState<Panel>(null);
   const [payment, setPayment] = useState(EMPTY_PAYMENT);
-  const [due, setDue] = useState(sub.amount_due ?? "");
   const [reason, setReason] = useState("");
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -82,7 +83,6 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
   }
 
   const toggle = (p: Panel) => { setMsg(null); setPayErrors({}); setOverpay(null); setPanel(panel === p ? null : p); };
-  const dueError = v.decimal(due, { min: 0, minExclusive: true, what: "Subscription amount" });
 
   function openRecord() {
     // Pre-fill what is still to collect, so a full payment is one click.
@@ -103,11 +103,10 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
 
   // Confirming needs the subscription amount (it decides Paid vs Partially
   // paid). The server calculates it from the employee count when it can;
-  // only without one is the admin asked, once.
-  function askForDue(suggested: string) {
-    setDue(suggested);
-    setPanel("due");
-    setMsg({ ok: false, text: "Set the subscription amount first (there is no employee count to calculate it from), then click Confirm again." });
+  // without one, the admin adds the count (or a manual amount) in Edit.
+  function askForAmount() {
+    setMsg({ ok: false, text: "Add the employee count (or a manual amount) in Edit subscription first, then click Confirm again." });
+    onEdit();
   }
 
   const amountHint = open === null
@@ -125,7 +124,7 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
         <button className="btn btn-sm btn-filled" disabled={busy} onClick={openRecord}>
           <i className="ti ti-plus" /> Record payment
         </button>
-        <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => { setDue(sub.amount_due ?? ""); toggle("due"); }}>
+        <button className="btn btn-sm btn-ghost" disabled={busy} onClick={onEdit}>
           {sub.amount_due === null ? "Set subscription amount" : "Edit subscription amount"}
         </button>
         {waived ? (
@@ -143,7 +142,7 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
       <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
         {([
           ["Subscription amount", sub.amount_due !== null ? fmtMoney(sub.amount_due, sub.currency)
-            : sub.employee_count ? "Calculated on first payment" : "Not set"],
+            : sub.employee_count ? "Calculated on first payment" : "Not set — add employee count"],
           ["Paid (confirmed)", fmtMoney(received, sub.currency)],
           ...(pending > 0 ? [["Awaiting confirmation", fmtMoney(pending, sub.currency)]] : []),
           ["Outstanding", outstanding !== null ? fmtMoney(outstanding, sub.currency) : "—"],
@@ -162,7 +161,10 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
           <PaymentFields value={payment} errors={payErrors} amountHint={amountHint}
             onChange={p => { setPayment(p); setPayErrors({}); setOverpay(null); }} />
           {payment.confirm && needsAmount && (
-            <div style={{ color: "var(--error)", fontSize: 12 }}>Set the subscription amount before confirming payments.</div>
+            <div style={{ color: "var(--error)", fontSize: 12 }}>
+              Add the employee count (or a manual amount) before confirming payments.{" "}
+              <button type="button" className="btn btn-ghost btn-sm" style={{ padding: "0 4px" }} onClick={onEdit}>Edit subscription</button>
+            </div>
           )}
           {overpay ? (
             <div className="alert alert-warn" style={{ flexWrap: "wrap", gap: 8 }}>
@@ -179,23 +181,6 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
                 {busy ? "Saving…" : payment.confirm ? "Record & confirm" : "Record payment"}
               </button>
             </div>
-          )}
-        </div>
-      )}
-
-      {panel === "due" && (
-        <div style={{ borderTop: "1px solid var(--outline-v)", paddingTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <span>Subscription amount ({sub.currency})</span>
-          <input className="field-input" type="number" min={0} step="0.01" inputMode="decimal" value={due} onChange={e => setDue(e.target.value)} style={{ maxWidth: 180 }} />
-          <button className="btn btn-sm btn-filled" disabled={busy || !!dueError}
-            onClick={() => run(() => platformAdminApi.post(API.platformAdmin.saas.amountDue(clientId), { amount_due: due }), "Could not update the amount due.")}>
-            Save
-          </button>
-          <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => setPanel(null)}>Cancel</button>
-          {dueError && (
-            <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-              {dueError}{Number(due) === 0 && due.trim() ? " Use “Waive payment” for no charge." : ""}
-            </span>
           )}
         </div>
       )}
@@ -241,7 +226,7 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
                         <>
                           <button className="btn btn-filled btn-sm" disabled={busy}
                             onClick={() => needsAmount
-                              ? askForDue(p.amount)
+                              ? askForAmount()
                               : run(() => platformAdminApi.post(API.platformAdmin.saas.verifyPayment(clientId, p.id)), "Could not confirm the payment.")}>
                             Confirm
                           </button>

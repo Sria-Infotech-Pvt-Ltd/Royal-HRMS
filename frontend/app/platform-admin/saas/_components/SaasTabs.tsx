@@ -80,7 +80,7 @@ export const EVENT_LABEL: Record<string, string> = {
   deactivated: "Deactivated", provisioning_retried: "Provisioning retried",
   payment_recorded: "Payment recorded", payment_verified: "Payment confirmed", payment_rejected: "Payment rejected",
   payment_waived: "Payment waived", payment_waiver_removed: "Waiver removed", amount_due_changed: "Amount due changed",
-  provisioned: "Provisioned", provisioning_failed: "Provisioning failed",
+  provisioned: "Provisioned", provisioning_failed: "Provisioning failed", edited: "Subscription edited",
 };
 
 // "Starter → Growth" for plan changes; just the plan for events with no "before" (payments etc.).
@@ -112,12 +112,6 @@ export const PAYMENT_METHODS: [PaymentMethod, string][] = [
 ];
 
 // Plan price × employees for one billing period, plus GST when it is extra.
-export function estimateDue(price: string | number, gstRate: string | number, gstInclusive: boolean,
-  employees: number, billing: string): number {
-  const base = Number(price) * employees * (billing === "yearly" ? 12 : 1);
-  return Math.round((gstInclusive ? base : base * (1 + Number(gstRate) / 100)) * 100) / 100;
-}
-
 export default function SaasTabs({ title, sub, actions }: { title: string; sub: string; actions?: React.ReactNode }) {
   const pathname = usePathname();
   return (

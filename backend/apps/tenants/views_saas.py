@@ -52,7 +52,8 @@ from apps.tenants.modules import catalogue
 from apps.tenants.pricing import charge, period_end
 from apps.tenants.permissions import IsPlatformAdmin
 from apps.tenants.serializers_saas import (
-    AssignSubscriptionSerializer, CompanySubscriptionSerializer, CustomerRowSerializer, NotificationSerializer,
+    AssignSubscriptionSerializer, CompanySubscriptionSerializer, CustomerRowSerializer, EditSubscriptionSerializer,
+    NotificationSerializer,
     RecordPaymentSerializer, RegistrationSerializer, SubscriptionHistorySerializer, SubscriptionPaymentSerializer,
     SubscriptionPlanSerializer,
 )
@@ -182,15 +183,23 @@ class SubscriptionListAssignView(_PlatformView):
             employee_count=data.get('employee_count'), billing_period=data.get('billing_period', ''),
             source=CompanySubscription.SOURCE_MANUAL, admin=request.user, notes=data.get('notes', ''), apply=False,
         )
-        sub.amount_due = data.get('amount_due')
-        if sub.amount_due is None and sub.employee_count:
-            # Same server-side maths as a plan change, so the total is known
-            # before the first payment.
-            sub.amount_due = charge(sub.price_per_employee, sub.gst_rate, sub.gst_inclusive,
-                                    sub.employee_count, sub.billing_period)['total']
+        # Same server-side maths as a plan change, so the total is known
+        # before the first payment. A different amount sent by the admin is a
+        # manual adjustment and is recorded as one.
+        calculated = (charge(sub.price_per_employee, sub.gst_rate, sub.gst_inclusive, sub.employee_count,
+                             sub.billing_period)['total'] if sub.employee_count else None)
+        sub.amount_due = data.get('amount_due') if data.get('amount_due') is not None else calculated
         sub.provisioning_status = CompanySubscription.PROVISION_AWAITING_PAYMENT
         sub.pending_admin_email = admin_email
         sub.save(update_fields=['amount_due', 'provisioning_status', 'pending_admin_email', 'updated_at'])
+        if sub.amount_due is not None and sub.amount_due != calculated:
+            reason = data.get('amount_reason', '').strip()
+            SubscriptionHistory.objects.create(
+                subscription=sub, event=SubscriptionHistory.EVENT_AMOUNT_DUE_CHANGED, before={'amount_due': None},
+                after=summary(sub), admin=request.user,
+                note=(f'Set manually: {sub.amount_due:,.2f} {sub.currency}'
+                      + (f' (calculated: {calculated:,.2f})' if calculated is not None else ' (no employee count)')
+                      + (f' — {reason}' if reason else ''))[:1000])
         if data.get('waive_reason', '').strip():
             billing.waive_payment(sub=sub, admin=request.user, reason=data['waive_reason'])
             sub.refresh_from_db()
@@ -344,6 +353,43 @@ class SubscriptionChangePlanView(_PlatformView):
         })
         sub = CompanySubscription.objects.select_related('plan', 'client').prefetch_related('payments').get(pk=sub.pk)
         return success('Plan changed.', CompanySubscriptionSerializer(sub).data)
+
+
+class SubscriptionEditView(_PlatformView):
+    """POST: edit plan / employees / billing period / dates / notes / amount.
+    {"dry_run": true} returns the preview (changes, old -> new amount,
+    outstanding, payment status, module difference, warnings) and saves nothing."""
+
+    def post(self, request, client_id):
+        sub = _subscription_or_404(client_id)
+        serializer = EditSubscriptionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        data = dict(serializer.validated_data)
+        note = data.pop('note', '')
+        if 'plan' in data:
+            if data['plan'] == sub.plan_id:
+                data['plan'] = sub.plan                 # unchanged (re-applying a plan is "Apply latest plan")
+            else:
+                plan = SubscriptionPlan.objects.filter(pk=data['plan'], status=SubscriptionPlan.STATUS_ACTIVE,
+                                                       is_legacy=False).first()
+                if plan is None:
+                    return error('Choose an active plan.', data={'plan': ['Choose an active plan.']})
+                data['plan'] = plan
+        from apps.tenants.subscription_edit import edit_subscription, preview_edit
+        try:
+            if _flag(request, 'dry_run'):
+                return success('Preview ready. Nothing has been saved.', preview_edit(sub, data))
+            sub, result = edit_subscription(sub=sub, data=data, admin=request.user, note=note)
+        except SubscriptionError as exc:
+            return error(str(exc))
+        _log_platform_action(request, 'saas_subscription_edited', target_company=sub.client, changes={
+            'changes': result['changes'], 'amount_mode': result['amount']['mode'],
+            'amount_reason': result['amount']['reason'],
+            'payment_status': result['payment_status'], 'modules': result['modules'],
+        })
+        sub = CompanySubscription.objects.select_related('plan', 'client').prefetch_related('payments').get(pk=sub.pk)
+        return success('Subscription updated.', CompanySubscriptionSerializer(sub).data)
 
 
 class SubscriptionPeriodView(_PlatformView):

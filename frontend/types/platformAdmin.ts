@@ -136,6 +136,26 @@ export interface PlanChangePreview {
   };
 }
 
+/** Edit Subscription preview (POST …/edit/ with dry_run). */
+export interface SubscriptionEditPreview {
+  changes: { field: string; label: string; from: string | number | null; to: string | number | null }[];
+  plan_changed: boolean;
+  amount: {
+    from: string | null;
+    to: string | null;
+    mode: "auto" | "manual" | "unchanged";
+    reason: string;
+    calculated: null | {
+      employee_count: number; billing_period: string; months: number; price_per_employee: string; currency: string;
+      subtotal: string; gst_rate: string; gst_inclusive: boolean; gst_amount: string; total: string;
+    };
+  };
+  payments: { received: string; pending: string; outstanding_before: string | null; outstanding_after: string | null; overpaid_after: string };
+  payment_status: { from: PaymentStatus; to: PaymentStatus };
+  modules: { added: string[]; removed: string[] };
+  warnings: string[];
+}
+
 export type PaymentStatus = "pending" | "paid" | "partially_paid" | "failed" | "waived";
 export type SubscriptionProvisioning = "awaiting_payment" | "pending" | "success" | "failed";
 export type PaymentMethod = "upi" | "bank_transfer" | "neft" | "rtgs" | "cash" | "cheque" | "other";

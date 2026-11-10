@@ -2,7 +2,8 @@ from django.urls import path
 
 from apps.tenants.views_saas import (
     FeatureCatalogueView, PlanDetailView, PlanListCreateView, RetryProvisioningView, SaasDashboardView,
-    SubscriptionChangePlanView, SubscriptionDetailView, SubscriptionHistoryListView, SubscriptionListAssignView,
+    SubscriptionChangePlanView, SubscriptionDetailView, SubscriptionEditView, SubscriptionHistoryListView,
+    SubscriptionListAssignView,
     SubscriptionPeriodView, SubscriptionStatusView, RegistrationListView, RegistrationDetailView,
     RegistrationApproveView, RegistrationRejectView, NotificationListView, NotificationReadView,
     SubscriptionAmountDueView, SubscriptionPaymentActionView, SubscriptionPaymentReceiptView, SubscriptionPaymentsView,
@@ -51,6 +52,7 @@ urlpatterns = [
     path('saas/subscriptions/', SubscriptionListAssignView.as_view(), name='saas-subscription-list'),
     path('saas/subscriptions/<uuid:client_id>/', SubscriptionDetailView.as_view(), name='saas-subscription-detail'),
     path('saas/subscriptions/<uuid:client_id>/change-plan/', SubscriptionChangePlanView.as_view(), name='saas-subscription-change-plan'),
+    path('saas/subscriptions/<uuid:client_id>/edit/', SubscriptionEditView.as_view(), name='saas-subscription-edit'),
     path('saas/subscriptions/<uuid:client_id>/period/', SubscriptionPeriodView.as_view(), name='saas-subscription-period'),
     path('saas/subscriptions/<uuid:client_id>/status/', SubscriptionStatusView.as_view(), name='saas-subscription-status'),
     path('saas/subscriptions/<uuid:client_id>/payments/', SubscriptionPaymentsView.as_view(), name='saas-subscription-payments'),

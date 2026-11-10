@@ -290,6 +290,8 @@ class AssignSubscriptionSerializer(serializers.Serializer):
     # itself (with optional receipt) is a separate call to the payments API.
     amount_due = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True,
                                           min_value=Decimal('0.01'))
+    # Why the amount differs from the calculated one (kept in the history).
+    amount_reason = serializers.CharField(required=False, allow_blank=True, default='', max_length=1000)
     waive_reason = serializers.CharField(required=False, allow_blank=True, default='', max_length=1000)
 
     def validate_starts_on(self, value):
@@ -303,6 +305,38 @@ class AssignSubscriptionSerializer(serializers.Serializer):
             raise serializers.ValidationError('Choose an existing company or enter a new one.')
         if data.get('ends_on') and data['ends_on'] < data['starts_on']:
             raise serializers.ValidationError({'ends_on': 'End date cannot be before the start date.'})
+        return data
+
+
+class EditSubscriptionSerializer(serializers.Serializer):
+    """Edit after assignment (apps.tenants.subscription_edit). Every field is
+    optional: only the fields sent are changed. amount_mode: "auto" = from
+    the plan price x employees x billing period + GST; "manual" = amount_due
+    with a required amount_reason."""
+    plan = serializers.UUIDField(required=False)
+    employee_count = serializers.IntegerField(required=False, min_value=1, max_value=validators.MAX_EMPLOYEES)
+    billing_period = serializers.ChoiceField(choices=('', *BILLING_PERIODS), required=False)
+    starts_on = serializers.DateField(required=False)
+    ends_on = serializers.DateField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True, max_length=1000)
+    amount_mode = serializers.ChoiceField(choices=('auto', 'manual'), required=False)
+    amount_due = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True,
+                                          min_value=Decimal('0.01'), max_value=Decimal('9999999999.99'))
+    amount_reason = serializers.CharField(required=False, allow_blank=True, max_length=1000)
+    note = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+    def validate_starts_on(self, value):
+        return _sane_date(value, 'Start date')
+
+    def validate_ends_on(self, value):
+        return _sane_date(value, 'End date') if value else value
+
+    def validate(self, data):
+        if data.get('amount_mode') == 'manual':
+            if data.get('amount_due') is None:
+                raise serializers.ValidationError({'amount_due': 'Enter the subscription amount.'})
+            if not (data.get('amount_reason') or '').strip():
+                raise serializers.ValidationError({'amount_reason': 'Give a reason for the manual amount.'})
         return data
 
 

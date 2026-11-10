@@ -8,13 +8,18 @@
 // End date: one billing period from the start (calendar months,
 // lib/saasDates), kept in step with the start date and billing period until
 // the admin types a date or chooses "No end date".
+// Subscription amount: calculated from the plan (price × employees × billing
+// period + GST — the server's own maths, lib/saasPricing); the employee count
+// is required for that. A different amount is a manual adjustment and needs a
+// reason, which the server keeps in the subscription history.
 
 import { useState } from "react";
 import Modal from "@/components/Modal";
 import platformAdminApi from "@/lib/platformAdminApi";
 import { API } from "@/lib/api/endpoints";
 import type { CompanySubscription, CustomerRow, SubscriptionPlan } from "@/types/platformAdmin";
-import { apiMessage, estimateDue, fmtMoney } from "./SaasTabs";
+import { apiMessage, fmtMoney } from "./SaasTabs";
+import { chargeFor } from "@/lib/saasPricing";
 import FieldError from "@/components/FieldError";
 import * as v from "@/lib/saasValidation";
 import { localToday, periodEnd } from "@/lib/saasDates";
@@ -47,7 +52,8 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
   const [employees, setEmployees] = useState("");
   const [billing, setBilling] = useState<"" | "monthly" | "yearly">("monthly");
   const [notes, setNotes] = useState("");
-  const [amountDue, setAmountDue] = useState<string | null>(null);   // null = follow the estimate
+  const [amountDue, setAmountDue] = useState<string | null>(null);   // null = follow the calculation
+  const [amountReason, setAmountReason] = useState("");
   const [payMode, setPayMode] = useState<"later" | "record" | "waive">("later");
   const [payment, setPayment] = useState(EMPTY_PAYMENT);
   const [allowOverpayment, setAllowOverpayment] = useState(false);
@@ -59,10 +65,11 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
 
   const plan = active.find(p => p.id === planId) ?? null;
   const count = Number(employees) || 0;
-  const monthly = plan ? Number(plan.price_per_employee) * count : 0;
-  const gst = plan && !plan.gst_inclusive ? monthly * Number(plan.gst_rate) / 100 : 0;
-  const estimate = plan && count > 0 ? estimateDue(plan.price_per_employee, plan.gst_rate, plan.gst_inclusive, count, billing) : 0;
+  const calc = plan && count > 0 ? chargeFor(plan.price_per_employee, plan.gst_rate, plan.gst_inclusive, count, billing) : null;
+  const estimate = calc?.total ?? 0;
   const due = amountDue ?? (estimate > 0 ? estimate.toFixed(2) : "");
+  // A total different from the calculated one is a manual adjustment.
+  const manualAmount = amountDue !== null && amountDue.trim() !== "" && Number(amountDue) !== estimate;
   const autoEnd = periodEnd(startsOn, billing);
   const endsOn = endMode === "none" ? "" : endMode === "manual" ? manualEnd : autoEnd;
   const overpaying = payMode === "record" && Number(due) > 0 && Number(payment.amount) > Number(due);
@@ -72,7 +79,10 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
       ...(mode === "existing" ? { client: clientId } : { new_company: company }),
       plan: planId, starts_on: startsOn, ends_on: endsOn || null,
       employee_count: count || null, billing_period: billing, notes,
-      amount_due: Number(due) > 0 ? due : null, waive_reason: payMode === "waive" ? waiveReason.trim() : "",
+      // Only a manual adjustment is sent; otherwise the server calculates the amount.
+      amount_due: manualAmount && Number(due) > 0 ? due : null,
+      amount_reason: manualAmount ? amountReason.trim() : "",
+      waive_reason: payMode === "waive" ? waiveReason.trim() : "",
       ...(dryRun ? { dry_run: true } : {}),
     };
   }
@@ -89,7 +99,7 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
         "new_company.gstin": v.gstin(company.gstin),
       } : {}),
       plan: plan ? null : "Choose an active plan.",
-      employee_count: v.wholeNumber(employees, { what: "Employees" })
+      employee_count: v.wholeNumber(employees, { isRequired: true, what: "Employees" })
         ?? (plan && count && plan.min_employees && count < plan.min_employees ? `${plan.name} needs at least ${plan.min_employees} employees.` : null)
         ?? (plan && count && plan.max_employees && count > plan.max_employees ? `${plan.name} allows at most ${plan.max_employees} employees.` : null),
       starts_on: v.date(startsOn, { what: "Start date" }),
@@ -99,6 +109,7 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
         ? `${plan.name} is billed ${plan.billing_periods.join(" or ")} only.` : null,
       notes: v.maxLength(notes, 1000),
       amount_due: v.decimal(due, { min: 0, minExclusive: true, isRequired: payMode === "record" && payment.confirm, what: "Subscription amount" }),
+      amount_reason: manualAmount ? v.required(amountReason, "A reason for the changed amount") ?? v.maxLength(amountReason, 1000) : null,
       waive_reason: payMode === "waive" ? v.required(waiveReason, "A reason") ?? v.maxLength(waiveReason, 1000) : null,
     });
     if (payMode === "record") {
@@ -213,7 +224,7 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
                 <FieldError msg={errors.plan} />
               </div>
               <div className="field-group">
-                <label className="field-label">Employees</label>
+                <label className="field-label">Employees *</label>
                 <input className="field-input" type="number" min={plan?.min_employees ?? 1} max={plan?.max_employees ?? v.MAX_EMPLOYEES} step={1}
                   inputMode="numeric" value={employees} onChange={e => change(() => setEmployees(e.target.value), "employee_count")} />
                 {plan && (plan.min_employees || plan.max_employees) && (
@@ -259,11 +270,6 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
                 <FieldError msg={errors.notes} />
               </div>
             </div>
-            {plan && count > 0 && (
-              <div style={{ color: "var(--on-variant)" }}>
-                Estimate: {fmtMoney(monthly, plan.currency)} / month {plan.gst_inclusive ? "(GST included)" : `+ GST ${fmtMoney(gst, plan.currency)}`} — for reference; billing is not automated.
-              </div>
-            )}
 
             <div className="card" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ fontWeight: 600 }}>Payment</div>
@@ -271,12 +277,29 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
                 <div className="field-group">
                   <label className="field-label">Subscription amount — total ({plan?.currency ?? "INR"})</label>
                   <input className="field-input" type="number" min={0} step="0.01" inputMode="decimal" value={due}
-                    onChange={e => change(() => setAmountDue(e.target.value), "amount_due")} />
+                    onChange={e => change(() => setAmountDue(e.target.value), "amount_due", "amount_reason")} />
                   <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                    {estimate > 0 ? `Calculated for one ${billing === "yearly" ? "year" : "month"} incl. GST — edit if needed.` : "Enter the total the customer owes for this subscription."}
+                    {calc && plan
+                      ? <>
+                          {count} employees × {fmtMoney(plan.price_per_employee, plan.currency)} × {calc.months} month(s) = {fmtMoney(calc.subtotal, plan.currency)}
+                          {plan.gst_inclusive ? ` (GST ${Number(plan.gst_rate)}% included)` : ` + GST ${Number(plan.gst_rate)}% ${fmtMoney(calc.gst, plan.currency)}`}
+                          {" = "}{fmtMoney(calc.total, plan.currency)}.
+                          {manualAmount && <> <button type="button" className="btn btn-ghost btn-sm" style={{ padding: "0 4px" }}
+                            onClick={() => change(() => { setAmountDue(null); setAmountReason(""); }, "amount_due", "amount_reason")}>Use calculated amount</button></>}
+                        </>
+                      : "Enter the employee count to calculate the amount."}
                   </span>
                   <FieldError msg={errors.amount_due} />
                 </div>
+                {manualAmount && (
+                  <div className="field-group">
+                    <label className="field-label">Reason for the changed amount *</label>
+                    <input className="field-input" value={amountReason} maxLength={1000} placeholder="e.g. negotiated discount"
+                      onChange={e => change(() => setAmountReason(e.target.value), "amount_reason")} />
+                    <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Kept in the subscription history.</span>
+                    <FieldError msg={errors.amount_reason} />
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                 {([["later", "Not received yet"], ["record", "Record a payment"], ["waive", "Waive payment"]] as const).map(([k, label]) => (
@@ -329,7 +352,7 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
             </div>
             <div>
               <strong>Payment:</strong>{" "}
-              {Number(due) > 0 ? `${fmtMoney(due, plan.currency)} due. ` : "Amount due not set. "}
+              {Number(due) > 0 ? `${fmtMoney(due, plan.currency)} due${manualAmount ? ` (manual — calculated ${fmtMoney(estimate, plan.currency)})` : ""}. ` : "Amount due not set. "}
               {payMode === "waive" ? `Waived (${waiveReason.trim()}) — the subscription is applied now.`
                 : payMode === "record" && payment.confirm && Number(payment.amount) >= Number(due)
                   ? `${fmtMoney(payment.amount, plan.currency)} received and confirmed — the subscription is applied now.`

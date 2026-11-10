@@ -1,8 +1,9 @@
 "use client";
 
-// One customer's subscription: details, payments (record / confirm / reject /
-// waive, receipts), change plan (with module difference preview), end date,
-// activate / deactivate, history, retry provisioning.
+// One customer's subscription: details, Edit subscription (plan, employees,
+// billing period, dates, notes, amount — EditSubscriptionModal), payments
+// (record / confirm / reject / waive, receipts), apply the latest version of
+// an edited plan, activate / deactivate, history, retry provisioning.
 
 import { useState } from "react";
 import Modal from "@/components/Modal";
@@ -12,6 +13,7 @@ import { useFetch } from "@/hooks/useFetch";
 import type { CustomerRow, PlanChangePreview, SubscriptionHistoryEntry, SubscriptionPaymentRecord, SubscriptionPlan } from "@/types/platformAdmin";
 import { EVENT_LABEL, PAYMENT_BADGE, PROVISION_BADGE, apiMessage, fmtDate, fmtMoney, planChange } from "./SaasTabs";
 import PaymentsSection from "./PaymentsSection";
+import EditSubscriptionModal from "./EditSubscriptionModal";
 import FieldError from "@/components/FieldError";
 import * as v from "@/lib/saasValidation";
 
@@ -25,7 +27,7 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
     API.platformAdmin.saas.subscription(customerId), platformAdminApi);
   const [planId, setPlanId] = useState("");
   const [preview, setPreview] = useState<PlanChangePreview | null>(null);
-  const [endsOn, setEndsOn] = useState<string | null>(null);
+  const [editing, setEditing] = useState<null | "all" | "amount">(null);
   const [retryEmail, setRetryEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -33,9 +35,6 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
   const company = data?.company;
   const sub = company?.subscription ?? null;
   const retryEmailError = retryEmail.trim() ? v.email(retryEmail) : null;
-  const endsOnError = endsOn === null || endsOn === "" ? null
-    : v.date(endsOn, { what: "End date" }) ?? (sub && endsOn < sub.starts_on ? "End date cannot be before the start date." : null);
-  const choices = plans.filter(p => p.status === "active" && !p.is_legacy && p.id !== sub?.plan);
 
   async function run(fn: () => Promise<unknown>, done: string) {
     setBusy(true);
@@ -65,6 +64,7 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
   }
 
   return (
+    <>
     <Modal title={company ? `${company.company_name} (${company.company_code})` : "Subscription"} onClose={onClose}
       closeDisabled={busy} size="lg" footer={<button className="btn btn-filled" onClick={onClose}>Close</button>}>
       {!company ? <div>Loading…</div> : (
@@ -85,13 +85,21 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
 
           {!sub ? <div className="alert alert-warn">No subscription assigned yet.</div> : (
             <>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontWeight: 600 }}>Subscription</span>
+                <span style={{ flex: 1 }} />
+                <button className="btn btn-sm btn-filled" disabled={busy} onClick={() => { setMsg(null); setEditing("all"); }}>
+                  <i className="ti ti-edit" /> Edit subscription
+                </button>
+              </div>
               <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                 {([
                   ["Plan", `${sub.plan_name}${sub.source === "legacy" ? " (legacy)" : ""}`],
                   ["Source", sub.source],
                   ["Status", sub.status],
                   ["Price", `${fmtMoney(sub.price_per_employee, sub.currency)} / employee / month`],
-                  ["Employees", sub.employee_count ?? "—"],
+                  ["Employees", sub.employee_count ?? "Not set"],
+                  ["Billing period", sub.billing_period ? (sub.billing_period === "yearly" ? "Yearly" : "Monthly") : "Not set"],
                   ["Period", `${fmtDate(sub.starts_on)} – ${sub.ends_on ? fmtDate(sub.ends_on) : "no end date"}`],
                 ] as [string, string | number][]).map(([k, v]) => (
                   <div key={k} style={{ background: "var(--bg-low)", borderRadius: 8, padding: "8px 10px" }}>
@@ -126,7 +134,17 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
                 </div>
               )}
 
+              {!sub.employee_count && sub.amount_due === null && (
+                <div className="alert alert-warn" style={{ flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ flex: 1, minWidth: 240 }}>
+                    No employee count — the subscription amount can&apos;t be calculated. Add the employee count (or a manual amount) in Edit subscription.
+                  </span>
+                  <button className="btn btn-sm btn-filled" disabled={busy} onClick={() => { setMsg(null); setEditing("all"); }}>Add employee count</button>
+                </div>
+              )}
+
               <PaymentsSection clientId={customerId} sub={sub} payments={data.payments}
+                onEdit={() => { setMsg(null); setEditing("amount"); }}
                 onChanged={() => { refetch(); onChanged(); }} />
 
               {sub.plan_outdated && sub.latest_plan && (
@@ -149,20 +167,19 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
                 </div>
               )}
 
+              {preview && (
               <div className="card" style={{ padding: 12 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8 }}>Change plan</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <select className="field-input" value={planId} onChange={e => previewChange(e.target.value)} style={{ maxWidth: 280 }}>
-                    <option value="">Select a plan…</option>
-                    {choices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                  <button className="btn btn-sm btn-filled" disabled={busy || !planId || !preview}
+                  <span style={{ fontWeight: 600 }}>Apply the latest version of {sub.plan_name}</span>
+                  <span style={{ flex: 1 }} />
+                  <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => { setPlanId(""); setPreview(null); }}>Cancel</button>
+                  <button className="btn btn-sm btn-filled" disabled={busy || !planId}
                     onClick={() => run(() => platformAdminApi.post(API.platformAdmin.saas.changePlan(customerId), { plan: planId }),
-                      preview?.same_plan ? "Latest plan version applied." : "Plan changed.").then(() => { setPlanId(""); setPreview(null); })}>
-                    {preview?.same_plan ? "Apply latest plan" : "Change plan"}
+                      "Latest plan version applied.").then(() => { setPlanId(""); setPreview(null); })}>
+                    Apply latest plan
                   </button>
                 </div>
-                {preview && (
+                {(
                   <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                     {preview.pricing ? (
                       <div style={{ background: "var(--bg-low)", borderRadius: 8, padding: "8px 10px" }}>
@@ -183,7 +200,7 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
                         </div>
                       </div>
                     ) : (
-                      <div style={{ color: "var(--on-variant)" }}>Employee count not set — the amount due won&apos;t be recalculated (set it in Payments).</div>
+                      <div style={{ color: "var(--on-variant)" }}>Employee count not set — the amount won&apos;t be recalculated (add it in Edit subscription).</div>
                     )}
                     {preview.difference.added.length === 0 && preview.difference.removed.length === 0 ? <div>No module changes.</div> : (
                       <>
@@ -194,13 +211,10 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
                   </div>
                 )}
               </div>
+              )}
 
               <div className="card" style={{ padding: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontWeight: 600 }}>End date</span>
-                <input className="field-input" type="date" min={sub.starts_on} value={endsOn ?? sub.ends_on ?? ""} onChange={e => setEndsOn(e.target.value)} style={{ maxWidth: 180 }} />
-                <button className="btn btn-sm btn-ghost" disabled={busy || endsOn === null || !!endsOnError}
-                  onClick={() => run(() => platformAdminApi.post(API.platformAdmin.saas.period(customerId), { ends_on: endsOn || null }), "Period updated.")}>Save</button>
-                <FieldError msg={endsOnError} />
+                <span style={{ fontWeight: 600 }}>Subscription status</span>
                 <span style={{ flex: 1 }} />
                 <button className={`btn btn-sm ${sub.status === "active" ? "btn-ghost" : "btn-filled"}`} disabled={busy}
                   onClick={() => run(() => platformAdminApi.post(API.platformAdmin.saas.status(customerId), { active: sub.status !== "active" }),
@@ -236,5 +250,12 @@ export default function SubscriptionDetailModal({ customerId, plans, onClose, on
         </div>
       )}
     </Modal>
+    {/* A sibling overlay, after the detail modal, so it stacks on top of it. */}
+    {editing && sub && (
+      <EditSubscriptionModal clientId={customerId} sub={sub} plans={plans} focusAmount={editing === "amount"}
+        onClose={() => setEditing(null)}
+        onSaved={m => { setMsg({ ok: true, text: m }); refetch(); onChanged(); }} />
+    )}
+    </>
   );
 }

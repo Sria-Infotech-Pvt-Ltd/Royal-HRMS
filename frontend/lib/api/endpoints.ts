@@ -42,6 +42,7 @@ export const API = {
       subscription: (clientId: string) => `/platform-admin/saas/subscriptions/${clientId}/`,
       changePlan: (clientId: string) => `/platform-admin/saas/subscriptions/${clientId}/change-plan/`,
       period: (clientId: string) => `/platform-admin/saas/subscriptions/${clientId}/period/`,
+      edit: (clientId: string) => `/platform-admin/saas/subscriptions/${clientId}/edit/`,
       status: (clientId: string) => `/platform-admin/saas/subscriptions/${clientId}/status/`,
       payments: (clientId: string) => `/platform-admin/saas/subscriptions/${clientId}/payments/`,
       verifyPayment: (clientId: string, id: string) => `/platform-admin/saas/subscriptions/${clientId}/payments/${id}/verify/`,
