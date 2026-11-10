@@ -310,6 +310,8 @@ class CommitTests(_ImportCase):
         self.assertEqual((first.full_name, first.branch, first.phone, first.employee_type, first.designation), ('Asha1 Verma', 'Import Hyderabad', '9876543210', 'Contract', 'Analyst 1'))
         self.assertTrue(first.must_change_password)
         self.assertEqual(first.onboarding_status, User.ONBOARDING_PENDING)
+        # The frontend only routes to the onboarding wizard when this is set; otherwise an imported employee skips it.
+        self.assertTrue(first.requires_self_service_onboarding)
         self.assertTrue(Placement.objects.filter(employee=first, position=self.analyst, effective_to__isnull=True).exists())
         self.assertEqual((first.profile.gender, first.profile.blood_group, first.profile.current_pin_code), ('female', 'B+', '500084'))
         self.assertEqual(User.objects.get(email='asha2@import.test').reporting_manager_id, self.hyd_manager.pk)

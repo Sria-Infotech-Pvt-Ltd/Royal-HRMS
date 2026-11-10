@@ -5243,3 +5243,40 @@ Result matrix (proven by `ModeStateFallbackMatrixTests`, all 3 modes x 2 fallbac
 - Shared neondb migrations (read-only SELECT, read-only session): attendance 0046, attendance 0047, notifications 0011 are all ALREADY APPLIED (2026-11-03 09:58 UTC). Nothing pending; nothing to apply.
 
 **Redis pin set (2026-11-06, user-approved):** `backend/requirements.txt` now `redis>=6.1.0,<9` (was `redis>=6.1.0`); no other dependency change. Verified: installed redis 8.1.0 in range, `pip check` clean, `manage.py check` clean, isolation + consent-version tests pass (10 OK). Test-isolation files kept. Known pre-existing failures left untouched (2 welcome-email template, 1 correction-review queue). Manual-testing checklist prepared for the user; nothing committed or pushed; branch `new-ai1` only.
+
+
+## Bulk Employee Import — durable background job + durable activation emails (2026-11-10) — LIVING SECTION
+
+**Goal:** HR uploads Excel -> employees created (background job) -> activation email per employee -> employee sets password, logs in, completes onboarding -> HR approves -> dashboard. Existing onboarding/HR approval is NOT bypassed.
+
+**Why it was rebuilt:** (1) the old synchronous `/commit/` took ~65 s and hit the ~30 s proxy timeout; (2) activation emails were sent from an in-memory thread tied to the web request, so they were lost on restart/timeout.
+
+**Backend (apps/accounts):**
+- Models + migrations: `EmployeeImportInvite` (0217; no token/email stored; one open invite per user; unique (batch,user)), `EmployeeImportJob` + `EmployeeImportJobError` (0218), legal-entity foundation columns (0216, platform_core 0023, branch 0013).
+- Job API (the old `/commit/` is unchanged): `POST/GET /api/employees/bulk-import/jobs/` (POST returns 202), `GET /jobs/<id>/`, `GET /jobs/<id>/errors/` (xlsx), `POST /jobs/<id>/cancel/`, `POST /api/employees/bulk-import/invites/<batch>/retry/`.
+- Job id == batch id == invitation batch id. 25 rows per transaction with a checkpoint (`next_row`) advanced in the same transaction; lease + sweep re-queue stale jobs; 2,000 rows per Celery run (task re-queues itself); max 5,000 rows; uploaded content cleared on finish, purged after 30 days.
+- Invitations: statuses pending/processing/sent/failed/skipped, bounded retries with backoff for transient SMTP errors, stale-lease recovery. At-least-once, never claimed exactly-once. "sent" only means the mail server accepted it, NOT that an inbox received it.
+- Invitation HOLD: `EMPLOYEE_IMPORT_INVITES_ENABLED` env var, default OFF (ON under tests). While off, nothing is queued, tokenised or sent. Enforced inside `send_activation_invite(bulk_import=True)`.
+- Activation link is built from `Company.portal_url`. If blank, the link is relative and USELESS in an email. Post-deploy value must be the public frontend URL (reported as `https://aira.nxsys.in`; confirm the scheme).
+- Imported employees are created with `onboarding_status=pending` AND `requires_self_service_onboarding=True`. The flag matters: `proxy.ts` and the login page only route to `/onboarding` when it is set (found by the end-to-end test; before the fix an imported employee would have skipped onboarding).
+- Management commands: `ensure_primary_legal_entity`, `resend_import_invites` (masked dry run by default; needs the exact confirmation count to send).
+
+**Frontend:** `hooks/useEmployeeImport.ts` (job create -> poll 3 s / 10 s while emails in flight / stop when settled or held; restores a running job on reopen; retry emails; cancel; error-report download), `components/employees/ImportJobPanel.tsx`, `ImportRecentJobs.tsx`, `EmployeeImportModal.tsx`, `lib/employeeImport.ts`, `types/employeeImport.ts`, endpoints in `lib/api/endpoints.ts`. The screen keeps employee CREATION and email DELIVERY separate.
+
+**Test results (all on private disposable Neon databases, never UAT):**
+- Backend main run: 160 tests OK (0 failed/errors/skipped), incl. 100-employee benchmark, worker-kill recovery, real Celery worker, migration 0217/0218 SQL forward+backward.
+- `tests_employee_bulk_import` + `tests_employee_import_hold_and_conflicts`: 59 tests OK.
+- Frontend: tsc clean, ESLint clean, vitest 68 files / 506 tests pass.
+- End-to-end (real server, real Celery worker, local SMTP catcher, HTTP only, NO browser): 62 of 63 checks pass. Covers preview, 202 confirm, background creation, caught email with absolute link, activation (weak password refused, link single-use), login (branch/department/designation/permissions), onboarding gate, submit validation, HR approval, dashboard access, retry after mail failure (no duplicate employees/invites), RBAC and cross-employee isolation (5 reads + 1 write -> 403).
+- The 1 failing check (C13): an employee can still edit their onboarding form AFTER submitting and before HR approval. Existing behaviour (`_save_profile_step` only blocks COMPLETE); NOT changed here. Decide whether it is wanted.
+
+**NOT covered / known limits:** no browser testing; document upload not exercised (documents go to real ImageKit cloud storage, so the test used placeholder rows); real inbox delivery unverified; creation speed ~3-4 s/employee on small batches, ~27 s/employee (~90 queries each) at 100 rows (no bulk path; 100k rows unproven; 5,000-row cap).
+
+**Before the first real upload on UAT/server (none of this was done by this work):**
+1. Apply migrations accounts 0216-0218, platform_core 0023, branch 0013.
+2. Set `Company.portal_url` to the public frontend URL.
+3. Set `EMPLOYEE_IMPORT_INVITES_ENABLED=true` and restart the Celery worker (the new tasks must be registered). Beat entries for the sweeps are in `config/settings.py`.
+4. First test with a 1-2 row file using mailboxes you control; check the real inbox, link, password set, login. Only then upload the full file.
+5. The 13 pending invitations from the earlier attempt are intentionally untouched.
+
+**Gotchas for the next person:** run tests with the project venv (`backend\H\Scripts\python.exe`, Django 5.1.15; system Python is Django 6.0.4). DB-flushing tests are opt-in (`RUN_DB_FLUSHING_TESTS=1`) because a flush wipes migration-seeded rows; the benchmark is `RUN_IMPORT_BENCHMARK=1`. Another Claude session edited the hold/conflict files (`services_employee_import_invite_policy.py`, `services_employee_import_invites.py`, `services_employee_import_job.py`, `tasks_employee_import.py`, `utils.py`, `config/settings.py`, `tests_employee_import_hold_and_conflicts.py`). Project Budgeting files (`views_external_api.py`, `tests_external_api.py`) belong to someone else and are not part of this change.

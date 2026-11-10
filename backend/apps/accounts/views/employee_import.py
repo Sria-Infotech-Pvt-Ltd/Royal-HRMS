@@ -14,7 +14,7 @@ from apps.accounts.services_employee_import import (
     MAX_FILE_BYTES, COLUMNS, ImportFileError, RowResult, allowed_branches, file_sha256, parse_workbook, summarise, validate_rows,
 )
 from apps.accounts.services_employee_import_commit import ImportRejected, commit_import
-from apps.accounts.services_employee_import_invites import invite_progress
+from apps.accounts.services_employee_import_invites import invite_progress, retry_batch
 from apps.accounts.services_employee_import_template import XLSX_CONTENT_TYPE, build_error_report, build_template
 from core.permissions import has_perm
 from core.responses import error, get_client_ip, success
@@ -159,3 +159,17 @@ class EmployeeImportInvitesView(APIView):
         if progress is None:
             return error('No invitations were found for this import.', http_status=status.HTTP_404_NOT_FOUND)
         return success('Invitation progress.', data=progress)
+
+
+class EmployeeImportInvitesRetryView(APIView):
+    """Queue the FAILED activation emails of one import again. Idempotent; never touches the employees themselves."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, batch_id):
+        refusal = _refuse_without_permission(request)
+        if refusal:
+            return refusal
+        if invite_progress(request.user, str(batch_id)) is None:
+            return error('No invitations were found for this import.', http_status=status.HTTP_404_NOT_FOUND)
+        result = retry_batch(request.user, str(batch_id))
+        return success(f'{result["requeued"]} failed invitations were queued again.', data={**result, 'progress': invite_progress(request.user, str(batch_id))})

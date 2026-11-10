@@ -49,4 +49,43 @@ export interface ImportCommitResult {
   employees?: { employee_id: string; name: string }[];
 }
 
-export type ImportStep = "start" | "previewed" | "done";
+/** start: choose a file; previewed: the checked file; job: following a background import job (it survives closing the window). */
+export type ImportStep = "start" | "previewed" | "job";
+
+export type ImportJobStatus = "queued" | "running" | "completed" | "completed_with_errors" | "failed" | "cancelled";
+
+/** Where the activation emails of one import stand. `held` is true while an administrator has switched invitation emails off. */
+export interface ImportJobInvitations {
+  held: boolean;
+  total: number;
+  pending: number;
+  processing: number;
+  sent: number;
+  skipped: number;
+  failed: number;
+}
+
+/** What GET /employees/bulk-import/jobs/<id>/ returns (and POST .../jobs/ on creation). Employee creation and email delivery are separate. */
+export interface ImportJobProgress {
+  job_id: string;
+  status: ImportJobStatus;
+  is_active: boolean;
+  file_name: string;
+  total_rows: number;
+  processed_rows: number;
+  created: number;
+  failed_rows: number;
+  percent: number;
+  cancel_requested: boolean;
+  failure_code: string;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  invitations: ImportJobInvitations;
+  invitation_failures: ImportInviteFailure[];
+}
+
+export interface ImportInvitesRetryResult {
+  requeued: number;
+  dispatched: number;
+}

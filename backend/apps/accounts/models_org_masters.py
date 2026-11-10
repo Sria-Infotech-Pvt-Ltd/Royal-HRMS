@@ -75,6 +75,8 @@ class Designation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=150)
+    # The company this designation belongs to. Nullable until backfilled; code and name become unique per company later.
+    legal_entity = models.ForeignKey('platform_core.LegalEntity', on_delete=models.PROTECT, null=True, blank=True, related_name='+', db_index=False)
     job_family = models.ForeignKey(JobFamily, on_delete=models.SET_NULL, null=True, blank=True, related_name='designations')
     default_grade = models.ForeignKey(Grade, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     is_active = models.BooleanField(default=True)

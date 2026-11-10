@@ -204,7 +204,7 @@ def _activation_link(token_id) -> str:
     return f'{base.rstrip("/")}{path}' if base else path
 
 
-def send_activation_invite(user, *, created_by=None, extra_html: str = '') -> tuple['PasswordResetToken', bool]:  # noqa: F821 - type-hint only, real import below to avoid a cycle
+def send_activation_invite(user, *, created_by=None, extra_html: str = '', bulk_import: bool = False) -> tuple['PasswordResetToken', bool]:  # noqa: F821 - type-hint only, real import below to avoid a cycle
     """Issues a fresh single-use activation invite (replacing any
     outstanding one for this user) and emails the link — the credentials-
     delivery path for every newly hired employee, and also what
@@ -221,6 +221,13 @@ def send_activation_invite(user, *, created_by=None, extra_html: str = '') -> tu
     catches it to record an EMAIL_FAILED OnboardingEvent and flip the
     Onboarding history panel into its "email_failed" state."""
     from apps.accounts.models import EmailLog, PasswordResetToken
+
+    if bulk_import:
+        # The bulk-import hold is enforced HERE, in the function that actually sends, and before anything is written: no token is
+        # issued (issuing one would invalidate the employee's current link) and no connection is opened while the switch is off.
+        from apps.accounts.services_employee_import_invite_policy import InviteSendingHeld, invites_enabled
+        if not invites_enabled():
+            raise InviteSendingHeld('Bulk-import invitation emails are switched off (EMPLOYEE_IMPORT_INVITES_ENABLED).')
 
     token = PasswordResetToken.create_for_user(
         user, purpose=PasswordResetToken.PURPOSE_INVITE, validity_hours=INVITE_VALIDITY_HOURS,

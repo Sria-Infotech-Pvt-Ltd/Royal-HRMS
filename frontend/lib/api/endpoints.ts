@@ -100,6 +100,12 @@ export const API = {
     importErrors: "/employees/bulk-import/errors/",
     importCommit: "/employees/bulk-import/commit/",
     importInvites: (batchId: string) => `/employees/bulk-import/invites/${batchId}/`,
+    importInvitesRetry: (batchId: string) => `/employees/bulk-import/invites/${batchId}/retry/`,
+    // Background import job: confirm creates it and returns at once; progress, error report and cancel are keyed by the job id.
+    importJobs: "/employees/bulk-import/jobs/",
+    importJob: (jobId: string) => `/employees/bulk-import/jobs/${jobId}/`,
+    importJobErrors: (jobId: string) => `/employees/bulk-import/jobs/${jobId}/errors/`,
+    importJobCancel: (jobId: string) => `/employees/bulk-import/jobs/${jobId}/cancel/`,
     bulkImportStatus: (batchId: string) => `/employees/bulk-import/status/${batchId}/`,
   },
 

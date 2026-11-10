@@ -15,6 +15,12 @@ from celery import shared_task
 logger = logging.getLogger(__name__)
 
 
+# Bulk employee import tasks live in tasks_employee_import.py; imported here so Celery's task discovery registers them.
+from apps.accounts.tasks_employee_import import (  # noqa: E402,F401
+    purge_old_import_jobs, requeue_stale_import_invites, requeue_stale_import_jobs, run_employee_import_job, send_import_invite,
+)
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
 def send_onboarding_submitted_notification_task(self, user_id):
     """

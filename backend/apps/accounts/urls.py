@@ -159,7 +159,11 @@ from apps.accounts.views import (
     ResolveTemplateVariablesView,
 )
 from apps.accounts.views.employee_import import (
-    EmployeeImportCommitView, EmployeeImportErrorsView, EmployeeImportInvitesView, EmployeeImportPreviewView, EmployeeImportTemplateView,
+    EmployeeImportCommitView, EmployeeImportErrorsView, EmployeeImportInvitesRetryView, EmployeeImportInvitesView, EmployeeImportPreviewView,
+    EmployeeImportTemplateView,
+)
+from apps.accounts.views.employee_import_job import (
+    EmployeeImportJobCancelView, EmployeeImportJobDetailView, EmployeeImportJobErrorsView, EmployeeImportJobListCreateView,
 )
 from apps.accounts.views_lifecycle import EmployeeAsOfView, EmployeeLifecycleTimelineView
 from apps.accounts.views_profile_photo import ProfilePhotoView
@@ -194,6 +198,11 @@ urlpatterns = [
     path('employees/bulk-import/preview/',                       EmployeeImportPreviewView.as_view(),    name='employee-import-preview'),
     path('employees/bulk-import/errors/',                        EmployeeImportErrorsView.as_view(),     name='employee-import-errors'),
     path('employees/bulk-import/invites/<uuid:batch_id>/',        EmployeeImportInvitesView.as_view(),    name='employee-import-invites'),
+    path('employees/bulk-import/invites/<uuid:batch_id>/retry/',  EmployeeImportInvitesRetryView.as_view(), name='employee-import-invites-retry'),
+    path('employees/bulk-import/jobs/',                           EmployeeImportJobListCreateView.as_view(), name='employee-import-jobs'),
+    path('employees/bulk-import/jobs/<uuid:job_id>/',             EmployeeImportJobDetailView.as_view(),  name='employee-import-job'),
+    path('employees/bulk-import/jobs/<uuid:job_id>/errors/',      EmployeeImportJobErrorsView.as_view(),  name='employee-import-job-errors'),
+    path('employees/bulk-import/jobs/<uuid:job_id>/cancel/',      EmployeeImportJobCancelView.as_view(),  name='employee-import-job-cancel'),
     path('employees/bulk-import/commit/',                        EmployeeImportCommitView.as_view(),     name='employee-import-commit'),
     path('employees/me/',                                        MyProfileView.as_view(),                name='my-profile'),
     path('employees/me/approvals/',                              MyApprovalsView.as_view(),              name='my-approvals'),
