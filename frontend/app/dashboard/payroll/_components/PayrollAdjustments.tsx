@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import Modal from "@/components/Modal";
+import AdjustmentImportModal from "./AdjustmentImportModal";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
@@ -63,8 +64,7 @@ export default function PayrollAdjustments() {
   const [saveMsg,   setSaveMsg]   = useState("");
   const [errMsg,    setErrMsg]    = useState("");
   const [addErr,    setAddErr]    = useState("");
-  const [importing, setImporting] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const param = monthParam(month, year);
   const { data, loading, refetch } = useFetch<AdjustmentListResponse>(
@@ -106,44 +106,6 @@ export default function PayrollAdjustments() {
     }
   }
 
-  async function handleBulkImport(file: File) {
-    setImporting(true);
-    setErrMsg("");
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await clientApi.post(
-        `${API.payroll.adjustmentsBulkImport}?month=${param}`,
-        form,
-        { headers: { "Content-Type": "multipart/form-data" } },
-      );
-      const imported = res.data?.data?.imported ?? 0;
-      const rowErrors = res.data?.data?.row_errors ?? [];
-      reloadFromPageOne();
-      if (rowErrors.length > 0) {
-        setErrMsg(`${imported} imported. ${rowErrors.length} row(s) had errors:\n` +
-          rowErrors.slice(0, 5).map((e: { row: number; error: string }) => `Row ${e.row}: ${e.error}`).join("\n"));
-      } else {
-        setSaveMsg(`${imported} adjustment(s) imported.`);
-      }
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Import failed.";
-      setErrMsg(msg);
-    } finally {
-      setImporting(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
-  function downloadTemplate() {
-    const csv = "employee_code,type,label,amount\nEMP001,addition,Festival Bonus,5000\nEMP002,deduction,Loan Recovery,2000\nEMP003,arrear,March Arrear,3500\n";
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = "adjustments_template.csv"; a.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <div style={{ marginTop: 24 }}>
       {saveMsg && (
@@ -172,21 +134,11 @@ export default function PayrollAdjustments() {
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn btn-ghost btn-sm" onClick={downloadTemplate}>
-            <i className="ti ti-download" /> Download Template
-          </button>
           {canEdit && (
             <>
-              <label className={`btn btn-ghost btn-sm${importing ? " disabled" : ""}`} style={{ cursor: "pointer" }}>
-                <i className="ti ti-file-upload" /> {importing ? "Importing…" : "Bulk Import"}
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  style={{ display: "none" }}
-                  onChange={e => { if (e.target.files?.[0]) handleBulkImport(e.target.files[0]); }}
-                />
-              </label>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowImport(true)}>
+                <i className="ti ti-file-upload" /> Bulk Import
+              </button>
               <button className="btn btn-filled btn-sm" onClick={() => { setAddErr(""); setShowAdd(true); }}>
                 <i className="ti ti-plus" /> Add Adjustment
               </button>
@@ -285,6 +237,15 @@ export default function PayrollAdjustments() {
             </div>
           )}
         </div>
+      )}
+
+      {showImport && (
+        <AdjustmentImportModal
+          month={param}
+          monthLabel={`${month} ${year}`}
+          onClose={() => setShowImport(false)}
+          onImported={() => { reloadFromPageOne(); setSaveMsg(""); }}
+        />
       )}
 
       {showAdd && (

@@ -97,7 +97,7 @@ class ManualPaymentTests(PaymentFixture):
         self.assign()
         resp = self.record(confirm=True)
         self.assertEqual(resp.status_code, 400)
-        self.assertIn('amount due', resp.data['message'])
+        self.assertIn('subscription amount', resp.data['message'])        # "amount due" relabelled
         self.assertFalse(SubscriptionPayment.objects.exists())            # nothing half-saved
         pid = self.record().data['data']['payment']['id']
         self.assertEqual(self.pa.post(self.url('saas-subscription-payment-verify', payment_id=pid)).status_code, 400)

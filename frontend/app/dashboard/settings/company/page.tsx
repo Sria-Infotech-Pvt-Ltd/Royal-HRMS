@@ -6,6 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import FinancialYearSection from "./_components/FinancialYearSection";
+import PlanDetailsTab from "./_components/PlanDetailsTab";
 
 // ─── Indian states / UTs ──────────────────────────────────────────────────────
 
@@ -97,6 +98,16 @@ export default function CompanyInfoPage() {
   const [saving,      setSaving]      = useState(false);
   const [savedAt,     setSavedAt]     = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  // Plan Details tab: company-wide administrators (settings.edit) only.
+  // ?tab=plan opens it directly (read once, so no Suspense boundary is needed).
+  const [tab, setTab] = useState<"info" | "plan">("info");
+  useEffect(() => {
+    if (canEdit && new URLSearchParams(window.location.search).get("tab") === "plan") setTab("plan");
+  }, [canEdit]);
+  function selectTab(next: "info" | "plan") {
+    setTab(next);
+    window.history.replaceState(null, "", next === "plan" ? "?tab=plan" : window.location.pathname);
+  }
 
   // Logo state
   const [logoFile,    setLogoFile]    = useState<File | null>(null);
@@ -242,8 +253,12 @@ export default function CompanyInfoPage() {
       {/* ── Page header ─────────────────────────────────────────────────── */}
       <div className="page-header">
         <div>
-          <div className="page-title">Company Information</div>
-          <div className="page-sub">Legal entity details, statutory identifiers, and registered address</div>
+          <div className="page-title">{tab === "plan" ? "Plan Details" : "Company Information"}</div>
+          <div className="page-sub">
+            {tab === "plan"
+              ? "Your subscription, the modules it includes, other plans and payment history"
+              : "Legal entity details, statutory identifiers, and registered address"}
+          </div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
@@ -251,6 +266,18 @@ export default function CompanyInfoPage() {
           </button>
         </div>
       </div>
+
+      {canEdit && (
+        <div className="tabs" style={{ marginBottom: 20 }}>
+          {([["info", "Company Information", "ti-building"], ["plan", "Plan Details", "ti-certificate"]] as const).map(([id, label, icon]) => (
+            <button key={id} type="button" className={`tab${tab === id ? " active" : ""}`} onClick={() => selectTab(id)}>
+              <i className={`ti ${icon}`} style={{ marginRight: 5 }} />{label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === "plan" ? <PlanDetailsTab /> : <>
 
       {/* ── Feedback ────────────────────────────────────────────────────── */}
       {apiError && (
@@ -508,6 +535,7 @@ export default function CompanyInfoPage() {
           </button>
         )}
       </div>
+      </>}
     </>
   );
 }

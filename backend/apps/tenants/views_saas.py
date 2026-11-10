@@ -49,6 +49,7 @@ from apps.tenants.registrations import RegistrationError
 from apps.tenants.registrations import approve as approve_registration
 from apps.tenants.registrations import reject as reject_registration
 from apps.tenants.modules import catalogue
+from apps.tenants.pricing import charge, period_end
 from apps.tenants.permissions import IsPlatformAdmin
 from apps.tenants.serializers_saas import (
     AssignSubscriptionSerializer, CompanySubscriptionSerializer, CustomerRowSerializer, NotificationSerializer,
@@ -172,12 +173,21 @@ class SubscriptionListAssignView(_PlatformView):
     def _assign(self, request, client, plan, data, admin_email=''):
         """Save the subscription awaiting payment (never paid by assignment);
         a waiver given here provisions it straight away."""
+        # End date: as sent (a date, or null = no end date). Only when the field
+        # is left out entirely is it one billing period from the start.
+        ends_on = data.get('ends_on') if 'ends_on' in data else period_end(data['starts_on'],
+                                                                           data.get('billing_period', ''))
         sub = assign_subscription(
-            client=client, plan=plan, starts_on=data['starts_on'], ends_on=data.get('ends_on'),
+            client=client, plan=plan, starts_on=data['starts_on'], ends_on=ends_on,
             employee_count=data.get('employee_count'), billing_period=data.get('billing_period', ''),
             source=CompanySubscription.SOURCE_MANUAL, admin=request.user, notes=data.get('notes', ''), apply=False,
         )
         sub.amount_due = data.get('amount_due')
+        if sub.amount_due is None and sub.employee_count:
+            # Same server-side maths as a plan change, so the total is known
+            # before the first payment.
+            sub.amount_due = charge(sub.price_per_employee, sub.gst_rate, sub.gst_inclusive,
+                                    sub.employee_count, sub.billing_period)['total']
         sub.provisioning_status = CompanySubscription.PROVISION_AWAITING_PAYMENT
         sub.pending_admin_email = admin_email
         sub.save(update_fields=['amount_due', 'provisioning_status', 'pending_admin_email', 'updated_at'])
@@ -408,7 +418,11 @@ class SubscriptionPaymentsView(_PlatformView):
             payment = billing.record_payment(
                 sub=sub, amount=data['amount'], method=data['method'], paid_on=data['paid_on'],
                 reference=data['reference'], notes=data['notes'], receipt=data.get('receipt'),
-                admin=request.user, confirm=data['confirm'])
+                admin=request.user, confirm=data['confirm'], allow_overpayment=data['allow_overpayment'])
+        except billing.OverpaymentWarning as exc:
+            # Nothing saved; the screen asks the admin to confirm and resends with allow_overpayment.
+            return error(str(exc), data={'requires_confirmation': 'overpayment',
+                                         'outstanding': f'{exc.outstanding:.2f}', 'pending': f'{exc.pending:.2f}'})
         except billing.PaymentError as exc:
             return error(str(exc))
         sub = _fresh(sub)

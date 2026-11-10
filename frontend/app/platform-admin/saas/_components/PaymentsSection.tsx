@@ -1,9 +1,13 @@
 "use client";
 
-// Payments for one subscription: amount due vs confirmed payments, the full
-// payment history (who recorded / confirmed each), receipts, and the
-// actions — record, confirm, reject (with reason), waive, edit amount due.
-// Payments are never edited or deleted; a wrong entry is rejected.
+// Payments for one subscription: subscription amount, paid (confirmed),
+// awaiting confirmation and outstanding — all calculated by the server —
+// the full payment history (who recorded / confirmed each), receipts, and the
+// actions — record, confirm, reject (with reason), waive, edit the
+// subscription amount. Recording asks only for the payment amount (pre-filled
+// with what is still open); a payment above the outstanding balance needs an
+// explicit "Record anyway". Payments are never edited or deleted; a wrong
+// entry is rejected.
 
 import { useState } from "react";
 import DocPreviewModal from "@/components/DocPreviewModal";
@@ -39,10 +43,17 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
   const [receipt, setReceipt] = useState<SubscriptionPaymentRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [overpay, setOverpay] = useState<string | null>(null);   // server's overpayment warning
 
   const waived = sub.payment_status === "waived";
   const received = Number(sub.amount_received);
-  const balance = sub.amount_due !== null ? Math.max(Number(sub.amount_due) - received, 0) : null;
+  const pending = Number(sub.amount_pending_confirmation ?? 0);
+  const outstanding = sub.amount_outstanding;               // null = subscription amount not known
+  const overpaid = Number(sub.amount_overpaid ?? 0);
+  // What is still open once the payments awaiting confirmation are confirmed.
+  const open = outstanding !== null ? Math.max(Number(outstanding) - pending, 0) : null;
+  // No total and nothing to calculate it from: the admin must enter it once.
+  const needsAmount = sub.amount_due === null && !sub.employee_count;
 
   async function run(fn: () => Promise<{ data: { message?: string } }>, fallback: string) {
     setBusy(true);
@@ -58,6 +69,11 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
       setPayErrors({});
       onChanged();
     } catch (e) {
+      const data = (e as { response?: { data?: { data?: { requires_confirmation?: string } } } })?.response?.data?.data;
+      if (data?.requires_confirmation === "overpayment") {
+        setOverpay(apiMessage(e, "This payment is more than the outstanding balance."));
+        return;
+      }
       setPayErrors(v.apiFieldErrors(e));
       setMsg({ ok: false, text: apiMessage(e, fallback) });
     } finally {
@@ -65,33 +81,52 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
     }
   }
 
-  const toggle = (p: Panel) => { setMsg(null); setPayErrors({}); setPanel(panel === p ? null : p); };
-  const dueError = v.decimal(due, { min: 0, minExclusive: true, what: "Amount due" });
+  const toggle = (p: Panel) => { setMsg(null); setPayErrors({}); setOverpay(null); setPanel(panel === p ? null : p); };
+  const dueError = v.decimal(due, { min: 0, minExclusive: true, what: "Subscription amount" });
 
-  function recordPayment() {
+  function openRecord() {
+    // Pre-fill what is still to collect, so a full payment is one click.
+    if (panel !== "record" && !payment.amount && open !== null && open > 0) {
+      setPayment(p => ({ ...p, amount: open.toFixed(2) }));
+    }
+    toggle("record");
+  }
+
+  function recordPayment(allowOverpayment = false) {
     const found = paymentErrors(payment);
     setPayErrors(found);
     if (Object.keys(found).length) { setMsg({ ok: false, text: "Please correct the highlighted fields." }); return; }
-    run(() => platformAdminApi.post(API.platformAdmin.saas.payments(clientId), paymentFormData(payment), MULTIPART), "Could not record the payment.");
+    setOverpay(null);
+    run(() => platformAdminApi.post(API.platformAdmin.saas.payments(clientId), paymentFormData(payment, allowOverpayment), MULTIPART),
+      "Could not record the payment.");
   }
 
-  // Confirming needs the amount due (it decides Paid vs Partially paid).
+  // Confirming needs the subscription amount (it decides Paid vs Partially
+  // paid). The server calculates it from the employee count when it can;
+  // only without one is the admin asked, once.
   function askForDue(suggested: string) {
     setDue(suggested);
     setPanel("due");
-    setMsg({ ok: false, text: "Set the amount due for this subscription first, then click Confirm again." });
+    setMsg({ ok: false, text: "Set the subscription amount first (there is no employee count to calculate it from), then click Confirm again." });
   }
+
+  const amountHint = open === null
+    ? (sub.employee_count ? "The subscription amount is calculated from the employee count when you record." : null)
+    : waived ? "Payment is waived — nothing is outstanding."
+    : Number(payment.amount) > open && open >= 0
+      ? `More than the ${fmtMoney(open, sub.currency)} still to collect — you will be asked to confirm.`
+      : `Outstanding: ${fmtMoney(outstanding ?? 0, sub.currency)}${pending ? ` (${fmtMoney(pending, sub.currency)} awaiting confirmation)` : ""}.`;
 
   return (
     <div className="card" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontWeight: 600 }}>Payments</span>
         <span style={{ flex: 1 }} />
-        <button className="btn btn-sm btn-filled" disabled={busy} onClick={() => toggle("record")}>
+        <button className="btn btn-sm btn-filled" disabled={busy} onClick={openRecord}>
           <i className="ti ti-plus" /> Record payment
         </button>
         <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => { setDue(sub.amount_due ?? ""); toggle("due"); }}>
-          {sub.amount_due === null ? "Set amount due" : "Edit amount due"}
+          {sub.amount_due === null ? "Set subscription amount" : "Edit subscription amount"}
         </button>
         {waived ? (
           <button className="btn btn-sm btn-ghost" disabled={busy}
@@ -107,9 +142,12 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
 
       <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
         {([
-          ["Amount due", sub.amount_due !== null ? fmtMoney(sub.amount_due, sub.currency) : "Not set"],
-          ["Received (confirmed)", fmtMoney(received, sub.currency)],
-          ["Balance", balance !== null ? fmtMoney(balance, sub.currency) : "—"],
+          ["Subscription amount", sub.amount_due !== null ? fmtMoney(sub.amount_due, sub.currency)
+            : sub.employee_count ? "Calculated on first payment" : "Not set"],
+          ["Paid (confirmed)", fmtMoney(received, sub.currency)],
+          ...(pending > 0 ? [["Awaiting confirmation", fmtMoney(pending, sub.currency)]] : []),
+          ["Outstanding", outstanding !== null ? fmtMoney(outstanding, sub.currency) : "—"],
+          ...(overpaid > 0 ? [["Overpaid", fmtMoney(overpaid, sub.currency)]] : []),
         ] as [string, string][]).map(([k, v]) => (
           <div key={k} style={{ background: "var(--bg-low)", borderRadius: 8, padding: "8px 10px" }}>
             <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{k}</div>
@@ -121,22 +159,33 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
 
       {panel === "record" && (
         <div style={{ borderTop: "1px solid var(--outline-v)", paddingTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
-          <PaymentFields value={payment} errors={payErrors} onChange={p => { setPayment(p); setPayErrors({}); }} />
-          {payment.confirm && sub.amount_due === null && (
-            <div style={{ color: "var(--error)", fontSize: 12 }}>Set the amount due before confirming payments.</div>
+          <PaymentFields value={payment} errors={payErrors} amountHint={amountHint}
+            onChange={p => { setPayment(p); setPayErrors({}); setOverpay(null); }} />
+          {payment.confirm && needsAmount && (
+            <div style={{ color: "var(--error)", fontSize: 12 }}>Set the subscription amount before confirming payments.</div>
           )}
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => setPanel(null)}>Cancel</button>
-            <button className="btn btn-sm btn-filled" disabled={busy || (payment.confirm && sub.amount_due === null)} onClick={recordPayment}>
-              {busy ? "Saving…" : payment.confirm ? "Record & confirm" : "Record payment"}
-            </button>
-          </div>
+          {overpay ? (
+            <div className="alert alert-warn" style={{ flexWrap: "wrap", gap: 8 }}>
+              <span style={{ flex: 1, minWidth: 220 }}>{overpay}</span>
+              <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => setOverpay(null)}>Change amount</button>
+              <button className="btn btn-sm btn-filled" disabled={busy} onClick={() => recordPayment(true)}>
+                {busy ? "Saving…" : "Record anyway"}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => setPanel(null)}>Cancel</button>
+              <button className="btn btn-sm btn-filled" disabled={busy || (payment.confirm && needsAmount)} onClick={() => recordPayment()}>
+                {busy ? "Saving…" : payment.confirm ? "Record & confirm" : "Record payment"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {panel === "due" && (
         <div style={{ borderTop: "1px solid var(--outline-v)", paddingTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <span>Amount due ({sub.currency})</span>
+          <span>Subscription amount ({sub.currency})</span>
           <input className="field-input" type="number" min={0} step="0.01" inputMode="decimal" value={due} onChange={e => setDue(e.target.value)} style={{ maxWidth: 180 }} />
           <button className="btn btn-sm btn-filled" disabled={busy || !!dueError}
             onClick={() => run(() => platformAdminApi.post(API.platformAdmin.saas.amountDue(clientId), { amount_due: due }), "Could not update the amount due.")}>
@@ -191,7 +240,7 @@ export default function PaymentsSection({ clientId, sub, payments, onChanged }: 
                       {p.status === "recorded" && rejecting !== p.id && (
                         <>
                           <button className="btn btn-filled btn-sm" disabled={busy}
-                            onClick={() => sub.amount_due === null
+                            onClick={() => needsAmount
                               ? askForDue(p.amount)
                               : run(() => platformAdminApi.post(API.platformAdmin.saas.verifyPayment(clientId, p.id)), "Could not confirm the payment.")}>
                             Confirm

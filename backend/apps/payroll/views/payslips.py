@@ -18,10 +18,11 @@ from apps.payroll.models import (
     EmployeePayslip,
     PayslipQuery,
     PayrollSettings,
+    StatutoryConfig,
 )
 from apps.payroll.notifications import notify_query_raised, notify_query_resolved
 from apps.payroll.serializers import EmployeePayslipSerializer, PayslipQuerySerializer
-from apps.payroll.views.cycles import _is_admin
+from apps.payroll.views.cycles import _is_admin, component_gross, esi_employee_share, recompute_payslip_totals
 from apps.payroll.views.employee_salary import _resolve_employee
 
 logger = logging.getLogger(__name__)
@@ -200,30 +201,19 @@ class UpdatePayslipReimbBonusView(APIView):
                 payslip.lop_days = Decimal(str(request.data['lop_days']))
             except (InvalidOperation, TypeError, ValueError):
                 return error('lop_days must be a valid number.')
-            per_day = payslip.gross_earnings / payslip.total_working_days if payslip.total_working_days else 0
+            # Per-day rate on the salary components only, as in processing —
+            # never on a bonus / reimbursement already added to gross.
+            gross = component_gross(payslip)
+            per_day = gross / payslip.total_working_days if payslip.total_working_days else 0
             payslip.lop_deduction = per_day * payslip.lop_days
-            updated_fields.extend(['lop_days', 'lop_deduction'])
+            # PF, PT and LWF don't depend on LOP days; the employee ESI share
+            # does (daily-wage exemption), so it is re-evaluated.
+            branch = Branch.objects.filter(branch_name=payslip.employee.branch).select_related('state').first()
+            statutory = StatutoryConfig.objects.filter(state=branch.state).first() if branch and branch.state else None
+            payslip.esi_employee = esi_employee_share(payslip, statutory)
+            updated_fields.extend(['lop_days', 'lop_deduction', 'esi_employee'])
 
-        other_earnings_total = sum(
-            (Decimal(str(v)) for v in payslip.other_earnings.values()),
-            Decimal(0),
-        )
-        payslip.gross_earnings = (
-            payslip.basic + payslip.hra + payslip.special_allowance
-            + other_earnings_total
-            + payslip.reimbursements + payslip.bonus
-            + payslip.adjustments_earning
-        )
-        other_deductions_total = sum(
-            (Decimal(str(v)) for v in (payslip.other_deductions or {}).values()),
-            Decimal(0),
-        )
-        payslip.total_deductions = (
-            payslip.lop_deduction + payslip.pf_employee
-            + payslip.esi_employee + payslip.pt_deduction + payslip.lwf_employee
-            + payslip.adjustments_deduction + other_deductions_total
-        )
-        payslip.net_pay = payslip.gross_earnings - payslip.total_deductions
+        recompute_payslip_totals(payslip)
         updated_fields.extend(['gross_earnings', 'total_deductions', 'net_pay'])
 
         payslip.save(update_fields=list(set(updated_fields)))

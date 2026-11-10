@@ -116,6 +116,9 @@ class CompanySubscriptionSerializer(serializers.ModelSerializer):
     plan_code = serializers.CharField(source='plan.code', read_only=True)
     modules = serializers.SerializerMethodField()
     amount_received = serializers.SerializerMethodField()
+    amount_pending_confirmation = serializers.SerializerMethodField()
+    amount_outstanding = serializers.SerializerMethodField()
+    amount_overpaid = serializers.SerializerMethodField()
     unconfirmed_payments = serializers.SerializerMethodField()
     plan_outdated = serializers.SerializerMethodField()
     latest_plan = serializers.SerializerMethodField()
@@ -126,7 +129,8 @@ class CompanySubscriptionSerializer(serializers.ModelSerializer):
             'id', 'client_id', 'plan', 'plan_code', 'plan_name', 'source', 'status', 'starts_on', 'ends_on',
             'employee_count', 'billing_period', 'price_per_employee', 'currency', 'gst_rate',
             'gst_inclusive', 'max_employees', 'plan_features', 'extra_modules', 'removed_modules',
-            'modules', 'notes', 'payment_status', 'amount_due', 'amount_received', 'unconfirmed_payments',
+            'modules', 'notes', 'payment_status', 'amount_due', 'amount_received', 'amount_pending_confirmation',
+            'amount_outstanding', 'amount_overpaid', 'unconfirmed_payments',
             'payment_waiver_reason', 'provisioning_status', 'provisioning_error', 'provisioned_at',
             'plan_outdated', 'latest_plan', 'created_at', 'updated_at',
         ]
@@ -134,11 +138,27 @@ class CompanySubscriptionSerializer(serializers.ModelSerializer):
     def get_modules(self, obj):
         return effective_modules(obj)
 
-    # Computed in Python so a prefetch of `payments` (the list view) is used.
+    # billing.payment_totals reads obj.payments.all(), so a prefetch (the list view) is used.
+    @staticmethod
+    def _totals(obj) -> dict:
+        from apps.tenants.billing import payment_totals
+        return payment_totals(obj)
+
     def get_amount_received(self, obj):
-        total = sum((p.amount for p in obj.payments.all() if p.status == SubscriptionPayment.STATUS_VERIFIED),
-                    Decimal('0'))
-        return f'{total:.2f}'
+        return f'{self._totals(obj)["received"]:.2f}'
+
+    def get_amount_pending_confirmation(self, obj):
+        """Recorded but not yet confirmed — not counted as received."""
+        return f'{self._totals(obj)["pending"]:.2f}'
+
+    def get_amount_outstanding(self, obj):
+        """Still to collect: subscription amount minus confirmed payments (never
+        below 0). 0 when waived; None while the subscription amount is unknown."""
+        outstanding = self._totals(obj)['outstanding']
+        return None if outstanding is None else f'{outstanding:.2f}'
+
+    def get_amount_overpaid(self, obj):
+        return f'{self._totals(obj)["overpaid"]:.2f}'
 
     def get_plan_outdated(self, obj) -> bool:
         """The plan was edited after this subscription took its snapshot. The
@@ -189,6 +209,8 @@ class RecordPaymentSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True, default='', max_length=1000)
     receipt = serializers.FileField(required=False, allow_null=True, validators=[validate_receipt_file])
     confirm = serializers.BooleanField(required=False, default=False)
+    # Set after the admin has seen the "more than the outstanding balance" warning.
+    allow_overpayment = serializers.BooleanField(required=False, default=False)
 
     def validate_paid_on(self, value):
         if value > timezone.localdate():

@@ -283,6 +283,7 @@ export default function PlanEditorModal({ plan, catalogue, onClose, onSaved }: {
                         {soon && <span className="badge badge-neutral" style={{ marginLeft: 6 }}>Coming soon</span>}
                         {f.kind === "display" && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--on-variant)" }}>(shown on plan)</span>}
                         {viaDep && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--on-variant)" }}>(required by another module)</span>}
+                        {f.description && <span style={{ display: "block", fontSize: 11, color: "var(--on-variant)" }}>{f.description}</span>}
                       </span>
                     </label>
                   );

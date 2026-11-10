@@ -66,6 +66,48 @@ FEATURES: list[dict] = [
     {'key': 'custom_workflows', 'label': 'Custom Workflows', 'category': 'Platform', 'kind': COMING_SOON},
 ]
 
+# One-line descriptions, shown to customers (Company Settings → Plan Details)
+# and in the Platform Admin plan editor. Every feature has one.
+DESCRIPTIONS = {
+    'employee_management': 'Employee records, profiles, departments, designations and the org chart.',
+    'self_service': 'Employees view their own profile, requests, payslips and documents.',
+    'onboarding': 'Digital onboarding forms and approval for new joiners.',
+    'approval_workflows': 'Configurable approvers for leave, expenses, resignations and more.',
+    'roles_permissions': 'Control who can see and do what, role by role.',
+    'notifications': 'In-app and email notifications for HR events.',
+    MODULE_ATTENDANCE: 'Daily attendance with clock-in/out, regularisation and attendance reports.',
+    MODULE_FACE_ATTENDANCE: 'Clock in and out with face recognition, with registration approval.',
+    MODULE_LEAVE: 'Leave types, balances, applications, approvals and the holiday calendar.',
+    MODULE_WFH: 'Work-from-home requests and approvals.',
+    MODULE_PAYROLL: 'Salary structures, monthly payroll runs, payslips and PF / ESI / PT returns.',
+    MODULE_EXPENSES: 'Expense claims, approvals and reimbursement through payroll.',
+    MODULE_RECRUITMENT: 'Candidates, interviews, selection, referrals and hiring emails.',
+    MODULE_ASSESSMENTS: 'Online tests and assessments for candidates and employees.',
+    MODULE_SEPARATION: 'Resignations, notice periods, exit approvals and clearance.',
+    MODULE_DOCUMENTS: 'Store and manage employee documents securely.',
+    MODULE_ASSETS: 'Track company equipment and assign it to employees.',
+    MODULE_ANNOUNCEMENTS: 'Company-wide and branch announcements to employees.',
+    MODULE_VOICE_COMMANDS: 'Hands-free voice assistant for common HR actions.',
+    'mobile_access': 'Use Royal HRMS comfortably on phones and tablets.',
+    'basic_reports': 'Export the data of each module to Excel or CSV.',
+    'advanced_dashboards': 'Richer dashboards with trends across modules.',
+    'multi_branch': 'Run several branches and locations in one company account.',
+    'advanced_rbac': 'Finer-grained roles and branch-level access control.',
+    'priority_support': 'Faster responses from the support team.',
+    'tds': 'Income-tax (TDS) declarations and calculations.',
+    'performance': 'Goals, reviews and performance tracking.',
+    'appraisal': 'Periodic appraisal cycles and ratings.',
+    'training': 'Training programmes and learning records.',
+    'advanced_reports': 'Custom report builder across modules.',
+    'hr_analytics': 'Workforce analytics and insights.',
+    'roster': 'Plan shift rosters for teams.',
+    'legal_entities': 'Several legal entities under one account.',
+    'api_integrations': 'Connect Royal HRMS with other systems through APIs.',
+    'custom_workflows': 'Build your own approval and process workflows.',
+}
+for _f in FEATURES:
+    _f['description'] = DESCRIPTIONS[_f['key']]
+
 FEATURES_BY_KEY = {f['key']: f for f in FEATURES}
 MODULE_FEATURES = {f['key'] for f in FEATURES if f['kind'] == MODULE}
 SELECTABLE_FEATURES = {f['key'] for f in FEATURES if f['kind'] in (MODULE, DISPLAY)}
@@ -120,4 +162,4 @@ def resolve_modules(features, extra_modules=(), removed_modules=()) -> list[str]
 
 def catalogue() -> list[dict]:
     return [{'key': f['key'], 'label': f['label'], 'category': f['category'], 'kind': f['kind'],
-             'depends_on': f.get('depends_on', [])} for f in FEATURES]
+             'description': f['description'], 'depends_on': f.get('depends_on', [])} for f in FEATURES]

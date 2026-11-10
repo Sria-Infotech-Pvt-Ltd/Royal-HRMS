@@ -45,6 +45,8 @@ export interface SaasFeature {
   label: string;
   category: string;
   kind: FeatureKind;
+  /** One-line description (also shown to companies in Settings → Plan Details). */
+  description?: string;
   depends_on: string[];
 }
 
@@ -101,6 +103,11 @@ export interface CompanySubscription {
   payment_status: PaymentStatus;
   amount_due: string | null;
   amount_received: string;
+  /** Recorded but not yet confirmed (not counted as received). */
+  amount_pending_confirmation: string;
+  /** Still to collect (amount_due − confirmed, never below 0); "0.00" when waived; null when amount_due is unknown. */
+  amount_outstanding: string | null;
+  amount_overpaid: string;
   unconfirmed_payments: number;
   payment_waiver_reason: string;
   provisioning_status: SubscriptionProvisioning;

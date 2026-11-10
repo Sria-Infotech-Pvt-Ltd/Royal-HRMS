@@ -37,6 +37,15 @@ class PaymentError(Exception):
     """Caller-fixable problem (shown to the Platform Admin)."""
 
 
+class OverpaymentWarning(PaymentError):
+    """The payment is more than the outstanding balance; recorded only when the
+    admin confirms (allow_overpayment)."""
+
+    def __init__(self, message, *, outstanding, pending):
+        super().__init__(message)
+        self.outstanding, self.pending = outstanding, pending
+
+
 def _history(sub, event, admin, note='', before=None):
     SubscriptionHistory.objects.create(subscription=sub, event=event, before=before or {}, after=summary(sub),
                                        admin=admin, note=note[:1000])
@@ -56,6 +65,47 @@ def _lock(sub) -> CompanySubscription:
 def amount_received(sub) -> Decimal:
     total = sub.payments.filter(status=SubscriptionPayment.STATUS_VERIFIED).aggregate(t=Sum('amount'))['t']
     return total or Decimal('0')
+
+
+def payment_totals(sub) -> dict:
+    """Received (confirmed), pending confirmation, outstanding and overpaid —
+    from sub.payments.all(), so a prefetch is used. Outstanding is 0 when
+    waived and None while the subscription amount is unknown."""
+    received = pending = Decimal('0')
+    for p in sub.payments.all():
+        if p.status == SubscriptionPayment.STATUS_VERIFIED:
+            received += p.amount
+        elif p.status == SubscriptionPayment.STATUS_RECORDED:
+            pending += p.amount
+    if sub.payment_status == Sub.PAYMENT_WAIVED:
+        outstanding = Decimal('0')
+    elif sub.amount_due is None:
+        outstanding = None
+    else:
+        outstanding = max(sub.amount_due - received, Decimal('0'))
+    overpaid = max(received - sub.amount_due, Decimal('0')) if sub.amount_due is not None else Decimal('0')
+    return {'received': received, 'pending': pending, 'outstanding': outstanding, 'overpaid': overpaid}
+
+
+def amount_pending(sub) -> Decimal:
+    total = sub.payments.filter(status=SubscriptionPayment.STATUS_RECORDED).aggregate(t=Sum('amount'))['t']
+    return total or Decimal('0')
+
+
+def ensure_amount_due(sub, admin=None) -> None:
+    """A subscription without an amount due but with an employee count gets it
+    from its own snapshot (price x employees x period + GST, the same maths
+    as a plan change), so recording a payment never asks for it. Without an
+    employee count it stays unset and the admin is asked once."""
+    if sub.amount_due is not None or not sub.employee_count:
+        return
+    from apps.tenants.pricing import charge
+    sub.amount_due = charge(sub.price_per_employee, sub.gst_rate, sub.gst_inclusive, sub.employee_count,
+                            sub.billing_period)['total']
+    sub.save(update_fields=['amount_due', 'updated_at'])
+    _history(sub, SubscriptionHistory.EVENT_AMOUNT_DUE_CHANGED, admin,
+             f'not set -> {sub.amount_due} {sub.currency} (calculated from {sub.employee_count} employees)',
+             before={'amount_due': None})
 
 
 def derive_payment_status(sub) -> str:
@@ -89,14 +139,18 @@ def _refresh_status(sub, admin):
 
 @transaction.atomic
 def record_payment(*, sub, amount: Decimal, method: str, paid_on, reference: str = '', notes: str = '',
-                   receipt=None, admin=None, confirm: bool = False) -> SubscriptionPayment:
+                   receipt=None, admin=None, confirm: bool = False,
+                   allow_overpayment: bool = False) -> SubscriptionPayment:
     sub = _lock(sub)
     reference = (reference or '').strip()
     if reference and sub.payments.filter(reference__iexact=reference).exclude(
             status=SubscriptionPayment.STATUS_REJECTED).exists():
         raise PaymentError(f'A payment with reference "{reference}" is already recorded for this subscription.')
+    ensure_amount_due(sub, admin)
     if confirm and sub.amount_due is None:
-        raise PaymentError('Set the amount due before confirming payments.')
+        raise PaymentError('Set the subscription amount before confirming payments.')
+    if not allow_overpayment:
+        _check_overpayment(sub, amount)
     payment = SubscriptionPayment(
         subscription=sub, amount=amount, currency=sub.currency, method=method, paid_on=paid_on,
         reference=reference, notes=(notes or '').strip(), recorded_by=admin,
@@ -109,6 +163,25 @@ def record_payment(*, sub, amount: Decimal, method: str, paid_on, reference: str
     if confirm:
         _verify(sub, payment, admin)
     return payment
+
+
+def _check_overpayment(sub, amount: Decimal) -> None:
+    """Warn when a payment is more than what is still to collect (subscription
+    amount - confirmed - awaiting confirmation). Unknown amount: no check."""
+    if sub.payment_status == Sub.PAYMENT_WAIVED:
+        raise OverpaymentWarning('Payment is waived for this subscription, so nothing is outstanding. '
+                                 'Record this payment anyway?', outstanding=Decimal('0'), pending=amount_pending(sub))
+    if sub.amount_due is None:
+        return
+    pending = amount_pending(sub)
+    outstanding = max(sub.amount_due - amount_received(sub), Decimal('0'))
+    still_open = max(outstanding - pending, Decimal('0'))
+    if amount > still_open:
+        waiting = f' ({pending} {sub.currency} more is awaiting confirmation)' if pending else ''
+        raise OverpaymentWarning(
+            f'This payment ({amount} {sub.currency}) is more than the outstanding balance '
+            f'({outstanding} {sub.currency}){waiting}. Record it anyway?',
+            outstanding=outstanding, pending=pending)
 
 
 def _describe(p: SubscriptionPayment) -> str:
@@ -138,8 +211,9 @@ def _locked_payment(sub, payment_id) -> tuple[CompanySubscription, SubscriptionP
 @transaction.atomic
 def verify_payment(*, sub, payment_id, admin=None) -> SubscriptionPayment:
     sub, payment = _locked_payment(sub, payment_id)
+    ensure_amount_due(sub, admin)
     if sub.amount_due is None:
-        raise PaymentError('Set the amount due before confirming payments.')
+        raise PaymentError('Set the subscription amount before confirming payments.')
     _verify(sub, payment, admin)
     return payment
 

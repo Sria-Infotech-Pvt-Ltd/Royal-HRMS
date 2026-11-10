@@ -5,6 +5,9 @@
 // provisioning, with the plan's modules. Preview → review → confirm.
 // Assigning never marks a subscription paid: its modules are applied (or the
 // new company set up) once a payment is confirmed or the payment is waived.
+// End date: one billing period from the start (calendar months,
+// lib/saasDates), kept in step with the start date and billing period until
+// the admin types a date or chooses "No end date".
 
 import { useState } from "react";
 import Modal from "@/components/Modal";
@@ -14,6 +17,7 @@ import type { CompanySubscription, CustomerRow, SubscriptionPlan } from "@/types
 import { apiMessage, estimateDue, fmtMoney } from "./SaasTabs";
 import FieldError from "@/components/FieldError";
 import * as v from "@/lib/saasValidation";
+import { localToday, periodEnd } from "@/lib/saasDates";
 import PaymentFields, { EMPTY_PAYMENT, MULTIPART, paymentErrors, paymentFormData } from "./PaymentFields";
 
 interface Preview {
@@ -36,14 +40,17 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
   const [clientId, setClientId] = useState(preselect?.id ?? "");
   const [company, setCompany] = useState({ company_code: "", company_name: "", admin_email: "", contact_name: "", contact_phone: "", gstin: "" });
   const [planId, setPlanId] = useState(active[0]?.id ?? "");
-  const [startsOn, setStartsOn] = useState(new Date().toISOString().slice(0, 10));
-  const [endsOn, setEndsOn] = useState("");
+  const [startsOn, setStartsOn] = useState(localToday());
+  // auto = one billing period from the start; manual = typed by the admin; none = no end date.
+  const [endMode, setEndMode] = useState<"auto" | "manual" | "none">("auto");
+  const [manualEnd, setManualEnd] = useState("");
   const [employees, setEmployees] = useState("");
   const [billing, setBilling] = useState<"" | "monthly" | "yearly">("monthly");
   const [notes, setNotes] = useState("");
   const [amountDue, setAmountDue] = useState<string | null>(null);   // null = follow the estimate
   const [payMode, setPayMode] = useState<"later" | "record" | "waive">("later");
   const [payment, setPayment] = useState(EMPTY_PAYMENT);
+  const [allowOverpayment, setAllowOverpayment] = useState(false);
   const [waiveReason, setWaiveReason] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
@@ -56,6 +63,9 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
   const gst = plan && !plan.gst_inclusive ? monthly * Number(plan.gst_rate) / 100 : 0;
   const estimate = plan && count > 0 ? estimateDue(plan.price_per_employee, plan.gst_rate, plan.gst_inclusive, count, billing) : 0;
   const due = amountDue ?? (estimate > 0 ? estimate.toFixed(2) : "");
+  const autoEnd = periodEnd(startsOn, billing);
+  const endsOn = endMode === "none" ? "" : endMode === "manual" ? manualEnd : autoEnd;
+  const overpaying = payMode === "record" && Number(due) > 0 && Number(payment.amount) > Number(due);
 
   function body(dryRun: boolean) {
     return {
@@ -88,11 +98,14 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
       billing_period: billing && plan && plan.billing_periods.length && !plan.billing_periods.includes(billing)
         ? `${plan.name} is billed ${plan.billing_periods.join(" or ")} only.` : null,
       notes: v.maxLength(notes, 1000),
-      amount_due: v.decimal(due, { min: 0, minExclusive: true, isRequired: payMode === "record" && payment.confirm, what: "Amount due" }),
+      amount_due: v.decimal(due, { min: 0, minExclusive: true, isRequired: payMode === "record" && payment.confirm, what: "Subscription amount" }),
       waive_reason: payMode === "waive" ? v.required(waiveReason, "A reason") ?? v.maxLength(waiveReason, 1000) : null,
     });
     if (payMode === "record") {
       for (const [k, m] of Object.entries(paymentErrors(payment))) found[`payment.${k}`] = m;
+      if (overpaying && !allowOverpayment && !found["payment.amount"]) {
+        found["payment.amount"] = "This is more than the subscription amount — correct it, or tick “Record it anyway”.";
+      }
     }
     return found;
   }
@@ -114,7 +127,8 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
       if (payMode !== "record") { onDone(data.message ?? "Subscription assigned."); onClose(); return; }
       const sub = data.data as CompanySubscription;
       try {
-        const { data: paid } = await platformAdminApi.post(API.platformAdmin.saas.payments(sub.client_id), paymentFormData(payment), MULTIPART);
+        const { data: paid } = await platformAdminApi.post(API.platformAdmin.saas.payments(sub.client_id),
+          paymentFormData(payment, overpaying && allowOverpayment), MULTIPART);
         onDone(`${data.message ?? "Subscription assigned."} ${paid.message ?? ""}`.trim());
       } catch (e) {
         onDone(`Subscription saved, but the payment was not recorded: ${apiMessage(e, "unknown error")} Record it from View → Payments.`);
@@ -216,8 +230,20 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
               </div>
               <div className="field-group">
                 <label className="field-label">End date</label>
-                <input className="field-input" type="date" min={startsOn || "2000-01-01"} value={endsOn} onChange={e => change(() => setEndsOn(e.target.value), "ends_on")} />
-                <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Blank = no end date. Expiry is not enforced yet.</span>
+                <input className="field-input" type="date" min={startsOn || "2000-01-01"} value={endsOn} disabled={endMode === "none"}
+                  onChange={e => change(() => { setManualEnd(e.target.value); setEndMode(e.target.value ? "manual" : "auto"); }, "ends_on")} />
+                <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                  {endMode === "none" ? "No end date (open-ended)."
+                    : endMode === "manual" ? <>Entered manually. <button type="button" className="btn btn-ghost btn-sm" style={{ padding: "0 4px" }}
+                        onClick={() => change(() => setEndMode("auto"), "ends_on")}>Use one {billing === "yearly" ? "year" : "month"} from start</button></>
+                    : autoEnd ? `One ${billing === "yearly" ? "year" : "month"} from the start date — updates with the start date and billing period.`
+                    : "Choose a billing period to calculate it, or enter a date."}
+                  {" "}Expiry is not enforced yet.
+                </span>
+                <label style={{ display: "flex", gap: 6, fontSize: 12 }}>
+                  <input type="checkbox" checked={endMode === "none"}
+                    onChange={e => change(() => setEndMode(e.target.checked ? "none" : "auto"), "ends_on")} /> No end date
+                </label>
                 <FieldError msg={errors.ends_on} />
               </div>
               <div className="field-group">
@@ -243,11 +269,11 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
               <div style={{ fontWeight: 600 }}>Payment</div>
               <div className="form-row cols-2" style={{ marginBottom: 0 }}>
                 <div className="field-group">
-                  <label className="field-label">Amount due ({plan?.currency ?? "INR"})</label>
+                  <label className="field-label">Subscription amount — total ({plan?.currency ?? "INR"})</label>
                   <input className="field-input" type="number" min={0} step="0.01" inputMode="decimal" value={due}
                     onChange={e => change(() => setAmountDue(e.target.value), "amount_due")} />
                   <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                    {estimate > 0 ? `Pre-filled for one ${billing === "yearly" ? "year" : "month"} incl. GST — edit if needed.` : "Enter what the customer owes."}
+                    {estimate > 0 ? `Calculated for one ${billing === "yearly" ? "year" : "month"} incl. GST — edit if needed.` : "Enter the total the customer owes for this subscription."}
                   </span>
                   <FieldError msg={errors.amount_due} />
                 </div>
@@ -255,11 +281,31 @@ export default function AssignSubscriptionModal({ customers, plans, preselect, o
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                 {([["later", "Not received yet"], ["record", "Record a payment"], ["waive", "Waive payment"]] as const).map(([k, label]) => (
                   <label key={k} style={{ display: "flex", gap: 6 }}>
-                    <input type="radio" checked={payMode === k} onChange={() => change(() => setPayMode(k), "payment", "waive_reason", "amount_due")} /> {label}
+                    <input type="radio" checked={payMode === k} onChange={() => change(() => {
+                      setPayMode(k);
+                      // Recording a payment: pre-fill the full amount, so a full payment needs no typing.
+                      if (k === "record" && !payment.amount && Number(due) > 0) setPayment(p => ({ ...p, amount: Number(due).toFixed(2) }));
+                    }, "payment", "waive_reason", "amount_due")} /> {label}
                   </label>
                 ))}
               </div>
-              {payMode === "record" && <PaymentFields value={payment} errors={paymentFieldErrors} onChange={p => change(() => setPayment(p), "payment", "amount_due")} />}
+              {payMode === "record" && (
+                <>
+                  <PaymentFields value={payment} errors={paymentFieldErrors}
+                    amountHint={Number(due) > 0
+                      ? (overpaying ? `More than the subscription amount (${fmtMoney(due, plan?.currency ?? "INR")}).`
+                        : `Outstanding after this payment: ${fmtMoney(Math.max(Number(due) - (Number(payment.amount) || 0), 0), plan?.currency ?? "INR")}.`)
+                      : undefined}
+                    onChange={p => change(() => { setPayment(p); setAllowOverpayment(false); }, "payment", "amount_due")} />
+                  {overpaying && (
+                    <label className="alert alert-warn" style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      <input type="checkbox" checked={allowOverpayment} style={{ marginTop: 2 }}
+                        onChange={e => change(() => setAllowOverpayment(e.target.checked), "payment")} />
+                      <span>This payment is more than the subscription amount ({fmtMoney(due, plan?.currency ?? "INR")}). Record it anyway?</span>
+                    </label>
+                  )}
+                </>
+              )}
               {payMode === "waive" && (
                 <div className="field-group">
                   <label className="field-label">Reason for waiving *</label>

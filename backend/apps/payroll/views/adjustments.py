@@ -1,11 +1,11 @@
 import logging
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
-from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 
 from core.responses import success, error, first_error
@@ -14,6 +14,10 @@ from core.permissions import has_perm as _has_perm
 from apps.payroll.models import PayrollAdjustment
 from apps.payroll.serializers import PayrollAdjustmentSerializer
 from apps.accounts.models import User
+from apps.payroll import services_adjustment_import as adj_imp
+from apps.payroll.audit import log_change
+from apps.payroll.services_structure_import import read_rows
+from apps.payroll.views.structures import _SampleMixin
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +33,25 @@ def _parse_month(value) -> date | None:
         return date(int(parts[0]), int(parts[1]), 1)
     except (IndexError, ValueError, TypeError):
         return None
+
+
+def _branch_scope(user):
+    """(scope, error response). Company-wide payroll users (settings.edit /
+    superuser) see every adjustment; everyone else only their own branch's
+    employees — the same rule as payroll cycles and the salary list."""
+    from apps.payroll.views.cycles import _is_admin
+    if _is_admin(user):
+        return None, None
+    if not user.branch:
+        return None, error('Your account is not assigned to a branch. Contact an administrator.', http_status=400)
+    return user.branch, None
+
+
+def _in_scope(qs, user):
+    branch, problem = _branch_scope(user)
+    if problem:
+        return None, problem
+    return (qs if branch is None else qs.filter(employee__branch=branch)), None
 
 
 class PayrollAdjustmentListCreateView(APIView):
@@ -47,6 +70,9 @@ class PayrollAdjustmentListCreateView(APIView):
         )
         if month:
             qs = qs.filter(month=month)
+        qs, problem = _in_scope(qs, request.user)
+        if problem:
+            return problem
 
         # Month-level totals across ALL matching rows (not just the current
         # page) — one DB-side aggregate query, not a Python sum over fetched
@@ -102,6 +128,12 @@ class PayrollAdjustmentListCreateView(APIView):
         serializer = PayrollAdjustmentSerializer(data=data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
+        branch, problem = _branch_scope(request.user)
+        if problem:
+            return problem
+        employee = serializer.validated_data['employee']
+        if branch is not None and employee.branch != branch:
+            return error('You can only add adjustments for employees in your branch.', http_status=403)
         adjustment = serializer.save(created_by=request.user)
         logger.info('PayrollAdjustment %s created by %s', adjustment.id, request.user.email)
         return success('Adjustment added.', PayrollAdjustmentSerializer(adjustment).data, http_status=201)
@@ -114,7 +146,11 @@ class PayrollAdjustmentDeleteView(APIView):
     def delete(self, request, pk):
         if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can delete payroll adjustments.', http_status=403)
-        adjustment = get_object_or_404(PayrollAdjustment, pk=pk)
+        # Out-of-branch adjustments answer 404, the same as missing ones.
+        qs, problem = _in_scope(PayrollAdjustment.objects.all(), request.user)
+        if problem:
+            return problem
+        adjustment = get_object_or_404(qs, pk=pk)
         adjustment.delete()
         logger.info('PayrollAdjustment %s deleted by %s', pk, request.user.email)
         return success('Adjustment deleted.')
@@ -122,12 +158,14 @@ class PayrollAdjustmentDeleteView(APIView):
 
 class PayrollAdjustmentBulkImportView(APIView):
     """
-    POST /payroll/adjustments/bulk-import/
-    Accepts an Excel file with columns:
-      employee_code, type (addition/deduction/arrear), label, amount
-    Query param: ?month=2026-07
+    POST /payroll/adjustments/bulk-import/?month=2026-07 (multipart "file", .csv/.xlsx)
+    Columns: Employee Code, Type (addition/deduction/arrear), Label, Amount.
+    dry_run=true returns the preview and saves nothing. The confirm request
+    re-reads and re-validates the whole file and saves nothing if any row has
+    an error (services_adjustment_import).
     """
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
         if not _has_perm(request.user, 'payroll.edit'):
@@ -135,119 +173,44 @@ class PayrollAdjustmentBulkImportView(APIView):
 
         month = _parse_month(request.query_params.get('month') or request.data.get('month'))
         if not month:
-            return error('month query parameter is required (e.g. ?month=2026-07).')
+            return error('Choose the payroll month (YYYY-MM, e.g. 2026-07).')
 
         uploaded = request.FILES.get('file')
         if not uploaded:
-            return error('No file uploaded. Send the Excel file as multipart field "file".')
+            return error('Attach a CSV or Excel (.xlsx) file.')
+        rows, problem = read_rows(uploaded, adj_imp.COLUMNS, adj_imp.REQUIRED)
+        if problem:
+            return error(problem)
 
-        # Validate file type
-        name = uploaded.name.lower()
-        if not (name.endswith('.xlsx') or name.endswith('.xls') or name.endswith('.csv')):
-            return error('Only .xlsx, .xls, or .csv files are accepted.')
+        from apps.payroll.views.cycles import _is_admin
+        admin = _is_admin(request.user)
+        plan = adj_imp.plan(rows, month=month,
+                            in_scope=lambda emp: admin or (bool(emp.branch) and emp.branch == request.user.branch))
+        data = lambda: {'month': month.strftime('%Y-%m'), 'summary': adj_imp.summarise(plan),
+                        'rows': adj_imp.public(plan)}
+        if str(request.data.get('dry_run', '')).lower() in ('1', 'true', 'yes'):
+            return success('Preview ready. Nothing has been saved yet.', data())
 
-        try:
-            rows = _parse_file(uploaded)
-        except Exception as exc:
-            logger.exception('Bulk import parse error')
-            return error(f'Could not read file: {exc}')
-
-        if not rows:
-            return error('The file appears to be empty or has no data rows.')
-
-        errors = []
-        valid_rows = []
-
-        for idx, row in enumerate(rows, start=2):  # row 1 = header
-            code   = str(row.get('employee_code', '')).strip()
-            rtype  = str(row.get('type', '')).strip().lower()
-            label  = str(row.get('label', '')).strip()
-            amount_raw = str(row.get('amount', '')).strip()
-
-            if not code:
-                errors.append({'row': idx, 'error': 'employee_code is missing'})
-                continue
-            if rtype not in _ALLOWED_TYPES:
-                errors.append({'row': idx, 'error': f'type must be addition, deduction, or arrear (got "{rtype}")'})
-                continue
-            if not label:
-                errors.append({'row': idx, 'error': 'label is missing'})
-                continue
-            try:
-                amount = Decimal(amount_raw)
-                if amount <= 0:
-                    raise ValueError
-            except (InvalidOperation, ValueError):
-                errors.append({'row': idx, 'error': f'amount must be a positive number (got "{amount_raw}")'})
-                continue
-
-            try:
-                employee = User.objects.get(employee_id__iexact=code, is_active=True)
-            except User.DoesNotExist:
-                errors.append({'row': idx, 'error': f'No active employee found with code "{code}"'})
-                continue
-            except User.MultipleObjectsReturned:
-                errors.append({'row': idx, 'error': f'Multiple employees matched code "{code}"'})
-                continue
-
-            valid_rows.append({
-                'employee': employee,
-                'month': month,
-                'type': rtype,
-                'label': label,
-                'amount': amount,
-                'created_by': request.user,
-            })
-
-        if errors and not valid_rows:
-            return error('All rows failed validation.', {'row_errors': errors})
-
-        with transaction.atomic():
-            created = PayrollAdjustment.objects.bulk_create([
-                PayrollAdjustment(**r) for r in valid_rows
-            ])
-
-        logger.info(
-            'Bulk import: %d adjustments created for month %s by %s (%d rows had errors)',
-            len(created), month, request.user.email, len(errors),
-        )
-        return success(
-            f'{len(created)} adjustment(s) imported successfully.',
-            {'imported': len(created), 'row_errors': errors},
-            http_status=201,
-        )
+        bad = adj_imp.summarise(plan)[adj_imp.ERROR]
+        if bad:
+            return error(f'{bad} of {len(plan)} row(s) have errors. Nothing was imported — fix them and '
+                         'upload the file again.', data=data())
+        imported = adj_imp.apply(plan, month=month, user=request.user)
+        log_change(request, 'payroll_adjustments_imported', '', None, {
+            'month': month.strftime('%Y-%m'), 'imported': imported,
+            'employees': sorted({r['employee_code'] for r in plan if r['status'] == 'created'}),
+        })
+        logger.info('Bulk import: %d adjustments created for month %s by %s', imported, month, request.user.email)
+        return success(f'{imported} adjustment(s) imported.', {'imported': imported, 'row_errors': [], **data()},
+                       http_status=201)
 
 
-def _parse_file(uploaded_file) -> list[dict]:
-    """Parse .xlsx/.xls/.csv into a list of dicts keyed by header row."""
-    name = uploaded_file.name.lower()
-    if name.endswith('.csv'):
-        import csv, io
-        text = uploaded_file.read().decode('utf-8-sig')
-        reader = csv.DictReader(io.StringIO(text))
-        return [_normalise_keys(row) for row in reader]
-    else:
-        try:
-            import openpyxl
-            wb = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
-            ws = wb.active
-            rows = list(ws.iter_rows(values_only=True))
-        except Exception:
-            import xlrd
-            wb = xlrd.open_workbook(file_contents=uploaded_file.read())
-            ws = wb.sheet_by_index(0)
-            rows = [ws.row_values(i) for i in range(ws.nrows)]
+class PayrollAdjustmentImportSampleView(_SampleMixin, APIView):
+    """GET ?format=csv|xlsx — template for the adjustments import."""
+    permission_classes = [IsAuthenticated]
 
-        if not rows:
-            return []
-        headers = [str(h).strip().lower().replace(' ', '_') if h else '' for h in rows[0]]
-        result = []
-        for row in rows[1:]:
-            if all(cell is None or str(cell).strip() == '' for cell in row):
-                continue
-            result.append({headers[i]: (row[i] if i < len(row) else '') for i in range(len(headers))})
-        return result
-
-
-def _normalise_keys(row: dict) -> dict:
-    return {k.strip().lower().replace(' ', '_'): v for k, v in row.items()}
+    def get(self, request):
+        if not _has_perm(request.user, 'payroll.edit'):
+            return error('Only HR admin can bulk-import adjustments.', http_status=403)
+        return self.sample_response(request, adj_imp.HEADERS, adj_imp.SAMPLE_ROWS,
+                                    'Adjustments', 'payroll_adjustments_import_sample')

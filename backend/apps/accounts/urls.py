@@ -1,4 +1,5 @@
 from django.urls import path
+from apps.tenants.views_company import PlanDetailsView
 from apps.accounts.views_notice_period_import import NoticePeriodImportSampleView, NoticePeriodImportView
 from apps.accounts.views_policy import (
     CompanyContactDetailView,
@@ -135,6 +136,7 @@ urlpatterns = [
     # Company (singleton)
     path('settings/company/',                     CompanyRetrieveUpdateView.as_view(),     name='company'),
     path('settings/company/financial-year/',      CompanyFinancialYearView.as_view(),      name='company-financial-year'),
+    path('settings/company/plan/',                PlanDetailsView.as_view(),               name='company-plan-details'),
     path('settings/id-card/',          IdCardSettingsView.as_view(),         name='id-card-settings'),
     path('settings/id-card/reference-pdf/', IdCardReferencePdfView.as_view(), name='id-card-reference-pdf'),
     path('settings/employee-code/',    EmployeeCodeSettingsView.as_view(),   name='employee-code-settings'),

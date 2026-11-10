@@ -6,6 +6,7 @@
 
 import FieldError from "@/components/FieldError";
 import * as v from "@/lib/saasValidation";
+import { localToday } from "@/lib/saasDates";
 import type { PaymentMethod } from "@/types/platformAdmin";
 import { PAYMENT_METHODS } from "./SaasTabs";
 
@@ -20,7 +21,7 @@ export interface PaymentInput {
 }
 
 export const EMPTY_PAYMENT: PaymentInput = {
-  amount: "", method: "upi", paid_on: new Date().toISOString().slice(0, 10), reference: "", notes: "",
+  amount: "", method: "upi", paid_on: localToday(), reference: "", notes: "",
   receipt: null, confirm: false,
 };
 
@@ -31,7 +32,7 @@ const RECEIPT_TYPES = ["application/pdf", "image/jpeg", "image/png"];
 /** Field errors for a payment entry (empty object = valid). */
 export function paymentErrors(p: PaymentInput): v.Errors {
   return v.collect({
-    amount: v.decimal(p.amount, { min: 0, minExclusive: true, what: "Amount received" }),
+    amount: v.decimal(p.amount, { min: 0, minExclusive: true, what: "Payment amount" }),
     method: PAYMENT_METHODS.some(([k]) => k === p.method) ? null : "Choose a payment method.",
     paid_on: v.date(p.paid_on, { notFuture: true, what: "Payment date" }),
     reference: v.reference(p.reference),
@@ -48,7 +49,8 @@ export const paymentReady = (p: PaymentInput) => Object.keys(paymentErrors(p)).l
 // into JSON and the receipt never arrives as a file.
 export const MULTIPART = { headers: { "Content-Type": "multipart/form-data" } };
 
-export function paymentFormData(p: PaymentInput): FormData {
+/** allowOverpayment: the admin has confirmed a payment above the outstanding balance. */
+export function paymentFormData(p: PaymentInput, allowOverpayment = false): FormData {
   const fd = new FormData();
   fd.append("amount", p.amount);
   fd.append("method", p.method);
@@ -56,23 +58,27 @@ export function paymentFormData(p: PaymentInput): FormData {
   fd.append("reference", p.reference.trim());
   fd.append("notes", p.notes.trim());
   fd.append("confirm", p.confirm ? "true" : "false");
+  if (allowOverpayment) fd.append("allow_overpayment", "true");
   if (p.receipt) fd.append("receipt", p.receipt);
   return fd;
 }
 
-export default function PaymentFields({ value, onChange, errors = {} }: {
+export default function PaymentFields({ value, onChange, errors = {}, amountHint }: {
   value: PaymentInput;
   onChange: (p: PaymentInput) => void;
   errors?: v.Errors;
+  /** Shown under the amount, e.g. the outstanding balance or an overpayment note. */
+  amountHint?: React.ReactNode;
 }) {
   const set = <K extends keyof PaymentInput>(k: K, v: PaymentInput[K]) => onChange({ ...value, [k]: v });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div className="form-row cols-2" style={{ marginBottom: 0 }}>
         <div className="field-group">
-          <label className="field-label">Amount received *</label>
+          <label className="field-label">Payment amount *</label>
           <input className="field-input" type="number" min={0} step="0.01" inputMode="decimal" value={value.amount} onChange={e => set("amount", e.target.value)} />
+          {amountHint && <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{amountHint}</span>}
           <FieldError msg={errors.amount} />
         </div>
         <div className="field-group">

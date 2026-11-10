@@ -2825,3 +2825,276 @@ supervisorctl restart royalhrms_backend royalhrms_frontend royalhrms_celery_work
 -   GST defaults to 18 % for every currency (set 0 manually for non-INR).
 -   DEMO2026 Aug / Sep payroll cleanup — confirm whether it was run.
 -   Staging environment still missing; `backend/.env.example` still missing.
+
+------------------------------------------------------------------------
+
+# 35. Application change log (production support, 2026-11-04 → 2026-11-10)
+
+Same rules as before: code was built and tested locally against the isolated
+Docker Postgres test DB on `localhost:15432`, never production. Production
+was only read, through read-only commands run by the owner (counts and
+config only; no passwords, tokens or personal data recorded here).
+
+**Status update for §34:** the SaaS work in §34 was committed and pushed on
+2026-11-04 (`7bb6624c`, `6c9ad625`) and deployed that day (tenants
+migrations `0012`–`0015` ran; the backend restart caused a short outage at
+about 17:02 IST — see "Login timeout" below).
+
+| Item | Commit | Migration | Pushed | Deployed |
+|---|---|---|---|---|
+| SaaS module access fixes + WebSocket notifications (frontend) | `34907afb` | None | Yes | Owner ran the deploy on 2026-11-06 — confirm with `git log --oneline -3` on the server |
+| SaaS: amount due recalculated on plan change, "plan edited" notice, effective modules | `b8dedcd3` | None | Yes | Same as above |
+| nginx `/ws/` route on the website site | server config only | — | — | **Yes** (2026-11-06, verified) |
+| Payroll Phase 1 + Phase 7 (reprocess fix, adjustments import) | uncommitted | None | No | No |
+| Payroll Phase 3 (salary setup import) + adjustments branch scoping | uncommitted | None | No | No |
+| SaaS end date (calendar months) + Record Payment totals | uncommitted | None | No | No |
+| Company Settings → Plan Details tab (read-only) | uncommitted | None | No | No |
+
+## Login timeout on the RIS mobile app (investigated 2026-11-06, no code change)
+-   Report: "login taking too long" on the mobile app (5 Nov, 11:04 IST).
+-   **Root cause: the app's request never reached the server.** nginx logged
+    one request from the Flutter app (`Dart/3.12`) between 10:30 and 12:00
+    IST and no login at 11:04. The server was healthy (login ≈ 60 ms through
+    nginx, password check 0.23 s, Redis and PostgreSQL normal, load 0.01).
+    5 Nov: 234 logins OK, 0 timeouts, 0 `499`, 0 server errors.
+-   The §34 deploy (4 Nov ≈ 17:02 IST) caused a short "connection refused"
+    window and 26 rate-limited (`429`) logins from people retrying.
+-   To pass to the Flutter app developer: sensible timeout + retry, a
+    "slow / no internet" message, stop the spinner on every failure,
+    double-tap protection; the app calls `/dashboard/` and `/activities/`
+    (not API paths) and often sends an expired token before refreshing.
+-   Lesson for deploys: build first, restart the backend last, so the
+    outage is seconds, not minutes.
+-   Side findings: Sarvam text-to-speech returns `402 Payment Required`
+    (account needs topping up); login rate limit is 20 / hour per IP and
+    company, which a whole office on one connection could hit.
+
+## Real-time notifications — WebSocket 404 (fixed 2026-11-06)
+-   Symptom: browsers hit `GET /ws/notifications/` → 404 several times a
+    second; the backend log had **0** WebSocket connections and **277,160**
+    plain GETs. Live notifications had never worked in production.
+-   Root causes:
+    1.  `api.royalhrms.com` nginx site has no `Upgrade` / `Connection`
+        headers, so the upgrade was stripped and Daphne answered 404.
+    2.  The website site (`royalhrms.com`) had no `/ws/` route.
+    3.  The frontend opened the socket on `api.royalhrms.com`, but the
+        login cookie belongs to `royalhrms.com` only, so the socket would be
+        anonymous even with nginx fixed.
+-   Fix:
+    -   **nginx (done on the server, backup in `/root/royalhrms-frontend.bak-*`):**
+        `location /ws/` in `/etc/nginx/sites-available/royalhrms-frontend`
+        → `proxy_pass http://127.0.0.1:8001`, HTTP/1.1, `Upgrade` /
+        `Connection "upgrade"`, forwarded headers, 3600 s timeouts.
+        Verified: `https://royalhrms.com/ws/notifications/` → `403` without
+        login (correct — it reaches Daphne).
+    -   **Frontend (`34907afb`):** the browser connects to the same host the
+        user is on (`wss://royalhrms.com/ws/notifications/`); after repeated
+        refusals it stops reconnecting and falls back to the 60-second
+        polling. No cookie or security setting changed.
+    -   Backend WebSocket tests added (`notifications/tests_websocket.py`):
+        auth required, user + company isolation, live delivery.
+-   Optional, not done: the same `/ws/` block on the API site (only needed
+    by clients that use `api.royalhrms.com`, e.g. the Flutter app).
+-   Check after deploy: F12 → Network → WS shows `101`; Daphne log shows
+    `WSCONNECT`; the `GET /ws/notifications/ 404` lines stop.
+
+## SaaS module access (`34907afb`)
+-   **Bug:** Assets, Documents and WFH were only gated when
+    `SUBSCRIPTION_ENFORCEMENT=on` (it is `off` in production), and were
+    added to every company's menu, so plans without Assets still showed the
+    Assets menu, page and APIs.
+-   **Fix:** once a company's plan is applied (paid / waived), the plan
+    decides Assets, Documents and WFH exactly — sidebar, Settings cards,
+    employee Assets tab, page links and every `/api/assets/` endpoint.
+    Companies without a plan keep their current access.
+-   Tests: `tenants/tests_saas_access.py`.
+
+## SaaS plan changes (`b8dedcd3`)
+-   **Upgrade kept the old amount due.** New shared calculator
+    `tenants/pricing.py`; a plan change (upgrade, downgrade, same plan)
+    recalculates amount due = price × employees × billing period + GST,
+    records it in history and refreshes the payment status (a paid
+    subscription that upgrades becomes Partially paid). Refused if the
+    employee count or billing period doesn't fit the new plan. The preview
+    shows old → new price and amount due.
+-   **Plan edits vs existing customers:** the snapshot rule is unchanged
+    (editing a plan never changes existing subscriptions). New notice
+    "{Plan} was edited after this subscription was assigned" with
+    **Review latest plan → Apply latest plan**.
+-   Company profile shows the **effective** modules (what login and the API
+    gate use). Direct `enabled_modules` edits through the Platform Admin
+    company API are refused for companies on a subscription.
+-   Existing amounts due are not changed retroactively.
+-   Production state read on 2026-11-06 (all provisioning `success`):
+    SPARK2026 Growth, DEMO2026 Growth, WROGN2026 Business / Premium,
+    NEXA001 Enterprise. NEXA001 holds an older copy of the Enterprise plan
+    (fewer modules than Growth) — use **Apply latest plan** if the current
+    Enterprise plan should apply. Not changed by us.
+-   Tests: `tenants/tests_saas_plan_changes.py` (13). SaaS 103/103, frontend
+    264/264 at the time.
+
+## Payroll inspection (2026-11-09, report only)
+-   Compared Royal HRMS payroll with the client's IT Team salary register
+    (Excel screenshots). **The screenshot data was not imported.**
+-   Main differences: PF on full Basic (sheet uses earned Basic); earned
+    amounts per component not stored; employer PF 13 %, service charge 4 %,
+    Sub Total, Payable Amount and a wages register don't exist; DOJ and
+    unpaid leave are not used for proration; no rounding to the rupee.
+-   Bugs found: reprocessing reset bonus and reimbursements to 0; editing a
+    draft payslip didn't keep statutory figures consistent; adjustments
+    import had no preview, partial saves, duplicates on re-upload and no
+    branch scope.
+
+## Payroll Phase 1 + Phase 7 (uncommitted, no migration)
+-   Reprocessing keeps bonuses and reimbursements (net pay unchanged by a
+    reprocess); LOP on a draft payslip is charged on salary components
+    only; ESI employee share rechecked when LOP changes; one shared totals
+    function. Payslips without bonus / reimbursement are unchanged (tested
+    field by field).
+-   Adjustments import rebuilt on the salary-structure import pattern:
+    server templates (CSV / Excel), preview, all-or-nothing, duplicate and
+    re-upload refusal, branch scope, months already sent / paid / processing
+    refused, audit log. `.xls` no longer accepted (it never worked —
+    `xlrd` is not installed).
+-   Files: `payroll/views/cycles.py`, `views/payslips.py`,
+    `views/adjustments.py`, `urls.py`, new `services_adjustment_import.py`,
+    new tests `tests_reprocess_and_edits.py`, `tests_adjustment_import.py`;
+    frontend `AdjustmentImportModal.tsx` (new), `PayrollAdjustments.tsx`,
+    `lib/api/endpoints.ts`.
+
+## Payroll Phase 3 — salary setup import (uncommitted, no migration)
+-   Payroll → Salary Setup → **Import Salaries**: CSV / Excel templates,
+    preview with per-row / per-field errors, all-or-nothing, duplicates
+    refused, identical rows reported as "No change", same effective date
+    replaced only with an explicit tick, revision history kept, salary
+    structures never changed, branch HR limited to their branch.
+-   **Security fix:** branch HR can only list, add and delete adjustments
+    for their own branch's employees.
+-   Files: new `payroll/services_salary_import.py`,
+    `services_structure_import.py` (`read_rows(..., keep_other=False)`),
+    `views/structures.py`, `urls.py`, new `tests_salary_import.py`; frontend
+    `SalarySetupTab.tsx`, `SalaryStructureImportModal.tsx` ("salaries"
+    mode), `importModals.test.tsx`.
+-   Tests: payroll 159/159; frontend 272/272; browser 15/15 (local).
+
+## SaaS end date + Record Payment (uncommitted, no migration)
+-   Owner decisions: calendar-month end date (same day next month, or the
+    last day of a shorter month; leap years handled; yearly = +12 months);
+    "No end date" stays possible; **expiry is not enforced**; overpayment
+    → warn; end date recalculated when the billing period changes; existing
+    waived subscriptions **not** backfilled.
+-   Assignment form fills the end date automatically; a hand-typed date is
+    kept. Website sign-ups use the same function (unchanged results).
+-   Payments: server-calculated Subscription amount, Paid (confirmed),
+    Awaiting confirmation, Outstanding (and Overpaid when it happens);
+    payment amount pre-filled with what is still to collect; the subscription
+    amount is calculated on the server if missing and an employee count
+    exists; a payment above the outstanding amount needs "Record anyway".
+    Default dates use the local date instead of UTC.
+-   Production read (2026-11-09): ORBIT2026 monthly 09 Nov → 09 Dec, paid;
+    SPARK2026, DEMO2026, WROGN2026, NEXA001 monthly, no end date, waived.
+    None of these change with this release. Visible change: recording a
+    payment on a waived subscription shows the overpayment warning first.
+-   Files: `tenants/pricing.py` (`add_months`, `period_end`),
+    `registrations.py`, `billing.py`, `views_saas.py`, `serializers_saas.py`,
+    `tests_saas_payments.py` (one assertion reworded), new
+    `tests_saas_end_date_payments.py`; frontend
+    `AssignSubscriptionModal.tsx`, `PaymentsSection.tsx`, `PaymentFields.tsx`,
+    `types/platformAdmin.ts`, new `lib/saasDates.ts` (+ test).
+
+## Company Settings → Plan Details tab (uncommitted, no migration)
+-   New tab after Company Information on `/dashboard/settings/company`
+    (`?tab=plan` opens it). Visible only with `settings.edit` (System Admin,
+    HR Admin); branch admins and employees don't see it and the API returns
+    403. **Strictly read-only.**
+-   Shows: current plan (description, billing cycle, dates, days left,
+    status, payment status, price, employee count, total / paid / awaiting
+    confirmation / outstanding; "Waived" never shown as Paid); every module
+    with a one-line description, included vs enabled, added / removed /
+    dependency and "Activates when payment is confirmed"; other active
+    public plans with per-employee price, estimate for the company's
+    employee count, extra modules and a comparison; payment history
+    (confirmed + awaiting confirmation; rejected hidden; no internal notes).
+-   Module descriptions also shown in the Platform Admin plan editor.
+-   API: `GET /api/settings/company/plan/` — company taken from the session,
+    never from a parameter.
+-   Files: `tenants/modules.py` (descriptions), `billing.py`
+    (`payment_totals`, shared with the admin serializer),
+    `serializers_saas.py`, new `customer_plan.py`, new `views_company.py`,
+    `accounts/urls.py`, new `tests_plan_details.py` (14); frontend
+    `settings/company/page.tsx`, new `_components/PlanDetailsTab.tsx`, new
+    `lib/planDetails.ts` (+ test), new `types/planDetails.ts`,
+    `lib/api/endpoints.ts`, `types/platformAdmin.ts`, `PlanEditorModal.tsx`.
+-   Tests: backend 14/14 and SaaS / payment / registration modules
+    135/135; frontend 293/293, `tsc` + ESLint clean; browser 7/7 (local).
+
+## Email Logs — investigation only (2026-11-09, no code change)
+-   "0 emails" is correct: **all six companies have 0 recruitment
+    candidates**, and only recruitment actions write to Email Logs.
+-   Onboarding and assessment emails **are** sent (Celery worker logs) but
+    are never written to Email Logs.
+-   **Four companies have no SMTP configured** — NEXA001, ORBIT2026,
+    SPARK2026, WROGN2026 — so every email there (welcome, OTP, password
+    reset, onboarding, assessments, payslips) fails silently; last seen
+    5 Nov 2026. DEMO2026 and RIS have active Gmail SMTP.
+-   Older failures, now stopped: Gmail `535` (last 22 Sep), missing
+    `provider` column during a deploy (15 Sep), connection closed (2 Oct),
+    Gmail `421` (8 Oct).
+-   Fix for the four companies is configuration only: Settings → SMTP
+    (Gmail needs an App Password). Not done by us.
+-   Other weaknesses: Email Logs not limited by branch; subject stored is
+    not the real subject; no error reason; **SMTP passwords stored in plain
+    text** (`SMTPSettings.password`).
+
+## Test environment notes
+-   The full `apps.tenants` suite shows 2 failures and a chain of
+    "connection already closed" errors when run as one batch; the same
+    happens on an untouched copy of `b8dedcd3`, so it is pre-existing. Run
+    the tenants test modules by name.
+-   Local-only test data: company `ACCTEST` (payroll on, two branches, a
+    "BT Standard" structure, a company HR and a branch HR test user,
+    employees BT001 / BT002 / BT101), a paid Starter subscription on
+    `TESTCO`, and a local Platform Admin test user. Local DB only.
+-   Known display quirk (pre-existing): `formatMoney` drops a trailing zero
+    (₹578.2).
+
+## Deploy steps for the uncommitted batch (after commit + push)
+No migration and no new package. Commit as three commits (payroll, SaaS
+end date / payments, Plan Details).
+```
+su - royalhrms
+cd /var/www/royalhrms/app && git pull origin production && git log --oneline -3
+cd frontend && npm run build          # stop if the build fails
+exit
+# as root — build first, restart last:
+sudo supervisorctl restart royalhrms_backend royalhrms_celery_worker royalhrms_celery_beat royalhrms_frontend
+sudo supervisorctl status | grep royalhrms
+```
+-   Check: HR Admin sees Settings → Company → Plan Details; a branch admin
+    doesn't; Platform Admin plan editor shows module descriptions; Payroll
+    Salary Setup and Adjustments show the import buttons.
+
+## Open items
+-   Commit, push and deploy the uncommitted batch above (owner's approval).
+-   Confirm the server is on `b8dedcd3` (or later).
+-   **Payroll Phase 0 business rules** (import style, month days, PF base,
+    employer PF 13 %, monthly bonus, Payable Amount, service charge,
+    advance, unpaid leave / DOJ, rounding, bank / UAN in the register,
+    interns, meaning of "gross") — Phases 2, 4, 5 and 6 are blocked on them.
+-   Payslip edit has no branch check yet (branch HR can edit other
+    branches' draft payslips).
+-   **Email Logs decisions:** option A (one list with a Type filter) or B
+    (separate tab); log all system emails; warn when a company has no SMTP;
+    platform SMTP fallback; encrypt SMTP passwords.
+-   SMTP setup for NEXA001, ORBIT2026, SPARK2026, WROGN2026.
+-   NEXA001: decide whether to **Apply latest plan** (Enterprise).
+-   Optional `/ws/` block on the API nginx site for the Flutter app.
+-   Flutter app fixes (timeouts, retry, messages) — app developer.
+-   Sarvam TTS account top-up (`402`).
+-   Payment gateway (Priority 5) — still deferred.
+-   Subscription expiry enforcement — not approved; end dates are
+    informational only.
+-   Carried from §34: legacy backfill decision, `SUBSCRIPTION_ENFORCEMENT`
+    plan, Platform Admin mobile layout, Add Company code check, GST default
+    for non-INR, DEMO2026 Aug / Sep payroll cleanup confirmation, staging and
+    `backend/.env.example` still missing.

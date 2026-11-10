@@ -160,6 +160,7 @@ export const API = {
     audit: "/settings/audit/",
     company: "/settings/company/",
     financialYear: "/settings/company/financial-year/",
+    companyPlan: "/settings/company/plan/",
     employeeCode: "/settings/employee-code/",
     idCard: "/settings/id-card/",
     idCardReferencePdf: "/settings/id-card/reference-pdf/",
@@ -429,6 +430,8 @@ export const API = {
     structureImportSample: "/payroll/structures/import/sample/",
     structureAssignImport: "/payroll/structures/assign-import/",
     structureAssignSample: "/payroll/structures/assign-import/sample/",
+    salaryImport: "/payroll/salary-import/",
+    salaryImportSample: "/payroll/salary-import/sample/",
     components: (structureId: string) => `/payroll/structures/${structureId}/components/`,
     component: (structureId: string, id: string) => `/payroll/structures/${structureId}/components/${id}/`,
 
@@ -487,6 +490,7 @@ export const API = {
     adjustments: "/payroll/adjustments/",
     adjustmentDetail: (id: string) => `/payroll/adjustments/${id}/`,
     adjustmentsBulkImport: "/payroll/adjustments/bulk-import/",
+    adjustmentsImportSample: "/payroll/adjustments/bulk-import/sample/",
 
     // Branch payroll status overview (admin only)
     branchStatus: "/payroll/branch-status/",

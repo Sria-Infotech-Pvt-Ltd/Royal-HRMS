@@ -9,6 +9,7 @@ from core.file_utils import _CSV_MIME, _XLSX_MIME, build_sample_csv, build_sampl
 from core.responses import success, error, first_error, get_client_ip
 from core.permissions import has_perm as _has_perm
 from apps.payroll import services_structure_import as imp
+from apps.payroll import services_salary_import as sal_imp
 from apps.payroll.audit import log_change, snapshot
 from apps.payroll.models import SalaryStructure, SalaryComponent
 from apps.payroll.serializers import (
@@ -274,3 +275,51 @@ class SalaryStructureAssignSampleView(_SampleMixin, APIView):
             return error('You do not have permission to assign salary structures.', http_status=403)
         return self.sample_response(request, imp.ASSIGN_HEADERS, imp.ASSIGN_SAMPLE_ROWS,
                                     'Assignments', 'salary_structure_assignment_sample')
+
+class SalaryImportView(APIView):
+    """POST multipart: file with one row per employee (Employee Code, Effective
+    From, one column per component amount, ...); dry_run=true for the preview;
+    replace_same_date=true to replace a revision with the same Effective From.
+    Each valid row saves a new salary revision (services_salary_import). Same
+    scope as Assign CTC. Nothing is saved if any row has an error."""
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        if not _has_perm(request.user, 'payroll.edit'):
+            return error('You do not have permission to import salaries.', http_status=403)
+        uploaded = request.FILES.get('file')
+        if not uploaded:
+            return error('Attach a CSV or Excel (.xlsx) file.')
+        rows, problem = imp.read_rows(uploaded, sal_imp.COLUMNS, sal_imp.REQUIRED, keep_other=True)
+        if problem:
+            return error(problem)
+        from apps.payroll.views.cycles import _is_admin
+        admin = _is_admin(request.user)
+        plan = sal_imp.plan(rows, replace_same_date=_flag(request, 'replace_same_date'),
+                            in_scope=lambda emp: admin or (bool(emp.branch) and emp.branch == request.user.branch))
+        data = lambda: {'summary': sal_imp.summarise(plan), 'rows': sal_imp.public(plan)}
+        if _flag(request, 'dry_run'):
+            return success('Preview ready. Nothing has been saved yet.', data())
+        bad = sal_imp.summarise(plan)[sal_imp.ERROR]
+        if bad:
+            return error(f'{bad} of {len(plan)} row(s) have errors. Nothing was saved — fix them and upload '
+                         'the file again.', data=data())
+        try:
+            saved = sal_imp.apply(plan, user=request.user, ip_address=get_client_ip(request))
+        except sal_imp.ImportAborted as exc:
+            return error(f'{exc} Nothing was saved.', data=data())
+        log_change(request, 'salary_import', '', None, {'saved': saved, 'rows': len(plan)})
+        logger.info('Salary import by %s: %d revision(s) saved', request.user.email, saved)
+        return success(f'{saved} salary revision(s) saved.', data())
+
+
+class SalaryImportSampleView(_SampleMixin, APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'payroll.edit'):
+            return error('You do not have permission to import salaries.', http_status=403)
+        headers, rows = sal_imp.sample()
+        return self.sample_response(request, headers, rows, 'Salaries', 'salary_import_sample')

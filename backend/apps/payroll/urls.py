@@ -11,6 +11,8 @@ from apps.payroll.views.structures import (
     SalaryStructureImportSampleView,
     SalaryStructureAssignImportView,
     SalaryStructureAssignSampleView,
+    SalaryImportView,
+    SalaryImportSampleView,
 )
 from apps.payroll.views.statutory import (
     StatutoryConfigListView,
@@ -60,6 +62,7 @@ from apps.payroll.views.adjustments import (
     PayrollAdjustmentListCreateView,
     PayrollAdjustmentDeleteView,
     PayrollAdjustmentBulkImportView,
+    PayrollAdjustmentImportSampleView,
 )
 from apps.payroll.views.ecr import CycleECRDownloadView, CycleECRPdfDownloadView, CycleECRTextDownloadView
 from apps.payroll.views.esic import CycleESICDownloadView
@@ -81,6 +84,8 @@ urlpatterns = [
     path('structures/import/sample/', SalaryStructureImportSampleView.as_view(), name='salary-structure-import-sample'),
     path('structures/assign-import/', SalaryStructureAssignImportView.as_view(), name='salary-structure-assign-import'),
     path('structures/assign-import/sample/', SalaryStructureAssignSampleView.as_view(), name='salary-structure-assign-sample'),
+    path('salary-import/', SalaryImportView.as_view(), name='salary-import'),
+    path('salary-import/sample/', SalaryImportSampleView.as_view(), name='salary-import-sample'),
     path('structures/<uuid:pk>/', SalaryStructureDetailView.as_view(), name='salary-structure-detail'),
     path('structures/<uuid:structure_pk>/components/', SalaryComponentListView.as_view(), name='salary-component-list'),
     path('structures/<uuid:structure_pk>/components/<uuid:pk>/', SalaryComponentDetailView.as_view(), name='salary-component-detail'),
@@ -152,5 +157,6 @@ urlpatterns = [
     # ── Payroll adjustments ──────────────────────────────────────────────────
     path('adjustments/', PayrollAdjustmentListCreateView.as_view(), name='payroll-adjustment-list'),
     path('adjustments/bulk-import/', PayrollAdjustmentBulkImportView.as_view(), name='payroll-adjustment-bulk-import'),
+    path('adjustments/bulk-import/sample/', PayrollAdjustmentImportSampleView.as_view(), name='payroll-adjustment-import-sample'),
     path('adjustments/<uuid:pk>/', PayrollAdjustmentDeleteView.as_view(), name='payroll-adjustment-delete'),
 ]

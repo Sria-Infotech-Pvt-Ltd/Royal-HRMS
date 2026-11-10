@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Modal from "@/components/Modal";
 import { useFetch } from "@/hooks/useFetch";
+import { usePermission } from "@/hooks/usePermission";
+import SalaryStructureImportModal from "@/app/dashboard/settings/payroll-config/_components/SalaryStructureImportModal";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { messageArea, quickCheck, toInputs, type MessageArea } from "@/lib/salaryComponents";
@@ -53,6 +55,8 @@ export default function SalarySetupTab() {
   const previewSeq = useRef(0);
   const [msg, setMsg] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const canEdit = usePermission("payroll.edit");
 
   const salaryConfigs = salaryPage?.results ?? [];
   const allEmployees = employeePage?.results ?? [];
@@ -211,6 +215,11 @@ export default function SalarySetupTab() {
                 style={{ paddingLeft: 32, width: 220 }}
               />
             </div>
+            {canEdit && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowImport(true)}>
+                <i className="ti ti-file-import" /> Import Salaries
+              </button>
+            )}
           </div>
         </div>
 
@@ -265,6 +274,14 @@ export default function SalarySetupTab() {
           </div>
         )}
       </div>
+
+      {showImport && (
+        <SalaryStructureImportModal
+          mode="salaries"
+          onClose={() => setShowImport(false)}
+          onImported={() => refetchSalaries()}
+        />
+      )}
 
       {/* Assign / Edit CTC modal */}
       {modal && (() => {

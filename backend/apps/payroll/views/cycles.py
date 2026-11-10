@@ -480,8 +480,15 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
         for employee_id, fields in computed.items():
             existing = existing_by_employee.get(employee_id)
             if existing is not None:
+                # Re-processing recalculates salary and statutory figures but
+                # keeps what HR entered in the wizard (reimbursements, bonus),
+                # totalled the same way as when they were entered.
+                entered = {'reimbursements': existing.reimbursements, 'bonus': existing.bonus}
                 for field, value in fields.items():
                     setattr(existing, field, value)
+                existing.reimbursements, existing.bonus = entered['reimbursements'], entered['bonus']
+                if existing.reimbursements or existing.bonus:
+                    recompute_payslip_totals(existing)
                 to_update.append(existing)
             else:
                 to_create.append(EmployeePayslip(cycle=cycle, employee_id=employee_id, **fields))
@@ -499,6 +506,42 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     names = {e.id: e.full_name for e in employees}
     zero_gross = [names[eid] for eid, f in computed.items() if f['gross_earnings'] <= 0 and f['net_pay'] <= 0 and f['annual_ctc'] > 0]
     return {'created_count': len(computed), 'skipped': skipped, 'zero_gross': zero_gross}
+
+
+def component_gross(payslip) -> Decimal:
+    """Monthly salary components only (no bonus, reimbursements or additions) —
+    the base processing uses for LOP, ESI and PT."""
+    other = sum((Decimal(str(v)) for v in (payslip.other_earnings or {}).values()), Decimal('0'))
+    return payslip.basic + payslip.hra + payslip.special_allowance + other
+
+
+def recompute_payslip_totals(payslip) -> None:
+    """Gross / total deductions / net once reimbursements or bonus are entered
+    (the wizard's reimbursement & bonus step, and re-processing afterwards).
+    Gross then includes reimbursements, bonus and additions; net is unchanged
+    in meaning: everything earned minus everything deducted."""
+    payslip.gross_earnings = (
+        component_gross(payslip) + payslip.reimbursements + payslip.bonus + payslip.adjustments_earning
+    )
+    other_deductions = sum((Decimal(str(v)) for v in (payslip.other_deductions or {}).values()), Decimal('0'))
+    payslip.total_deductions = (
+        payslip.lop_deduction + payslip.pf_employee + payslip.esi_employee + payslip.pt_deduction
+        + payslip.lwf_employee + payslip.adjustments_deduction + other_deductions
+    )
+    payslip.net_pay = payslip.gross_earnings - payslip.total_deductions
+
+
+def esi_employee_share(payslip, statutory) -> Decimal:
+    """The employee ESI share for the payslip's current LOP days — same rule as
+    _compute_employee_payslip: due only when ESI applies (employer share > 0)
+    and the average daily wage is above the exemption threshold."""
+    if not statutory or not payslip.esi_employer:
+        return Decimal('0')
+    gross = component_gross(payslip)
+    days_paid = max(Decimal('1'), Decimal(payslip.total_working_days) - Decimal(payslip.lop_days))
+    if gross / days_paid > statutory.esi_daily_wage_exemption_threshold:
+        return gross * statutory.esi_employee_rate / 100
+    return Decimal('0')
 
 
 def _company_header() -> dict:

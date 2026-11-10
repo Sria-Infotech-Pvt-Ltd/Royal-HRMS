@@ -8,6 +8,10 @@
 //     changed.
 //   mode "assign": Employee ID, Structure Name, Effective From — saves a new
 //     salary revision (same CTC, the structure's components) per valid row.
+//   mode "salaries" (Payroll → Salary Setup): one row per employee with the
+//     monthly amount of each component — saves a new salary revision per row
+//     (CTC = monthly earnings × 12). All or nothing; a revision with the same
+//     Effective From is replaced only when "Replace …" is ticked.
 // Preview first (nothing saved), explicit confirmation, and the server checks
 // the whole file again before saving.
 
@@ -18,7 +22,7 @@ import { downloadBlobFile } from "@/lib/downloadFile";
 import Modal from "@/components/Modal";
 import { checkImportFile } from "@/lib/assetImport";
 
-type Mode = "structures" | "assign";
+type Mode = "structures" | "assign" | "salaries";
 
 interface StructurePlan {
   name: string;
@@ -34,10 +38,15 @@ interface AssignRow {
   employee_id: string;
   name: string;
   structure: string;
-  current_structure: string | null;
+  current_structure?: string | null;
   effective_from: string;
-  status: "update" | "no_change" | "error" | "updated";
+  status: "create" | "update" | "no_change" | "error" | "created" | "updated";
   message: string;
+  // mode "salaries"
+  current_ctc?: string | null;
+  annual_ctc?: string | null;
+  monthly_earnings?: string | null;
+  components?: { name: string; amount: string; deduction: boolean }[];
 }
 interface Result {
   summary: Record<string, number>;
@@ -72,7 +81,21 @@ const COPY: Record<Mode, { title: string; intro: string; sample: string; url: st
     url: API.payroll.structureAssignImport,
     sampleUrl: API.payroll.structureAssignSample,
   },
+  salaries: {
+    title: "Import Salaries",
+    intro: "One row per employee: Employee Code, Employee Name (checked against the record), Structure Name (blank = the "
+      + "branch / company default), Effective From (YYYY-MM-DD), then the monthly amount of each component of that "
+      + "structure (blank = not paid), Annual CTC (optional check), PF Eligible / ESI Eligible / PT Applicable "
+      + "(yes / no / blank = keep). Each row saves a new salary revision — earlier revisions stay as history and "
+      + "salary structures are not changed. Nothing is saved if any row has an error.",
+    sample: "salary_import_sample",
+    url: API.payroll.salaryImport,
+    sampleUrl: API.payroll.salaryImportSample,
+  },
 };
+
+const money = (v: string | null | undefined) =>
+  v == null ? "—" : `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 function apiMessage(err: unknown, fallback: string): string {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
@@ -95,6 +118,7 @@ export default function SalaryStructureImportModal({ mode, onClose, onImported }
   const copy = COPY[mode];
   const [file, setFile] = useState<File | null>(null);
   const [updateExisting, setUpdateExisting] = useState(false);
+  const [replaceSameDate, setReplaceSameDate] = useState(false);
   const [preview, setPreview] = useState<Result | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
@@ -131,6 +155,7 @@ export default function SalaryStructureImportModal({ mode, onClose, onImported }
     fd.append("file", file);
     if (dryRun) fd.append("dry_run", "true");
     if (mode === "structures" && updateExisting) fd.append("update_existing", "true");
+    if (mode === "salaries" && replaceSameDate) fd.append("replace_same_date", "true");
     try {
       const { data } = await clientApi.post(copy.url, fd, { headers: { "Content-Type": undefined } });
       if (dryRun) {
@@ -151,8 +176,9 @@ export default function SalaryStructureImportModal({ mode, onClose, onImported }
   }
 
   const s = preview?.summary ?? {};
-  const actionable = mode === "structures" ? (s.create ?? 0) + (s.update ?? 0) : (s.update ?? 0);
-  const blocked = mode === "structures" && (s.error ?? 0) > 0;   // structure import is all-or-nothing
+  const actionable = mode === "assign" ? (s.update ?? 0) : (s.create ?? 0) + (s.update ?? 0);
+  const blocked = mode !== "assign" && (s.error ?? 0) > 0;   // structure and salary imports are all-or-nothing
+  const unit = mode === "structures" ? "structure(s)" : "revision(s)";
 
   const shown = result ?? preview;
 
@@ -172,14 +198,14 @@ export default function SalaryStructureImportModal({ mode, onClose, onImported }
           <>
             <button className="btn btn-ghost" onClick={() => setConfirming(false)} disabled={!!busy}>Back</button>
             <button className="btn btn-filled" onClick={() => send(false)} disabled={!!busy}>
-              {busy === "save" ? "Saving…" : mode === "structures" ? `Yes, save ${actionable} structure(s)` : `Yes, save ${actionable} revision(s)`}
+              {busy === "save" ? "Saving…" : `Yes, save ${actionable} ${unit}`}
             </button>
           </>
         ) : preview ? (
           <>
             <button className="btn btn-ghost" onClick={reset} disabled={!!busy}>Cancel</button>
             <button className="btn btn-filled" onClick={() => setConfirming(true)} disabled={!!busy || actionable === 0 || blocked}>
-              {mode === "structures" ? `Save ${actionable} structure(s)…` : `Save ${actionable} revision(s)…`}
+              {`Save ${actionable} ${unit}…`}
             </button>
           </>
         ) : (
@@ -212,6 +238,16 @@ export default function SalaryStructureImportModal({ mode, onClose, onImported }
               </label>
               {file && <span><i className="ti ti-file" /> {file.name}</span>}
             </div>
+            {mode === "salaries" && (
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <input type="checkbox" checked={replaceSameDate} onChange={e => setReplaceSameDate(e.target.checked)} />
+                <span>
+                  <strong>Replace revisions with the same Effective From</strong> — when an employee&apos;s current
+                  revision starts on the same date, the imported one replaces it (the old one stays in the history).
+                  Left unticked, those rows are shown as errors.
+                </span>
+              </label>
+            )}
             {mode === "structures" && (
               <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <input type="checkbox" checked={updateExisting} onChange={e => setUpdateExisting(e.target.checked)} />
@@ -234,7 +270,7 @@ export default function SalaryStructureImportModal({ mode, onClose, onImported }
               {result ? "Finished: " : "Preview (nothing saved yet): "}
               {Object.entries(shown.summary).filter(([k]) => k !== "total").map(([k, v]) => `${v} ${STATUS[k]?.label.toLowerCase() ?? k}`).join(", ")}
               {` (of ${shown.summary.total}).`}
-              {!result && blocked && " Fix the errors before importing — structures are imported all together."}
+              {!result && blocked && ` Fix the errors before importing — ${mode === "structures" ? "structures" : "rows"} are imported all together.`}
             </div>
           </div>
         )}
@@ -245,7 +281,9 @@ export default function SalaryStructureImportModal({ mode, onClose, onImported }
             <div>
               {mode === "structures"
                 ? `Save ${actionable} structure(s)? Updated structures change the next payroll of employees who follow them without their own saved revision (shown per structure).`
-                : `Save ${actionable} new salary revision(s)? Each takes effect from its Effective From date.`}
+                : mode === "salaries"
+                  ? `Save ${actionable} salary revision(s)? Each takes effect from its Effective From date; rows marked "Will update" replace the revision from the same date.`
+                  : `Save ${actionable} new salary revision(s)? Each takes effect from its Effective From date.`}
               {" "}Every row is checked again before saving.
             </div>
           </div>
@@ -281,7 +319,31 @@ export default function SalaryStructureImportModal({ mode, onClose, onImported }
           </div>
         )}
 
-        {shown?.rows && (
+        {shown?.rows && mode === "salaries" && (
+          <div style={{ overflow: "auto", maxHeight: 340, border: "1px solid var(--outline-v)", borderRadius: 8 }}>
+            <table className="data-table" style={{ width: "100%", fontSize: 12.5 }}>
+              <thead><tr><th>Row</th><th>Employee</th><th>Structure</th><th>From</th><th>Annual CTC</th><th>Monthly components</th><th>Status</th><th>Details</th></tr></thead>
+              <tbody>
+                {shown.rows.map(r => (
+                  <tr key={r.row}>
+                    <td>{r.row}</td>
+                    <td>{r.name ? `${r.name} (${r.employee_id})` : r.employee_id || "—"}</td>
+                    <td>{r.structure || "—"}</td>
+                    <td>{r.effective_from || "—"}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {r.annual_ctc ? (r.current_ctc && r.current_ctc !== r.annual_ctc ? `${money(r.current_ctc)} → ${money(r.annual_ctc)}` : money(r.annual_ctc)) : "—"}
+                    </td>
+                    <td>{r.components?.length ? r.components.map(c => `${c.name}${c.deduction ? " (deduction)" : ""} ${money(c.amount)}`).join(" · ") : "—"}</td>
+                    <td><Badge status={r.status} /></td>
+                    <td style={{ color: r.status === "error" ? "var(--error)" : "var(--on-variant)" }}>{r.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {shown?.rows && mode === "assign" && (
           <div style={{ overflow: "auto", maxHeight: 340, border: "1px solid var(--outline-v)", borderRadius: 8 }}>
             <table className="data-table" style={{ width: "100%", fontSize: 12.5 }}>
               <thead><tr><th>Row</th><th>Employee</th><th>Structure</th><th>From</th><th>Status</th><th>Details</th></tr></thead>

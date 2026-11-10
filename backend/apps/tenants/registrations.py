@@ -16,7 +16,6 @@ Website registration workflow:
 """
 from __future__ import annotations
 
-import calendar
 import re
 import secrets
 import string
@@ -30,6 +29,7 @@ from apps.tenants.models import (
     SubscriptionPlan,
 )
 from apps.tenants.payments import VerifiedPayment, get_gateway, to_minor
+from apps.tenants.pricing import add_months
 from apps.tenants.services import CompanyCodeTaken, create_pending_client
 from apps.tenants.modules import resolve_modules
 from apps.tenants.subscriptions import apply_subscription, assign_subscription
@@ -181,10 +181,8 @@ def record_payment_event(event: VerifiedPayment, gateway_name: str) -> CompanyRe
 
 # ── Review ────────────────────────────────────────────────────────────────────
 
-def _add_months(d: date, months: int) -> date:
-    m = d.month - 1 + months
-    y, m = d.year + m // 12, m % 12 + 1
-    return date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
+# Same calendar-month rule as manual assignments (pricing.add_months).
+_add_months = add_months
 
 
 @transaction.atomic

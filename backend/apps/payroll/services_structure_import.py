@@ -90,9 +90,11 @@ CREATE, UPDATE, NO_CHANGE, ERROR = 'create', 'update', 'no_change', 'error'
 
 # ── File reading (same limits/parsers as the employee import) ────────────────
 
-def read_rows(uploaded, columns: dict, required: dict) -> tuple[list[dict] | None, str | None]:
+def read_rows(uploaded, columns: dict, required: dict, *, keep_other: bool = False
+              ) -> tuple[list[dict] | None, str | None]:
     """Rows as {key: value} using `columns` aliases; `required` maps key -> header
-    shown in the error when that column is missing."""
+    shown in the error when that column is missing. keep_other=True also returns
+    every other non-blank header under row['_other'] as {header: value}."""
     from apps.accounts.views import _parse_employee_csv_rows, _parse_employee_xlsx_rows
     if uploaded.size > MAX_IMPORT_BYTES:
         return None, 'File too large. Maximum allowed size is 5 MB.'
@@ -111,6 +113,10 @@ def read_rows(uploaded, columns: dict, required: dict) -> tuple[list[dict] | Non
         return None, f'File contains {len(rows)} rows. Maximum allowed per import is {MAX_IMPORT_ROWS}.'
     out = [{columns[k.strip().lower()]: str(v if v is not None else '').strip()
             for k, v in row.items() if k and k.strip().lower() in columns} for row in rows]
+    if keep_other:
+        for parsed, row in zip(out, rows):
+            parsed['_other'] = {' '.join(k.split()): str(v if v is not None else '').strip()
+                                for k, v in row.items() if k and k.strip() and k.strip().lower() not in columns}
     for key, header in required.items():
         if not any(key in r for r in out):
             return None, f'The file needs a "{header}" column.'
