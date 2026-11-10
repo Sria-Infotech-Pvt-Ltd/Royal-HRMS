@@ -189,19 +189,14 @@ INVITE_VALIDITY_HOURS = 72
 
 
 def _activation_link(token_id) -> str:
-    """Absolute activation URL if Company.portal_url is configured, else a
-    bare relative path — an email client can't resolve a relative link
-    against "the frontend's origin" the way a browser tab can, but this
-    never silently fails outright: a company that hasn't set portal_url
-    yet still gets a link that works once opened from the same site,
-    matching how portal_url is already used elsewhere in this codebase
-    (see OnboardingApprovalView) rather than hardcoding any origin here."""
-    from apps.accounts.models import Company
+    """Absolute activation URL, https://<portal>/activate/<token>/ (the frontend route app/activate/[token]).
 
-    company = Company.objects.first()
-    base = (company.portal_url if company else '') or ''
-    path = f'/activate/{token_id}/'
-    return f'{base.rstrip("/")}{path}' if base else path
+    The portal address is checked every time (services_frontend_url). It used to fall back to the bare path "/activate/<token>/"
+    when unset, which mail clients turned into "http://activate/<token>/". Now a missing or unusable address raises
+    PortalUrlNotConfigured instead of producing a link that cannot work."""
+    from apps.accounts.services_frontend_url import frontend_url
+
+    return frontend_url(f'/activate/{token_id}/')
 
 
 def send_activation_invite(user, *, created_by=None, extra_html: str = '', bulk_import: bool = False) -> tuple['PasswordResetToken', bool]:  # noqa: F821 - type-hint only, real import below to avoid a cycle
@@ -228,6 +223,11 @@ def send_activation_invite(user, *, created_by=None, extra_html: str = '', bulk_
         from apps.accounts.services_employee_import_invite_policy import InviteSendingHeld, invites_enabled
         if not invites_enabled():
             raise InviteSendingHeld('Bulk-import invitation emails are switched off (EMPLOYEE_IMPORT_INVITES_ENABLED).')
+
+    # Checked BEFORE the token is issued: issuing one invalidates the employee's current link, and a missing/unusable portal address
+    # must not cost them a working link or produce a broken email.
+    from apps.accounts.services_frontend_url import frontend_origin
+    frontend_origin()
 
     token = PasswordResetToken.create_for_user(
         user, purpose=PasswordResetToken.PURPOSE_INVITE, validity_hours=INVITE_VALIDITY_HOURS,

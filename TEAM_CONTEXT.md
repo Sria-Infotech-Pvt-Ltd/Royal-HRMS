@@ -5280,3 +5280,34 @@ Result matrix (proven by `ModeStateFallbackMatrixTests`, all 3 modes x 2 fallbac
 5. The 13 pending invitations from the earlier attempt are intentionally untouched.
 
 **Gotchas for the next person:** run tests with the project venv (`backend\H\Scripts\python.exe`, Django 5.1.15; system Python is Django 6.0.4). DB-flushing tests are opt-in (`RUN_DB_FLUSHING_TESTS=1`) because a flush wipes migration-seeded rows; the benchmark is `RUN_IMPORT_BENCHMARK=1`. Another Claude session edited the hold/conflict files (`services_employee_import_invite_policy.py`, `services_employee_import_invites.py`, `services_employee_import_job.py`, `tasks_employee_import.py`, `utils.py`, `config/settings.py`, `tests_employee_import_hold_and_conflicts.py`). Project Budgeting files (`views_external_api.py`, `tests_external_api.py`) belong to someone else and are not part of this change.
+
+
+## Activation link fix + activation/onboarding lifecycle tests (2026-11-10) — LIVING SECTION
+
+**Symptom:** the activation email's "Set Your Password" button opened `http://activate/<token>/` (and, in another mail client, `http:///activate/<token>/`) — a link with no website name.
+
+**Root cause:** `utils._activation_link` built `Company.portal_url + '/activate/<token>/'` with NO check of the stored value. With no Company row, or an empty portal URL, the email carried the bare path `/activate/<token>/`; mail clients turn that into `http://activate/...`. A value like `http://` (it passed the settings form, which only checked the prefix) produced `http:/activate/...`. Proven from the sent emails in the database: every logged invitation had `href="/activate/<token>/"`. Only `Company.portal_url` is used; there is no `FRONTEND_URL` setting.
+
+**Fix (backend/apps/accounts):**
+- New `services_frontend_url.py`: `check_portal_url`, `frontend_origin`, `frontend_url`, `PortalUrlNotConfigured`. Requires `https://` (http only for localhost or DEBUG), a real host name with a dot (or localhost), no spaces, no `?` or `#`.
+- `utils._activation_link` and `send_activation_invite` use it. The portal address is checked BEFORE the token is issued, so a bad setting neither sends a broken email nor invalidates the employee's current link.
+- Bulk-import pipeline: `classify` maps `PortalUrlNotConfigured` to reason `portal_url_not_configured` (permanent, not auto-retried; the Retry button works after the setting is fixed).
+- `CompanySerializer.validate_portal_url` uses the same check, so a value that cannot make a working link cannot be saved.
+- Frontend route is unchanged and exists: `frontend/app/activate/[token]/page.tsx` -> `/activate/<token>`; it calls `GET /api/invite/<token>/` and `POST /api/reset-password/`, then links to `/login`.
+- Forgot-password emails a 6-digit code, NOT a link, so it has no domain to get wrong (tested). The candidate onboarding link (`services_onboarding_link.issue_onboarding_link`) uses the same unchecked pattern; NOT changed here.
+
+**Status fields (verified in code; they are three different things):**
+- Account activation: `User.password` (unusable until set), `account_activated_at` (stamped when the invite link is used), `must_change_password`, `activation_pending`, and `PasswordResetToken.is_used`. `User.is_active=False` means DISABLED by an administrator (login says "deactivated"); imported accounts are `is_active=True`. Do NOT set it False to mean "not activated yet": the UI would show "Disabled".
+- Onboarding: `onboarding_status` pending -> draft -> submitted -> complete (or rejected); labels Not Started / In Progress / Awaiting Review / Needs Revision / Completed. `requires_self_service_onboarding=True` makes the login page and `proxy.ts` send the employee to `/onboarding`.
+- HR approval: `OnboardingApprovalView` moves submitted -> complete (only from submitted).
+- Known gap (reported, not changed): bulk-imported employees never get `activation_pending=True` (the import sends the invite directly, not through `services_onboarding.send_onboarding_email`), so the "password set / first login / activated" events are not written to their onboarding history timeline. Their account status still derives correctly (Invitation Pending -> Active).
+
+**Tests (private test database `test_neondb_activation` on the current Neon project; no email sent):**
+- `tests_activation_url.py` 17 tests: production URL, trailing slash/case, path prefix, localhost, missing Company, blank, 14 malformed values, settings form refuses them, no token burnt on failure, import invitation fails with a clear reason and Retry works after the fix, valid/expired/unknown link, password creation, single use, weak password, forgot-password has no link.
+- `tests_employee_activation_lifecycle.py` 10 tests: imported account pending (password unusable, not activated, onboarding pending, flag True, is_active True); login blocked before a password exists; sending the invite does not activate; setting the password activates the account but NOT onboarding; link single-use; login allowed after; before HR approval onboarding stays pending and cannot be approved or self-approved; after HR approval onboarding is complete and the dashboard rule/API work; disabled is a separate state.
+- `tests_employee_import_protected_batch.py` 8 tests (protecting one invitation batch via the existing `skipped` status).
+- Results: url 17 OK, lifecycle 10 OK, protected 8 OK, `tests_activation_invite` 7 OK, `tests_employee_import_invites` 31 OK (run once before the final edits to the two new test files, which only touched those files). NOT re-run after this change: bulk-import, hire-wizard, onboarding-status, candidate-link, SMTP modules (they mock the sending function).
+
+**IMPORTANT for whoever runs this environment:** the Celery worker imports code when it starts. A worker started before this fix keeps sending OLD links. After deploying: restart the worker. And a Company row with `portal_url` = `https://aira.nxsys.in` MUST exist (Settings -> Company); with the fix, no invitation is sent until it does. Existing invitations already emailed keep the broken link: use Resend Invite for those employees. The database used on 2026-11-10 (Neon project `tiny-dawn-89898883`, branch `br-cold-rain-a1w7h21b`) had 0 Company rows when checked.
+
+Also on 2026-11-10: the new Neon database was migrated from empty (521 migrations; `branch.0002_initial_data` is recorded twice because two `migrate` runs overlapped; harmless, no duplicate rows). The old UAT cleanup (179 employee rows) was prepared, exported and restore-tested but NOT executed; the old UAT host rejected the password afterwards.

@@ -22,6 +22,7 @@ UNQUEUED_GRACE_SECONDS = 120
 REASONS = {
     'smtp_auth': 'The mail server rejected the SMTP login. An administrator must fix the SMTP settings, then use Retry.',
     'smtp_not_configured': 'No active SMTP configuration exists. An administrator must set one up, then use Retry.',
+    'portal_url_not_configured': 'The company portal URL is missing or not a valid web address, so no activation link can be built. An administrator must set it in Company settings, then use Retry.',
     'recipient_refused': 'The mail server refused this recipient address. Check the work email, then use Resend Invite.',
     'smtp_connection': 'The mail server could not be reached. Use Retry when it is available.',
     'smtp_timeout': 'The mail server did not answer in time. Use Retry.',
@@ -57,6 +58,10 @@ def stale_after() -> timedelta:
 
 def classify(exc: Exception) -> tuple[str, bool]:
     """(reason code, is_transient). Only recognised network/SMTP trouble is retried; anything unknown fails at once."""
+    from apps.accounts.services_frontend_url import PortalUrlNotConfigured      # checked first: it is a RuntimeError subclass
+
+    if isinstance(exc, PortalUrlNotConfigured):
+        return 'portal_url_not_configured', False
     if isinstance(exc, smtplib.SMTPAuthenticationError):
         return 'smtp_auth', False
     if isinstance(exc, smtplib.SMTPRecipientsRefused):
