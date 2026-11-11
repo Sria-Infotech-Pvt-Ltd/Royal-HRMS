@@ -6,7 +6,8 @@ re-checks. Nothing in this module creates or changes data.
 
 Rules:
   - the columns are fixed (COLUMNS); nothing sensitive (bank, PAN, Aadhaar, UAN, CTC, passwords) is read at all;
-  - branch, org unit, position and reporting manager must already exist and match exactly; nothing is guessed or created;
+  - branch, org unit, position and reporting manager must already exist and match exactly; nothing is guessed or created.
+    Several seats may share one org unit and title: each row gets the first vacant one (services_employee_import_seats);
   - a non-admin importer may only import into their own branch, whatever the spreadsheet says (checked here, on the
     server, for preview and for commit);
   - an email that already exists, or repeats in the file, is reported as a duplicate, never skipped silently.
@@ -20,10 +21,9 @@ import re
 from dataclasses import dataclass, field
 
 from apps.accounts.employment_types import normalize_employment_type
-from django.db.models import Q
 
-from apps.accounts.models import EmployeeProfile, Placement, Position, User
-from apps.accounts.services_access_guards import assignment_refusal
+from apps.accounts.models import EmployeeProfile, Position, User
+from apps.accounts.services_employee_import_seats import SeatPool
 from apps.accounts.services_approver_assignment import KIND_REPORTING_MANAGER, approver_refusal
 from core.access import is_full_access
 from core.permissions import has_perm
@@ -109,8 +109,9 @@ class ParsedFile:
     rows: list[tuple[int, dict]] = field(default_factory=list)      # (Excel row number, {column key: text})
 
 
-def parse_workbook(content: bytes) -> ParsedFile:
-    """Rows of the Employees sheet keyed by column, with Excel row numbers. Blank rows are ignored."""
+def parse_workbook(content: bytes, *, max_rows: int = MAX_ROWS) -> ParsedFile:
+    """Rows of the Employees sheet keyed by column, with Excel row numbers. Blank rows are ignored.
+    `max_rows` is 500 for the synchronous import; the background import job passes its own, larger limit."""
     if len(content) > MAX_FILE_BYTES:
         raise ImportFileError('The file is too large. The maximum size is 5 MB.')
     if not content.startswith(b'PK'):
@@ -143,8 +144,8 @@ def parse_workbook(content: bytes) -> ParsedFile:
             if not any(values.values()):
                 continue
             parsed.rows.append((excel_row, values))
-            if len(parsed.rows) > MAX_ROWS:
-                raise ImportFileError(f'The file has more than {MAX_ROWS} employees. Split it into smaller files.')
+            if len(parsed.rows) > max_rows:
+                raise ImportFileError(f'The file has more than {max_rows} employees. Split it into smaller files.')
         if not parsed.rows:
             raise ImportFileError('The file has no employee rows.')
         return parsed
@@ -223,10 +224,7 @@ class _Lookups:
             if branch.branch_code:
                 self.all_active_branches[branch.branch_code.strip().lower()] = branch
         self.allowed_pks = {branch.pk for branch in self.allowed}
-        self.positions: dict[tuple[str, str], list[Position]] = {}
-        for position in Position.objects.filter(is_active=True).select_related('org_unit'):
-            self.positions.setdefault((position.org_unit.name.strip().lower(), position.title.strip().lower()), []).append(position)
-        self.org_units = {key[0] for key in self.positions}
+        self.seats = SeatPool(importer)
         self.existing_emails = {email.lower() for email in User.objects.values_list('email', flat=True)}
         wanted = {values.get('reporting_manager', '') for _row, values in rows if values.get('reporting_manager')}
         self.managers = {u.employee_id: u for u in User.objects.filter(employee_id__in=wanted)} if wanted else {}
@@ -245,31 +243,15 @@ def _check_branch(lookups: _Lookups, raw: str, result: RowResult) -> None:
 
 
 def _check_position(lookups: _Lookups, unit: str, title: str, result: RowResult) -> None:
-    if unit.strip().lower() not in lookups.org_units:
+    """Give the row the first vacant seat of this exact org unit and title (see services_employee_import_seats)."""
+    if not lookups.seats.has_org_unit(unit):
         result.errors.append(f'Org Unit "{unit}" was not found.')
         return
-    matches = lookups.positions.get((unit.strip().lower(), title.strip().lower()), [])
-    if not matches:
-        result.errors.append(f'No active position "{title}" exists in org unit "{unit}".')
+    allocation = lookups.seats.allocate(unit, title, result.date_of_joining, result.row)
+    if allocation.error:
+        result.errors.append(allocation.error)
         return
-    if len(matches) > 1:
-        result.errors.append(f'"{title}" matches more than one position in org unit "{unit}".')
-        return
-    position = matches[0]
-    if position.position_permissions.filter(permission__codename='settings.edit').exists():
-        result.errors.append(f'"{title}" carries full access and cannot be filled by import.')
-        return
-    refusal = assignment_refusal(lookups.importer, None, position)
-    if refusal:
-        result.errors.append(refusal.message)
-        return
-    if result.date_of_joining is not None and Placement.objects.filter(position=position).filter(
-        Q(effective_to__isnull=True) | Q(effective_to__gte=result.date_of_joining),
-    ).exists():
-        # A seat has one holder at a time; this is the same rule the single-employee hire enforces.
-        result.errors.append(f'The position "{title}" is already occupied on that joining date. Each imported employee needs their own vacant seat.')
-        return
-    result.position = position
+    result.position = allocation.position
 
 
 def _check_manager(lookups: _Lookups, raw: str, result: RowResult) -> None:

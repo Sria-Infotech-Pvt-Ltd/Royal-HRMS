@@ -181,6 +181,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     # hired after that migration. Kept searchable so old paperwork, emails,
     # and verbal references to the old ID still resolve to the right person.
     legacy_employee_code = models.CharField(max_length=20, blank=True, db_index=True)
+    # The one company this person belongs to (never several). Nullable until the backfill migration has filled it in for
+    # every existing row; no index yet (it is added concurrently in a later step, with the per-company constraints).
+    legal_entity    = models.ForeignKey('platform_core.LegalEntity', on_delete=models.PROTECT, null=True, blank=True, related_name='+', db_index=False)
     department      = models.CharField(max_length=100, blank=True)
     designation     = models.CharField(max_length=100, blank=True)
     # Free text, no choices enum — same convention as department/designation
@@ -483,6 +486,8 @@ class OrgUnit(models.Model):
                      related_name='children',
                  )
     cost_center = models.CharField(max_length=30, blank=True)
+    # The company this unit belongs to. Nullable until backfilled; a child unit must share its parent's company (enforced later).
+    legal_entity = models.ForeignKey('platform_core.LegalEntity', on_delete=models.PROTECT, null=True, blank=True, related_name='+', db_index=False)
     # Phase 5A Task A.2 — additive FK to the new CostCenter master; the
     # text column above is kept and NOT yet synced from this ref (Task L
     # deferred, see PHASE5A_REPORT.md).
@@ -511,6 +516,7 @@ class JobTemplate(models.Model):
     read-only from the API (no admin CRUD needed for v1)."""
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name       = models.CharField(max_length=150, unique=True)
+    legal_entity = models.ForeignKey('platform_core.LegalEntity', on_delete=models.PROTECT, null=True, blank=True, related_name='+', db_index=False)
     band       = models.CharField(max_length=20, blank=True)
     # Phase 5A Task A.2 — additive FK to the new Band master.
     band_ref   = models.ForeignKey('Band', on_delete=models.SET_NULL, null=True, blank=True, related_name='job_templates')
@@ -1789,7 +1795,9 @@ class EmployeeCodeSeries(models.Model):
     readable directly off the ID (SAP personnel-number style), no lookup
     needed. IDs are 8-digit, purely numeric — no alphabetic prefix."""
     employment_type = models.CharField(max_length=50, unique=True, choices=User.EMPLOYMENT_TYPE_CHOICES)
-    range_start      = models.PositiveBigIntegerField(help_text='Exclusive lower bound — never issued itself; the first ID handed out is range_start + 1.')
+    # Which company's series this is. Nullable until backfilled; the unique constraint becomes (company, employment type) later.
+    legal_entity     = models.ForeignKey('platform_core.LegalEntity', on_delete=models.PROTECT, null=True, blank=True, related_name='+', db_index=False)
+    range_start     = models.PositiveBigIntegerField(help_text='Exclusive lower bound — never issued itself; the first ID handed out is range_start + 1.')
     range_end        = models.PositiveBigIntegerField(help_text='Inclusive upper bound — the last ID this series can ever issue.')
     next_sequence    = models.PositiveBigIntegerField(help_text='Next number this series will hand out.')
     updated_at       = models.DateTimeField(auto_now=True)
@@ -3134,3 +3142,9 @@ from .models_onboarding_event import OnboardingEvent  # noqa: E402,F401
 
 # Reusable bulk permission bundles (additive) — see models_permission_template.py.
 from .models_permission_template import PermissionTemplate  # noqa: E402,F401
+
+# Durable to-do list for the activation emails of a bulk employee import (additive) — see models_import_invite.py.
+from .models_import_invite import EmployeeImportInvite  # noqa: E402,F401
+
+# Durable background job for a bulk employee import, with its row-level errors (additive) — see models_import_job.py.
+from .models_import_job import EmployeeImportJob, EmployeeImportJobError  # noqa: E402,F401

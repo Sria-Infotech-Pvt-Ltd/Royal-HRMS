@@ -125,6 +125,20 @@ class TemplateTests(_ImportCase):
         self.assertIn('IMP-BLR', listed(self.admin))
         self.assertIn('IMP-HYD', listed(self.admin))
 
+    def test_lists_sheet_shows_every_vacant_position_including_never_filled_ones(self):
+        # self.seats were never held by anyone; one is then filled, one is filled and later vacated, one filled until the future.
+        holder = make_user('lists_holder@test.com', employee_id='LH001', branch=self.hyd.branch_name)
+        Placement.objects.create(position=self.seats[2], employee=holder, effective_from='2020-01-01')                      # open: occupied
+        former = make_user('lists_former@test.com', employee_id='LH002', branch=self.hyd.branch_name)
+        Placement.objects.create(position=self.seats[3], employee=former, effective_from='2020-01-01', effective_to='2021-01-01')  # ended: vacant
+        workbook = openpyxl.load_workbook(io.BytesIO(self.client_for(self.hr).get(TEMPLATE).content))
+        pairs = {(row[6].value, row[7].value) for row in workbook['Lists'].iter_rows(min_row=2, max_col=8) if row[7].value}
+        self.assertIn(('Import Unit', 'Analyst 1'), pairs)          # never held by anyone: vacant
+        self.assertIn(('Import Unit', 'Analyst 3'), pairs)          # held in the past, free now: vacant
+        self.assertNotIn(('Import Unit', 'Analyst 2'), pairs)       # held today: not offered
+        units = [row[1].value for row in workbook['Lists'].iter_rows(min_row=2, max_col=2) if row[1].value]
+        self.assertIn('Import Unit', units)                          # the Org Unit dropdown is fed from the same vacant seats
+
     def test_template_round_trips_through_preview(self):
         # A filled-in template keeps its " *" header markers; the parser must accept them.
         workbook = openpyxl.load_workbook(io.BytesIO(self.client_for(self.hr).get(TEMPLATE).content))
@@ -296,6 +310,8 @@ class CommitTests(_ImportCase):
         self.assertEqual((first.full_name, first.branch, first.phone, first.employee_type, first.designation), ('Asha1 Verma', 'Import Hyderabad', '9876543210', 'Contract', 'Analyst 1'))
         self.assertTrue(first.must_change_password)
         self.assertEqual(first.onboarding_status, User.ONBOARDING_PENDING)
+        # The frontend only routes to the onboarding wizard when this is set; otherwise an imported employee skips it.
+        self.assertTrue(first.requires_self_service_onboarding)
         self.assertTrue(Placement.objects.filter(employee=first, position=self.analyst, effective_to__isnull=True).exists())
         self.assertEqual((first.profile.gender, first.profile.blood_group, first.profile.current_pin_code), ('female', 'B+', '500084'))
         self.assertEqual(User.objects.get(email='asha2@import.test').reporting_manager_id, self.hyd_manager.pk)

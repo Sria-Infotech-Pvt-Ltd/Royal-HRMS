@@ -13,13 +13,14 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import PasswordResetToken
+from apps.accounts.models import Company, PasswordResetToken
 from apps.accounts.utils import send_activation_invite
 
 
 class ActivationInviteTests(TestCase):
     def setUp(self):
         cache.clear()
+        Company.objects.create(company_name='Test Co', portal_url='https://aira.nxsys.in')     # links are only built from a valid portal address
         self.role = make_role('employee_invite_test')
         self.user = make_user('invited@test.com', role=self.role, must_change_password=True)
 

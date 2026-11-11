@@ -2,9 +2,10 @@
 
 import { useRef } from "react";
 import Modal from "@/components/Modal";
+import ImportJobPanel from "@/components/employees/ImportJobPanel";
 import ImportPreviewTable, { ImportSummaryTiles } from "@/components/employees/ImportPreviewTable";
+import ImportRecentJobs from "@/components/employees/ImportRecentJobs";
 import { useEmployeeImport } from "@/hooks/useEmployeeImport";
-import { describeCommitResult } from "@/lib/employeeImport";
 
 interface Props {
   onClose: () => void;
@@ -16,11 +17,14 @@ const NOTE_STYLE = { fontSize: 12, color: "var(--on-variant)", lineHeight: 1.6 }
 export default function EmployeeImportModal({ onClose, onSuccess }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const flow = useEmployeeImport(onSuccess);
-  const { step, file, preview, result, progress, error, isBusy } = flow;
+  const { step, file, preview, job, recent, error, isBusy, isActing } = flow;
 
   const footer = (
     <>
-      <button className="btn btn-ghost" onClick={onClose}>{step === "done" ? "Close" : "Cancel"}</button>
+      <button className="btn btn-ghost" onClick={onClose}>{step === "job" ? "Close" : "Cancel"}</button>
+      {step === "job" && job && !job.is_active && (
+        <button className="btn btn-filled" onClick={flow.startNew} suppressHydrationWarning><i className="ti ti-plus" /> Import another file</button>
+      )}
       {step === "start" && (
         <button className="btn btn-filled" onClick={flow.runPreview} disabled={isBusy || !file} suppressHydrationWarning>
           {isBusy ? <><i className="ti ti-loader-2 spin" /> Checking…</> : <><i className="ti ti-eye" /> Preview</>}
@@ -34,7 +38,7 @@ export default function EmployeeImportModal({ onClose, onSuccess }: Props) {
             </button>
           )}
           <button className="btn btn-filled" onClick={flow.confirmImport} disabled={isBusy || !preview.can_import} suppressHydrationWarning>
-            {isBusy ? <><i className="ti ti-loader-2 spin" /> Importing…</> : <><i className="ti ti-check" /> Confirm import of {preview.summary.total}</>}
+            {isBusy ? <><i className="ti ti-loader-2 spin" /> Starting…</> : <><i className="ti ti-check" /> Confirm import of {preview.summary.total}</>}
           </button>
         </>
       )}
@@ -43,10 +47,10 @@ export default function EmployeeImportModal({ onClose, onSuccess }: Props) {
 
   return (
     <Modal title={<><i className="ti ti-file-upload" style={{ marginRight: 8 }} />Import Employees from Excel</>} onClose={onClose} maxWidth={860} footer={footer}>
-      {step !== "done" && (
+      {step !== "job" && (
         <div style={{ ...NOTE_STYLE, marginBottom: 14 }}>
           <strong>1.</strong> Download the template and fill it in. <strong>2.</strong> Upload it and review the preview — nothing is created yet.{" "}
-          <strong>3.</strong> Confirm. If any row has an error, nobody is imported. Each new employee then gets an activation email.
+          <strong>3.</strong> Confirm. Every row must be valid to start. The employees are then created in the background, so you can close this window and come back: progress is saved. Each new employee then gets an activation email.
           <div style={{ marginTop: 8 }}>
             <button className="btn btn-ghost btn-sm" onClick={flow.downloadTemplate} suppressHydrationWarning>
               <i className="ti ti-download" /> Download template (.xlsx)
@@ -55,7 +59,7 @@ export default function EmployeeImportModal({ onClose, onSuccess }: Props) {
         </div>
       )}
 
-      {step !== "done" && (
+      {step !== "job" && (
         <div onClick={() => inputRef.current?.click()} style={{ border: `2px dashed ${file ? "var(--primary)" : "var(--outline-v)"}`, borderRadius: 10, padding: "20px", textAlign: "center", cursor: "pointer", background: "var(--bg-low)", marginBottom: 14 }}>
           <input ref={inputRef} type="file" accept=".xlsx" style={{ display: "none" }} onChange={event => flow.chooseFile(event.target.files?.[0] ?? null)} />
           <i className={`ti ${file ? "ti-file-check" : "ti-upload"}`} style={{ fontSize: 26, display: "block", marginBottom: 6 }} />
@@ -76,19 +80,11 @@ export default function EmployeeImportModal({ onClose, onSuccess }: Props) {
         </>
       )}
 
-      {step === "done" && result && (
-        <div>
-          <div className="alert" style={{ marginBottom: 12 }}><i className="ti ti-circle-check" /><span>{describeCommitResult(result, progress)}</span></div>
-          {(progress?.failed ?? result.invite_failures).length > 0 && (
-            <div style={{ border: "1px solid var(--outline-v)", borderRadius: 8, padding: 10 }}>
-              <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Activation emails not sent (employees were created)</div>
-              {(progress?.failed ?? result.invite_failures).map(failure => (
-                <div key={failure.employee_id} style={NOTE_STYLE}>Row {failure.row}: employee {failure.employee_id} — {failure.reason}</div>
-              ))}
-            </div>
-          )}
-        </div>
+      {step === "job" && job && (
+        <ImportJobPanel job={job} isActing={isActing} onCancel={flow.cancelJob} onRetryEmails={flow.retryEmails} onDownloadErrors={flow.downloadJobErrors} />
       )}
+
+      {step === "start" && <ImportRecentJobs jobs={recent} onOpen={flow.openJob} />}
     </Modal>
   );
 }

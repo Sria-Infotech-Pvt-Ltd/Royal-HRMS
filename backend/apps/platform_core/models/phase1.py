@@ -219,6 +219,9 @@ class LegalEntity(TimestampedModel):
 
     is_primary      = models.BooleanField(default=False)
     is_active       = models.BooleanField(default=True)
+    # Prepended to the numeric employee IDs this company issues, so IDs stay globally unique across companies. Blank for the
+    # original company, whose existing 8-digit IDs never change; a company added later gets a short fixed prefix (e.g. "02").
+    employee_id_prefix = models.CharField(max_length=6, blank=True, default='')
     updated_by      = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     # Phase 2 — admin-added custom field values, written only through
     # services_attributes.py.

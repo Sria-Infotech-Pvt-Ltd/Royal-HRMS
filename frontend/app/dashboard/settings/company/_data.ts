@@ -1,4 +1,5 @@
 import type { CompanyData, CompanyFieldErrors } from "@/types/company";
+import { validatePortalUrl } from "@/lib/portalUrl";
 
 // ─── Indian states / UTs ──────────────────────────────────────────────────────
 
@@ -239,7 +240,7 @@ export const EMPTY_COMPANY: CompanyData = {
   communication_address: "", communication_city: "", communication_state: "", communication_pin_code: "",
   default_currency: "INR", date_format: "DD-MM-YYYY", timezone: "Asia/Kolkata",
   financial_year_start_month: "April",
-  primary_email: "", website: "", official_phone: "",
+  primary_email: "", website: "", official_phone: "", portal_url: "",
 };
 
 // ─── Financial year ───────────────────────────────────────────────────────────
@@ -466,6 +467,8 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
   if (isDraft) {
     if (f.website && !isValidWebsite(f.website.trim()))
       e.website = "Enter a valid website, e.g. www.example.com.";
+    const draftPortalError = validatePortalUrl(f.portal_url ?? "");
+    if (draftPortalError) e.portal_url = draftPortalError;
     return e;
   }
 
@@ -550,6 +553,8 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
 
   if (f.website && !isValidWebsite(f.website.trim()))
     e.website = "Enter a valid website, e.g. www.example.com.";
+  const portalError = validatePortalUrl(f.portal_url ?? "");
+  if (portalError) e.portal_url = portalError;
   if (f.official_phone && !PHONE_RE.test(f.official_phone)) e.official_phone = "Enter a valid phone number.";
   if (f.primary_email && !EMAIL_RE.test(f.primary_email))   e.primary_email  = "Enter a valid email address.";
   if (f.signatory_email && !EMAIL_RE.test(f.signatory_email)) e.signatory_email = "Enter a valid email address.";

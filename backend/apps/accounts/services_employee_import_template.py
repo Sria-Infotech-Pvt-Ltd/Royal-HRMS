@@ -15,7 +15,10 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from apps.accounts.employment_types import VALID_EMPLOYMENT_TYPES
-from apps.accounts.models import EmployeeProfile, Position
+from django.db.models import Q
+from django.utils import timezone
+
+from apps.accounts.models import EmployeeProfile, Placement, Position
 from apps.accounts.services_employee_import import COLUMNS, EMPLOYEES_SHEET, RowResult, allowed_branches
 
 XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -56,7 +59,10 @@ def _lists_sheet(workbook, importer):
     """Lists sheet: branches the importer may use, org units, org-unit/position pairs, and fixed choices."""
     sheet = workbook.create_sheet('Lists')
     branches = [b.branch_code or b.branch_name for b in allowed_branches(importer)]
-    positions = list(Position.objects.filter(is_active=True).exclude(placements__effective_to__isnull=True).select_related('org_unit').order_by('org_unit__name', 'title'))
+    # Vacant = no placement that is still open today. (Excluding on `placements__effective_to__isnull=True` is wrong: for a seat
+    # nobody has ever held it matches the missing placement too, so every never-filled seat would be hidden.)
+    still_held = Placement.objects.filter(Q(effective_to__isnull=True) | Q(effective_to__gte=timezone.localdate())).values('position_id')
+    positions = list(Position.objects.filter(is_active=True).exclude(pk__in=still_held).select_related('org_unit').order_by('org_unit__name', 'title'))
     units = sorted({p.org_unit.name for p in positions})
     lists = {
         'Company Code': branches, 'Org Unit': units, 'Employment Type': list(VALID_EMPLOYMENT_TYPES),

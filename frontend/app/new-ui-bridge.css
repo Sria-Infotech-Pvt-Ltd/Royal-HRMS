@@ -1,0 +1,33 @@
+/*
+  New-UI bridge for the pre-dashboard employee screens (account activation, onboarding wizard, change password).
+
+  Those screens were written against the older palette in globals.css (--bg, --on-bg, --on-variant, --outline-v, --primary, ...). That
+  palette only has a dark version when the in-app dark toggle sets html[data-theme="dark"], while the new design (aira-theme.css) also
+  follows the browser/OS dark setting by itself. A new hire has no saved choice, so on a dark-mode PC they got the new design's dark
+  card backgrounds with the old palette's dark text and dim labels: fields and text were hard to read.
+
+  Inside .new-ui the old names are re-pointed at the new design's tokens (--ground, --surface-2, --ink, --muted, --line, --brand, ...),
+  so the screens use the new UI colours and follow light, dark, the toggle and the OS setting together. display:contents keeps the
+  wrapper out of the layout; custom properties still inherit through it.
+*/
+.new-ui {
+  display: contents;
+  --bg: var(--ground);
+  --bg-low: var(--surface-2);
+  --bg-mid: var(--sunken);
+  --bg-high: var(--line);
+  --bg-highest: var(--line);
+  --on-bg: var(--ink);
+  --on-variant: var(--muted);
+  --outline: var(--faint);
+  --outline-v: var(--line);
+  --primary: var(--brand);
+  --primary-c: var(--brand-2);
+  --primary-container: var(--brand-tint);
+  --on-primary: var(--onbrand);
+  --error: var(--crit);
+  --error-c: var(--crit-bg);
+  --success: var(--ok);
+  --success-c: var(--ok-bg);
+  --warn-c: var(--warn-bg);
+}

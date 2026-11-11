@@ -42,6 +42,8 @@ class Branch(models.Model):
     ]
 
     branch_code = models.CharField(max_length=20, unique=True)
+    # The company this branch belongs to. Nullable until backfilled; branch_code becomes unique per company in a later step.
+    legal_entity = models.ForeignKey('platform_core.LegalEntity', on_delete=models.PROTECT, null=True, blank=True, related_name='+', db_index=False)
     branch_name = models.CharField(max_length=200)
     address = models.TextField()
     state = models.ForeignKey(State, on_delete=models.PROTECT, related_name='branches')

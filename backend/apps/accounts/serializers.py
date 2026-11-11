@@ -1014,10 +1014,14 @@ class CompanySerializer(serializers.ModelSerializer):
     def validate_portal_url(self, value: str) -> str:
         if not value:
             return value
-        v = value.strip()
-        if v and not v.startswith(('http://', 'https://')):
-            raise serializers.ValidationError('Portal URL must start with http:// or https://.')
-        return v
+        from apps.accounts.services_frontend_url import check_portal_url
+
+        # Same check the activation-link builder uses, so a value that is saved can always produce a working link. A value such as
+        # "http://" used to pass here and produced emailed links pointing at a host called "activate".
+        try:
+            return check_portal_url(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc))
 
     def validate_logo(self, value):
         if value is None:

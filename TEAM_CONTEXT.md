@@ -5243,3 +5243,120 @@ Result matrix (proven by `ModeStateFallbackMatrixTests`, all 3 modes x 2 fallbac
 - Shared neondb migrations (read-only SELECT, read-only session): attendance 0046, attendance 0047, notifications 0011 are all ALREADY APPLIED (2026-11-03 09:58 UTC). Nothing pending; nothing to apply.
 
 **Redis pin set (2026-11-06, user-approved):** `backend/requirements.txt` now `redis>=6.1.0,<9` (was `redis>=6.1.0`); no other dependency change. Verified: installed redis 8.1.0 in range, `pip check` clean, `manage.py check` clean, isolation + consent-version tests pass (10 OK). Test-isolation files kept. Known pre-existing failures left untouched (2 welcome-email template, 1 correction-review queue). Manual-testing checklist prepared for the user; nothing committed or pushed; branch `new-ai1` only.
+
+
+## Bulk Employee Import — durable background job + durable activation emails (2026-11-10) — LIVING SECTION
+
+**Goal:** HR uploads Excel -> employees created (background job) -> activation email per employee -> employee sets password, logs in, completes onboarding -> HR approves -> dashboard. Existing onboarding/HR approval is NOT bypassed.
+
+**Why it was rebuilt:** (1) the old synchronous `/commit/` took ~65 s and hit the ~30 s proxy timeout; (2) activation emails were sent from an in-memory thread tied to the web request, so they were lost on restart/timeout.
+
+**Backend (apps/accounts):**
+- Models + migrations: `EmployeeImportInvite` (0217; no token/email stored; one open invite per user; unique (batch,user)), `EmployeeImportJob` + `EmployeeImportJobError` (0218), legal-entity foundation columns (0216, platform_core 0023, branch 0013).
+- Job API (the old `/commit/` is unchanged): `POST/GET /api/employees/bulk-import/jobs/` (POST returns 202), `GET /jobs/<id>/`, `GET /jobs/<id>/errors/` (xlsx), `POST /jobs/<id>/cancel/`, `POST /api/employees/bulk-import/invites/<batch>/retry/`.
+- Job id == batch id == invitation batch id. 25 rows per transaction with a checkpoint (`next_row`) advanced in the same transaction; lease + sweep re-queue stale jobs; 2,000 rows per Celery run (task re-queues itself); max 5,000 rows; uploaded content cleared on finish, purged after 30 days.
+- Invitations: statuses pending/processing/sent/failed/skipped, bounded retries with backoff for transient SMTP errors, stale-lease recovery. At-least-once, never claimed exactly-once. "sent" only means the mail server accepted it, NOT that an inbox received it.
+- Invitation HOLD: `EMPLOYEE_IMPORT_INVITES_ENABLED` env var, default OFF (ON under tests). While off, nothing is queued, tokenised or sent. Enforced inside `send_activation_invite(bulk_import=True)`.
+- Activation link is built from `Company.portal_url`. If blank, the link is relative and USELESS in an email. Post-deploy value must be the public frontend URL (reported as `https://aira.nxsys.in`; confirm the scheme).
+- Imported employees are created with `onboarding_status=pending` AND `requires_self_service_onboarding=True`. The flag matters: `proxy.ts` and the login page only route to `/onboarding` when it is set (found by the end-to-end test; before the fix an imported employee would have skipped onboarding).
+- Management commands: `ensure_primary_legal_entity`, `resend_import_invites` (masked dry run by default; needs the exact confirmation count to send).
+
+**Frontend:** `hooks/useEmployeeImport.ts` (job create -> poll 3 s / 10 s while emails in flight / stop when settled or held; restores a running job on reopen; retry emails; cancel; error-report download), `components/employees/ImportJobPanel.tsx`, `ImportRecentJobs.tsx`, `EmployeeImportModal.tsx`, `lib/employeeImport.ts`, `types/employeeImport.ts`, endpoints in `lib/api/endpoints.ts`. The screen keeps employee CREATION and email DELIVERY separate.
+
+**Test results (all on private disposable Neon databases, never UAT):**
+- Backend main run: 160 tests OK (0 failed/errors/skipped), incl. 100-employee benchmark, worker-kill recovery, real Celery worker, migration 0217/0218 SQL forward+backward.
+- `tests_employee_bulk_import` + `tests_employee_import_hold_and_conflicts`: 59 tests OK.
+- Frontend: tsc clean, ESLint clean, vitest 68 files / 506 tests pass.
+- End-to-end (real server, real Celery worker, local SMTP catcher, HTTP only, NO browser): 62 of 63 checks pass. Covers preview, 202 confirm, background creation, caught email with absolute link, activation (weak password refused, link single-use), login (branch/department/designation/permissions), onboarding gate, submit validation, HR approval, dashboard access, retry after mail failure (no duplicate employees/invites), RBAC and cross-employee isolation (5 reads + 1 write -> 403).
+- The 1 failing check (C13): an employee can still edit their onboarding form AFTER submitting and before HR approval. Existing behaviour (`_save_profile_step` only blocks COMPLETE); NOT changed here. Decide whether it is wanted.
+
+**NOT covered / known limits:** no browser testing; document upload not exercised (documents go to real ImageKit cloud storage, so the test used placeholder rows); real inbox delivery unverified; creation speed ~3-4 s/employee on small batches, ~27 s/employee (~90 queries each) at 100 rows (no bulk path; 100k rows unproven; 5,000-row cap).
+
+**Before the first real upload on UAT/server (none of this was done by this work):**
+1. Apply migrations accounts 0216-0218, platform_core 0023, branch 0013.
+2. Set `Company.portal_url` to the public frontend URL.
+3. Set `EMPLOYEE_IMPORT_INVITES_ENABLED=true` and restart the Celery worker (the new tasks must be registered). Beat entries for the sweeps are in `config/settings.py`.
+4. First test with a 1-2 row file using mailboxes you control; check the real inbox, link, password set, login. Only then upload the full file.
+5. The 13 pending invitations from the earlier attempt are intentionally untouched.
+
+**Gotchas for the next person:** run tests with the project venv (`backend\H\Scripts\python.exe`, Django 5.1.15; system Python is Django 6.0.4). DB-flushing tests are opt-in (`RUN_DB_FLUSHING_TESTS=1`) because a flush wipes migration-seeded rows; the benchmark is `RUN_IMPORT_BENCHMARK=1`. Another Claude session edited the hold/conflict files (`services_employee_import_invite_policy.py`, `services_employee_import_invites.py`, `services_employee_import_job.py`, `tasks_employee_import.py`, `utils.py`, `config/settings.py`, `tests_employee_import_hold_and_conflicts.py`). Project Budgeting files (`views_external_api.py`, `tests_external_api.py`) belong to someone else and are not part of this change.
+
+
+## Activation link fix + activation/onboarding lifecycle tests (2026-11-10) — LIVING SECTION
+
+**Symptom:** the activation email's "Set Your Password" button opened `http://activate/<token>/` (and, in another mail client, `http:///activate/<token>/`) — a link with no website name.
+
+**Root cause:** `utils._activation_link` built `Company.portal_url + '/activate/<token>/'` with NO check of the stored value. With no Company row, or an empty portal URL, the email carried the bare path `/activate/<token>/`; mail clients turn that into `http://activate/...`. A value like `http://` (it passed the settings form, which only checked the prefix) produced `http:/activate/...`. Proven from the sent emails in the database: every logged invitation had `href="/activate/<token>/"`. Only `Company.portal_url` is used; there is no `FRONTEND_URL` setting.
+
+**Fix (backend/apps/accounts):**
+- New `services_frontend_url.py`: `check_portal_url`, `frontend_origin`, `frontend_url`, `PortalUrlNotConfigured`. Requires `https://` (http only for localhost or DEBUG), a real host name with a dot (or localhost), no spaces, no `?` or `#`.
+- `utils._activation_link` and `send_activation_invite` use it. The portal address is checked BEFORE the token is issued, so a bad setting neither sends a broken email nor invalidates the employee's current link.
+- Bulk-import pipeline: `classify` maps `PortalUrlNotConfigured` to reason `portal_url_not_configured` (permanent, not auto-retried; the Retry button works after the setting is fixed).
+- `CompanySerializer.validate_portal_url` uses the same check, so a value that cannot make a working link cannot be saved.
+- Frontend route is unchanged and exists: `frontend/app/activate/[token]/page.tsx` -> `/activate/<token>`; it calls `GET /api/invite/<token>/` and `POST /api/reset-password/`, then links to `/login`.
+- Forgot-password emails a 6-digit code, NOT a link, so it has no domain to get wrong (tested). The candidate onboarding link (`services_onboarding_link.issue_onboarding_link`) uses the same unchecked pattern; NOT changed here.
+
+**Status fields (verified in code; they are three different things):**
+- Account activation: `User.password` (unusable until set), `account_activated_at` (stamped when the invite link is used), `must_change_password`, `activation_pending`, and `PasswordResetToken.is_used`. `User.is_active=False` means DISABLED by an administrator (login says "deactivated"); imported accounts are `is_active=True`. Do NOT set it False to mean "not activated yet": the UI would show "Disabled".
+- Onboarding: `onboarding_status` pending -> draft -> submitted -> complete (or rejected); labels Not Started / In Progress / Awaiting Review / Needs Revision / Completed. `requires_self_service_onboarding=True` makes the login page and `proxy.ts` send the employee to `/onboarding`.
+- HR approval: `OnboardingApprovalView` moves submitted -> complete (only from submitted).
+- Known gap (reported, not changed): bulk-imported employees never get `activation_pending=True` (the import sends the invite directly, not through `services_onboarding.send_onboarding_email`), so the "password set / first login / activated" events are not written to their onboarding history timeline. Their account status still derives correctly (Invitation Pending -> Active).
+
+**Tests (private test database `test_neondb_activation` on the current Neon project; no email sent):**
+- `tests_activation_url.py` 17 tests: production URL, trailing slash/case, path prefix, localhost, missing Company, blank, 14 malformed values, settings form refuses them, no token burnt on failure, import invitation fails with a clear reason and Retry works after the fix, valid/expired/unknown link, password creation, single use, weak password, forgot-password has no link.
+- `tests_employee_activation_lifecycle.py` 10 tests: imported account pending (password unusable, not activated, onboarding pending, flag True, is_active True); login blocked before a password exists; sending the invite does not activate; setting the password activates the account but NOT onboarding; link single-use; login allowed after; before HR approval onboarding stays pending and cannot be approved or self-approved; after HR approval onboarding is complete and the dashboard rule/API work; disabled is a separate state.
+- `tests_employee_import_protected_batch.py` 8 tests (protecting one invitation batch via the existing `skipped` status).
+- Results: url 17 OK, lifecycle 10 OK, protected 8 OK, `tests_activation_invite` 7 OK, `tests_employee_import_invites` 31 OK (run once before the final edits to the two new test files, which only touched those files). NOT re-run after this change: bulk-import, hire-wizard, onboarding-status, candidate-link, SMTP modules (they mock the sending function).
+
+**IMPORTANT for whoever runs this environment:** the Celery worker imports code when it starts. A worker started before this fix keeps sending OLD links. After deploying: restart the worker. And a Company row with `portal_url` = `https://aira.nxsys.in` MUST exist (Settings -> Company); with the fix, no invitation is sent until it does. Existing invitations already emailed keep the broken link: use Resend Invite for those employees. The database used on 2026-11-10 (Neon project `tiny-dawn-89898883`, branch `br-cold-rain-a1w7h21b`) had 0 Company rows when checked.
+
+Also on 2026-11-10: the new Neon database was migrated from empty (521 migrations; `branch.0002_initial_data` is recorded twice because two `migrate` runs overlapped; harmless, no duplicate rows). The old UAT cleanup (179 employee rows) was prepared, exported and restore-tested but NOT executed; the old UAT host rejected the password afterwards.
+
+
+## Employee Portal URL field in Company Settings (2026-11-10)
+
+**Problem:** bulk-import activation emails fail with "The company portal URL is missing or not a valid web address" and there was NO Portal URL field in Company Settings, so an administrator could not fix it.
+
+**What already existed:** `Company.portal_url` (accounts, CharField 255) and `CompanySerializer` (field list + `validate_portal_url`); `PUT/PATCH /api/settings/company/` (`CompanyRetrieveUpdateView`, needs `settings.edit`, audited, cache invalidated). The system has ONE company (`Company.objects.first()`), so there is no per-tenant selection; the invitation service reads the same record. (`platform_core.LegalEntity.portal_url` is a separate, unused field.) No model change, no migration needed.
+
+**What was missing / added (frontend):**
+- `lib/portalUrl.ts` (+ test): `validatePortalUrl`, same rules as the backend: https required; localhost over http only outside production; rejects missing scheme, `http://`, single-word hosts, spaces, `?`/`#`.
+- `types/company.ts`: `portal_url`. `settings/company/_data.ts`: default value + validation on full and draft saves. `ContactBrandingCard.tsx`: new "Employee Portal URL" field (placeholder `https://aira.nxsys.in`, help text, error message, read-only without `settings.edit`). The page already sends every form field, so it saves.
+
+**Backend change:** `services_frontend_url.check_portal_url` now allows plain http ONLY for localhost AND only while `DEBUG` is on (before, localhost http was accepted in production too).
+
+**Gotcha found by the tests:** saving the Company form runs the WHOLE company validation. A save that only sets the Portal URL fails with "PAN is required for an Indian entity" unless the company details are complete; "Save draft" (`is_draft=true`) skips those required fields and still validates the portal URL. On a fresh server, either complete the company profile or use Save draft. A company record must exist at all (with 0 Company rows the PUT creates one and needs the full set of required fields, or draft).
+
+**Tests:** backend `tests_company_portal_url.py` 10 (save, read back, trailing slash removed, audit, only `settings.edit` can change, malformed values refused and nothing saved, http only in DEBUG, link built as `https://aira.nxsys.in/activate/<token>/`, cleared value stops invitations with a clear message and creates no token) + `tests_activation_url.py` 17 + `tests_employee_activation_lifecycle.py` 10 + `tests_activation_invite.py` 7 = 44 OK (private test DB, no email sent). Frontend: `lib/portalUrl.test.ts` + `ContactBrandingCard.test.tsx` 22 tests OK, `tsc` clean, ESLint clean. NOT run: full frontend suite and `npm run build` (the build was failing earlier because of a corrupted generated file in `frontend/.next/dev/types`, caused by `next dev` and `next build` writing at the same time; delete `.next` and build with no dev server running).
+
+**To use on the deployed server (needs approval, nothing applied by this work):** deploy this commit; open Settings -> Company -> Contact & branding; set Employee Portal URL to `https://aira.nxsys.in` and save (Save draft if the company profile is incomplete); restart the Celery worker (it imports code at start); set `EMPLOYEE_IMPORT_INVITES_ENABLED=true` for the web and worker processes; then use Retry / Resend Invite for the waiting invitations, testing one mailbox you control first.
+
+
+## Onboarding approval screen could not confirm (2026-11-10)
+
+**Symptom:** on the server, HR/superuser opened Candidate Reviews -> Onboarding -> Review, pressed "Approve & Activate", then "Confirm & Activate", and nothing happened (no request in the Network tab).
+
+**Root cause (found by reading the code; not reproduced on the server):** the approval payload always returns the PAN masked (`ABCDE••••F`, `OnboardingApprovalSerializer.get_profile`). `OnboardingDrawer` checked that masked text against the PAN format, which can never match, so `handleConfirm` returned early with "Enter a valid PAN". That message was only rendered inside the "Assign Position" box, which is not shown for already-positioned employees (every bulk-imported employee has an employee ID), so the button silently did nothing. Anyone who had entered a PAN was affected.
+
+**Fix (frontend only):** `lib/onboardingApproval.ts` (`usablePan`, `approvalFieldError`): a masked PAN is not validated and not re-sent (the server keeps the stored PAN when none is sent); a real malformed PAN or a wrong-length UAN is still refused. `OnboardingDrawer.tsx` uses it and now also shows the refusal message at the top for already-positioned employees. 5 vitest tests; tsc and ESLint clean. Deploy = rebuild/redeploy the frontend; no backend change.
+
+**Also verified (backend):** a superuser sees a submitted onboarding in `/api/onboarding/approvals/` and can approve it, even if the employee has not set a password yet (approval does not activate the account; the employee becomes Active only by setting a password through the activation link, which needs `Company.portal_url`). Approving someone who has not submitted is refused. 3 tests in `tests_employee_activation_lifecycle.py` (`SuperuserApprovalTests`).
+
+**Known wording issue (not changed):** the confirmation dialog says "Approve and activate ... full access immediately", which is not what approval does (see above).
+
+**Not committed in this change:** the dark-mode "new UI" bridge for the activation/onboarding/change-password screens (`app/new-ui-bridge.css` + three `layout.tsx` + one import in `app/layout.tsx`) is still uncommitted, awaiting a visual check of the onboarding wizard by someone logged in as an employee.
+
+
+## Dark-mode fix for the activation / onboarding / change-password screens (2026-11-10)
+
+**Symptom:** after a bulk import, a new hire who set their password saw dark, hard-to-read screens (labels almost invisible, light rules box on a dark card).
+
+**Cause:** these screens use the older palette in `globals.css` (`--bg`, `--on-bg`, `--on-variant`, `--outline-v`, `--primary`...), which only has a dark version when the in-app toggle sets `html[data-theme="dark"]`. The new design (`aira-theme.css`) also follows the browser/OS dark setting on its own, and redefines the shared `--surface`. A new hire has no saved choice, so on a dark-mode PC they got dark card backgrounds with the old palette's dark text. Reproduced in headless Chrome with the dark colour scheme emulated (dark card `#14151e`, text `#14151f`, labels `#5c6377`).
+
+**Fix:** `frontend/app/new-ui-bridge.css` re-points the old variable names at the new design's tokens (`--ground`, `--surface-2`, `--ink`, `--muted`, `--line`, `--brand`, ...) inside `.new-ui`, which is `display: contents` so it does not affect layout. `.new-ui` wraps three routes via new `layout.tsx` files: `app/onboarding/`, `app/activate/[token]/`, `app/change-password/`; the CSS is imported in `app/layout.tsx`. The activation page was screenshotted in dark and light after the change and reads correctly in both.
+
+**Not verified:** the onboarding wizard itself (needs a logged-in employee, so not screenshotted), the assessments page (uses fixed light colours of its own, not covered), other browsers / mobile.
+
+**Related findings, not changed (ask before doing):**
+- Org-chart "Assign holder" dropdown is empty for newly imported teams: `OrgStructureClient.tsx` loads employees with `status=active` (account enabled AND onboarding complete AND activated), so employees still in Onboarding are not offered. Proposed small frontend change: also offer Onboarding employees. Assigning someone already seated moves them (their old seat is closed).
+- Reporting manager after import comes from the org chart: the person holding the unit's chief seat (or the nearest ancestor's), same branch name, active. In the checked database 43 chief seats existed and none was held, so nobody resolved. Alternatives: the Excel column "Reporting Manager Employee ID", or assign by hand.

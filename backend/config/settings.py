@@ -402,6 +402,23 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.accounts.tasks.notify_joining_today',
         'schedule': crontab(hour=6, minute=0),
     },
+    # Every 5 minutes — recovery sweep for bulk-import activation emails: re-queues invitations whose worker died, whose retry is
+    # due, or that were never queued because Redis was down. Safe to overlap: each invitation is claimed under a row lock.
+    'requeue-stale-import-invites': {
+        'task':     'apps.accounts.tasks.requeue_stale_import_invites',
+        'schedule': 300.0,
+    },
+    # Every 2 minutes — recovery sweep for bulk-import JOBS: queues jobs nobody picked up (Redis was down) and jobs whose worker
+    # died (their lease expired); the job then resumes at its database checkpoint. Safe to overlap.
+    'requeue-stale-import-jobs': {
+        'task':     'apps.accounts.tasks.requeue_stale_import_jobs',
+        'schedule': 120.0,
+    },
+    # Daily at 03:30 IST — deletes finished import jobs and their row-level errors after the 30-day retention period.
+    'purge-old-import-jobs': {
+        'task':     'apps.accounts.tasks.purge_old_import_jobs',
+        'schedule': crontab(hour=3, minute=30),
+    },
 }
 
 # ─── DRF ─────────────────────────────────────────────────────────────────────
@@ -457,6 +474,17 @@ EMAIL_BACKEND      = (
     else 'django.core.mail.backends.smtp.EmailBackend'
 )
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Aira HRMS <noreply@hrms.com>')
+# Seconds to wait on the mail server before giving up. Django's default is to wait forever, which can hang a worker.
+EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT', default=20)
+# Activation invitations of a bulk employee import (apps/accounts/services_employee_import_invites.py).
+EMPLOYEE_IMPORT_INVITE_MAX_ATTEMPTS  = 4
+EMPLOYEE_IMPORT_INVITE_STALE_SECONDS = 600       # a "processing" invitation older than this is treated as abandoned (worker died)
+EMPLOYEE_IMPORT_INVITE_RATE_LIMIT    = '20/m'    # per worker; keep below the sending limit of the mail account
+# Bulk employee import as a background job (apps/accounts/services_employee_import_job.py).
+EMPLOYEE_IMPORT_CHUNK_SIZE           = 2000      # rows handled per Celery task run before the next run is queued
+EMPLOYEE_IMPORT_COMMIT_BATCH         = 25        # rows per database transaction (keeps locks short; a file this small is all-or-nothing)
+EMPLOYEE_IMPORT_JOB_MAX_ROWS         = 5000      # the whole workbook is read into memory: raise only after a streaming reader exists
+EMPLOYEE_IMPORT_JOB_LEASE_SECONDS    = 600       # a worker owns a job this long; if it dies the lease expires and the job resumes
 
 OTP_EXPIRY_MINUTES = 10
 OTP_MAX_ATTEMPTS = 5
@@ -547,6 +575,11 @@ LOGS_DIR.mkdir(exist_ok=True)
 # data matters here). Test runs get their own subdirectory instead — same
 # handlers/rotation/formatting, just never the same files.
 RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == 'test'
+# Hold switch for the activation emails of a bulk employee import. OFF unless explicitly turned on with the environment variable
+# EMPLOYEE_IMPORT_INVITES_ENABLED=true: while it is off nothing is queued, claimed, tokenised or emailed by the web server, a Celery
+# worker, the Beat sweep or the resend command, and every pending invitation stays exactly as it is. The test runner turns it on
+# (every test mocks the mail function) so the pipeline can be exercised; tests of the hold itself switch it off again.
+EMPLOYEE_IMPORT_INVITES_ENABLED = True if RUNNING_TESTS else env.bool('EMPLOYEE_IMPORT_INVITES_ENABLED', default=False)
 _LOG_DIR = (LOGS_DIR / 'test') if RUNNING_TESTS else LOGS_DIR
 _LOG_DIR.mkdir(exist_ok=True)
 

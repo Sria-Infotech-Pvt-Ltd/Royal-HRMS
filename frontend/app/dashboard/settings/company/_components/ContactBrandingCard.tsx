@@ -2,6 +2,7 @@
 
 import type { RefObject } from "react";
 import type { CompanySectionProps } from "@/types/company";
+import { PORTAL_URL_HELP } from "@/lib/portalUrl";
 import ProfileCard from "./ProfileCard";
 
 interface Props extends CompanySectionProps {
@@ -56,6 +57,22 @@ export default function ContactBrandingCard({
           type="text"
         />
         {errors.website && <div className="field-error-msg">{errors.website}</div>}
+      </div>
+
+      <div className="field-group mb-16" data-testid="portal-url-field">
+        <label className="field-label" htmlFor="company-portal-url">Employee Portal URL</label>
+        <input
+          id="company-portal-url"
+          className={`field-input${errors.portal_url ? " field-error" : ""}`}
+          value={form.portal_url ?? ""}
+          disabled={!canEdit}
+          onChange={e => onFieldChange("portal_url", e.target.value)}
+          placeholder="https://aira.nxsys.in"
+          type="text"
+        />
+        {errors.portal_url
+          ? <div className="field-error-msg">{errors.portal_url}</div>
+          : <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 6 }}>{PORTAL_URL_HELP}</div>}
       </div>
 
       <div className="field-group">
