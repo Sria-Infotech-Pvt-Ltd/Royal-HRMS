@@ -193,6 +193,7 @@ export default function LeaveDashboard({ onApply, onViewCalendar }: Props) {
           initialData={detailRequest}
           onClose={() => setDetailRequest(null)}
           onCancelRequest={() => cancelMine(detailRequest.id)}
+          onChanged={refetchRequests}
         />
       )}
     </div>

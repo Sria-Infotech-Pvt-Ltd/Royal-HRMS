@@ -20,7 +20,7 @@ function resolveAuthor(data: AnnouncementData): string {
 }
 
 export default function AnnouncementCard() {
-  const { data, loading } = useFetch<AnnouncementData>(API.dashboard.announcement);
+  const { data, loading } = useFetch<AnnouncementData>(API.employeeDashboard.announcement);
   const [viewing, setViewing] = useState(false);
 
   const isValidAnnouncement =

@@ -121,6 +121,63 @@ def _count_consecutive_absent_days(
     return consecutive
 
 
+EPISODE_LOOK_BACK_DAYS = 62
+
+
+def _absence_episode(employee, today: date) -> tuple[int, date | None]:
+    """
+    The absence episode running up to yesterday: (consecutive absent working
+    days, first absent day). Same day rules as _count_consecutive_absent_days
+    (week-offs and holidays skipped, approved leave or any attendance ends
+    it) but walks the whole streak, so the first day — the episode's identity —
+    stays the same each day the absence continues.
+    """
+    from apps.attendance.models import AttendanceRecord
+    start = today - timedelta(days=EPISODE_LOOK_BACK_DAYS)
+    records = {
+        r.date: r.status
+        for r in AttendanceRecord.objects.filter(employee=employee, date__gte=start, date__lt=today)
+    }
+    leave_dates = _get_approved_leave_dates(employee, start, today)
+    off_days_by_date = _get_weekly_off_days(employee, start, today - timedelta(days=1))
+    joined = getattr(employee, 'date_of_joining', None)
+
+    count, first = 0, None
+    current = today - timedelta(days=1)
+    while current >= start:
+        if joined and current < joined:
+            break
+        if current.strftime('%A').lower() in off_days_by_date[current]:
+            current -= timedelta(days=1)
+            continue
+        if current in leave_dates:
+            break
+        status = records.get(current)
+        if status == AttendanceRecord.STATUS_HOLIDAY:
+            current -= timedelta(days=1)
+            continue
+        if status in (AttendanceRecord.STATUS_ABSENT, None):
+            count += 1
+            first = current
+        else:
+            break
+        current -= timedelta(days=1)
+    return count, first
+
+
+def episode_reference(employee, first_day: date) -> str:
+    return f'{employee.id}:{first_day.isoformat()}'
+
+
+def _episode_alerted(employee, first_day: date) -> bool:
+    """True once any alert was sent for this absence episode (one per episode, not per day)."""
+    from apps.notifications.models import Notification
+    return Notification.objects.filter(
+        notification_type='attendance', title__in=('Absence Alert', 'You Were Marked Absent'),
+        reference_id=episode_reference(employee, first_day),
+    ).exists()
+
+
 def _alert_sent_today(employee, today: date) -> bool:
     """True if an absence alert notification was already created for this employee today."""
     from apps.notifications.models import Notification
@@ -132,10 +189,12 @@ def _alert_sent_today(employee, today: date) -> bool:
     ).exists()
 
 
-def _fire_alert(employee, consecutive_days: int, notify_whom: str) -> None:
-    """Create one Notification per configured recipient (manager, HR, or both)."""
-    from apps.notifications.models import Notification
-    from apps.notifications.signals import _category_enabled
+def _fire_alert(employee, consecutive_days: int, notify_whom: str, first_day: date | None = None) -> None:
+    """One notification per configured recipient (manager, HR, or both), plus
+    the employee about their own absence. Through the shared notification
+    path (preferences, live push)."""
+    from apps.notifications.signals import _notify
+    reference = episode_reference(employee, first_day) if first_day else str(employee.id)
     message = (
         f'{employee.full_name} has been absent for {consecutive_days} consecutive '
         'working day(s) without an approved leave.'
@@ -151,16 +210,14 @@ def _fire_alert(employee, consecutive_days: int, notify_whom: str) -> None:
             recipients.append(hr)
 
     for recipient in recipients:
-        if not _category_enabled(recipient, 'attendance'):
+        if recipient.pk == employee.pk:
             continue
-        Notification.objects.create(
-            user=recipient,
-            title='Absence Alert',
-            message=message,
-            notification_type='attendance',
-            module='attendance',
-            reference_id=str(employee.id),
-        )
+        _notify(recipient, 'Absence Alert', message, 'attendance', 'attendance', reference)
+    since = f' since {first_day:%d %b %Y}' if first_day else ''
+    _notify(employee, 'You Were Marked Absent',
+            f'You have been absent for {consecutive_days} working day(s){since} without an approved leave. '
+            'Apply for leave or request an attendance correction if this is wrong.',
+            'attendance', 'attendance', reference)
     logger.info(
         'Absence alert fired: employee=%s consecutive_days=%d recipients=%d',
         employee.id, consecutive_days, len(recipients),
@@ -196,12 +253,13 @@ def detect_absence_alerts() -> dict:
 
     for employee in employees:
         checked += 1
-        consecutive = _count_consecutive_absent_days(employee, today, threshold)
-        if consecutive < threshold:
+        consecutive, first_day = _absence_episode(employee, today)
+        if consecutive < threshold or first_day is None:
             continue
-        if _alert_sent_today(employee, today):
+        # One alert per absence episode — not again every day it continues.
+        if _episode_alerted(employee, first_day):
             continue
-        _fire_alert(employee, consecutive, notify_whom)
+        _fire_alert(employee, consecutive, notify_whom, first_day)
         alerts_sent += 1
 
     logger.info(

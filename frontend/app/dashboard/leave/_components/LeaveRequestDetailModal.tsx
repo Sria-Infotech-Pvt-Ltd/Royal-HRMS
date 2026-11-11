@@ -3,6 +3,7 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { LeaveRequest, STATUS_BADGE, STATUS_LABEL, fmtDate } from "../_data";
+import LeaveCancellationPanel from "./LeaveCancellationPanel";
 
 interface Props {
   requestId:        string;
@@ -11,6 +12,8 @@ interface Props {
   onApprove?:       () => void;
   onReject?:        () => void;
   onCancelRequest?: () => void;
+  /** Called after a cancellation request / decision so the list can refresh. */
+  onChanged?:       () => void;
 }
 
 const DECISION_LABEL: Record<string, string> = {
@@ -51,11 +54,11 @@ function DecisionRow({
 }
 
 export default function LeaveRequestDetailModal({
-  requestId, initialData, onClose, onApprove, onReject, onCancelRequest,
+  requestId, initialData, onClose, onApprove, onReject, onCancelRequest, onChanged,
 }: Props) {
   // Row data renders immediately (no blank flash); GET /leave/requests/<id>/
   // then supplies the current state in case it changed since the list loaded.
-  const { data, loading, error } = useFetch<LeaveRequest>(API.leave.requestDetail(requestId));
+  const { data, loading, error, refetch } = useFetch<LeaveRequest>(API.leave.requestDetail(requestId));
   const r = data ?? initialData;
 
   return (
@@ -164,6 +167,8 @@ export default function LeaveRequestDetailModal({
               {r.handover_notes && <p className="text-xs text-[var(--on-variant)] mt-1.5">{r.handover_notes}</p>}
             </div>
           )}
+
+          <LeaveCancellationPanel request={r} onChanged={() => { refetch(); onChanged?.(); }} />
 
           {r.document_url && (
             <div className="border-t border-[var(--outline-v)] pt-4">

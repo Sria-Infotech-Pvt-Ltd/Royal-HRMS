@@ -91,5 +91,6 @@ class NotificationSettingsView(APIView):
         serializer = NotificationSettingsSerializer(settings_row, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
-        serializer.save()
+        # Approval notifications are mandatory — they cannot be switched off.
+        serializer.save(is_approval_enabled=True)
         return success('Notification settings updated.', serializer.data)

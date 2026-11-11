@@ -149,6 +149,13 @@ export interface LeaveRequest {
   created_at:         string;
   can_approve?:       boolean;
   can_cancel?:        boolean;
+  // Cancelling an approved leave (needs approval)
+  cancellation_status?:       "" | "requested" | "approved" | "rejected";
+  cancellation_reason?:       string;
+  cancellation_requested_at?: string | null;
+  cancellation_remarks?:      string;
+  can_request_cancellation?:  boolean;
+  can_decide_cancellation?:   boolean;
   approved_by:        string | null;
   approved_at:        string | null;
 }

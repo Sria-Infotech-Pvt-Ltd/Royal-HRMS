@@ -57,7 +57,8 @@ describe("subscription coverage", () => {
 
   it("a Starter company sees no payroll, recruitment, expense or asset menus", () => {
     const starter = ["announcements", "attendance", "documents", "leave", "wfh"];
-    const all = ["recruitment.view", "payroll.view", "leave.view", "expenses.view", "attendance.create",
+    // An HR user: the HR Attendance menu needs attendance.edit (lib/navConfig.ts).
+    const all = ["recruitment.view", "payroll.view", "leave.view", "expenses.view", "attendance.edit",
       "employees.view", "documents.view", "wfh.view", "settings.view"];
     const visible = buildNav(all, starter).filter(e => !isSection(e)).map(e => (e as NavItem).id);
     for (const hidden of ["payroll", "my-payslip", "expenses", "interview-list", "candidate-review", "email-logs", "referrals"]) {

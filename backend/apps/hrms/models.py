@@ -678,6 +678,23 @@ class LeaveRequest(models.Model):
     handover_notes       = models.TextField(blank=True, default='')
 
     document   = models.FileField(upload_to=leave_document_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage(), null=True, blank=True)
+
+    # Cancelling an APPROVED leave needs approval (apps.hrms.views.leave_cancellation).
+    # A pending request is still cancelled directly by the employee.
+    CANCELLATION_REQUESTED = 'requested'
+    CANCELLATION_APPROVED  = 'approved'
+    CANCELLATION_REJECTED  = 'rejected'
+    CANCELLATION_CHOICES = [('', 'None'), (CANCELLATION_REQUESTED, 'Cancellation requested'),
+                            (CANCELLATION_APPROVED, 'Cancellation approved'),
+                            (CANCELLATION_REJECTED, 'Cancellation rejected')]
+    cancellation_status       = models.CharField(max_length=12, choices=CANCELLATION_CHOICES, blank=True, default='')
+    cancellation_reason       = models.TextField(blank=True, default='')
+    cancellation_requested_at = models.DateTimeField(null=True, blank=True)
+    cancellation_reviewed_by  = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                                  related_name='+')
+    cancellation_reviewed_at  = models.DateTimeField(null=True, blank=True)
+    cancellation_remarks      = models.TextField(blank=True, default='')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

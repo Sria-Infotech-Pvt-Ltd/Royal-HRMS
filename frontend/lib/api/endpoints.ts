@@ -233,6 +233,12 @@ export const API = {
     approveWfh: (id: string) => `/wfh/requests/${id}/approve/`,
     expenseList: "/expenses/",
     approveExpense: (id: string) => `/expenses/${id}/approve/`,
+    escalationSettings:       "/approvals/escalation-settings/",
+    escalationHeadCandidates: "/approvals/escalation-settings/head-candidates/",
+    escalations:              "/approvals/escalations/",
+    delegations:              "/approvals/delegations/",
+    delegationsEligible:      "/approvals/delegations/eligible/", // + ?workflow=leave|attendance
+    delegationRevoke:         (id: string) => `/approvals/delegations/${id}/revoke/`,
   },
 
   expenses: {
@@ -298,6 +304,9 @@ export const API = {
     requests: "/leave/requests/",
     requestDetail: (id: string) => `/leave/requests/${id}/`,
     approve: (id: string) => `/leave/requests/${id}/approve/`,
+    cancellationRequest:  (id: string) => `/leave/requests/${id}/cancellation/`,
+    cancellationDecision: (id: string) => `/leave/requests/${id}/cancellation/decision/`,
+    cancellations:        "/leave/cancellations/",
     stats: "/leave/stats/",
     calendar: "/leave/calendar/",
     holidays: "/leave/holidays/",

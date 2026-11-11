@@ -285,6 +285,7 @@ export default function MyRequestsClient({ initialTab }: Props) {
           initialData={detailItem.raw as LeaveRequest}
           onClose={() => setDetailItem(null)}
           onCancelRequest={detailItem.canCancel ? () => cancelLeave(detailItem.id) : undefined}
+          onChanged={refetchLeave}
         />
       )}
 

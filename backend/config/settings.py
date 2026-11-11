@@ -92,6 +92,7 @@ TENANT_APPS = (
     'apps.attendance',
     'apps.assessments',
     'apps.notifications',
+    'apps.approvals',
     'apps.dashboard',
     'apps.payroll',
     'apps.voice_commands',
@@ -408,6 +409,12 @@ CELERY_BEAT_SCHEDULE = {
     'check-absence-alerts': {
         'task':     'apps.attendance.tasks.check_absence_alerts',
         'schedule': crontab(hour=9, minute=0),
+    },
+    # Runs daily at 09:30 IST — approval reminders / escalation (each company's
+    # own Settings → Approval Rules → Escalation; off unless a company enables it).
+    'run-approval-escalations': {
+        'task':     'apps.approvals.tasks.run_approval_escalations',
+        'schedule': crontab(hour=9, minute=30),
     },
     # Runs daily at 00:05 IST — sends birthday wishes (email + in-app
     # notifications) to employees. Offset 5 min past midnight rather than

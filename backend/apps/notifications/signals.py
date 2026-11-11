@@ -39,12 +39,18 @@ _MODULE_DEFAULT_CATEGORY = {
 }
 
 
+# Categories a user cannot switch off: requests waiting for their approval
+# must always reach them (in-app and email).
+MANDATORY_CATEGORIES = frozenset({'approval'})
+
+
 def _category_enabled(user, category: str | None) -> bool:
     """True if `user` has this notification category enabled. Categories with
     no mapping (e.g. birthday, promotion, announcement) are never gated —
     they fall through as always-enabled. A user with no NotificationSettings
-    row yet also defaults to enabled, matching the model's field defaults."""
-    if not category:
+    row yet also defaults to enabled, matching the model's field defaults.
+    Mandatory categories (approval) are always enabled."""
+    if not category or category in MANDATORY_CATEGORIES:
         return True
     try:
         from .models import NotificationSettings
@@ -62,6 +68,8 @@ def _category_enabled_user_ids(user_ids: list, category: str) -> list:
     a new Document Center upload going to many users at once) — one query
     instead of one per recipient. Same "no row = enabled" default as the
     single-user check above."""
+    if category in MANDATORY_CATEGORIES:
+        return list(user_ids)
     try:
         from .models import NotificationSettings
         field = f'is_{category}_enabled'
@@ -132,7 +140,26 @@ def _company_name() -> str:
         return ''
 
 
-def _send_lifecycle_email(user, template_name: str, context: dict) -> None:
+_EMAIL_CATEGORY_PREFIXES = (
+    ('leave_', 'leave'), ('regularization_', 'attendance'), ('late_justification_', 'attendance'),
+    ('face_registration_', 'attendance'), ('expense_', 'expense'), ('separation_', 'separation'),
+    ('payslip_', 'payroll'),
+)
+
+
+def email_category(template_name: str) -> str | None:
+    """The notification category an email belongs to, so the user's preference
+    applies to email as well as in-app. Pending-approval emails are 'approval'
+    (mandatory). None = never gated (e.g. security: password reset)."""
+    if 'pending_approval' in template_name:
+        return 'approval'
+    for prefix, category in _EMAIL_CATEGORY_PREFIXES:
+        if template_name.startswith(prefix):
+            return category
+    return None
+
+
+def _send_lifecycle_email(user, template_name: str, context: dict, category: str | None = None) -> None:
     """
     Fire-and-forget lifecycle email (leave, separation, expense, ... — any
     event whose email should track its in-app Notification 1:1), sent
@@ -145,6 +172,9 @@ def _send_lifecycle_email(user, template_name: str, context: dict) -> None:
     swallows a missing/inactive template rather than raising into Celery.
     """
     if not user or not getattr(user, 'email', ''):
+        return
+    # Same preference as the in-app notification (Settings → Notifications).
+    if not _category_enabled(user, category or email_category(template_name)):
         return
     from django.db import connection
     from apps.notifications.tasks import send_lifecycle_email_task
@@ -171,10 +201,11 @@ def _send_lifecycle_email(user, template_name: str, context: dict) -> None:
 @receiver(pre_save, sender='hrms.LeaveRequest')
 def _capture_leave_status(sender, instance, **kwargs):
     instance._old_status = None
+    instance._old_cancellation = ''
     if instance.pk:
         try:
-            instance._old_status = (
-                sender.objects.values_list('status', flat=True).get(pk=instance.pk)
+            instance._old_status, instance._old_cancellation = (
+                sender.objects.values_list('status', 'cancellation_status').get(pk=instance.pk)
             )
         except sender.DoesNotExist:
             pass
@@ -200,11 +231,16 @@ def _on_leave_save(sender, instance, created, **kwargs):
             'total_days':    str(instance.total_days),
             'reason':        instance.reason,
         })
-        # L1 approver if assigned, or L2 when manager submits (goes straight to l2_pending)
-        approver = instance.l1_approver or (
-            instance.l2_approver if instance.status == 'l2_pending' else None
-        )
-        if approver:
+        # L1 approver if assigned, or L2 when manager submits (goes straight to
+        # l2_pending) — or, with no HR assigned, the HR who can act (fallback).
+        if instance.l1_approver:
+            approvers = [instance.l1_approver]
+        elif instance.status == 'l2_pending':
+            approvers = _leave_hr_approvers(instance)
+        else:
+            approvers = []
+        from apps.approvals.services import with_delegates
+        for approver in with_delegates(approvers, 'leave'):
             _notify(approver, 'New Leave Request',
                     f'{employee.full_name} has submitted a {label} request from {start} to {end}.',
                     'leave_applied', 'leave', ref_id, employee, category='approval')
@@ -219,10 +255,53 @@ def _on_leave_save(sender, instance, created, **kwargs):
             })
         return
 
+    old_cancel = getattr(instance, '_old_cancellation', '') or ''
+    if old_cancel != (instance.cancellation_status or ''):
+        _dispatch_cancellation(instance, employee, label, ref_id, old_cancel)
+
     old_status = getattr(instance, '_old_status', None)
     if old_status == instance.status:
         return
     _dispatch_leave_status(instance, employee, label, ref_id, old_status, instance.status)
+
+
+def _dispatch_cancellation(instance, employee, label, ref_id, old_cancel):
+    """Cancellation of an approved leave: requested → decider(s); rejected → employee.
+    (Approved ends in status 'cancelled', handled by _dispatch_leave_status.)"""
+    start, end = instance.start_date.strftime('%d %b'), instance.end_date.strftime('%d %b')
+    if instance.cancellation_status == 'requested':
+        _notify(employee, 'Leave Cancellation Requested',
+                f'Your request to cancel your {label} ({start} – {end}) is waiting for approval.',
+                'leave_cancellation', 'leave', ref_id, employee)
+        from apps.approvals.services import with_delegates
+        from apps.hrms.views.leave_cancellation import decision_stage
+        deciders = ([instance.l1_approver] if instance.l1_approver else []) if decision_stage(instance) == 'l1' \
+            else _leave_hr_approvers(instance)
+        for u in with_delegates(deciders, 'leave'):
+            _notify(u, 'Leave Cancellation Pending',
+                    f'{employee.full_name} asked to cancel their approved {label} ({start} – {end}): '
+                    f'{instance.cancellation_reason}', 'leave_cancellation', 'leave', ref_id, employee,
+                    category='approval')
+    elif instance.cancellation_status == 'rejected' and old_cancel == 'requested':
+        _notify(employee, 'Leave Cancellation Rejected',
+                f'Your request to cancel your {label} ({start} – {end}) was rejected: {instance.cancellation_remarks}. '
+                'The leave stays approved.', 'leave_cancellation', 'leave', ref_id)
+
+
+def _leave_hr_approvers(instance) -> list:
+    """HR stage: the assigned L2, else the HR who can act on it (apps.notifications.recipients)."""
+    if instance.l2_approver:
+        return [instance.l2_approver]
+    from .recipients import fallback_hr_approvers
+    return fallback_hr_approvers(instance.employee, 'leave.approve')
+
+
+def _attendance_hr_approvers(instance) -> list:
+    """Attendance HR stage: the assigned L2, else HR staff who can act on it."""
+    if instance.l2_approver:
+        return [instance.l2_approver]
+    from .recipients import fallback_hr_approvers
+    return fallback_hr_approvers(instance.employee, 'attendance.create', staff_only=True)
 
 
 def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
@@ -241,12 +320,13 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
             'start_date':    start,
             'end_date':      end,
         })
-        if instance.l2_approver:
-            _notify(instance.l2_approver, 'Leave Awaiting Approval',
+        from apps.approvals.services import with_delegates
+        for hr_approver in with_delegates(_leave_hr_approvers(instance), 'leave'):
+            _notify(hr_approver, 'Leave Awaiting Approval',
                     f'Leave request of {employee.full_name} is awaiting your approval.',
                     'leave_manager_approved', 'leave', ref_id, category='approval')
-            _send_lifecycle_email(instance.l2_approver, 'leave_request_pending_approval', {
-                'approver_name': instance.l2_approver.full_name or instance.l2_approver.email,
+            _send_lifecycle_email(hr_approver, 'leave_request_pending_approval', {
+                'approver_name': hr_approver.full_name or hr_approver.email,
                 'employee_name': employee.full_name or employee.email,
                 'leave_type':    label,
                 'start_date':    start,
@@ -316,8 +396,10 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
         })
 
     elif new_st == 'cancelled':
-        _notify(employee, 'Leave Cancelled',
-                f'Your {label} request has been cancelled.',
+        approved_before = old_st == 'approved'
+        _notify(employee, 'Leave Cancellation Approved' if approved_before else 'Leave Cancelled',
+                (f'Your approved {label} ({start} – {end}) has been cancelled and the days returned to your balance.'
+                 if approved_before else f'Your {label} request has been cancelled.'),
                 'leave_cancelled', 'leave', ref_id)
         _send_lifecycle_email(employee, 'leave_cancelled', {
             'employee_name': employee.full_name or employee.email,
@@ -325,6 +407,43 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
             'start_date':    start,
             'end_date':      end,
         })
+
+
+# ─── Leave balance changes ─────────────────────────────────────────────────────
+
+def _days(value) -> str:
+    v = float(value)
+    return f'{v:g}'
+
+
+@receiver(post_save, sender='hrms.LeaveCreditTransaction')
+def _on_leave_credit_transaction(sender, instance, created, **kwargs):
+    """Every recorded balance change — manual adjustment, monthly credit,
+    reversal, monthly expiry — tells the employee."""
+    if not created:
+        return
+    label = _leave_display(instance.leave_type)
+    amount = float(instance.amount)
+    month = ''
+    if instance.month:
+        import calendar
+        month = f' for {calendar.month_name[instance.month]} {instance.year}'
+    kind = instance.txn_type
+    if kind == 'monthly_credit':
+        msg = f'{_days(abs(amount))} day(s) of {label} {"credited" if amount >= 0 else "removed"}{month}.'
+    elif kind == 'monthly_expiry':
+        msg = f'{_days(abs(amount))} unused day(s) of {label}{month} expired.'
+    elif kind == 'reversal':
+        msg = f'A {label} balance change was reversed ({"+" if amount >= 0 else ""}{_days(amount)} day(s)).'
+    else:
+        msg = f'Your {label} balance was adjusted by {"+" if amount >= 0 else ""}{_days(amount)} day(s).'
+    notify_leave_balance_change(instance.employee, f'{msg} New balance: {_days(instance.total_after)} day(s).',
+                                str(instance.pk))
+
+
+def notify_leave_balance_change(employee, message: str, reference_id: str = '') -> None:
+    """In-app 'Leave Balance Updated' (leave category — follows the employee's preference)."""
+    _notify(employee, 'Leave Balance Updated', message, 'leave_balance', 'leave', reference_id)
 
 
 # ─── Attendance Correction (Regularization) ────────────────────────────────────
@@ -361,24 +480,21 @@ def _on_correction_save(sender, instance, created, **kwargs):
             'reason':        instance.get_reason_display(),
         })
 
-        hr = getattr(employee, 'hr', None)
-        if hr:
-            _notify(hr, 'Regularization Request Pending',
-                    f'Attendance regularization request from {employee.full_name} is pending approval.',
-                    'regularization', 'attendance', ref_id, category='approval')
-            _send_lifecycle_email(hr, 'regularization_pending_approval', {
-                'approver_name': hr.full_name or hr.email,
-                'employee_name': employee_name,
-                'date':          corr_date,
-                'reason':        instance.get_reason_display(),
-            })
+        # Whoever acts first: the L1 manager, or (manager's own request / no
+        # manager) the HR stage — not HR while the manager still has to act.
+        _notify_regularization_approvers(instance, employee_name, corr_date, ref_id)
         return
 
     old_status = getattr(instance, '_old_status', None)
     if old_status == instance.status:
         return
 
-    if instance.status == 'approved':
+    if old_status == 'pending' and instance.status == 'l2_pending':
+        _notify(employee, 'Regularization Forwarded to HR',
+                'Your manager approved your attendance regularization request. It is now with HR.',
+                'regularization', 'attendance', ref_id)
+        _notify_regularization_approvers(instance, employee_name, corr_date, ref_id)
+    elif instance.status == 'approved':
         _notify(employee, 'Regularization Approved',
                 'Your attendance regularization request has been approved.',
                 'regularization', 'attendance', ref_id)
@@ -391,6 +507,26 @@ def _on_correction_save(sender, instance, created, **kwargs):
                 'regularization', 'attendance', ref_id)
         _send_lifecycle_email(employee, 'regularization_rejected', {
             'employee_name': employee_name, 'date': corr_date,
+        })
+
+
+def _notify_regularization_approvers(instance, employee_name, corr_date, ref_id) -> None:
+    if instance.status == 'pending':
+        approvers = [instance.l1_approver] if instance.l1_approver else []
+    elif instance.status == 'l2_pending':
+        approvers = _attendance_hr_approvers(instance)
+    else:
+        approvers = []
+    from apps.approvals.services import with_delegates
+    for approver in with_delegates(approvers, 'attendance'):
+        _notify(approver, 'Regularization Request Pending',
+                f'Attendance regularization request from {instance.employee.full_name} is pending your approval.',
+                'regularization', 'attendance', ref_id, category='approval')
+        _send_lifecycle_email(approver, 'regularization_pending_approval', {
+            'approver_name': approver.full_name or approver.email,
+            'employee_name': employee_name,
+            'date':          corr_date,
+            'reason':        instance.get_reason_display(),
         })
 
 
@@ -415,8 +551,10 @@ def _on_late_justification_save(instance, created):
         return
 
     def notify_approver():
-        approver = _late_approver(instance)
-        if approver:
+        approvers = ([instance.l1_approver] if instance.l1_approver else []) if instance.status == 'pending' \
+            else _attendance_hr_approvers(instance)
+        from apps.approvals.services import with_delegates
+        for approver in with_delegates(approvers, 'attendance'):
             _notify(approver, 'Late Arrival Justification Pending',
                     f'{employee.full_name} explained a late arrival on {day} ({reason}) — awaiting your review.',
                     'regularization', 'attendance', ref_id, category='approval')

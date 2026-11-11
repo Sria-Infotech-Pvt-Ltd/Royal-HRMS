@@ -7,6 +7,7 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import type { GlobalApprovalRule, ApprovalWorkflowType } from "@/types/approvalMatrix";
 import Modal from "@/components/Modal";
+import EscalationSettingsCard from "./_components/EscalationSettingsCard";
 
 interface RoleOption {
   id:           number;
@@ -153,6 +154,8 @@ export default function ApprovalRulesPage() {
           </div>
         </div>
       )}
+
+      <EscalationSettingsCard />
 
       {editing && (
         <Modal

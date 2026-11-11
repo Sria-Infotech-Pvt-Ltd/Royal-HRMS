@@ -373,6 +373,8 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
     document_url       = serializers.SerializerMethodField()
     can_approve        = serializers.SerializerMethodField()
     can_cancel         = serializers.SerializerMethodField()
+    can_request_cancellation = serializers.SerializerMethodField()
+    can_decide_cancellation  = serializers.SerializerMethodField()
     approved_by        = serializers.SerializerMethodField()
     approved_at        = serializers.SerializerMethodField()
 
@@ -388,6 +390,8 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             'document_url', 'created_at',
             'can_approve', 'can_cancel',
             'approved_by', 'approved_at',
+            'cancellation_status', 'cancellation_reason', 'cancellation_requested_at', 'cancellation_remarks',
+            'can_request_cancellation', 'can_decide_cancellation',
         ]
 
     def get_employee_name(self, obj):
@@ -451,6 +455,24 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         is_own    = obj.employee_id == request.user.id
         is_pending = obj.status in ('pending', 'l2_pending')
         return is_own and is_pending
+
+    def get_can_request_cancellation(self, obj):
+        """Own approved leave that hasn't started and has no cancellation request waiting."""
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        from django.utils import timezone
+        return (obj.employee_id == request.user.id and obj.status == 'approved'
+                and obj.start_date > timezone.localdate() and obj.cancellation_status != 'requested')
+
+    def get_can_decide_cancellation(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        if obj.cancellation_status != 'requested' or obj.status != 'approved':
+            return False
+        from apps.hrms.views.leave_cancellation import can_decide
+        return can_decide(request.user, obj)
 
 
 MAX_DOCUMENT_SIZE  = 5 * 1024 * 1024

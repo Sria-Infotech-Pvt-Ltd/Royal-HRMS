@@ -97,6 +97,10 @@ def _can_approve_at_stage(user, correction: AttendanceCorrection, stage: str) ->
         return True
     if _is_branch_admin(user):
         return _branch_admin_covers(user, correction.employee)
+    # Delegate of this stage's approver, or the request was escalated to this user.
+    from apps.approvals.services import acts_for
+    if acts_for(user, correction, stage, 'attendance'):
+        return True
 
     if stage == 'l1':
         if correction.l1_approver_id:
@@ -160,7 +164,10 @@ def _approval_scope_filter(user) -> Q:
             l2_scope |= orphaned
         scope = (scope | l2_scope) if scope is not None else l2_scope
 
-    return scope if scope is not None else Q(pk=None)  # no other role gets a review queue
+    # Requests delegated to or escalated to this user.
+    from apps.approvals.services import scope_q
+    extra = scope_q(user, 'attendance')
+    return (scope | extra) if scope is not None else extra
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────

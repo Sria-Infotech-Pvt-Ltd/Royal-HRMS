@@ -29,12 +29,12 @@ const DEFAULT_SETTINGS: NotificationSettingsForm = {
   is_system_enabled:     true,
 };
 
-const CATEGORIES: { field: keyof NotificationSettingsForm; icon: string; label: string; desc: string }[] = [
+const CATEGORIES: { field: keyof NotificationSettingsForm; icon: string; label: string; desc: string; locked?: boolean }[] = [
   { field: "is_leave_enabled",      icon: "ti-beach",           label: "Leave Notifications",       desc: "Receive notifications for leave requests, approvals, and rejections." },
   { field: "is_expense_enabled",    icon: "ti-receipt",         label: "Expense Notifications",      desc: "Receive notifications for expense submissions, approvals, and rejections." },
   { field: "is_separation_enabled", icon: "ti-door-exit",       label: "Separation Notifications",   desc: "Receive notifications for separation requests, approvals, rejections, and status updates." },
   { field: "is_payroll_enabled",    icon: "ti-report-money",    label: "Payroll Notifications",      desc: "Receive notifications for payslip generation and payroll updates." },
-  { field: "is_approval_enabled",   icon: "ti-checkbox",        label: "Approval Notifications",     desc: "Receive notifications when an action requires your approval." },
+  { field: "is_approval_enabled",   icon: "ti-checkbox",        label: "Approval Notifications",     desc: "Always on — requests waiting for your approval always reach you (in-app and email).", locked: true },
   { field: "is_document_enabled",   icon: "ti-file-text",       label: "Document Notifications",     desc: "Receive notifications when documents are uploaded or require action." },
   { field: "is_attendance_enabled", icon: "ti-clock",           label: "Attendance Notifications",   desc: "Receive notifications for attendance-related actions or issues." },
   { field: "is_system_enabled",     icon: "ti-server",          label: "System Notifications",       desc: "Receive important HRMS system notifications." },
@@ -146,9 +146,9 @@ export default function NotificationsConfigPage() {
                 </div>
               </div>
               <ToggleSwitch
-                checked={settings[cat.field]}
+                checked={cat.locked ? true : settings[cat.field]}
                 onChange={checked => handleToggle(cat.field, checked)}
-                disabled={!canEdit || savingField === cat.field}
+                disabled={!canEdit || savingField === cat.field || !!cat.locked}
               />
             </div>
           ))}

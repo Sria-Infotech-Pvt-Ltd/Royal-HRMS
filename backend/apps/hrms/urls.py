@@ -1,4 +1,7 @@
 from django.urls import path
+from apps.hrms.views.leave_cancellation import (
+    LeaveCancellationDecisionView, LeaveCancellationListView, LeaveCancellationRequestView,
+)
 from apps.hrms.views.wfh_reports import WFHDailyReportListCreateView, WFHDailyReportReviewView
 
 from .views import (
@@ -95,6 +98,11 @@ urlpatterns = [
     path('leave/requests/',                          LeaveRequestListCreateView.as_view(), name='leave-request-list'),
     path('leave/requests/<str:request_id>/',         LeaveRequestDetailView.as_view(),     name='leave-request-detail'),
     path('leave/requests/<str:request_id>/approve/', LeaveApprovalView.as_view(),          name='leave-request-approve'),
+    path('leave/requests/<str:request_id>/cancellation/', LeaveCancellationRequestView.as_view(),
+         name='leave-cancellation-request'),
+    path('leave/requests/<str:request_id>/cancellation/decision/', LeaveCancellationDecisionView.as_view(),
+         name='leave-cancellation-decision'),
+    path('leave/cancellations/', LeaveCancellationListView.as_view(), name='leave-cancellation-list'),
 
     # Work From Home
     path('wfh/requests/',                          WorkFromHomeRequestListCreateView.as_view(), name='wfh-request-list'),

@@ -142,6 +142,10 @@ def _can_approve_at_stage(user, leave_request, stage: str) -> bool:
         return True
     if _is_branch_admin(user):
         return _branch_admin_covers(user, leave_request.employee)
+    # Delegate of this stage's approver, or the request was escalated to this user.
+    from apps.approvals.services import acts_for
+    if acts_for(user, leave_request, stage, 'leave'):
+        return True
 
     if stage == 'l1':
         if leave_request.l1_approver_id:
@@ -214,6 +218,10 @@ def _approval_scope_filter(user) -> 'Q':
                 orphaned &= Q(employee__branch__iexact=branch)
             l2_scope |= orphaned
         scope = (scope | l2_scope) if scope is not None else l2_scope
+
+    # Requests delegated to or escalated to this user.
+    from apps.approvals.services import scope_q
+    scope = (scope | scope_q(user, 'leave')) if scope is not None else scope_q(user, 'leave')
 
     if scope is not None:
         return scope & ~Q(employee=user)
@@ -793,6 +801,11 @@ class LeaveBalanceAdjustView(APIView):
             balance.used_days = used
         balance.save(update_fields=['total_days', 'used_days', 'updated_at'])
         logger.info('Leave balance %s adjusted by %s', balance_id, request.user.email)
+        from apps.notifications.signals import _leave_display, notify_leave_balance_change
+        notify_leave_balance_change(
+            balance.employee,
+            f'HR updated your {_leave_display(balance.leave_type)} balance for {balance.year}: '
+            f'{float(balance.total_days - balance.used_days):g} day(s) available.', str(balance.pk))
         return success('Balance adjusted.', LeaveBalanceSerializer(balance).data)
 
     def put(self, request, balance_id: str):
