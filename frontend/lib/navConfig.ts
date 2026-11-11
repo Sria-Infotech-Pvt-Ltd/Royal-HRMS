@@ -38,7 +38,8 @@ const ALL_NAV: NavEntry[] = [
   { id: "branches", icon: "ti-building-skyscraper", label: "Branches", path: "/dashboard/branches", permission: "branches.view" },
 
   { section: "Time & Pay" },
-  { id: "attendance", icon: "ti-clock", label: "Attendance", path: "/dashboard/attendance", permission: "attendance.create" },
+  // HR attendance — attendance staff only; employees use My Attendance.
+  { id: "attendance", icon: "ti-clock", label: "Attendance", path: "/dashboard/attendance", permission: ["attendance.edit", "settings.edit"] },
   { id: "payroll", icon: "ti-report-money", label: "Payroll", path: "/dashboard/payroll", permission: "payroll.view" },
   { id: "leave", icon: "ti-beach", label: "Leave Management", path: "/dashboard/leave", permission: "leave.view" },
   { id: "work-from-home", icon: "ti-home-2", label: "Work From Home", path: "/dashboard/work-from-home", permission: "wfh.view" },

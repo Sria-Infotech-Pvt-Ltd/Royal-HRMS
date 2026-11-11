@@ -235,7 +235,7 @@ class AttendanceDetailLocationAPITests(TestCase):
         )
         self.uk_policy = WorkingHoursPolicy.objects.get(policy_code='WH-UK')
 
-        hr_role = make_role('hr_uk_geofence_detail_test', permission_codenames=['attendance.view'])
+        hr_role = make_role('hr_uk_geofence_detail_test', permission_codenames=['attendance.view', 'attendance.edit'])
         self.hr = make_user(
             'hr.ukgeodetail@test.com', role=hr_role, password='TestPass123!', employee_id='EMPHRUKG001',
         )

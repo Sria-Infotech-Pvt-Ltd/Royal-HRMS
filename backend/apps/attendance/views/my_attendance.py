@@ -321,6 +321,7 @@ class AttendanceCorrectionView(APIView):
             if AttendanceCorrection.objects.select_for_update().filter(
                 employee=employee,
                 date=data['date'],
+                kind=AttendanceCorrection.KIND_PUNCH,
                 status__in=[AttendanceCorrection.STATUS_PENDING, AttendanceCorrection.STATUS_L2_PENDING],
             ).exists():
                 return error(
@@ -383,6 +384,7 @@ class MyCorrectionsListView(APIView):
             status_filter=ser.validated_data['status'],
             date_from=ser.validated_data['date_from'],
             date_to=ser.validated_data['date_to'],
+            kind=ser.validated_data['kind'],
         )
         page_obj, paginator = paginate(rows, request)
         return success(

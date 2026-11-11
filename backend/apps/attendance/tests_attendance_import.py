@@ -38,7 +38,7 @@ class AttendanceImportTests(TestCase):
             'imp.admin@test.com', role=make_role('imp_admin', permission_codenames=['attendance.create', 'settings.edit']),
             employee_id='IMPADM1', full_name='Import Admin', branch=HYD,
         )
-        branch_hr_role = make_role('imp_branch_hr', permission_codenames=['attendance.create', 'attendance.view'])
+        branch_hr_role = make_role('imp_branch_hr', permission_codenames=['attendance.create', 'attendance.view', 'attendance.edit'])
         self.hr_hyd = make_user('imp.hr.hyd@test.com', role=branch_hr_role, employee_id='IMPHRH1', full_name='HR Hyd', branch=HYD)
         manager_role = make_role('imp_manager', permission_codenames=['attendance.create'], can_manage_team=True)
         self.manager = make_user('imp.mgr@test.com', role=manager_role, employee_id='IMPMGR1', full_name='Manager', branch=HYD)

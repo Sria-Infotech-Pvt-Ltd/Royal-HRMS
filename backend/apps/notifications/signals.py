@@ -343,6 +343,9 @@ def _capture_correction_status(sender, instance, **kwargs):
 
 @receiver(post_save, sender='attendance.AttendanceCorrection')
 def _on_correction_save(sender, instance, created, **kwargs):
+    if getattr(instance, 'kind', 'punch') == 'late_justification':
+        _on_late_justification_save(instance, created)
+        return
     employee = instance.employee
     ref_id   = str(instance.id)
     employee_name = employee.full_name or employee.email
@@ -388,6 +391,74 @@ def _on_correction_save(sender, instance, created, **kwargs):
                 'regularization', 'attendance', ref_id)
         _send_lifecycle_email(employee, 'regularization_rejected', {
             'employee_name': employee_name, 'date': corr_date,
+        })
+
+
+def _late_approver(instance):
+    """Who acts next on a late-arrival justification: the L1 manager while
+    pending, else the assigned HR (or the employee's HR)."""
+    if instance.status == 'pending':
+        return instance.l1_approver
+    return instance.l2_approver or getattr(instance.employee, 'hr', None)
+
+
+def _on_late_justification_save(instance, created):
+    """Late-arrival justification lifecycle (AttendanceCorrection, kind=late_justification).
+    Medical proof is never attached to any notification or email."""
+    employee = instance.employee
+    ref_id = str(instance.id)
+    employee_name = employee.full_name or employee.email
+    day = instance.date.strftime('%d %b %Y')
+    reason = instance.get_reason_display()
+    old_status = None if created else getattr(instance, '_old_status', None)
+    if not created and old_status == instance.status:
+        return
+
+    def notify_approver():
+        approver = _late_approver(instance)
+        if approver:
+            _notify(approver, 'Late Arrival Justification Pending',
+                    f'{employee.full_name} explained a late arrival on {day} ({reason}) — awaiting your review.',
+                    'regularization', 'attendance', ref_id, category='approval')
+            _send_lifecycle_email(approver, 'late_justification_pending_approval', {
+                'approver_name': approver.full_name or approver.email, 'employee_name': employee_name,
+                'date': day, 'reason': reason,
+            })
+
+    if created or old_status == 'resubmit' and instance.status in ('pending', 'l2_pending'):
+        again = not created
+        _notify(employee, 'Late Arrival Justification ' + ('Resubmitted' if again else 'Submitted'),
+                f'Your late arrival justification for {day} has been {"resubmitted" if again else "submitted"}.',
+                'regularization', 'attendance', ref_id, employee)
+        _send_lifecycle_email(employee, 'late_justification_submitted', {
+            'employee_name': employee_name, 'date': day, 'reason': reason,
+        })
+        notify_approver()
+        return
+
+    remarks = (instance.l2_remarks if instance.l2_status else instance.l1_remarks) or ''
+    if instance.status == 'l2_pending' and old_status == 'pending':
+        _notify(employee, 'Late Arrival Justification — Manager Approved',
+                f'Your manager approved your late arrival justification for {day}. It is now with HR.',
+                'regularization', 'attendance', ref_id)
+        notify_approver()
+    elif instance.status == 'approved':
+        _notify(employee, 'Late Arrival Excused',
+                f'Your late arrival on {day} has been excused.', 'regularization', 'attendance', ref_id)
+        _send_lifecycle_email(employee, 'late_justification_approved', {'employee_name': employee_name, 'date': day})
+    elif instance.status == 'rejected':
+        _notify(employee, 'Late Arrival Justification Rejected',
+                f'Your late arrival justification for {day} was rejected: {remarks}',
+                'regularization', 'attendance', ref_id)
+        _send_lifecycle_email(employee, 'late_justification_rejected', {
+            'employee_name': employee_name, 'date': day, 'remarks': remarks,
+        })
+    elif instance.status == 'resubmit':
+        _notify(employee, 'Late Arrival Justification — Resubmission Required',
+                f'Please resubmit your late arrival justification for {day}: {remarks}',
+                'regularization', 'attendance', ref_id)
+        _send_lifecycle_email(employee, 'late_justification_resubmission_required', {
+            'employee_name': employee_name, 'date': day, 'remarks': remarks,
         })
 
 

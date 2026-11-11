@@ -12,6 +12,11 @@ but only once the request reaches its FINAL approval (L1 approval with no
 L2 configured, or L2 approval) — which changes the AttendanceRecord from
 STATUS_INCOMPLETE → present/late and removes the employee from the
 Un-Punches list automatically.
+
+Late-arrival justifications (kind=late_justification) share this chain,
+queue and review endpoint. Their final approval never creates punches — it
+marks the day "Late (Excused)" (services_late_justification.mark_excused).
+Rejecting one, or asking for a resubmission, needs a reason.
 """
 from __future__ import annotations
 
@@ -101,7 +106,11 @@ def _can_approve_at_stage(user, correction: AttendanceCorrection, stage: str) ->
     if stage == 'l2':
         if correction.l2_approver_id:
             return correction.l2_approver_id == user.id
-        return _has_perm(user, 'attendance.create') and _can_hr_access_request(user, correction)
+        # Unassigned HR stage: HR staff only — never an ordinary employee who
+        # merely holds attendance.create for their own requests.
+        from apps.attendance.access import is_attendance_staff
+        return (_has_perm(user, 'attendance.create') and is_attendance_staff(user)
+                and _can_hr_access_request(user, correction))
 
     return False
 
@@ -139,8 +148,11 @@ def _approval_scope_filter(user) -> Q:
     scope = Q(l1_approver=user) if is_manager else None
 
     if _has_perm(user, 'attendance.create'):
+        from apps.attendance.access import is_attendance_staff
         l2_scope = Q(l2_approver=user)
-        if not is_manager:
+        # The branch-wide fallback (requests with no HR assigned) is for HR
+        # staff — not ordinary employees who hold attendance.create.
+        if not is_manager and is_attendance_staff(user):
             branch = _user_branch(user)
             orphaned = Q(l2_approver__isnull=True)
             if branch:
@@ -201,11 +213,15 @@ def list_corrections(
     branch: str = '',
     department: str = '',
     status_filter: str = '',
+    kind: str = '',
+    missing_proof: bool = False,
 ) -> list[dict]:
     """
     Return correction requests visible to `user`, newest first.
 
-    status_filter: 'pending' | 'l2_pending' | 'approved' | 'rejected' | '' (all)
+    status_filter: 'pending' | 'l2_pending' | 'approved' | 'rejected' | 'resubmit' | '' (all)
+    kind:          'punch' | 'late_justification' | '' (all)
+    missing_proof: late justifications without an uploaded proof
     """
     employee_qs = User.objects.filter(is_active=True)
     if branch:
@@ -222,6 +238,11 @@ def list_corrections(
     )
     if status_filter:
         qs = qs.filter(status=status_filter)
+    if kind:
+        qs = qs.filter(kind=kind)
+    if missing_proof:
+        qs = qs.filter(kind=AttendanceCorrection.KIND_LATE).filter(
+            Q(supporting_document__isnull=True) | Q(supporting_document=''))
 
     return [_build_row(c, user) for c in qs]
 
@@ -231,6 +252,7 @@ def list_my_corrections(
     status_filter: str = '',
     date_from: datetime.date | None = None,
     date_to: datetime.date | None = None,
+    kind: str = '',
 ) -> list[dict]:
     """
     Return `employee`'s own correction requests, newest first — for the
@@ -251,8 +273,10 @@ def list_my_corrections(
         qs = qs.filter(date__gte=date_from)
     if date_to:
         qs = qs.filter(date__lte=date_to)
+    if kind:
+        qs = qs.filter(kind=kind)
 
-    return [_build_row(c) for c in qs]
+    return [_build_row(c, viewer=employee) for c in qs]
 
 
 def approve_correction(correction_id: str, actioning_user, remarks: str = '') -> dict:
@@ -265,13 +289,27 @@ def reject_correction(correction_id: str, actioning_user, remarks: str = '') -> 
     return _act_on_correction(correction_id, actioning_user, approve=False, remarks=remarks)
 
 
+def request_resubmission(correction_id: str, actioning_user, remarks: str = '') -> dict:
+    """Late justifications only: send back to the employee (reason required)."""
+    return _act_on_correction(correction_id, actioning_user, approve=False, remarks=remarks, resubmit=True)
+
+
 # ── Private helpers ────────────────────────────────────────────────────────────
 
-def _act_on_correction(correction_id: str, actioning_user, *, approve: bool, remarks: str = '') -> dict:
+def _act_on_correction(correction_id: str, actioning_user, *, approve: bool, remarks: str = '',
+                       resubmit: bool = False) -> dict:
     from apps.attendance.services_attendance import AttendanceProcessorService
+    from apps.attendance import services_late_justification as late
 
+    remarks = (remarks or '').strip()
     with transaction.atomic():
         correction = _get_actionable(correction_id)
+        is_late = correction.kind == AttendanceCorrection.KIND_LATE
+        if resubmit and not is_late:
+            raise ValueError('Only late-arrival justifications can be sent back for resubmission.')
+        if is_late and not approve and not remarks:
+            raise late.LateJustificationError(
+                'Give a reason — it is shown to the employee.', 'remarks')
 
         if correction.status == AttendanceCorrection.STATUS_PENDING:
             stage = 'l1'
@@ -286,7 +324,8 @@ def _act_on_correction(correction_id: str, actioning_user, *, approve: bool, rem
             )
 
         now = timezone.now()
-        stage_status = AttendanceCorrection.STAGE_APPROVED if approve else AttendanceCorrection.STAGE_REJECTED
+        stage_status = (AttendanceCorrection.STAGE_APPROVED if approve
+                        else AttendanceCorrection.STAGE_RESUBMIT if resubmit else AttendanceCorrection.STAGE_REJECTED)
         is_final = False
 
         if stage == 'l1':
@@ -310,11 +349,19 @@ def _act_on_correction(correction_id: str, actioning_user, *, approve: bool, rem
             correction.status = AttendanceCorrection.STATUS_APPROVED if approve else AttendanceCorrection.STATUS_REJECTED
             is_final = True
 
+        if resubmit:
+            # Not a final decision: the employee may resubmit the same request.
+            correction.status = AttendanceCorrection.STATUS_RESUBMIT
+            correction.resubmission_requested_at = now
+            is_final = False
+
         if is_final:
             correction.reviewed_by = actioning_user
             correction.reviewed_at = now
 
-            if approve:
+            if approve and is_late:
+                late.mark_excused(correction, actioning_user)      # no punches created or changed
+            elif approve:
                 if correction.punch_type in (AttendanceCorrection.PUNCH_IN, AttendanceCorrection.PUNCH_BOTH):
                     _create_punch(
                         correction.employee, correction.date,
@@ -328,7 +375,11 @@ def _act_on_correction(correction_id: str, actioning_user, *, approve: bool, rem
                 AttendanceProcessorService.process_day(correction.employee, correction.date)
 
         correction.save()
-        _write_correction_audit(correction, actioning_user, stage=stage, approved=approve)
+        if is_late:
+            late.audit_review(correction, actioning_user, stage=stage,
+                              decision='approve' if approve else 'resubmit' if resubmit else 'reject', remarks=remarks)
+        else:
+            _write_correction_audit(correction, actioning_user, stage=stage, approved=approve)
         logger.info(
             'Correction %s %s at %s stage by %s (employee=%s date=%s)',
             correction.pk, stage_status, stage, actioning_user.pk, correction.employee_id, correction.date,
@@ -401,7 +452,11 @@ def _write_correction_audit(correction: AttendanceCorrection, actioning_user, *,
     )
 
 
-def _build_row(c: AttendanceCorrection, user=None) -> dict:
+def _build_row(c: AttendanceCorrection, user=None, viewer=None) -> dict:
+    """One request. `user` = the reviewer (decides can_action, as before);
+    `viewer` = whoever sees the row (decides whether the medical proof is
+    offered; the employee's own list passes only viewer). A file URL is never
+    included — proof is streamed by CorrectionDocumentView after the same check."""
     can_action = False
     if user and c.status == AttendanceCorrection.STATUS_PENDING:
         can_action = _can_approve_at_stage(user, c, 'l1')
@@ -413,7 +468,7 @@ def _build_row(c: AttendanceCorrection, user=None) -> dict:
     # Original (as-punched) times for that date, for context alongside what was requested.
     from apps.attendance.models import AttendanceRecord
     record = AttendanceRecord.objects.filter(employee=employee, date=c.date).only(
-        'first_punch_in', 'last_punch_out',
+        'first_punch_in', 'last_punch_out', 'is_late', 'late_excused', 'status',
     ).first()
     original_in  = record.first_punch_in.strftime('%H:%M') if record and record.first_punch_in else None
     original_out = record.last_punch_out.strftime('%H:%M') if record and record.last_punch_out else None
@@ -443,4 +498,38 @@ def _build_row(c: AttendanceCorrection, user=None) -> dict:
         'reviewed_by':        c.reviewed_by.full_name if c.reviewed_by else None,
         'reviewed_at':        c.reviewed_at.strftime('%Y-%m-%d %H:%M') if c.reviewed_at else None,
         'created_at':         c.created_at.strftime('%Y-%m-%d %H:%M'),
+        **_late_fields(c, record, viewer or user),
     }
+
+
+def _late_fields(c: AttendanceCorrection, record, user) -> dict:
+    is_late = c.kind == AttendanceCorrection.KIND_LATE
+    out = {
+        'kind':             c.kind,
+        'reason_label':     c.get_reason_display(),
+        'status_label':     c.get_status_display(),
+    }
+    if not is_late:
+        return out
+    from apps.attendance import services_late_justification as late
+    has_doc = bool(c.supporting_document)
+    can_view = bool(user) and late.can_view_document(user, c)
+    decision_remarks = c.l2_remarks if c.l2_status else c.l1_remarks
+    asked = timezone.localtime(c.resubmission_requested_at).date() if c.resubmission_requested_at else None
+    out.update({
+        'explanation':          c.notes or '',
+        'has_document':         has_doc,
+        'can_view_document':    can_view,
+        'document_name':        c.document_name if can_view else '',
+        'proof_required':       c.reason == AttendanceCorrection.REASON_MEDICAL,
+        'missing_proof':        not has_doc,
+        'rejection_reason':     decision_remarks if c.status in (AttendanceCorrection.STATUS_REJECTED,
+                                                                 AttendanceCorrection.STATUS_RESUBMIT) else '',
+        'resubmission_count':   c.resubmission_count,
+        'resubmit_by':          late.deadline_for(asked).isoformat() if asked else None,
+        'can_resubmit':         bool(user) and user.id == c.employee_id and c.status == AttendanceCorrection.STATUS_RESUBMIT
+                                and asked is not None and timezone.localdate() <= late.deadline_for(asked),
+        'late_excused':         bool(record and record.late_excused and c.status == AttendanceCorrection.STATUS_APPROVED),
+        'attendance_status':    record.status_display if record else None,
+    })
+    return out

@@ -23,6 +23,8 @@ export interface AttendanceStats {
   avg_hours_per_day:     number;
   attendance_percentage: number;
   working_days:          number;
+  /** Maximum Late Arrivals Per Month — tracking only. */
+  late_limit?:           import("@/lib/lateLimit").LateLimitSummary;
 }
 
 export interface MonthlySummary {
@@ -45,6 +47,9 @@ export interface DayRecord {
   holiday_name?:           string | null;
   canRegularize:           boolean;
   regularization_required: boolean;
+  /** A late day still inside the 3-day window with no open / approved justification. */
+  canExplainLate?:          boolean;
+  lateJustificationStatus?: string | null;
 }
 
 export interface CalendarResponse {
@@ -62,6 +67,9 @@ export interface HistoryRow {
   hours:         string | null;
   status:        string;
   canRegularize: boolean;
+  isoDate?:       string;
+  canExplainLate?: boolean;
+  lateJustificationStatus?: string | null;
 }
 
 export type PunchType       = "IN" | "OUT" | "BOTH";

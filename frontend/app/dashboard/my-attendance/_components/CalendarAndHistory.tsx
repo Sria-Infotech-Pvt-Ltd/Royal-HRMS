@@ -14,6 +14,7 @@ interface Props {
   onPrev:       () => void;
   onNext:       () => void;
   onRegularize: (date: string) => void;
+  onExplainLate?: (date: string, clockIn: string | null) => void;
   readOnly?:    boolean;
 }
 
@@ -31,7 +32,7 @@ const LEGEND = [
 
 type Tab = "calendar" | "history";
 
-export default function CalendarAndHistory({ month, year, calendar, history, isLoading, onPrev, onNext, onRegularize, readOnly = false }: Props) {
+export default function CalendarAndHistory({ month, year, calendar, history, isLoading, onPrev, onNext, onRegularize, onExplainLate, readOnly = false }: Props) {
   const [tab, setTab] = useState<Tab>("calendar");
 
   return (
@@ -76,8 +77,8 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
       </div>
 
       {tab === "calendar"
-        ? <AttendanceCalendar year={year} month={month} data={calendar} onRegularize={onRegularize} readOnly={readOnly} />
-        : <AttendanceHistoryTable data={history} onRegularize={onRegularize} readOnly={readOnly} />}
+        ? <AttendanceCalendar year={year} month={month} data={calendar} onRegularize={onRegularize} onExplainLate={onExplainLate} readOnly={readOnly} />
+        : <AttendanceHistoryTable data={history} onRegularize={onRegularize} onExplainLate={onExplainLate} readOnly={readOnly} />}
     </div>
   );
 }

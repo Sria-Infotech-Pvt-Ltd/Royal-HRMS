@@ -292,7 +292,7 @@ class AttendanceExportLocationTests(TestCase):
 class AttendanceExportEndpointLocationTests(TestCase):
     def setUp(self):
         cache.clear()
-        hr_role = make_role('export_location_hr', permission_codenames=['attendance.view', 'attendance.export'])
+        hr_role = make_role('export_location_hr', permission_codenames=['attendance.view', 'attendance.export', 'attendance.edit'])
         make_user('export.hr@test.com', role=hr_role, employee_id='EMPXLHR1', full_name='Export HR', branch=BRANCH)
         self.emp = make_user(
             'export.ep@test.com', role=make_role('export_location_staff'), employee_id='EMPXLEP1',

@@ -244,14 +244,18 @@ class CorrectionListFilterSerializer(serializers.Serializer):
     branch     = serializers.CharField(required=False, allow_blank=True, default='')
     department = serializers.CharField(required=False, allow_blank=True, default='')
     status     = serializers.ChoiceField(
-        choices=['', 'pending', 'l2_pending', 'approved', 'rejected'],
+        choices=['', 'pending', 'l2_pending', 'approved', 'rejected', 'resubmit'],
         required=False, allow_blank=True, default='',
     )
+    kind          = serializers.ChoiceField(choices=['', 'punch', 'late_justification'],
+                                            required=False, allow_blank=True, default='')
+    missing_proof = serializers.BooleanField(required=False, default=False)
 
 
 class CorrectionReviewSerializer(serializers.Serializer):
-    action  = serializers.ChoiceField(choices=['approve', 'reject'])
-    remarks = serializers.CharField(required=False, allow_blank=True, default='')
+    # resubmit: late-arrival justifications only (sent back to the employee).
+    action  = serializers.ChoiceField(choices=['approve', 'reject', 'resubmit'])
+    remarks = serializers.CharField(required=False, allow_blank=True, default='', max_length=1000)
 
 
 # ── Write serializers ─────────────────────────────────────────────────────────

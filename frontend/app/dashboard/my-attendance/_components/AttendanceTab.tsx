@@ -5,6 +5,8 @@ import { useAttendanceDashboard } from "@/hooks/useAttendanceDashboard";
 import ClockWidget from "./ClockWidget";
 import CalendarAndHistory from "./CalendarAndHistory";
 import CorrectionModal from "./CorrectionModal";
+import LateJustificationModal from "./LateJustificationModal";
+import { LATE_LIMIT_BADGE } from "@/lib/lateLimit";
 
 function Spinner() {
   return <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />;
@@ -20,6 +22,8 @@ export default function AttendanceTab() {
   const [month, setMonth] = useState(initMonth);
   const [year,  setYear]  = useState(initYear);
   const [correctionDate, setCorrectionDate] = useState<string | null>(null);
+  const [lateDay, setLateDay] = useState<{ date: string; clockIn: string | null } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const { stats, summary, calendar, history, isLoading, refetch } = useAttendanceDashboard({ month, year });
 
@@ -111,6 +115,35 @@ export default function AttendanceTab() {
         </div>
       </div>
 
+      {/* Maximum Late Arrivals Per Month (company policy; tracking only) */}
+      {stats?.late_limit?.enabled && (
+        <div className="card mb-16">
+          <div className="card-header">
+            <div className="card-title"><i className="ti ti-clock-exclamation" /> Monthly Late Arrivals</div>
+            {stats.late_limit.status && (
+              <span className={LATE_LIMIT_BADGE[stats.late_limit.status]}>{stats.late_limit.status_label}</span>
+            )}
+          </div>
+          <div className="card-body">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 0 }}>
+              {[
+                { label: "Maximum allowed",          value: stats.late_limit.maximum },
+                { label: "Late arrivals this month", value: stats.late_limit.late_arrivals },
+                { label: "Remaining",                value: stats.late_limit.remaining ?? "—" },
+              ].map((item, idx) => (
+                <div key={item.label} style={{ padding: "10px 16px", textAlign: "center", borderRight: idx < 2 ? "1px solid var(--outline-v)" : "none" }}>
+                  <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 6 }}>{item.label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{isLoading ? <Spinner /> : item.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 8 }}>
+              Counted per calendar month; Late (Excused) days are not counted. This limit is for tracking — it does not add any LOP.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Monthly Summary */}
       <div className="card mb-16">
         <div className="card-header">
@@ -150,7 +183,20 @@ export default function AttendanceTab() {
         onPrev={prev}
         onNext={next}
         onRegularize={date => setCorrectionDate(date)}
+        onExplainLate={(date, clockIn) => { setNotice(null); setLateDay({ date, clockIn }); }}
       />
+
+      {notice && (
+        <div className="alert alert-success" style={{ marginTop: 12 }}>
+          <i className="ti ti-circle-check" /> {notice}
+        </div>
+      )}
+
+      {lateDay && (
+        <LateJustificationModal mode="new" date={lateDay.date} clockIn={lateDay.clockIn}
+          onClose={() => setLateDay(null)}
+          onSuccess={m => { setNotice(m); refetch(); }} />
+      )}
 
       <CorrectionModal
         key={correctionDate ?? ""}

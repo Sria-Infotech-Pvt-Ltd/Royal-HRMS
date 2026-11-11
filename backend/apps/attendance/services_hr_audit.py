@@ -220,6 +220,7 @@ def get_unpunches(
         .filter(
             date=target_date,
             employee__in=employee_qs,
+            kind=AttendanceCorrection.KIND_PUNCH,
             status=AttendanceCorrection.STATUS_PENDING,
         )
         .values_list('employee_id', flat=True)
@@ -230,6 +231,7 @@ def get_unpunches(
         .filter(
             date=target_date,
             employee__in=employee_qs,
+            kind=AttendanceCorrection.KIND_PUNCH,
             status=AttendanceCorrection.STATUS_PENDING,
         )
         .values_list('employee_id', 'id')

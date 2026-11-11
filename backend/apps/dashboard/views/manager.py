@@ -331,7 +331,7 @@ def _build_pending_approvals(manager, team_ids,
             )
             .select_related('employee')
             .only(
-                'id', 'date', 'punch_type', 'created_at',
+                'id', 'date', 'punch_type', 'kind', 'reason', 'created_at',
                 'employee__full_name', 'employee__employee_id',
             )
             .order_by('created_at')[:20]
@@ -342,7 +342,9 @@ def _build_pending_approvals(manager, team_ids,
                 'approval_type': 'attendance_correction',
                 'employee_name': ac.employee.full_name,
                 'employee_id':   ac.employee.employee_id or '',
-                'summary':       f'Attendance Correction — {ac.punch_type.upper()}',
+                'summary':       (f'Late Arrival Justification — {ac.get_reason_display()}'
+                                  if ac.kind == AttendanceCorrection.KIND_LATE
+                                  else f'Attendance Correction — {ac.punch_type.upper()}'),
                 'date_from':     str(ac.date),
                 'date_to':       str(ac.date),
                 'applied_on':    str(ac.created_at.date()),

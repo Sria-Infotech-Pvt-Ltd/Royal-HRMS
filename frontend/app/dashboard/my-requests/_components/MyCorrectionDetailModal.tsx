@@ -15,10 +15,12 @@ const PUNCH_LABEL: Record<MyCorrectionRequest["punch_type"], string> = {
 };
 
 function StageRow({ label, approverName, status, remarks }: {
-  label: string; approverName: string | null; status: "approved" | "rejected" | null; remarks: string;
+  label: string; approverName: string | null; status: "approved" | "rejected" | "resubmit" | null; remarks: string;
 }) {
-  const cls = status === "approved" ? "badge badge-success" : status === "rejected" ? "badge badge-error" : "badge badge-warn";
-  const txt = status === "approved" ? "Approved" : status === "rejected" ? "Rejected" : "Pending";
+  const cls = status === "approved" ? "badge badge-success" : status === "rejected" ? "badge badge-error"
+    : status === "resubmit" ? "badge badge-info" : "badge badge-warn";
+  const txt = status === "approved" ? "Approved" : status === "rejected" ? "Rejected"
+    : status === "resubmit" ? "Sent back" : "Pending";
   return (
     <div className="flex items-start justify-between gap-3 py-2 border-b border-[var(--outline-v)] last:border-b-0">
       <div>
@@ -32,15 +34,17 @@ function StageRow({ label, approverName, status, remarks }: {
 }
 
 export default function MyCorrectionDetailModal({ request: r, onClose }: Props) {
-  const showIn  = r.punch_type !== "OUT";
-  const showOut = r.punch_type !== "IN";
+  // Late-arrival justifications have no requested punch times.
+  const isLate  = r.kind === "late_justification";
+  const showIn  = !isLate && r.punch_type !== "OUT";
+  const showOut = !isLate && r.punch_type !== "IN";
 
   return (
     <Modal
       title={
         <>
           <i className="ti ti-clock-edit" style={{ marginRight: 8 }} />
-          {PUNCH_LABEL[r.punch_type] ?? "Attendance Correction"}
+          {isLate ? "Late Arrival Justification" : PUNCH_LABEL[r.punch_type] ?? "Attendance Correction"}
         </>
       }
       onClose={onClose}
@@ -53,10 +57,18 @@ export default function MyCorrectionDetailModal({ request: r, onClose }: Props) 
             <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Date</p>
             <p className="text-sm font-medium text-[var(--on-bg)]">{fmtSubmitted(r.date)}</p>
           </div>
-          <span className={STATUS_BADGE_CLASS[toDisplayStatus(r.status)]}>{STATUS_LABEL[toDisplayStatus(r.status)]}</span>
+          <span className={STATUS_BADGE_CLASS[toDisplayStatus(r.status)]}>
+            {r.status === "resubmit" ? "Resubmission Required" : isLate && r.status === "approved" ? "Late (Excused)" : STATUS_LABEL[toDisplayStatus(r.status)]}
+          </span>
         </div>
 
         <div className="border-t border-[var(--outline-v)] pt-4 flex flex-col gap-2">
+          {isLate && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[var(--on-variant)]">Clocked in</span>
+              <span className="font-medium tabular-nums">{fmtTime12h(r.original_in)} (unchanged)</span>
+            </div>
+          )}
           {showIn && (
             <div className="flex items-center justify-between text-sm">
               <span className="text-[var(--on-variant)]">Check-in</span>
@@ -73,7 +85,7 @@ export default function MyCorrectionDetailModal({ request: r, onClose }: Props) 
 
         <div className="border-t border-[var(--outline-v)] pt-4">
           <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Reason</p>
-          <p className="text-sm text-[var(--on-bg)]">{r.reason || "—"}</p>
+          <p className="text-sm text-[var(--on-bg)]">{(isLate ? r.reason_label : r.reason) || "—"}</p>
           {r.notes && <p className="text-xs text-[var(--on-variant)] mt-1">{r.notes}</p>}
         </div>
 

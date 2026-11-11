@@ -60,6 +60,8 @@ from apps.attendance.services_hr_ops import (
 )
 from core.pagination import paginate, paginated_data
 from core.permissions import has_perm as _has_perm
+from apps.attendance.access import can_manage_attendance as _can_manage_attendance
+from apps.attendance.access import is_attendance_staff as _is_attendance_staff
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +97,10 @@ def _manager_scope_employee_ids(user) -> list[str] | None:
     different team — scoping a manager by branch (like HR is) would show
     them every other manager's team too, not just their own.
     """
+    # Ordinary employees (attendance.view / .create alone): their own records
+    # only — never their branch (apps.attendance.access).
+    if not _is_attendance_staff(user):
+        return [user.pk]
     try:
         if user.role and getattr(user.role, 'can_manage_team', False):
             return list(
@@ -113,10 +119,36 @@ def _manager_can_access_employee(user, employee) -> bool:
     employee/record rather than a filtered list, where a queryset filter
     can't apply.
     """
-    employee_ids = _manager_scope_employee_ids(user)
-    if employee_ids is None:
+    if _is_unrestricted(user):
         return True
-    return str(employee.pk) in {str(i) for i in employee_ids}
+    employee_ids = _manager_scope_employee_ids(user)
+    if employee_ids is not None:                     # manager: reports; employee: self
+        return str(employee.pk) in {str(i) for i in employee_ids}
+    # HR / branch admin: their branch, the same rule the list views use (_branch_scope).
+    branch = (getattr(user, 'branch', '') or '').strip()
+    return not branch or (getattr(employee, 'branch', '') or '').strip() == branch
+
+
+def _detail_employee(record_pk, employee_id_str: str = ''):
+    """The employee a detail request is about (by record id, else by employee code)."""
+    from django.contrib.auth import get_user_model
+    from apps.attendance.models import AttendanceRecord
+    record = AttendanceRecord.objects.select_related('employee').filter(id=record_pk).first() \
+        if _looks_like_uuid(record_pk) else None
+    if record is not None:
+        return record.employee
+    if employee_id_str:
+        return get_user_model().objects.filter(employee_id=employee_id_str).first()
+    return None
+
+
+def _looks_like_uuid(value) -> bool:
+    import uuid
+    try:
+        uuid.UUID(str(value))
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -186,6 +218,11 @@ class HRAttendanceDetailView(APIView):
             except ValueError:
                 return error('Invalid date format. Use YYYY-MM-DD.')
 
+        # Branch HR may only open their branch's records (managers and
+        # employees are limited by employee_ids below). Same 404 either way.
+        target = _detail_employee(pk, employee_id_str)
+        if target is not None and not _manager_can_access_employee(request.user, target):
+            return error('Attendance record not found.', http_status=404)
         detail = get_attendance_detail(
             record_id=str(pk),
             target_date=target_date,
@@ -199,7 +236,7 @@ class HRAttendanceDetailView(APIView):
 
     def patch(self, request, pk: str):
         """HR edits an existing attendance record — status, punch times, note."""
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         ser = HRAttendanceEditSerializer(data=request.data)
@@ -282,7 +319,7 @@ class HRAttendanceCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         ser = HRAttendanceManualCreateSerializer(data=request.data)
@@ -406,7 +443,7 @@ class HROvertimeCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         ser = OvertimeWriteSerializer(data=request.data)
@@ -492,7 +529,7 @@ class HRAttendanceImportView(APIView):
     parser_classes = [MultiPartParser]
 
     def post(self, request):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         file = request.FILES.get('file')
@@ -569,7 +606,7 @@ class HRAttendanceImportStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, import_id):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         from apps.attendance.models import AttendanceImportLog
@@ -630,7 +667,7 @@ class HRAttendanceImportSampleView(APIView):
     ]
 
     def get(self, request):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         from core.file_utils import build_sample_csv, build_sample_xlsx, _CSV_MIME, _XLSX_MIME
@@ -667,7 +704,7 @@ class HRAttendanceReprocessView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         date_str = request.data.get('date', '')
@@ -739,6 +776,8 @@ class HRCorrectionListView(APIView):
             branch=_branch_scope(request.user, ser.validated_data['branch']),
             department=ser.validated_data['department'],
             status_filter=ser.validated_data['status'],
+            kind=ser.validated_data['kind'],
+            missing_proof=ser.validated_data['missing_proof'],
         )
         page_obj, paginator = paginate(rows, request)
         return success(
@@ -775,14 +814,27 @@ class HRCorrectionReviewView(APIView):
 
         remarks = ser.validated_data.get('remarks', '')
 
-        from apps.attendance.services_hr_corrections import approve_correction, reject_correction
+        from apps.attendance.services_hr_corrections import (
+            approve_correction, reject_correction, request_resubmission,
+        )
+        from apps.attendance.services_late_justification import LateJustificationError
+        action = ser.validated_data['action']
         try:
-            if ser.validated_data['action'] == 'approve':
+            if action == 'approve':
                 result = approve_correction(str(pk), actioning_user=request.user, remarks=remarks)
-                msg = 'Correction approved. Attendance record updated.' if result['status'] == 'approved' else 'Correction approved. Awaiting HR review.'
+                if result.get('kind') == 'late_justification':
+                    msg = ('Justification approved. The day is now Late (Excused).' if result['status'] == 'approved'
+                           else 'Justification approved. Awaiting HR review.')
+                else:
+                    msg = 'Correction approved. Attendance record updated.' if result['status'] == 'approved' else 'Correction approved. Awaiting HR review.'
+            elif action == 'resubmit':
+                result = request_resubmission(str(pk), actioning_user=request.user, remarks=remarks)
+                msg = 'Sent back to the employee for resubmission.'
             else:
                 result = reject_correction(str(pk), actioning_user=request.user, remarks=remarks)
-                msg = 'Correction rejected.'
+                msg = 'Justification rejected.' if result.get('kind') == 'late_justification' else 'Correction rejected.'
+        except LateJustificationError as exc:
+            return error(str(exc), data={exc.field or 'remarks': [str(exc)]}, http_status=400)
         except PermissionError as exc:
             return error(str(exc), http_status=403)
         except ValueError as exc:
@@ -980,7 +1032,7 @@ class WeeklyOffAssignmentListView(APIView):
         )
 
     def post(self, request):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         ser = WeeklyOffAssignmentWriteSerializer(data=request.data)
@@ -1017,7 +1069,7 @@ class WeeklyOffAssignmentBulkView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         ser = WeeklyOffBulkAssignmentWriteSerializer(data=request.data)
@@ -1114,7 +1166,7 @@ class ShiftAssignmentListView(APIView):
         )
 
     def post(self, request):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         ser = ShiftAssignmentWriteSerializer(data=request.data)
@@ -1151,7 +1203,7 @@ class ShiftAssignmentBulkView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         ser = ShiftBulkAssignmentWriteSerializer(data=request.data)

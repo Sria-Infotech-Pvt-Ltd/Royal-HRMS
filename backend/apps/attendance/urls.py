@@ -1,6 +1,11 @@
 
 from django.urls import path
 
+from apps.attendance.views.late_limit import LateArrivalLimitEmployeesView, LateArrivalLimitView
+from apps.attendance.views.late_justification import (
+    CorrectionDocumentView, LateJustificationResubmitView, LateJustificationSubmitView,
+)
+
 from apps.attendance.views import (
     AbsenceAlertPolicyDetailView,
     AbsenceAlertPolicyListCreateView,
@@ -100,6 +105,12 @@ urlpatterns = [
     path('calendar/',   AttendanceCalendarView.as_view(), name='attendance-calendar'),
     path('correction/', AttendanceCorrectionView.as_view(), name='attendance-correction'),
     path('corrections/my/', MyCorrectionsListView.as_view(), name='attendance-corrections-my'),
+    path('late-justification/', LateJustificationSubmitView.as_view(), name='attendance-late-justification'),
+    path('late-arrival-limit/', LateArrivalLimitView.as_view(), name='attendance-late-arrival-limit'),
+    path('late-arrival-limit/employees/', LateArrivalLimitEmployeesView.as_view(),
+         name='attendance-late-arrival-limit-employees'),
+    path('late-justification/<uuid:pk>/resubmit/', LateJustificationResubmitView.as_view(),
+         name='attendance-late-justification-resubmit'),
 
     # ── HR Attendance Management ───────────────────────────────────────────────
     path('dashboard/',                    HRAttendanceDashboardView.as_view(), name='hr-attendance-dashboard'),
@@ -117,6 +128,7 @@ urlpatterns = [
     path('reprocess/',                    HRAttendanceReprocessView.as_view(), name='hr-attendance-reprocess'),
     path('corrections/',                  HRCorrectionListView.as_view(),      name='hr-corrections-list'),
     path('corrections/<uuid:pk>/review/', HRCorrectionReviewView.as_view(),    name='hr-correction-review'),
+    path('corrections/<uuid:pk>/document/', CorrectionDocumentView.as_view(),  name='attendance-correction-document'),
     path('employee-calendar/',            HREmployeeMonthView.as_view(),       name='hr-employee-month-calendar'),
     path('weekly-off-assignments/',                      WeeklyOffAssignmentListView.as_view(),    name='weekly-off-assignments-list'),
     path('weekly-off-assignments/bulk/',                  WeeklyOffAssignmentBulkView.as_view(),    name='weekly-off-assignments-bulk'),

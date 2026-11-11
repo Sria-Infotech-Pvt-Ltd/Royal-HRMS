@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import RegularizationModal from "./RegularizationModal";
+import MyLateJustifications from "./MyLateJustifications";
 import MyCorrectionDetailModal from "../../my-requests/_components/MyCorrectionDetailModal";
 import {
   MyCorrectionRequest, PaginatedResponse, STATUS_BADGE_CLASS, STATUS_LABEL,
@@ -16,8 +17,9 @@ export default function AttendanceCorrectionsTab({ autoOpenNew = false }: { auto
   const [showNew, setShowNew] = useState(autoOpenNew);
   const [detail, setDetail]   = useState<MyCorrectionRequest | null>(null);
 
+  // Punch corrections only — late-arrival justifications have their own card below.
   const { data, loading, error, refetch } = useFetch<PaginatedResponse<MyCorrectionRequest>>(
-    `${API.attendance.myCorrections}?page_size=100`
+    `${API.attendance.myCorrections}?kind=punch&page_size=100`
   );
 
   const corrections = useMemo(() => [...(data?.results ?? [])].sort(
@@ -133,6 +135,8 @@ export default function AttendanceCorrectionsTab({ autoOpenNew = false }: { auto
           )}
         </div>
       </div>
+
+      <MyLateJustifications />
 
       {showNew && (
         <RegularizationModal

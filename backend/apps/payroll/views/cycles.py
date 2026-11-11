@@ -392,14 +392,16 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     for rec in AttendanceRecord.objects.filter(
         employee_id__in=employee_ids,
         date__range=(cycle.cycle_start, cycle.cycle_end),
-    ).only('employee_id', 'status', 'date'):
+    ).only('employee_id', 'status', 'date', 'late_excused'):
         if rec.status not in _NON_WORKING:
             working_days_by_emp[rec.employee_id] += 1
         if rec.status == AttendanceRecord.STATUS_ABSENT:
             absent_count_by_emp[rec.employee_id] += 1
         elif rec.status == AttendanceRecord.STATUS_HALF_DAY:
             half_day_count_by_emp[rec.employee_id] += 1
-        elif rec.status == AttendanceRecord.STATUS_LATE:
+        elif rec.status == AttendanceRecord.STATUS_LATE and not rec.late_excused:
+            # "Late (Excused)" — an approved late-arrival justification — is
+            # not a late mark. Pending / rejected justifications stay late.
             late_dates_by_emp[rec.employee_id].append(rec.date)
 
     # ── Per-distinct-structure / per-distinct-state caches ──────────────────

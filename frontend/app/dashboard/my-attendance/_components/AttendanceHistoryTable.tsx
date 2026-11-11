@@ -5,6 +5,7 @@ import type { HistoryRow } from "@/types/attendance";
 interface Props {
   data:         HistoryRow[];
   onRegularize: (date: string) => void;
+  onExplainLate?: (date: string, clockIn: string | null) => void;
   // Hides the Regularize action — used when viewing another employee's
   // history, since the correction flow always submits against request.user.
   readOnly?:    boolean;
@@ -18,6 +19,15 @@ const STATUS_BADGE: Record<string, string> = {
   weekly_off: "badge badge-neutral",
   holiday:    "badge badge-neutral",
   on_leave:   "badge badge-info",
+  // The history rows carry the backend's display labels.
+  "Present":        "badge badge-success",
+  "Late":           "badge badge-warn",
+  "Late (Excused)": "badge badge-info",
+  "Absent":         "badge badge-error",
+  "Half Day":       "badge badge-primary",
+  "Weekly Off":     "badge badge-neutral",
+  "Holiday":        "badge badge-neutral",
+  "On Leave":       "badge badge-info",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -30,7 +40,7 @@ const STATUS_LABEL: Record<string, string> = {
   on_leave:   "On Leave",
 };
 
-export default function AttendanceHistoryTable({ data, onRegularize, readOnly = false }: Props) {
+export default function AttendanceHistoryTable({ data, onRegularize, onExplainLate, readOnly = false }: Props) {
   if (data.length === 0) {
     return (
       <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--on-variant)" }}>
@@ -86,6 +96,16 @@ export default function AttendanceHistoryTable({ data, onRegularize, readOnly = 
                       >
                         <i className="ti ti-flag-3" style={{ fontSize: 11 }} />
                         Regularize
+                      </button>
+                    )}
+                    {!readOnly && onExplainLate && row.canExplainLate && row.isoDate && (
+                      <button
+                        onClick={() => onExplainLate(row.isoDate as string, row.clockIn && row.clockIn !== "—" ? row.clockIn : null)}
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: 11, color: "var(--info)", gap: 4 }}
+                      >
+                        <i className="ti ti-message-question" style={{ fontSize: 11 }} />
+                        Explain late arrival
                       </button>
                     )}
                   </td>

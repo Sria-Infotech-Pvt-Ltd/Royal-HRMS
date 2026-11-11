@@ -30,7 +30,7 @@ from config.test_runner import TEST_COMPANY_CODE
 IST = ZoneInfo('Asia/Kolkata')
 BRANCH = 'Month Export Branch'
 OTHER_BRANCH = 'Month Export Other'
-EXPORT_PERMS = ['attendance.view', 'attendance.export']
+EXPORT_PERMS = ['attendance.view', 'attendance.export', 'attendance.edit']   # HR (attendance staff)
 
 
 def _at(day: date, hh: int) -> datetime.datetime:

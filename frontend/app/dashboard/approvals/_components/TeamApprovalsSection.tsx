@@ -8,6 +8,8 @@ import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { ApprovalModal } from "../ApprovalModal";
+import LateJustificationReviewModal from "../../attendance/_components/LateJustificationReviewModal";
+import type { LateJustificationRow } from "@/types/lateJustification";
 import { LeaveRequest } from "../../leave/_data";
 import {
   ApprovalItem, ApprovalKind, CorrectionListResponse,
@@ -159,8 +161,14 @@ export default function TeamApprovalsSection() {
   // ── Drawer ── separation has its own detail page with the full stage/
   // clearance/handover UI, so "View" goes there instead of this generic drawer.
   const [drawerItem, setDrawerItem] = useState<ApprovalItem | null>(null);
+  // Late-arrival justifications open their own review (reason required to
+  // reject / send back; proof only for authorised HR) instead of the drawer.
+  const [lateReview, setLateReview] = useState<LateJustificationRow | null>(null);
+  const isLate = (item: ApprovalItem) =>
+    item.kind === "attendance_correction" && (item.raw as { kind?: string }).kind === "late_justification";
   function handleView(item: ApprovalItem) {
     if (item.kind === "separation") { router.push(`/dashboard/separation/${item.id}`); return; }
+    if (isLate(item)) { setLateReview(item.raw as unknown as LateJustificationRow); return; }
     setDrawerItem(item);
   }
 
@@ -187,6 +195,10 @@ export default function TeamApprovalsSection() {
     // (reused from Payroll → Payslip Queries, not duplicated).
     if (item.kind === "payslip") {
       setResolveTarget(item.raw as PayslipQuery);
+      return;
+    }
+    if (isLate(item)) {
+      setLateReview(item.raw as unknown as LateJustificationRow);
       return;
     }
     if (item.kind === "attendance_correction") {
@@ -395,6 +407,11 @@ export default function TeamApprovalsSection() {
           onConfirm={handleBulkConfirm}
           onClose={() => setBulkAction(null)}
         />
+      )}
+
+      {lateReview && (
+        <LateJustificationReviewModal request={lateReview} onClose={() => setLateReview(null)}
+          onDone={m => { showToast(m, "success"); refetchCorrections(); }} />
       )}
 
       {resolveTarget && (

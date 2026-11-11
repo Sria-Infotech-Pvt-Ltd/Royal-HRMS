@@ -350,6 +350,14 @@ export const API = {
     corrections: "/attendance/corrections/",
     correctionReview: (id: string) => `/attendance/corrections/${id}/review/`,
     myCorrections: "/attendance/corrections/my/",
+    // Late-arrival justification (an AttendanceCorrection of kind "late_justification").
+    lateJustification: "/attendance/late-justification/",
+    // Maximum Late Arrivals Per Month (tracking only) and who is over it.
+    lateArrivalLimit: "/attendance/late-arrival-limit/",
+    lateArrivalLimitEmployees: "/attendance/late-arrival-limit/employees/",
+    lateJustificationResubmit: (id: string) => `/attendance/late-justification/${id}/resubmit/`,
+    // Proof file, streamed only to the uploader and users with medical-proof access.
+    correctionDocument: (id: string) => `/attendance/corrections/${id}/document/`,
     employeeCalendar: (employeeId: string, month: string) => `/attendance/employee-calendar/?employee_id=${employeeId}&month=${month}`,
 
     faceCaptureTelemetry: "/attendance/face-capture-telemetry/",

@@ -18,12 +18,15 @@ export interface MyCorrectionRequest {
   requested_out:    string | null;
   reason:           string;
   notes?:           string;
-  status:           "pending" | "l2_pending" | "approved" | "rejected";
+  status:           "pending" | "l2_pending" | "approved" | "rejected" | "resubmit";
+  kind?:            "punch" | "late_justification";
+  reason_label?:    string;
+  rejection_reason?: string;
   l1_approver_name: string | null;
-  l1_status:        "approved" | "rejected" | null;
+  l1_status:        "approved" | "rejected" | "resubmit" | null;
   l1_remarks:       string;
   l2_approver_name: string | null;
-  l2_status:        "approved" | "rejected" | null;
+  l2_status:        "approved" | "rejected" | "resubmit" | null;
   l2_remarks:       string;
   reviewed_by:      string | null;
   reviewed_at:      string | null;
@@ -134,7 +137,7 @@ export function fmtTime12h(hhmm: string | null): string {
 }
 
 export function toDisplayStatus(status: string): DisplayStatus {
-  if (status === "pending" || status === "l2_pending") return "pending";
+  if (status === "pending" || status === "l2_pending" || status === "resubmit") return "pending";
   if (status === "approved") return "approved";
   if (status === "rejected") return "rejected";
   return "cancelled";
@@ -208,6 +211,23 @@ export function wfhToMyItem(r: WorkFromHomeRequest): MyRequestItem {
 }
 
 export function correctionToMyItem(r: MyCorrectionRequest): MyRequestItem {
+  if (r.kind === "late_justification") {
+    return {
+      key:             `attendance_correction:${r.id}`,
+      kind:            "attendance_correction",
+      id:              r.id,
+      requestCode:     `LJ-${r.id.slice(0, 6).toUpperCase()}`,
+      title:           r.status === "resubmit" ? "Late Arrival Justification — Resubmission Required" : "Late Arrival Justification",
+      detailSecondary: `${fmtDateOnly(r.date)} · ${r.reason_label ?? r.reason}`,
+      submittedAt:     r.created_at,
+      status:          r.status,
+      displayStatus:   toDisplayStatus(r.status),
+      approver:        r.l2_approver_name || r.l1_approver_name || "—",
+      lastUpdated:     r.reviewed_at || r.created_at,
+      canCancel:       false,
+      raw:             r,
+    };
+  }
   const showIn  = r.punch_type !== "OUT";
   const showOut = r.punch_type !== "IN";
   const arrows  = [

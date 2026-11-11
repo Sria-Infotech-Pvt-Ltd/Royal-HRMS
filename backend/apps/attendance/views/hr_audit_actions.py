@@ -14,6 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.permissions import has_perm as _has_perm
+from apps.attendance.access import can_manage_attendance as _can_manage_attendance
 from core.responses import error, first_error, success
 
 from apps.attendance.serializers_hr import (
@@ -41,6 +42,15 @@ class HRAttendanceAuditView(APIView):
         if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
+        # Same scope as the record itself: own records for employees, direct
+        # reports for managers, branch for branch HR. Same 404 either way.
+        from apps.attendance.models import AttendanceRecord
+        from apps.attendance.views.hr_attendance import _looks_like_uuid, _manager_can_access_employee
+        record = (AttendanceRecord.objects.select_related('employee').filter(id=pk).first()
+                  if _looks_like_uuid(pk) else None)
+        if record is None or not _manager_can_access_employee(request.user, record.employee):
+            return error('Attendance record not found.', http_status=404)
+
         from apps.attendance.services_audit_log import get_audit_history
         history = get_audit_history(str(pk))
 
@@ -60,7 +70,7 @@ class HRInvalidPunchAssignView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         ser = InvalidPunchAssignSerializer(data=request.data)
@@ -85,7 +95,7 @@ class HRInvalidPunchDiscardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         ser = InvalidPunchDiscardSerializer(data=request.data)
@@ -110,7 +120,7 @@ class HRInvalidPunchConvertView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _has_perm(request.user, 'attendance.create'):
+        if not _can_manage_attendance(request.user):
             return error('Permission denied.', http_status=403)
 
         ser = InvalidPunchConvertSerializer(data=request.data)

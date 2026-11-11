@@ -517,7 +517,8 @@ class EmployeeRecentRequestsView(APIView):
         for ac in AttendanceCorrection.objects.filter(employee=employee).order_by('-created_at', '-id'):
             recent.append(((ac.created_at, ac.id), {
                 'request_type': 'attendance_correction',
-                'title':        f'Attendance Correction — {ac.date}',
+                'title':        (f'Late Arrival Justification — {ac.date}' if ac.kind == 'late_justification'
+                                 else f'Attendance Correction — {ac.date}'),
                 'applied_date': str(ac.created_at.date()),
                 'status':       ac.status,
                 'remarks':      ac.notes or '',

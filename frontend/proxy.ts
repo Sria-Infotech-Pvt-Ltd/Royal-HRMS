@@ -22,7 +22,9 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/employees": "employees.view",
   "/dashboard/org-chart": "org_chart.view",
   "/dashboard/branches": "settings.view",
-  "/dashboard/attendance": "attendance.view",
+  // HR attendance management. attendance.view alone is not enough: ordinary
+  // employees hold it for My Attendance (backend: apps/attendance/access.py).
+  "/dashboard/attendance": ["attendance.edit", "settings.edit"],
   "/dashboard/payroll": "payroll.view",
   "/dashboard/leave": "leave.view",
   "/dashboard/expenses": "expenses.view",

@@ -425,7 +425,7 @@ class ShiftAssignmentAPITests(TestCase):
         self.sgt = _make_policy('Test SGT/ICT Shift', 'WH-TEST-SGT-ICT', SGT_START, SGT_END)
         self.uk = _make_policy('Test UK Shift', 'WH-TEST-UK', UK_START, UK_END)
 
-        hr_role = make_role('hr_shift_assign_test', permission_codenames=['attendance.view', 'attendance.create'])
+        hr_role = make_role('hr_shift_assign_test', permission_codenames=['attendance.view', 'attendance.create', 'attendance.edit'])
         self.hr = make_user(
             'hr.shiftassign@test.com', role=hr_role, password='TestPass123!',
             employee_id='EMPHRS001', branch='Shift Test Branch',

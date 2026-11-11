@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db import models
 
 from core.encrypted_fields import EncryptedJSONField
+from core.storage import AuthenticatedRawMediaCloudinaryStorage, late_justification_upload_path
 
 # ─── Weekly Days constants (used by model + serializers) ──────────────────────
 
@@ -1028,6 +1029,12 @@ class AttendanceLateMarkRules(models.Model):
         choices=LOP_UNIT_CHOICES,
         default=LOP_UNIT_FULL_DAY,
     )
+    # Maximum late arrivals per calendar month (Settings → Leave Policy).
+    # Tracking and display only — it never adds LOP; the rule above alone
+    # decides late-mark deductions. Late (Excused) days are not counted.
+    # See apps.attendance.services_late_limit.
+    late_limit_enabled          = models.BooleanField(default=True)
+    max_late_arrivals_per_month = models.PositiveSmallIntegerField(default=5)
 
     class Meta:
         db_table = 'attendance_settings_late_mark_rules'
@@ -1358,6 +1365,11 @@ class AttendanceRecord(models.Model):
     )
     overtime_minutes       = models.PositiveIntegerField(default=0)
     is_late                = models.BooleanField(default=False)
+    # Set only when a late-arrival justification (AttendanceCorrection,
+    # kind=late_justification) is fully approved. The day stays "late" with
+    # its original punches; it is shown as "Late (Excused)" and payroll does
+    # not count it as a late mark. Never written by attendance processing.
+    late_excused           = models.BooleanField(default=False)
     is_early_exit          = models.BooleanField(default=False)
     # True when this day used one of the month's permitted early departures
     # (AttendancePunchRules.early_leave_allowance_per_month) to count as a full day.
@@ -1379,8 +1391,12 @@ class AttendanceRecord(models.Model):
     def __str__(self) -> str:
         return f'{self.employee_id} — {self.date} — {self.status}'
 
+    LATE_EXCUSED_DISPLAY = 'Late (Excused)'
+
     @property
     def status_display(self) -> str:
+        if self.status == self.STATUS_LATE and self.late_excused:
+            return self.LATE_EXCUSED_DISPLAY
         return self.STATUS_DISPLAY_MAP.get(self.status, self.status)
 
     @property
@@ -1404,12 +1420,25 @@ class AttendanceRecord(models.Model):
 
 class AttendanceCorrection(models.Model):
     """
-    Employee-submitted regularization request for a missed or incorrect punch.
+    Employee-submitted request on one attendance day, through the shared
+    Manager (L1) → HR (L2) approval chain. Two kinds:
 
-    Workflow: submitted → pending → approved/rejected by manager or HR.
-    An approved correction creates a regularized AttendancePunch and triggers
-    reprocessing of the attendance record for that date.
+    punch               regularization of a missed or incorrect punch. An
+                        approved correction creates a regularized
+                        AttendancePunch and reprocesses the day.
+    late_justification  explanation for a late arrival (medical / transport /
+                        personal / other; medical needs proof). Approval never
+                        touches punches: it marks the AttendanceRecord
+                        late_excused ("Late (Excused)", no late-mark LOP).
+                        Reviewers may also ask for a resubmission.
     """
+
+    KIND_PUNCH = 'punch'
+    KIND_LATE  = 'late_justification'
+    KIND_CHOICES = [
+        (KIND_PUNCH, 'Punch correction'),
+        (KIND_LATE,  'Late arrival justification'),
+    ]
 
     PUNCH_IN   = 'IN'
     PUNCH_OUT  = 'OUT'
@@ -1425,6 +1454,11 @@ class AttendanceCorrection(models.Model):
     REASON_FIELD_WORK = 'field_work'
     REASON_SYSTEM     = 'system_downtime'
     REASON_OTHER      = 'other'
+    # Late-arrival justification reasons ("other" is shared).
+    REASON_MEDICAL    = 'medical'
+    REASON_TRANSPORT  = 'transport'
+    REASON_PERSONAL   = 'personal'
+    # Punch-correction reasons (unchanged; also used by voice commands).
     REASON_CHOICES    = [
         (REASON_BIOMETRIC,  'Device malfunction / biometric error'),
         (REASON_FORGOT,     'Forgot to punch'),
@@ -1432,23 +1466,36 @@ class AttendanceCorrection(models.Model):
         (REASON_SYSTEM,     'System / server downtime'),
         (REASON_OTHER,      'Other'),
     ]
+    LATE_REASON_CHOICES = [
+        (REASON_MEDICAL,   'Medical'),
+        (REASON_TRANSPORT, 'Transport'),
+        (REASON_PERSONAL,  'Personal'),
+        (REASON_OTHER,     'Other'),
+    ]
+    ALL_REASON_CHOICES = REASON_CHOICES[:-1] + LATE_REASON_CHOICES
+    LATE_REASONS  = tuple(code for code, _ in LATE_REASON_CHOICES)
 
     STATUS_PENDING    = 'pending'
     STATUS_L2_PENDING = 'l2_pending'
     STATUS_APPROVED   = 'approved'
     STATUS_REJECTED   = 'rejected'
+    STATUS_RESUBMIT   = 'resubmit'      # late justifications only
     STATUS_CHOICES  = [
         (STATUS_PENDING,    'Pending'),
         (STATUS_L2_PENDING, 'L2 Pending'),
         (STATUS_APPROVED,   'Approved'),
         (STATUS_REJECTED,   'Rejected'),
+        (STATUS_RESUBMIT,   'Resubmission Required'),
     ]
+    OPEN_STATUSES = (STATUS_PENDING, STATUS_L2_PENDING, STATUS_RESUBMIT)
 
     STAGE_APPROVED = 'approved'
     STAGE_REJECTED = 'rejected'
+    STAGE_RESUBMIT = 'resubmit'
     STAGE_STATUS_CHOICES = [
         (STAGE_APPROVED, 'Approved'),
         (STAGE_REJECTED, 'Rejected'),
+        (STAGE_RESUBMIT, 'Resubmission requested'),
     ]
 
     id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -1457,8 +1504,10 @@ class AttendanceCorrection(models.Model):
         on_delete=models.CASCADE,
         related_name='attendance_corrections',
     )
+    kind                = models.CharField(max_length=20, choices=KIND_CHOICES, default=KIND_PUNCH)
     date                = models.DateField()
-    punch_type          = models.CharField(max_length=4, choices=PUNCH_TYPE_CHOICES)
+    # Blank for late justifications (no punch is requested).
+    punch_type          = models.CharField(max_length=4, choices=PUNCH_TYPE_CHOICES, blank=True, default='')
     requested_in_time   = models.TimeField(
         null=True, blank=True,
         help_text='Correct punch-in time. Required when punch_type is IN or BOTH.',
@@ -1467,8 +1516,23 @@ class AttendanceCorrection(models.Model):
         null=True, blank=True,
         help_text='Correct punch-out time. Required when punch_type is OUT or BOTH.',
     )
-    reason              = models.CharField(max_length=20, choices=REASON_CHOICES)
+    reason              = models.CharField(max_length=20, choices=ALL_REASON_CHOICES)
     notes               = models.TextField(blank=True, default='')
+
+    # ── Late-arrival justification ──
+    # Proof (required for medical). Private storage, streamed only through
+    # the API to the employee and users holding attendance.medical_proof_view.
+    supporting_document = models.FileField(
+        upload_to=late_justification_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage(),
+        null=True, blank=True, max_length=255,
+    )
+    document_name             = models.CharField(max_length=255, blank=True, default='')
+    attendance_record         = models.ForeignKey(
+        'AttendanceRecord', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='late_justifications',
+    )
+    resubmission_count        = models.PositiveSmallIntegerField(default=0)
+    resubmission_requested_at = models.DateTimeField(null=True, blank=True)
     status              = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING,
     )
@@ -1516,6 +1580,7 @@ class AttendanceCorrection(models.Model):
             # by status alone (no employee) — neither existing composite
             # (both employee-leading) can serve that without an employee bound.
             models.Index(fields=['status'], name='corr_status_idx'),
+            models.Index(fields=['kind', 'status'], name='corr_kind_status_idx'),
         ]
 
     def __str__(self) -> str:
@@ -1692,6 +1757,12 @@ class AttendanceAuditLog(models.Model):
     EVENT_REPROCESSED          = 'REPROCESSED'
     EVENT_INVALID_DISCARDED    = 'INVALID_DISCARDED'
     EVENT_INVALID_CONVERTED    = 'INVALID_CONVERTED'
+    EVENT_LATE_SUBMITTED       = 'LATE_REASON_SUBMITTED'
+    EVENT_LATE_RESUBMITTED     = 'LATE_REASON_RESUBMITTED'
+    EVENT_LATE_APPROVED        = 'LATE_REASON_APPROVED'
+    EVENT_LATE_REJECTED        = 'LATE_REASON_REJECTED'
+    EVENT_LATE_RESUBMIT_ASKED  = 'LATE_REASON_RESUBMIT_ASKED'
+    EVENT_LATE_EXCUSED         = 'LATE_EXCUSED'
 
     EVENT_CHOICES = [
         (EVENT_CLOCK_IN,             'Clock In'),
@@ -1706,6 +1777,12 @@ class AttendanceAuditLog(models.Model):
         (EVENT_REPROCESSED,          'Reprocessed'),
         (EVENT_INVALID_DISCARDED,    'Invalid Punch Discarded'),
         (EVENT_INVALID_CONVERTED,    'Invalid Punch Converted'),
+        (EVENT_LATE_SUBMITTED,       'Late Arrival Justification Submitted'),
+        (EVENT_LATE_RESUBMITTED,     'Late Arrival Justification Resubmitted'),
+        (EVENT_LATE_APPROVED,        'Late Arrival Justification Approved'),
+        (EVENT_LATE_REJECTED,        'Late Arrival Justification Rejected'),
+        (EVENT_LATE_RESUBMIT_ASKED,  'Late Arrival Justification — Resubmission Requested'),
+        (EVENT_LATE_EXCUSED,         'Late Arrival Excused'),
     ]
 
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

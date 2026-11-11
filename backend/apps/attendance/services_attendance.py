@@ -812,6 +812,8 @@ class AttendanceDashboardService:
             'avg_hours_per_day': avg_hours,
             'attendance_percentage': attendance_pct,
             'working_days':      working_days,
+            # Maximum Late Arrivals Per Month (tracking only; excused days not counted).
+            'late_limit':        _late_limit_summary(employee, year, month),
         }
 
     @classmethod
@@ -874,12 +876,13 @@ class AttendanceDashboardService:
         holiday_dates = set(holiday_names.keys())
         off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
         pending_dates = cls._pending_correction_dates(employee, year, month)
+        late_requests = cls._late_justification_status(employee, year, month)
 
         days: dict[int, dict] = {}
         for day_num in range(1, days_in_month + 1):
             entry = cls._build_day(
                 day_num, year, month, records, leave_dates, off_dates,
-                pending_dates, today, holiday_dates, holiday_names,
+                pending_dates, today, holiday_dates, holiday_names, late_requests,
             )
             if entry is not None:
                 days[day_num] = entry
@@ -891,9 +894,12 @@ class AttendanceDashboardService:
         Returns the AttendanceHistory table rows for the given month,
         newest first.
         """
+        from apps.attendance.services_late_justification import can_explain
         records = (
             cls._month_records(employee, year, month)
         )
+        late_requests = cls._late_justification_status(employee, year, month)
+        open_late = {d for d, st in late_requests.items() if st != 'rejected'}
         rows = []
         for r in sorted(records, key=lambda x: x.date, reverse=True):
             can_regularize = r.status in (
@@ -910,8 +916,23 @@ class AttendanceDashboardService:
                 'hours':         r.total_hours_display,
                 'status':        r.status_display,
                 'canRegularize': can_regularize,
+                'isoDate':       r.date.isoformat(),
+                'canExplainLate': can_explain(employee, r, open_late),
+                'lateJustificationStatus': late_requests.get(r.date),
             })
         return rows
+
+    @staticmethod
+    def _late_justification_status(employee, year: int, month: int) -> dict:
+        """date → status of the latest late-arrival justification in the month."""
+        from apps.attendance.models import AttendanceCorrection
+        out: dict = {}
+        for d, st in (AttendanceCorrection.objects
+                      .filter(employee=employee, kind=AttendanceCorrection.KIND_LATE,
+                              date__year=year, date__month=month)
+                      .order_by('created_at').values_list('date', 'status')):
+            out[d] = st
+        return out
 
     # ── Private ───────────────────────────────────────────────────────────────
 
@@ -929,6 +950,7 @@ class AttendanceDashboardService:
         return AttendanceCorrection.objects.filter(
             employee=employee,
             date=for_date,
+            kind=AttendanceCorrection.KIND_PUNCH,
             status=AttendanceCorrection.STATUS_PENDING,
         ).exists()
 
@@ -941,6 +963,7 @@ class AttendanceDashboardService:
             .filter(
                 employee=employee,
                 date__year=year, date__month=month,
+                kind=AttendanceCorrection.KIND_PUNCH,
                 status=AttendanceCorrection.STATUS_PENDING,
             )
             .values_list('date', flat=True)
@@ -996,6 +1019,7 @@ class AttendanceDashboardService:
         pending_dates: set, today: date,
         holiday_dates: set = None,
         holiday_names: dict = None,
+        late_requests: dict = None,
     ) -> dict | None:
         """Builds the response dict for one calendar day; returns None for blank future days."""
         cur           = date(year, month, day_num)
@@ -1025,6 +1049,13 @@ class AttendanceDashboardService:
             and cur not in pending_dates
         )
         label = 'Missing Clock Out' if reg_required else AttendanceRecord.STATUS_DISPLAY_MAP.get(key, key)
+        if key == AttendanceRecord.STATUS_LATE and rec and rec.late_excused:
+            label = AttendanceRecord.LATE_EXCUSED_DISPLAY
+        late_requests = late_requests or {}
+        late_status = late_requests.get(cur)
+        from apps.attendance.services_late_justification import can_explain
+        can_explain_late = bool(rec) and key == rec.status and can_explain(
+            None, rec, {d for d, st in late_requests.items() if st != "rejected"})
         holiday_name = None
         if key == AttendanceRecord.STATUS_HOLIDAY:
             holiday_name = holiday_names.get(cur) or (rec.note if rec and rec.note else 'Holiday')
@@ -1040,7 +1071,14 @@ class AttendanceDashboardService:
             'holiday_name':            holiday_name,
             'canRegularize':           can_reg,
             'regularization_required': reg_required,
+            'canExplainLate':          can_explain_late,
+            'lateJustificationStatus': late_status,
         }
+
+
+def _late_limit_summary(employee, year: int, month: int) -> dict:
+    from apps.attendance.services_late_limit import summary
+    return summary(employee, year, month)
 
 
 # ── Audit helper ──────────────────────────────────────────────────────────────

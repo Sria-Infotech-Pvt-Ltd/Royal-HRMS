@@ -7,6 +7,7 @@ interface Props {
   month:        number;  // 1-indexed
   data:         Record<string, DayRecord>;
   onRegularize: (date: string) => void;
+  onExplainLate?: (date: string, clockIn: string | null) => void;
   // Hides the Regularize action — used when viewing another employee's
   // calendar, since the correction flow always submits against request.user.
   readOnly?:    boolean;
@@ -18,6 +19,7 @@ const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const STATUS_LABELS: Record<string, string> = {
   'Present':           'P',
   'Late':              'L',
+  'Late (Excused)':    'LE',
   'Absent':            'A',
   'Half Day':          'H',
   'Weekly Off':        'W',
@@ -30,7 +32,11 @@ const STATUS_LABELS: Record<string, string> = {
 // Non-working days: hide clock-in/out times (no punches expected)
 const NON_WORKING = new Set(['Weekly Off', 'Holiday']);
 
-export default function AttendanceCalendar({ year, month, data, onRegularize, readOnly = false }: Props) {
+const LATE_STATUS_HINT: Record<string, string> = {
+  pending: "Reason pending", l2_pending: "Reason pending", resubmit: "Resubmit reason", rejected: "Reason rejected",
+};
+
+export default function AttendanceCalendar({ year, month, data, onRegularize, onExplainLate, readOnly = false }: Props) {
   const jsMonth    = month - 1;  // convert to 0-indexed for Date API
   const firstDay   = new Date(year, jsMonth, 1).getDay();
   const daysInMonth = new Date(year, jsMonth + 1, 0).getDate();
@@ -131,6 +137,26 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                     >
                       Regularize
                     </button>
+                  )}
+
+                  {!readOnly && onExplainLate && record?.canExplainLate && (
+                    <button
+                      onClick={() => onExplainLate(dateStr(day), record.clockIn)}
+                      title="Explain why you were late (medical, transport, personal or other)"
+                      style={{
+                        marginTop: 3, marginLeft: 3, padding: "1px 5px", fontSize: 8, fontWeight: 700,
+                        background: "var(--info-c, var(--bg-low))", color: "var(--info)",
+                        border: "1px solid var(--info)", borderRadius: 4,
+                        cursor: "pointer", letterSpacing: "0.03em", lineHeight: 1.4,
+                      }}
+                    >
+                      Explain
+                    </button>
+                  )}
+                  {record?.lateJustificationStatus && LATE_STATUS_HINT[record.lateJustificationStatus] && (
+                    <div style={{ fontSize: 8, marginTop: 2, color: "var(--on-variant)" }}>
+                      {LATE_STATUS_HINT[record.lateJustificationStatus]}
+                    </div>
                   )}
                 </>
               )}

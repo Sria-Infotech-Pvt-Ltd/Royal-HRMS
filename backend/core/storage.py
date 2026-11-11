@@ -149,6 +149,12 @@ def wfh_document_upload_path(instance, filename) -> str:
     return f'{_tenant_schema()}/wfh_documents/{filename}'
 
 
+def late_justification_upload_path(instance, filename) -> str:
+    # Medical proof: the original filename (often a patient's name) is never
+    # used in the stored path — only its extension, with a random name.
+    return _short_upload_name(f'{_tenant_schema()}/late_justifications', filename)
+
+
 def document_center_upload_path(instance, filename) -> str:
     # Matches the year/month partitioning the old upload_to='documents/%Y/%m/'
     # string gave for free — a callable upload_to doesn't get Django's

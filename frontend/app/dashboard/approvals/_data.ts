@@ -41,8 +41,13 @@ export interface CorrectionRequest {
   requested_out:    string | null;
   reason:           string;
   notes?:           string;
-  status:           "pending" | "l2_pending" | "approved" | "rejected";
+  status:           "pending" | "l2_pending" | "approved" | "rejected" | "resubmit";
+  /** "late_justification" rows carry the extra fields in types/lateJustification. */
+  kind?:            "punch" | "late_justification";
+  reason_label?:    string;
+  has_document?:    boolean;
   l1_approver_name: string | null;
+  // "resubmit" only occurs on late justifications, which open their own review modal.
   l1_status:        "approved" | "rejected" | null;
   l1_remarks:       string;
   l2_approver_name: string | null;
@@ -264,8 +269,10 @@ export function correctionToItem(r: CorrectionRequest): ApprovalItem {
     status:         r.status,
     displayStatus:  toDisplayStatus(r.status),
     submittedAt:    r.created_at,
-    detailPrimary:  PUNCH_LABEL[r.punch_type] ?? "Attendance Correction",
-    detailSecondary: arrows.join("  ·  "),
+    detailPrimary:  r.kind === "late_justification" ? "Late Arrival Justification" : PUNCH_LABEL[r.punch_type] ?? "Attendance Correction",
+    detailSecondary: r.kind === "late_justification"
+      ? `${r.reason_label ?? r.reason}${r.has_document ? " · proof attached" : ""} · clocked in ${fmtTime12h(r.original_in)}`
+      : arrows.join("  ·  "),
     detailTertiary: fmtDateOnly(r.date),
     canAction:      r.can_action,
     raw:            r,

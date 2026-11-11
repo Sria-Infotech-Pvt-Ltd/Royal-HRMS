@@ -408,7 +408,7 @@ class AttendanceDetailLocationLabelAPITests(TestCase):
             latitude=OFFICE_LAT, longitude=OFFICE_LON,
             allowed_radius_meters=150, geofencing_enabled=True,
         )
-        hr_role = make_role('hr_geocode_label_test', permission_codenames=['attendance.view'])
+        hr_role = make_role('hr_geocode_label_test', permission_codenames=['attendance.view', 'attendance.edit'])
         self.hr = make_user(
             'hr.geocodelabel@test.com', role=hr_role, password='TestPass123!', employee_id='EMPHRGL001',
         )

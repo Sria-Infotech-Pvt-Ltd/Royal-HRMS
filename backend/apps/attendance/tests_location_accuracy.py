@@ -80,7 +80,7 @@ class AttendanceDetailAccuracyAPITests(TestCase):
     def setUp(self):
         cache.clear()
         self.client = APIClient()
-        make_user('acc.hr@test.com', role=make_role('acc_hr', permission_codenames=['attendance.view']),
+        make_user('acc.hr@test.com', role=make_role('acc_hr', permission_codenames=['attendance.view', 'attendance.edit']),
                   employee_id='EMPACCHR', full_name='Acc HR')
         self.employee = make_user('acc.emp@test.com', role=make_role('acc_staff'), employee_id='EMPACC01', full_name='Acc Emp')
         resp = self.client.post(

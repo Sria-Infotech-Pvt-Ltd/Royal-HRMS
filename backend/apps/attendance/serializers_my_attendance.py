@@ -191,6 +191,8 @@ class StatsSerializer(serializers.Serializer):
     avg_hours_per_day     = serializers.FloatField()
     attendance_percentage = serializers.IntegerField()
     working_days          = serializers.IntegerField()
+    # {enabled, maximum, late_arrivals, remaining, status, status_label, year, month}
+    late_limit            = serializers.DictField(required=False)
 
 
 class MonthlySummarySerializer(serializers.Serializer):
@@ -218,6 +220,8 @@ class DayRecordSerializer(serializers.Serializer):
     holiday_name            = serializers.CharField(allow_null=True, required=False)
     canRegularize           = serializers.BooleanField()
     regularization_required = serializers.BooleanField()
+    canExplainLate          = serializers.BooleanField(required=False, default=False)
+    lateJustificationStatus = serializers.CharField(allow_null=True, required=False, default=None)
 
 
 class CalendarSerializer(serializers.Serializer):
@@ -234,6 +238,9 @@ class HistoryRowSerializer(serializers.Serializer):
     hours         = serializers.CharField()
     status        = serializers.CharField()
     canRegularize = serializers.BooleanField()
+    isoDate       = serializers.CharField(required=False)
+    canExplainLate = serializers.BooleanField(required=False, default=False)
+    lateJustificationStatus = serializers.CharField(allow_null=True, required=False, default=None)
 
 
 class CorrectionReadSerializer(serializers.Serializer):
@@ -249,9 +256,11 @@ class CorrectionReadSerializer(serializers.Serializer):
 class MyCorrectionsFilterSerializer(serializers.Serializer):
     """Query params for GET /api/attendance/corrections/my/."""
     status    = serializers.ChoiceField(
-        choices=['', 'pending', 'l2_pending', 'approved', 'rejected'],
+        choices=['', 'pending', 'l2_pending', 'approved', 'rejected', 'resubmit'],
         required=False, allow_blank=True, default='',
     )
+    kind      = serializers.ChoiceField(choices=['', 'punch', 'late_justification'],
+                                        required=False, allow_blank=True, default='')
     date_from = serializers.DateField(required=False, allow_null=True, default=None)
     date_to   = serializers.DateField(required=False, allow_null=True, default=None)
 

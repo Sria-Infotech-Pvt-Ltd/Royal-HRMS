@@ -10,6 +10,7 @@ import type { CarryForwardType, CarryForwardMode, CreditSchedule, LeavePolicyCar
 import EligibilitySection from "./EligibilitySection";
 import CarryForwardSettingsSection from "./CarryForwardSettingsSection";
 import MonthlyCreditSettingsSection from "./MonthlyCreditSettingsSection";
+import LateArrivalLimitCard from "./LateArrivalLimitCard";
 
 // Full shape of GET /leave/policy/ list items — includes both the existing
 // Leave Types fields (annual_days, can_carry_forward, ...) and the policy
@@ -358,6 +359,7 @@ export default function LeavePoliciesTab() {
 
   return (
     <>
+      <LateArrivalLimitCard />
       <div className="scope-banner flex items-center gap-4 flex-wrap">
         <i className="ti ti-info-circle text-[22px] text-[var(--primary)] flex-shrink-0" />
         <div className="flex-1 min-w-[240px]">
