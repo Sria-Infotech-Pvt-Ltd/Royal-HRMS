@@ -8,6 +8,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useFaceLivenessCapture } from "@/hooks/useFaceLivenessCapture";
+import { useModelLoadMessage } from "@/hooks/useModelLoadMessage";
 import FaceStatusPanel from "@/components/FaceStatusPanel";
 import FaceCaptureStage from "@/components/FaceCaptureStage";
 import { FACE_FLOW_V2 } from "@/lib/faceApi/flowConfig";
@@ -35,6 +36,7 @@ interface FaceVerificationModalProps {
 const VERIFICATION_FRAMES_TO_CAPTURE = 3;
 
 export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: FaceVerificationModalProps) {
+  const modelLoadMessage = useModelLoadMessage();
   const { phase, errorMessage, liveHint, lowLight, livenessProgress, modelProgress, videoRef, canvasRef, start, retry, stop } = useFaceLivenessCapture({
     // Quick clock-in: a head turn is the single liveness step (registration still requires blink AND turn).
     livenessMode: "turn_only",
@@ -126,7 +128,7 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
           {(phase === "idle" || phase === "loading_models") && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)" spinning
-              title="Preparing face verification" message="Downloading face models (first time only)…" progress={modelProgress}
+              title="Preparing face verification" message={modelLoadMessage} progress={modelProgress}
             />
           )}
 

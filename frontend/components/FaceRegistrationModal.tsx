@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFaceRegistrationCapture } from "@/hooks/useFaceRegistrationCapture";
+import { useModelLoadMessage } from "@/hooks/useModelLoadMessage";
 import FaceStatusPanel from "@/components/FaceStatusPanel";
 import FaceCaptureStage from "@/components/FaceCaptureStage";
 import FaceConsentPanel from "@/components/FaceConsentPanel";
@@ -20,6 +21,7 @@ interface FaceRegistrationModalProps {
 }
 
 export default function FaceRegistrationModal({ onClose, mode = "register" }: FaceRegistrationModalProps) {
+  const modelLoadMessage = useModelLoadMessage();
   const { phase, errorMessage, submittedRequest, modelProgress, liveHint, livenessProgress, videoRef, canvasRef, start, retry, stop } = useFaceRegistrationCapture();
   // Gates everything below — the camera never opens (start() is never
   // called) until this is true. Reset per modal open (no persisted "don't
@@ -98,7 +100,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
           {phase === "loading_models" && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)" spinning
-              title="Preparing face recognition" message="Downloading face models (first time only)…" progress={modelProgress}
+              title="Preparing face recognition" message={modelLoadMessage} progress={modelProgress}
             />
           )}
 

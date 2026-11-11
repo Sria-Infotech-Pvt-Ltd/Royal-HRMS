@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useHRFaceCapture } from "@/hooks/useHRFaceRegistration";
+import { useModelLoadMessage } from "@/hooks/useModelLoadMessage";
 import FaceStatusPanel from "@/components/FaceStatusPanel";
 import FaceCaptureStage from "@/components/FaceCaptureStage";
 import FaceConsentPanel from "@/components/FaceConsentPanel";
@@ -24,6 +25,7 @@ interface HRFaceCaptureModalProps {
 export default function HRFaceCaptureModal({
   employeeUuid, employeeName, isUpdate, onClose, onRegistered,
 }: HRFaceCaptureModalProps) {
+  const modelLoadMessage = useModelLoadMessage();
   const { phase, errorMessage, registeredRequest, modelProgress, liveHint, livenessProgress, videoRef, canvasRef, start, retry, stop } =
     useHRFaceCapture(employeeUuid);
   const [consentAcknowledged, setConsentAcknowledged] = useState(false);
@@ -106,7 +108,7 @@ export default function HRFaceCaptureModal({
           {phase === "loading_models" && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)" spinning
-              title="Preparing face recognition" message="Downloading face models (first time only)…" progress={modelProgress}
+              title="Preparing face recognition" message={modelLoadMessage} progress={modelProgress}
             />
           )}
 

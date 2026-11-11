@@ -6,7 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
 import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
-import { loadFaceApiModels } from "@/lib/faceApi/loadModels";
+import { scheduleFaceModelPreload } from "@/lib/faceApi/preload";
 import type { TodaySession, AttendanceMode, PunchLocation } from "@/types/attendance";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
 
@@ -132,17 +132,12 @@ export function useClockWidget() {
   // Warm the face models in the background as soon as we know this employee
   // will be asked for a face check, so the ~7 MB download isn't spent while
   // they stare at "Preparing face verification" after clicking Clock In.
-  // Deferred to idle time so it never competes with the dashboard's own load;
-  // errors are swallowed here — start() retries the load when it's actually needed.
+  // Goes through the same shared scheduler as FaceModelPreloader (idle-time,
+  // scheduled once); errors are swallowed there — start() retries the load when
+  // it's actually needed.
   useEffect(() => {
     if (!faceVerificationRequired) return;
-    const run = () => { void loadFaceApiModels().catch(() => undefined); };
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(run, { timeout: 3000 });
-      return () => window.cancelIdleCallback(id);
-    }
-    const id = window.setTimeout(run, 500);
-    return () => window.clearTimeout(id);
+    return scheduleFaceModelPreload();
   }, [faceVerificationRequired]);
 
   const isClockedIn = session?.is_clocked_in ?? false;

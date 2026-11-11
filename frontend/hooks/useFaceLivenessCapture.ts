@@ -9,15 +9,16 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import {
   faceapi, loadDetectionModels, loadRecognitionModel, isDetectionReady, isRecognitionReady,
-  getModelLoadProgress, subscribeModelLoadProgress,
+  getModelLoadProgress, subscribeModelLoadProgress, getModelLoadInfo, describeModelLoadFailure,
 } from "@/lib/faceApi/loadModels";
+import { isValidDescriptor } from "@/lib/faceApi/descriptor";
 import { faceInsideGuide } from "@/lib/faceApi/guide";
 import { LivenessTracker, type LivenessMode } from "@/lib/faceApi/liveness";
 import { syncCanvasSize, drawDetectionBox, clearOverlay, OVERLAY_COLOR } from "@/lib/faceApi/overlay";
 import { grabVideoFrame, putImageData, meanLuminanceOfBox, assessEyeOcclusion, sampleFaceAndFrameLuminance } from "@/lib/faceApi/frameCapture";
 import { assessLiveReadiness } from "@/lib/faceApi/readiness";
 import { CaptureTelemetry, type CapturePurpose } from "@/lib/faceApi/telemetry";
-import { FACE_FLOW_V2 } from "@/lib/faceApi/flowConfig";
+import { FACE_FLOW_V2, isFaceLoaderV2 } from "@/lib/faceApi/flowConfig";
 import { pickBoostControl, nextBoostValue, type BoostCaps, type BoostControl, type RangeCaps } from "@/lib/faceApi/cameraBoost";
 import { applyClahe } from "@/lib/faceApi/clahe";
 import {
@@ -251,6 +252,14 @@ export function useFaceLivenessCapture(
   const workingCanvasRef    = useRef<HTMLCanvasElement | null>(null);
 
   const telemetryRef        = useRef(new CaptureTelemetry(purpose, FACE_FLOW_V2));
+  // Total time this session spent waiting on model loading (detector wait after the
+  // camera was live + any wait for the recognition model at capture time).
+  const modelsWaitMsRef     = useRef(0);
+  const recordModelsWait = useCallback((addedMs: number) => {
+    modelsWaitMsRef.current += Math.max(0, Math.round(addedMs));
+    telemetryRef.current.recordFlag("models_wait_ms", modelsWaitMsRef.current);
+    telemetryRef.current.recordFlag("models_cache", getModelLoadInfo().cache);
+  }, []);
   const hintCodeRef         = useRef<string | null>(null);
   const noticeUntilRef      = useRef(0);          // keeps an auto-resume notice visible briefly
   const progressRef         = useRef({ blink: false, turn: false });
@@ -439,14 +448,17 @@ export function useFaceLivenessCapture(
         await loadRecognitionModel();
       } catch (err: unknown) {
         console.error("[useFaceLivenessCapture] failed to load face recognition model:", err);
-        setErrorMessage("Could not load face-recognition models. Check your connection and try again.");
-        telemetryRef.current.recordFailure("models_failed");
+        const failure = describeModelLoadFailure(err);
+        setErrorMessage(failure.message);
+        telemetryRef.current.recordFailure(failure.code);
+        recordModelsWait(Date.now() - waitStartedAt);
         telemetryRef.current.finish("error");
         stopCamera();
         setPhase("error");
         return;
       }
       telemetryRef.current.recordFlag("recognition_wait_ms", Date.now() - waitStartedAt);
+      recordModelsWait(Date.now() - waitStartedAt);
     }
     showHint(null, null); // framing hints are done - the stage shows "Hold still" now
 
@@ -498,13 +510,27 @@ export function useFaceLivenessCapture(
       return;
     }
 
+    const finalDescriptor = averageDescriptors(collected);
+    // Last line of defence before anything is submitted: exactly 128 finite
+    // values. A malformed vector would only be rejected by the server as a
+    // mismatch - and counted towards the employee's lockout - so it is stopped
+    // here with a retryable error instead. (Never logs the values.)
+    if (isFaceLoaderV2() && !isValidDescriptor(finalDescriptor)) {
+      telemetryRef.current.recordFailure("descriptor_invalid");
+      telemetryRef.current.finish("error");
+      stopCamera();
+      setErrorMessage("Face capture didn't produce a valid result. Please try again.");
+      setPhase("error");
+      return;
+    }
+
     telemetryRef.current.finish("captured");
     setPhase("captured");
-    onCapturedRef.current(averageDescriptors(collected), livenessScore, captureSessionIdRef.current, {
+    onCapturedRef.current(finalDescriptor, livenessScore, captureSessionIdRef.current, {
       frameCount: collected.length,
       variance: consistency.meanPairwiseDistance,
     });
-  }, [framesToCapture, captureOneQualityGatedFrame, resumeDetecting, showHint, stopCamera]);
+  }, [framesToCapture, captureOneQualityGatedFrame, resumeDetecting, showHint, stopCamera, recordModelsWait]);
 
   const captureAndFinish = useCallback(async (livenessScore: number) => {
     await captureMultipleFrames(livenessScore);
@@ -655,6 +681,7 @@ export function useFaceLivenessCapture(
     stableFrameCountRef.current = 0;
     captureSessionIdRef.current = generateCaptureSessionId(); // fresh camera session
     telemetryRef.current.begin(captureSessionIdRef.current, "");
+    modelsWaitMsRef.current = 0;
     autoResumeQualityRef.current = 0;
     autoResumeLivenessRef.current = 0;
     lowLightFramesRef.current = 0;
@@ -760,8 +787,10 @@ export function useFaceLivenessCapture(
 
     // Camera is live; only now wait for the models (usually already loaded, so this is instant).
     if (!isDetectionReady()) setPhase("loading_models");
+    const modelsWaitStartedAt = Date.now();
     const modelsError = await modelsOutcome;
     if (isStale()) return;
+    recordModelsWait(Date.now() - modelsWaitStartedAt);
     if (modelsError) {
       // Logged (not just surfaced as a generic banner) because this failure
       // mode has more than one real cause in practice - e.g. a proxy/rewrite
@@ -769,8 +798,9 @@ export function useFaceLivenessCapture(
       // weight files, not just a genuine network drop - and the console is
       // the only place that distinction is visible.
       console.error("[useFaceLivenessCapture] failed to load face-api models:", modelsError);
-      setErrorMessage("Could not load face-recognition models. Check your connection and try again.");
-      telemetryRef.current.recordFailure("models_failed");
+      const failure = describeModelLoadFailure(modelsError);
+      setErrorMessage(failure.message);
+      telemetryRef.current.recordFailure(failure.code);
       telemetryRef.current.finish("error");
       stopCamera();
       setPhase("error");
@@ -787,7 +817,7 @@ export function useFaceLivenessCapture(
     detectingSinceRef.current = Date.now();
     setPhase("detecting");
     rafRef.current = requestAnimationFrame(runDetectionLoop);
-  }, [runDetectionLoop, resetProgress, stopCamera]);
+  }, [runDetectionLoop, resetProgress, stopCamera, recordModelsWait]);
 
   const retry = useCallback(() => {
     setErrorMessage(null);

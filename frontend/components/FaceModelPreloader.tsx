@@ -9,22 +9,16 @@
 // flow itself retries the load when it is actually needed.
 import { useEffect } from "react";
 import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
-import { loadFaceApiModels } from "@/lib/faceApi/loadModels";
+import { scheduleFaceModelPreload } from "@/lib/faceApi/preload";
 
 export default function FaceModelPreloader() {
   const { isMandatory } = useFaceVerificationStatus();
 
   useEffect(() => {
     if (!isMandatory) return;
-    const run = () => { void loadFaceApiModels().catch(() => undefined); };
-    // Short idle window so the dashboard's own first paint is not competing for
-    // the network, but a hard 1s cap so it can never be postponed indefinitely.
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(run, { timeout: 1000 });
-      return () => window.cancelIdleCallback(id);
-    }
-    const id = window.setTimeout(run, 300);
-    return () => window.clearTimeout(id);
+    // The one shared scheduler (lib/faceApi/preload.ts): idle-time, once, even
+    // though the clock widget asks for the same preload.
+    return scheduleFaceModelPreload();
   }, [isMandatory]);
 
   return null;
