@@ -8,19 +8,49 @@ under test here.
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
+from apps.attendance.services_geofencing import (
+    GPS_REQUIRED_MESSAGE,
+    WFH_NO_APPROVED_REQUEST_MESSAGE,
+)
+from apps.hrms.models import REQ_APPROVED, WorkFromHomeRequest
 from apps.attendance.models import (
     AttendanceFaceVerificationRules,
     AttendancePunch,
     AttendanceSettings,
     FaceRegistrationRequest,
+    FaceVerificationAttempt,
 )
 from config.test_runner import TEST_COMPANY_CODE
+
+# Every punch in this module uses a mode that has NO location rule. These
+# tests are about face verification, not geofencing, and the geofence/WFH gate
+# runs BEFORE the face check (see services_attendance.record_punch). 'wfh' used
+# to be that "no location rule" mode, but it now requires an approved
+# WorkFromHomeRequest plus a GPS point (commit 20909b3), so every 'wfh' punch
+# here was rejected before reaching the face code. 'field' is validated by
+# services_geofencing._validate_no_geofence ("never validated"), so a punch in
+# this mode reaches face verification exactly as the tests intend.
+PUNCH_MODE = 'field'
+
+
+def _assert_reached_face_check(test_case, resp) -> None:
+    """A rejection asserted as a FACE rejection must not actually be the
+    geofence / work-from-home gate (which runs first) in disguise — that gap is
+    what let these tests pass for the wrong reason."""
+    message = str(resp.data.get('message', '')).lower()
+    test_case.assertNotIn('work-from-home', message, resp.data)
+    test_case.assertNotIn('work from home', message, resp.data)
+    test_case.assertNotIn('outside', message, resp.data)
+    test_case.assertNotIn('location', message, resp.data)
 
 
 def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
@@ -95,7 +125,7 @@ class FaceVerificationPunchTests(TestCase):
         cache.clear()
 
     def _punch(self, **overrides):
-        payload = {'punch_type': 'IN', 'attendance_mode': 'wfh'}
+        payload = {'punch_type': 'IN', 'attendance_mode': PUNCH_MODE}
         payload.update(overrides)
         return self.client.post(reverse('attendance-punch'), payload, format='json')
 
@@ -142,7 +172,11 @@ class FaceVerificationPunchTests(TestCase):
         # wording — see services_face_matching.py's _EMBEDDING_MISMATCH_MESSAGE.
         self.assertIn("couldn't match your face", resp.data['message'].lower())
         self.assertNotIn('lighting', resp.data['message'].lower())
+        _assert_reached_face_check(self, resp)
         self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
+        attempt = FaceVerificationAttempt.objects.get(employee=self.employee)
+        self.assertFalse(attempt.is_match)
+        self.assertEqual(attempt.rejection_reason, FaceVerificationAttempt.REJECTION_MISMATCH)
 
     def test_pending_registration_does_not_require_verification_when_toggle_off(self):
         # Only an APPROVED request gates the punch — pending/rejected don't —
@@ -152,6 +186,7 @@ class FaceVerificationPunchTests(TestCase):
         )
         resp = self._punch()
         self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertFalse(AttendancePunch.objects.get(employee=self.employee).face_verified)
 
     def test_pending_registration_is_rejected_when_mandatory(self):
         # Toggle on: a pending (not yet approved) request doesn't satisfy
@@ -218,16 +253,16 @@ class FaceVerificationLowConfidenceFailClosedTests(TestCase):
         cache.clear()
 
     def _punch(self, **overrides):
-        payload = {'punch_type': 'IN', 'attendance_mode': 'wfh'}
+        payload = {'punch_type': 'IN', 'attendance_mode': PUNCH_MODE}
         payload.update(overrides)
         return self.client.post(reverse('attendance-punch'), payload, format='json')
 
     def test_borderline_capture_is_rejected(self):
         resp = self._punch(face_embedding=BORDERLINE_EMBEDDING_A, capture_session_id='session-a')
         self.assertEqual(resp.status_code, 403, resp.data)
+        _assert_reached_face_check(self, resp)
         self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
 
-        from apps.attendance.models import FaceVerificationAttempt
         attempt = FaceVerificationAttempt.objects.get(employee=self.employee)
         # is_match=False on the row itself — this is a genuine rejection now,
         # not a "pending" match, so it counts toward the failed-attempt cap
@@ -243,11 +278,118 @@ class FaceVerificationLowConfidenceFailClosedTests(TestCase):
 
         second = self._punch(face_embedding=BORDERLINE_EMBEDDING_B, capture_session_id='session-b')
         self.assertEqual(second.status_code, 403, second.data)
+        _assert_reached_face_check(self, first)
+        _assert_reached_face_check(self, second)
         self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
+
+        # Proof both rejections came from the FACE check, not some other 403:
+        # two audit rows, both the low-confidence rejection, neither a match.
+        attempts = list(FaceVerificationAttempt.objects.filter(employee=self.employee))
+        self.assertEqual(len(attempts), 2)
+        for attempt in attempts:
+            self.assertFalse(attempt.is_match)
+            self.assertEqual(attempt.rejection_reason, FaceVerificationAttempt.REJECTION_LOW_CONFIDENCE_PENDING)
 
     def test_confident_match_is_unaffected(self):
         resp = self._punch(face_embedding=MATCHING_EMBEDDING, capture_session_id='session-a')
         self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(AttendancePunch.objects.get(employee=self.employee).face_verified)
+        attempt = FaceVerificationAttempt.objects.get(employee=self.employee)
+        self.assertTrue(attempt.is_match)
+        self.assertEqual(attempt.rejection_reason, '')
+
+
+class WfhGateRunsBeforeFaceVerificationTests(TestCase):
+    """The geofence / work-from-home gate must reject an invalid WFH punch
+    BEFORE face verification is reached (services_attendance.record_punch
+    validates the location first, then calls verify_for_punch).
+
+    Why the ordering matters, and how it's proven here: face verification
+    always writes a FaceVerificationAttempt audit row, and failed attempts
+    count toward the 5-failures-in-15-minutes lockout. So if the face check ran
+    first, an employee punching from the wrong place would (a) leave an audit
+    row and (b) burn lockout attempts. Every rejection below therefore asserts
+    ZERO FaceVerificationAttempt rows — the face service was never invoked —
+    plus no AttendancePunch. Each case is paired with a positive control (the
+    same employee, face and embedding succeeding once the WFH requirement is
+    met), so the rejections can't be an artefact of broken setup.
+    """
+
+    HOME_LAT = Decimal('17.000000')
+    HOME_LON = Decimal('78.000000')
+
+    def setUp(self):
+        cache.clear()
+        self.client   = APIClient()
+        self.employee = make_user('wfhgate@test.com', role=make_role('employee_wfh_gate'),
+                                  password='TestPass123!')
+        _login(self.client, 'wfhgate@test.com')
+        # Face verification is mandatory and this employee has a valid,
+        # approved registration — so IF the face check were reached, a
+        # matching embedding would succeed and a mismatched one would fail.
+        _set_face_verification_mandatory(True)
+        _make_approved_request(self.employee)
+
+    def tearDown(self):
+        cache.clear()
+
+    def _wfh_punch(self, **overrides):
+        payload = {'punch_type': 'IN', 'attendance_mode': 'wfh'}
+        payload.update(overrides)
+        return self.client.post(reverse('attendance-punch'), payload, format='json')
+
+    def _approve_wfh_today(self):
+        today = timezone.localdate()
+        return WorkFromHomeRequest.objects.create(
+            employee=self.employee, start_date=today, end_date=today,
+            latitude=self.HOME_LAT, longitude=self.HOME_LON, status=REQ_APPROVED,
+        )
+
+    def _assert_rejected_before_face_check(self, resp, expected_message):
+        self.assertEqual(resp.status_code, 403, resp.data)
+        self.assertEqual(resp.data['message'], expected_message)
+        self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
+        # The decisive assertion: the face service never ran.
+        self.assertEqual(
+            FaceVerificationAttempt.objects.filter(employee=self.employee).count(), 0,
+            'face verification was reached even though the WFH gate should have rejected first',
+        )
+
+    def test_wfh_punch_without_an_approved_request_is_rejected_before_face_check(self):
+        resp = self._wfh_punch(face_embedding=MATCHING_EMBEDDING, latitude=17.0, longitude=78.0)
+        self._assert_rejected_before_face_check(resp, WFH_NO_APPROVED_REQUEST_MESSAGE)
+
+    def test_a_non_matching_face_does_not_leave_an_attempt_when_wfh_is_not_approved(self):
+        # A bad face must not even be evaluated (so it can't count toward the
+        # lockout) when the location gate has already refused the punch.
+        resp = self._wfh_punch(face_embedding=MISMATCHED_EMBEDDING, latitude=17.0, longitude=78.0)
+        self._assert_rejected_before_face_check(resp, WFH_NO_APPROVED_REQUEST_MESSAGE)
+
+    def test_wfh_punch_without_gps_is_rejected_before_face_check(self):
+        self._approve_wfh_today()
+        resp = self._wfh_punch(face_embedding=MATCHING_EMBEDDING)
+        self._assert_rejected_before_face_check(resp, GPS_REQUIRED_MESSAGE)
+
+    def test_wfh_punch_outside_the_declared_location_is_rejected_before_face_check(self):
+        self._approve_wfh_today()
+        # ~140 km from the approved point — far outside the 200 m radius.
+        resp = self._wfh_punch(face_embedding=MATCHING_EMBEDDING, latitude=18.0, longitude=79.0)
+        self._assert_rejected_before_face_check(
+            resp, 'You are outside your declared work-from-home location. Punch In is not permitted.',
+        )
+
+    def test_control_valid_wfh_punch_reaches_face_verification_and_succeeds(self):
+        # Same employee, same registered face, same embedding as the cases
+        # above — only the WFH requirement differs. Proves the rejections
+        # above came from the WFH gate, and that the face check does run once
+        # the gate passes (an attempt row now exists, and it matched).
+        self._approve_wfh_today()
+        resp = self._wfh_punch(face_embedding=MATCHING_EMBEDDING, latitude=17.0, longitude=78.0)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(AttendancePunch.objects.get(employee=self.employee).face_verified)
+        attempt = FaceVerificationAttempt.objects.get(employee=self.employee)
+        self.assertTrue(attempt.is_match)
+        self.assertEqual(attempt.rejection_reason, '')
 
 
 class FaceRegistrationMyStatusTests(TestCase):
@@ -367,14 +509,21 @@ class FaceRegistrationHRRegisterTests(TestCase):
         _login(employee_client, 'hrregister-employee@test.com')
 
         old_face_resp = employee_client.post(reverse('attendance-punch'), {
-            'punch_type': 'IN', 'attendance_mode': 'wfh', 'face_embedding': REGISTERED_EMBEDDING,
+            'punch_type': 'IN', 'attendance_mode': PUNCH_MODE, 'face_embedding': REGISTERED_EMBEDDING,
         }, format='json')
         self.assertEqual(old_face_resp.status_code, 403, old_face_resp.data)
+        # The 403 must be the FACE mismatch, proven by the audit row — not the
+        # geofence/WFH gate, which would leave no FaceVerificationAttempt behind.
+        _assert_reached_face_check(self, old_face_resp)
+        old_attempt = FaceVerificationAttempt.objects.get(employee=self.employee)
+        self.assertFalse(old_attempt.is_match)
+        self.assertEqual(old_attempt.rejection_reason, FaceVerificationAttempt.REJECTION_MISMATCH)
 
         new_face_resp = employee_client.post(reverse('attendance-punch'), {
-            'punch_type': 'IN', 'attendance_mode': 'wfh', 'face_embedding': new_embedding,
+            'punch_type': 'IN', 'attendance_mode': PUNCH_MODE, 'face_embedding': new_embedding,
         }, format='json')
         self.assertEqual(new_face_resp.status_code, 200, new_face_resp.data)
+        self.assertTrue(AttendancePunch.objects.get(employee=self.employee).face_verified)
 
     def test_employee_picker_is_not_branch_scoped(self):
         resp = self.client.get(reverse('face-registration-employee-picker'))
