@@ -219,6 +219,15 @@ if _REDIS_URL:
     # IGNORE_EXCEPTIONS above swallows a Redis error, so an outage stays
     # visible in the logs instead of failing completely silently.
     DJANGO_REDIS_LOG_IGNORED_EXCEPTIONS = True
+    # Local development only: when the local Redis is not running, stop
+    # retrying it for a short time so each cache call falls back to the
+    # database immediately instead of waiting ~2 s (Windows) per call.
+    # Production (DEBUG=False) keeps the standard redis-py connection.
+    if DEBUG and _REDIS_URL.startswith('redis://'):
+        from core.redis_connection import FailFastRedisConnection
+        CACHES['default']['OPTIONS']['CONNECTION_POOL_KWARGS'] = {
+            'connection_class': FailFastRedisConnection,
+        }
 else:
     CACHES = {
         'default': {
@@ -583,6 +592,16 @@ EMPLOYEE_IMPORT_INVITES_ENABLED = True if RUNNING_TESTS else env.bool('EMPLOYEE_
 _LOG_DIR = (LOGS_DIR / 'test') if RUNNING_TESTS else LOGS_DIR
 _LOG_DIR.mkdir(exist_ok=True)
 
+# Windows cannot rename a log file that another process has open (runserver's
+# watcher and server processes both load this config), so rotation failed
+# with PermissionError [WinError 32]. See core/logging_handlers.py. Linux
+# (production) keeps the standard handler.
+_ROTATING_FILE_HANDLER = (
+    'core.logging_handlers.WindowsSafeRotatingFileHandler'
+    if sys.platform == 'win32'
+    else 'logging.handlers.RotatingFileHandler'
+)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -595,7 +614,7 @@ LOGGING = {
     'handlers': {
         'auth_file': {
             'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
+            'class': _ROTATING_FILE_HANDLER,
             'filename': _LOG_DIR / 'auth.log',
             'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
             'backupCount': 5,
@@ -604,7 +623,7 @@ LOGGING = {
         },
         'error_file': {
             'level': 'WARNING',
-            'class': 'logging.handlers.RotatingFileHandler',
+            'class': _ROTATING_FILE_HANDLER,
             'filename': _LOG_DIR / 'errors.log',
             'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
             'backupCount': 5,
@@ -613,7 +632,7 @@ LOGGING = {
         },
         'voice_commands_file': {
             'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
+            'class': _ROTATING_FILE_HANDLER,
             'filename': _LOG_DIR / 'voice_commands.log',
             'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
             'backupCount': 5,

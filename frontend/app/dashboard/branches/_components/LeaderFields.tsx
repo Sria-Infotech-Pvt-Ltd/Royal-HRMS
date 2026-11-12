@@ -1,10 +1,10 @@
 "use client";
 
 import SearchableSelect from "@/components/SearchableSelect";
-import type { ApiEmployeeOption, BranchAdminSeat, LeaderForm } from "./_data";
+import type { ApiEmployeeOption, BranchAdminSeat, CurrentBranchAdmin, LeaderForm } from "./_data";
 
 export default function LeaderFields({
-  label, form, setForm, employees, seats, errors, prefix,
+  label, form, setForm, employees, seats, errors, prefix, currentAdmin = null,
 }: {
   label: string;
   form: LeaderForm;
@@ -13,6 +13,8 @@ export default function LeaderFields({
   seats: BranchAdminSeat[];
   errors: Record<string, string>;
   prefix: string;
+  /** Edit only: who is the admin right now, shown above the fields. */
+  currentAdmin?: CurrentBranchAdmin | null;
 }) {
   function set<K extends keyof LeaderForm>(k: K, v: LeaderForm[K]) {
     setForm(f => ({ ...f, [k]: v }));
@@ -28,6 +30,15 @@ export default function LeaderFields({
 
   return (
     <div style={{ marginBottom: "18px" }}>
+      {currentAdmin && (
+        <div className="alert alert-success mb-16" style={{ alignItems: "flex-start" }}>
+          <i className="ti ti-user-shield" />
+          <div style={{ fontSize: 13 }}>
+            <div><b>Current admin:</b> {currentAdmin.employee.full_name} ({currentAdmin.employee.employee_id})</div>
+            <div>{currentAdmin.employee.email} · {currentAdmin.positionTitle}</div>
+          </div>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
         <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--primary)" }}>{label}</div>
         {employees.length > 0 && (
@@ -43,7 +54,7 @@ export default function LeaderFields({
       </div>
 
       {form.mode === "existing" ? (
-        <div className="field-group">
+        <div className="field-group" style={{ marginBottom: "8px" }}>
           <input
             type="text"
             className="field-input"
@@ -67,41 +78,47 @@ export default function LeaderFields({
           {errors[`${prefix}Employee`] && <p className="field-error-msg">{errors[`${prefix}Employee`]}</p>}
         </div>
       ) : (
-        <>
-          <div className="form-row cols-2" style={{ marginBottom: "8px" }}>
-            <div className="field-group">
-              <input
-                type="text"
-                className={`field-input${errors[`${prefix}Name`] ? " field-error" : ""}`}
-                value={form.name}
-                onChange={e => set("name", e.target.value)}
-                placeholder="Full name"
-              />
-              {errors[`${prefix}Name`] && <p className="field-error-msg">{errors[`${prefix}Name`]}</p>}
-            </div>
-            <div className="field-group">
-              <input
-                type="email"
-                className={`field-input${errors[`${prefix}Email`] ? " field-error" : ""}`}
-                value={form.email}
-                onChange={e => set("email", e.target.value)}
-                placeholder="Work email"
-              />
-              {errors[`${prefix}Email`] && <p className="field-error-msg">{errors[`${prefix}Email`]}</p>}
-            </div>
+        <div className="form-row cols-2" style={{ marginBottom: "8px" }}>
+          <div className="field-group">
+            <input
+              type="text"
+              className={`field-input${errors[`${prefix}Name`] ? " field-error" : ""}`}
+              value={form.name}
+              onChange={e => set("name", e.target.value)}
+              placeholder="Full name"
+            />
+            {errors[`${prefix}Name`] && <p className="field-error-msg">{errors[`${prefix}Name`]}</p>}
           </div>
           <div className="field-group">
-            <SearchableSelect
-              inputClassName="field-input"
-              value={form.positionId}
-              onChange={v => set("positionId", v)}
-              placeholder={seats.length ? "— Position with branch-wide access —" : "No position with branch-wide access yet"}
-              options={seats.map(s => ({ value: s.id, label: `${s.title} — ${s.org_unit_name}${s.holder_name ? ` (held by ${s.holder_name})` : ""}` }))}
+            <input
+              type="email"
+              className={`field-input${errors[`${prefix}Email`] ? " field-error" : ""}`}
+              value={form.email}
+              onChange={e => set("email", e.target.value)}
+              placeholder="Work email"
             />
-            {errors[`${prefix}Position`] && <p className="field-error-msg">{errors[`${prefix}Position`]}</p>}
+            {errors[`${prefix}Email`] && <p className="field-error-msg">{errors[`${prefix}Email`]}</p>}
           </div>
-        </>
+        </div>
       )}
+
+      {/* Both modes: the admin's access comes from the position they hold, so one is always chosen. */}
+      <div className="field-group">
+        <SearchableSelect
+          inputClassName="field-input"
+          value={form.positionId}
+          onChange={v => set("positionId", v)}
+          placeholder={seats.length ? "— Position with branch-wide access —" : "No position with branch-wide access yet"}
+          options={seats.map(s => ({ value: s.id, label: `${s.title} — ${s.org_unit_name}${s.holder_name ? ` (held by ${s.holder_name})` : ""}` }))}
+        />
+        {!seats.length && (
+          <div style={{ fontSize: "11px", color: "var(--on-variant)", marginTop: "4px" }}>
+            <i className="ti ti-info-circle" style={{ marginRight: "4px" }} />
+            No position has branch-wide access yet. Give a position that access in Org Structure first.
+          </div>
+        )}
+        {errors[`${prefix}Position`] && <p className="field-error-msg">{errors[`${prefix}Position`]}</p>}
+      </div>
     </div>
   );
 }

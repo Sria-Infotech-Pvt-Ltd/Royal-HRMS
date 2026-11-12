@@ -11,10 +11,11 @@ import ToggleSwitch from "@/components/ToggleSwitch";
 import type { GSTRegistration } from "@/types/company";
 import {
   type StateObj, type CityObj, type Branch, type BranchStats, type BranchDistribution,
-  type Envelope, type Paginated, type BranchAdminSeat, type ApiEmployeeOption, type LeaderForm,
-  EMPTY_LEADER, isLeaderActive, EMAIL_RE, OTHER_CITY, BRANCH_NAME_RE, CITY_NAME_RE,
+  type Envelope, type Paginated, type BranchAdminSeat, type ApiEmployeeOption, type LeaderForm, type BranchForm, type CurrentBranchAdmin,
+  EMPTY_LEADER, EMPTY_BRANCH_FORM, branchToForm, isLeaderActive, EMAIL_RE, OTHER_CITY, BRANCH_NAME_RE, CITY_NAME_RE,
 } from "./_data";
 import LeaderFields from "./LeaderFields";
+import { loadBranchAdminOptions } from "./branchAdminOptions";
 import BranchCard from "./BranchCard";
 import EmployeeDistributionChart from "./EmployeeDistributionChart";
 import BranchLocationPreview from "./BranchLocationPreview";
@@ -57,6 +58,10 @@ export default function BranchManagement() {
   // Admin in the same step instead of having to find the new branch again
   // afterward on the Employees page. Optional — leaving it blank is fine.
   const [branchAdminForm, setBranchAdminForm] = useState<LeaderForm>(EMPTY_LEADER);
+  // What the admin section was filled with when the form opened (Edit: the current admin). Saving
+  // only assigns an admin when this changed, so an untouched Edit never re-runs the assignment.
+  const initialLeaderRef = useRef<LeaderForm>(EMPTY_LEADER);
+  const [currentAdmin, setCurrentAdmin] = useState<CurrentBranchAdmin | null>(null);
   const [leaderErrors,    setLeaderErrors]    = useState<Record<string, string>>({});
   const [branchAdminSeats, setBranchAdminSeats] = useState<BranchAdminSeat[]>([]);
   const [leaderEmployees, setLeaderEmployees] = useState<ApiEmployeeOption[]>([]);
@@ -64,22 +69,11 @@ export default function BranchManagement() {
   const [transferConfirm, setTransferConfirm] = useState<TransferConfirmState | null>(null);
   const [transferChecking, setTransferChecking] = useState(false);
 
-  const [editForm, setEditForm] = useState({
-    id:             0,
-    branch_code:    "",
-    branch_name:    "",
-    address:        "",
-    state:          "",
-    city:           "",
-    gst_registration: "",
-    status:         "Active",
-    is_headquarter: false,
-    is_metro:       false,
-    geofencing_enabled:    false,
-    latitude:              "",
-    longitude:             "",
-    allowed_radius_meters: "150",
-  });
+  const [editForm, setEditForm] = useState<BranchForm>(EMPTY_BRANCH_FORM);
+  // Edit loads the record fresh from GET /branch/branches/<id>/. The request id drops a late
+  // response from a Company Code clicked earlier, so it can never overwrite the one now open.
+  const [editLoading, setEditLoading] = useState(false);
+  const editRequestRef = useRef(0);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -241,6 +235,8 @@ export default function BranchManagement() {
     if (isLeaderActive(f)) {
       if (f.mode === "existing") {
         if (!f.employeeId) errs.branchAdminEmployee = "Select an employee.";
+        // Admin access comes from the seat; moving someone in without one never made them admin.
+        if (!f.positionId) errs.branchAdminPosition = "Select the position they will hold.";
       } else {
         if (!f.name.trim())        errs.branchAdminName        = "Name is required.";
         if (!f.email.trim())       errs.branchAdminEmail       = "Email is required.";
@@ -249,6 +245,15 @@ export default function BranchManagement() {
       }
     }
     return errs;
+  };
+
+  const shouldApplyLeader = () => {
+    const current = branchAdminForm;
+    if (!isLeaderActive(current)) return false;
+    const initial = initialLeaderRef.current;
+    const isUnchangedAdmin = current.mode === "existing" && initial.mode === "existing"
+      && current.employeeId === initial.employeeId && current.positionId === initial.positionId;
+    return !isUnchangedAdmin;
   };
 
   // Two ways to fill the leadership slot:
@@ -264,8 +269,18 @@ export default function BranchManagement() {
   //    EmployeeListCreateView.post's department_required check).
   const applyLeaderRole = async (f: LeaderForm, branchName: string) => {
     if (f.mode === "existing") {
-      // Their access comes from the position they hold; this only moves them to the new Company Code.
+      // Admin access = holding a branch-wide seat while working in this Company Code, so both are
+      // set: the branch move (as before) and the seat, via the Org Chart's own "assign holder" call.
+      const employee = leaderEmployees.find(e => e.id === f.employeeId);
+      if (!employee) throw new Error("The selected employee could not be found. Reopen the form and try again.");
       await clientApi.put(API.employees.detail(f.employeeId), { branch: branchName });
+      const seat = branchAdminSeats.find(s => s.id === f.positionId);
+      if (seat?.holder !== employee.uuid) {
+        await clientApi.post(API.orgStructure.positions.placements(f.positionId), {
+          employee: employee.uuid,
+          effective_from: new Date().toISOString().slice(0, 10),
+        });
+      }
       return;
     }
 
@@ -315,23 +330,25 @@ export default function BranchManagement() {
       const branchName = editForm.branch_name.trim();
       setModalMode(null);
       fetchData();
+      if (modalMode === "edit") setInviteAlert({ type: "success", text: `${branchName} was updated.` });
 
       // Leadership assignment runs after the branch is already saved and the
       // modal is closed — the branch itself must never be blocked or rolled
       // back by a problem with this optional, secondary step.
-      if (modalMode === "add" && isLeaderActive(branchAdminForm)) {
+      if (shouldApplyLeader()) {
+        const savedVerb = modalMode === "add" ? "created" : "updated";
         try {
           await applyLeaderRole(branchAdminForm, branchName);
           setInviteAlert({
             type: "success",
             text: branchAdminForm.mode === "new"
-              ? `${branchName} was created and its Company Code Admin was invited by email.`
-              : `${branchName} was created and its Company Code Admin was assigned.`,
+              ? `${branchName} was ${savedVerb} and its Company Code Admin was invited by email.`
+              : `${branchName} was ${savedVerb} and its Company Code Admin was assigned.`,
           });
         } catch (e) {
           setInviteAlert({
             type: "warn",
-            text: `${branchName} was created, but assigning its Company Code Admin failed: ${(e as { message?: string })?.message ?? "unknown error"} — use the Employees page instead.`,
+            text: `${branchName} was ${savedVerb}, but assigning its Company Code Admin failed: ${(e as { message?: string })?.message ?? "unknown error"} — use the Employees page instead.`,
           });
         }
         setBranchAdminForm(EMPTY_LEADER);
@@ -347,7 +364,7 @@ export default function BranchManagement() {
   const handleSave = async () => {
     setSaveError(null);
     const errs = validate();
-    const leaderErrs = modalMode === "add" ? validateLeaders() : {};
+    const leaderErrs = shouldApplyLeader() ? validateLeaders() : {};
     if (Object.keys(errs).length > 0 || Object.keys(leaderErrs).length > 0) {
       setFieldErrors(errs);
       setLeaderErrors(leaderErrs);
@@ -367,7 +384,7 @@ export default function BranchManagement() {
     // inviting someone new — confirm it explicitly, and warn if they
     // currently manage people or are someone's HR (those relationships
     // don't get reassigned automatically by this transfer).
-    if (modalMode === "add" && branchAdminForm.mode === "existing" && branchAdminForm.employeeId) {
+    if (shouldApplyLeader() && branchAdminForm.mode === "existing" && branchAdminForm.employeeId) {
       const employee = leaderEmployees.find(e => e.id === branchAdminForm.employeeId);
       if (employee) {
         setTransferChecking(true);
@@ -406,25 +423,47 @@ export default function BranchManagement() {
     setFieldErrors({});
     setLeaderErrors({});
     setBranchAdminForm(EMPTY_LEADER);
+    initialLeaderRef.current = EMPTY_LEADER;
+    setCurrentAdmin(null);
+    setBranchAdminSeats([]);
+    setLeaderEmployees([]);
     setTransferConfirm(null);
     setModalMode("edit");
     setNewCityName("");
-    setEditForm({
-      id:             branch.id,
-      branch_code:    branch.branch_code,
-      branch_name:    branch.branch_name,
-      address:        branch.address,
-      state:          branch.state.toString(),
-      city:           branch.city.toString(),
-      gst_registration: branch.gst_registration ?? "",
-      status:         branch.status.toLowerCase(),
-      is_headquarter: branch.is_headquarter,
-      is_metro:       branch.is_metro ?? false,
-      geofencing_enabled:    branch.geofencing_enabled ?? false,
-      latitude:              branch.latitude?.toString() ?? "",
-      longitude:             branch.longitude?.toString() ?? "",
-      allowed_radius_meters: branch.allowed_radius_meters?.toString() ?? "150",
-    });
+    // Cleared first so nothing from the previously opened Company Code shows while this one loads.
+    setEditForm({ ...EMPTY_BRANCH_FORM, id: branch.id, branch_name: branch.branch_name });
+    const requestId = ++editRequestRef.current;
+    setEditLoading(true);
+    loadEditDetails(branch.id, requestId);
+  };
+
+  // GET the Company Code, then the admin section's options and current admin, before showing the form.
+  const loadEditDetails = async (branchId: number, requestId: number) => {
+    const loadFailed = "Could not load this Company Code's saved details. Close the form and try again.";
+    try {
+      const res = await clientApi.get<Envelope<Branch>>(API.branches.detail(branchId));
+      const saved = res.data.data;
+      if (requestId !== editRequestRef.current) return;
+      if (!saved) { setSaveError(loadFailed); return; }
+      const options = await loadBranchAdminOptions(saved.branch_name);
+      if (requestId !== editRequestRef.current) return;
+      const admin = options.currentAdmin;
+      const leader: LeaderForm = admin
+        ? { ...EMPTY_LEADER, mode: "existing", employeeId: admin.employee.id, positionId: admin.positionId }
+        : EMPTY_LEADER;
+      initialLeaderRef.current = leader;
+      setCurrentAdmin(admin);
+      setBranchAdminSeats(options.seats);
+      setLeaderEmployees(options.employees);
+      setBranchAdminForm(leader);
+      setEditForm(branchToForm(saved));
+    } catch (err: unknown) {
+      if (requestId !== editRequestRef.current) return;
+      const e = err as { message?: string };  // clientApi rejects with the server's message
+      setSaveError(e.message ?? loadFailed);
+    } finally {
+      if (requestId === editRequestRef.current) setEditLoading(false);
+    }
   };
 
   const doDelete = async () => {
@@ -478,16 +517,16 @@ export default function BranchManagement() {
               setBranchAdminForm(EMPTY_LEADER);
               setTransferConfirm(null);
               setNewCityName("");
-              setEditForm({
-                id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", gst_registration: "", status: "active", is_headquarter: false, is_metro: false,
-                geofencing_enabled: false, latitude: "", longitude: "", allowed_radius_meters: "150",
-              });
-              Promise.allSettled([
-                clientApi.get<{ data: { results: BranchAdminSeat[] } }>(API.orgStructure.positions.list, { params: { page_size: 500, can_manage_branch: "true" } }),
-                clientApi.get<{ data: { results: ApiEmployeeOption[] } }>(API.employees.list, { params: { page_size: 50, status: "active" } }),
-              ]).then(([seats, e]) => {
-                setBranchAdminSeats(seats.status === "fulfilled" ? seats.value.data.data.results : []);
-                setLeaderEmployees(e.status === "fulfilled" ? (e.value.data.data?.results ?? []) : []);
+              editRequestRef.current += 1;  // a still-pending Edit load must not fill the Add form
+              setEditLoading(false);
+              setEditForm(EMPTY_BRANCH_FORM);
+              initialLeaderRef.current = EMPTY_LEADER;
+              setCurrentAdmin(null);
+              const requestId = editRequestRef.current;
+              loadBranchAdminOptions().then(options => {
+                if (requestId !== editRequestRef.current) return;  // another form was opened meanwhile
+                setBranchAdminSeats(options.seats);
+                setLeaderEmployees(options.employees);
               });
             }}>
               <i className="ti ti-plus" /> Add Company Code
@@ -578,7 +617,7 @@ export default function BranchManagement() {
               <button
                 className="btn btn-filled"
                 onClick={handleSave}
-                disabled={saving || codeLoading || citiesLoading || transferChecking}
+                disabled={saving || codeLoading || citiesLoading || transferChecking || editLoading || (modalMode === "edit" && !editForm.branch_code)}
               >
                 {saving ? (
                   <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />{modalMode === "add" ? "Creating…" : "Saving…"}</>
@@ -596,6 +635,13 @@ export default function BranchManagement() {
                   <i className="ti ti-alert-circle" /> {saveError}
                 </div>
               )}
+              {editLoading ? (
+                <div className="p-8 text-center text-[var(--on-variant)]">
+                  <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />
+                  Loading saved details…
+                </div>
+              ) : modalMode === "edit" && !editForm.branch_code ? null : (
+              <>
               <div className="form-row cols-2">
                 <div className="field-group">
                   <label className="field-label">State/Region *</label>
@@ -764,17 +810,17 @@ export default function BranchManagement() {
                 </div>
               </div>
 
-              {modalMode === "add" && (
-                <div style={{ marginTop: "4px", marginBottom: "20px", paddingTop: "18px", paddingBottom: "4px", borderTop: "1px solid var(--outline-v)" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--on-bg)", marginBottom: "14px" }}>
-                    Assign Company Code Admin <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span>
-                  </div>
-                  <LeaderFields
-                    label="Company Code Admin" form={branchAdminForm} setForm={setBranchAdminForm}
-                    employees={leaderEmployees} seats={branchAdminSeats} errors={leaderErrors} prefix="branchAdmin"
-                  />
+              {/* Shown on Add and Edit alike; Edit prefills the current admin (see loadEditDetails). */}
+              <div style={{ marginTop: "4px", marginBottom: "20px", paddingTop: "18px", paddingBottom: "4px", borderTop: "1px solid var(--outline-v)" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--on-bg)", marginBottom: "14px" }}>
+                  Assign Company Code Admin <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span>
                 </div>
-              )}
+                <LeaderFields
+                  label="Company Code Admin" form={branchAdminForm} setForm={setBranchAdminForm}
+                  employees={leaderEmployees} seats={branchAdminSeats} errors={leaderErrors} prefix="branchAdmin"
+                  currentAdmin={modalMode === "edit" ? currentAdmin : null}
+                />
+              </div>
 
               <div className="form-row cols-2">
                 <div className="field-group">
@@ -890,6 +936,8 @@ export default function BranchManagement() {
                     </div>
                   </div>
                 </>
+              )}
+              </>
               )}
         </Modal>
       )}

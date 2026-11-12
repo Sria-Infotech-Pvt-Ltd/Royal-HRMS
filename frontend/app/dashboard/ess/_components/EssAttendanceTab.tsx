@@ -8,7 +8,7 @@
 // employee's correction requests); clocking in/out lives on the "Punch in"
 // button in the shared hero banner, so there is no second clock widget here.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useAttendanceDashboard } from "@/hooks/useAttendanceDashboard";
 import { useFetch } from "@/hooks/useFetch";
 import { useWeeklyTimesheet } from "@/hooks/useWeeklyTimesheet";
@@ -19,8 +19,8 @@ import {
   MyCorrectionRequest, PaginatedResponse, STATUS_LABEL, toDisplayStatus,
 } from "../../my-requests/_data";
 import type { RecentPunchRow } from "@/types/attendance";
+import EssAttendanceCalendar from "./EssAttendanceCalendar";
 
-const WEEKDAY_LETTER = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const RECENT_PUNCHES = 3;
 const RECENT_REQUESTS = 5;
@@ -32,20 +32,6 @@ function punchDetail(row: RecentPunchRow): string {
 function correctionTitle(dateIso: string): string {
   const date = new Date(`${dateIso}T12:00:00`);
   return Number.isNaN(date.getTime()) ? "Correction" : `${date.getDate()} ${MONTH_LONG[date.getMonth()]} correction`;
-}
-
-function dayClass(status: string | undefined): string {
-  const value = (status ?? "").toLowerCase();
-  if (value === "present") return "present";
-  if (value === "late") return "late";
-  if (value === "absent") return "absent";
-  if (value === "half day") return "half-day";
-  if (value.includes("leave")) return "leave";
-  if (value === "weekly off") return "weekly-off";
-  if (value === "holiday") return "holiday";
-  if (value === "incomplete" || value === "missing clock out") return "incomplete";
-  if (value === "not joined") return "not-joined";
-  return "unrecorded";
 }
 
 function TimesheetCard() {
@@ -107,27 +93,10 @@ export default function EssAttendanceTab() {
     setDisplayedMonth(current => new Date(current.getFullYear(), current.getMonth() + offset, 1));
   }
 
-  const days = useMemo(() => {
-    // The whole month, not just "1..today" — a monthly calendar that stops
-    // at today hides the rest of the month's weekly-offs/holidays entirely.
-    // Days with no calendar entry yet (future, unprocessed) just render
-    // blank, same as any other day dayClass() doesn't recognize a status for.
-    const daysInMonth = new Date(year, month, 0).getDate();
-    return Array.from({ length: daysInMonth }, (_, index) => {
-      const dayNumber = index + 1;
-      // calendar.days is keyed by plain day-of-month ("1", "2", …), not an ISO
-      // date string — same convention AttendanceCalendar.tsx's own `data[String(day)]`
-      // lookup already relies on; building an ISO key here instead meant this
-      // calendar never matched anything and every day rendered blank.
-      const record = calendar[String(dayNumber)];
-      return {
-        dayNumber,
-        letter: WEEKDAY_LETTER[new Date(year, month - 1, dayNumber).getDay()],
-        cls: dayClass(record?.status),
-        status: record?.status ?? "",
-      };
-    });
-  }, [calendar, month, year]);
+  function goToCurrentMonth() {
+    const now = new Date();
+    setDisplayedMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+  }
 
   const punches = recentPunches.data ?? [];
   const requests = [...(corrections.data?.results ?? [])]
@@ -146,63 +115,15 @@ export default function EssAttendanceTab() {
 
       <div className="ess-grid">
         <div className="ess-card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-            <h2>{MONTH_LONG[month - 1]} {year}</h2>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button
-                className="rvbtn"
-                type="button"
-                onClick={() => changeMonth(-1)}
-                disabled={attendanceLoading}
-                aria-label="Previous month"
-              >
-                <i className="ti ti-chevron-left" /> Previous
-              </button>
-              <button
-                className="rvbtn"
-                type="button"
-                onClick={() => changeMonth(1)}
-                disabled={attendanceLoading}
-                aria-label="Next month"
-              >
-                Next <i className="ti ti-chevron-right" />
-              </button>
-            </div>
-          </div>
-          <p>Daily attendance and approved leave.</p>
-          <div className="ess-calendar-legend" aria-label="Attendance status colors">
-            {[
-              ["present", "Present"],
-              ["late", "Late"],
-              ["absent", "Absent"],
-              ["half-day", "Half day"],
-              ["leave", "On leave"],
-              ["unrecorded", "Week off / Holiday"],
-              ["incomplete", "Incomplete"],
-              ["not-joined", "Not joined"],
-            ].map(([className, label]) => (
-              <span key={className}>
-                <i className={`ess-status-dot ${className}`} />
-                {label}
-              </span>
-            ))}
-          </div>
-          <div className="ess-calendar-wrap">
-            <div className="ess-calendar">
-              {days.map(day => (
-                <div
-                  key={day.dayNumber}
-                  className={`ess-day ${day.cls}`}
-                  title={day.status ? `${day.dayNumber} ${MONTH_LONG[month - 1]}: ${day.status}` : undefined}
-                  aria-label={`${day.dayNumber} ${MONTH_LONG[month - 1]}${day.status ? `: ${day.status}` : ""}`}
-                >
-                  <span>{day.letter}</span>
-                  <b>{day.dayNumber}</b>
-                  {day.status && <small>{day.status}</small>}
-                </div>
-              ))}
-            </div>
-          </div>
+          <EssAttendanceCalendar
+            year={year}
+            month={month}
+            calendar={calendar}
+            isLoading={attendanceLoading}
+            onPreviousMonth={() => changeMonth(-1)}
+            onNextMonth={() => changeMonth(1)}
+            onToday={goToCurrentMonth}
+          />
         </div>
         <div className="ess-card">
           <h2>Recent punches</h2>

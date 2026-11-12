@@ -6,6 +6,7 @@
 // under the `.wf-` prefix.
 
 import type { ReactNode } from "react";
+import { toCurrentWeek } from "@/lib/weeklyAttendance";
 
 type Tone = "brand" | "ok" | "warn" | "crit" | "info";
 
@@ -123,8 +124,9 @@ export function QuickTile({ icon, tone, title, sub, onClick }: {
 }
 
 /**
- * Last-7-days attendance. Bar height = present ÷ headcount (attendance %), the
- * most recent day (today) is emphasised. Hover/focus a bar for the exact count.
+ * This week's attendance, Monday to Sunday (days after today stay empty). Bar
+ * height = present ÷ headcount (attendance %), today is emphasised. Hover/focus
+ * a bar for the exact count.
  */
 export function AttendanceTrend({ data, total, loading }: {
   data: { label: string; count: number }[]; total: number; loading: boolean;
@@ -142,14 +144,22 @@ export function AttendanceTrend({ data, total, loading }: {
         {[100, 75, 50, 25, 0].map((p) => <span key={p}><em>{p}%</em></span>)}
       </div>
       <div className="wf-cols">
-        {data.map((d, i) => {
+        {toCurrentWeek(data, new Date()).map((d, i) => {
+          if (d.count === null) {
+            return (
+              <div className="wf-col upcoming" key={i} title="Later this week">
+                <span className="wf-col-val" />
+                <div className="wf-bar-wrap" />
+                <span className="wf-col-lbl">{d.label}</span>
+              </div>
+            );
+          }
           const pct = Math.min(100, (d.count / scale) * 100);
-          const today = i === data.length - 1;
           return (
-            <div className="wf-col" key={i} tabIndex={0} title={`${d.count} present · ${Math.round(pct)}% of headcount`}>
+            <div className={`wf-col${d.isToday ? " today" : ""}`} key={i} tabIndex={0} title={`${d.count} present · ${Math.round(pct)}% of headcount`}>
               <span className="wf-col-val">{d.count}</span>
-              <div className="wf-bar-wrap"><i className={today ? "today" : ""} style={{ height: `${Math.max(3, pct)}%` }} /></div>
-              <span className={`wf-col-lbl${today ? " today" : ""}`}>{d.label}</span>
+              <div className="wf-bar-wrap"><i className={d.isToday ? "today" : ""} style={{ height: `${Math.max(3, pct)}%` }} /></div>
+              <span className={`wf-col-lbl${d.isToday ? " today" : ""}`}>{d.label}</span>
             </div>
           );
         })}
