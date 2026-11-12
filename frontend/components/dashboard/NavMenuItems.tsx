@@ -1,6 +1,6 @@
 "use client";
 
-// The rows inside a top-bar dropdown: an icon tile, the page name, and its path. Shared by the section dropdowns,
+// The rows inside a top-bar dropdown: an icon tile and the page name. Shared by the section dropdowns,
 // the profile menu and the narrow-screen menu.
 
 import type { NavItem } from "@/lib/navConfig";
@@ -23,7 +23,6 @@ export default function NavMenuItems({ items, activeNavId, onSelect, isTwoColumn
             <span className="nm-tile"><i className={`ti ${item.icon}`} style={{ fontSize: 16 }} /></span>
             <span className="min-w-0">
               <span className="nm-label">{item.label}</span>
-              <span className="nm-path">{item.path}</span>
             </span>
           </button>
         );

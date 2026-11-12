@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useSharedAnnouncement, useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
 import { formatDate } from "@/lib/formatDate";
+import { announcementLinkHref } from "@/lib/announcementLink";
 
 function fmtDate(iso: string): string {
   return formatDate(iso);
@@ -27,7 +28,8 @@ export default function EmpUpdatesCard() {
 
   const birthdaysToday = birthdayData?.birthdays ?? [];
 
-  const showAnnouncement = !loadingAnnouncement && !!announcement && !announcementDismissed;
+  // The API answers an empty object when there is nothing to show, which is truthy: require a title.
+  const showAnnouncement = !loadingAnnouncement && !!announcement?.title && !announcementDismissed;
   const showBirthdays    = !loadingBirthdays && birthdaysToday.length > 0 && !birthdayDismissed;
 
   if (!showAnnouncement && !showBirthdays) return null;
@@ -42,9 +44,14 @@ export default function EmpUpdatesCard() {
             borderBottom: showBirthdays ? "1px solid var(--outline-v)" : undefined,
           }}
         >
-          <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: "rgba(124,58,237,0.12)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
-            <i className={announcement.is_pinned ? "ti ti-pin" : "ti ti-speakerphone"} />
-          </div>
+          {announcement.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed storage address, not a static asset
+            <img src={announcement.image_url} alt="" style={{ width: 44, height: 44, borderRadius: 8, flexShrink: 0, objectFit: "cover" }} />
+          ) : (
+            <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: "rgba(124,58,237,0.12)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
+              <i className={announcement.is_pinned ? "ti ti-pin" : "ti ti-speakerphone"} />
+            </div>
+          )}
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
@@ -69,8 +76,8 @@ export default function EmpUpdatesCard() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <Link href="/dashboard/announcements" style={{ fontSize: 12, color: "var(--primary)", fontWeight: 500, textDecoration: "none", whiteSpace: "nowrap" }}>
-              View <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
+            <Link href={announcementLinkHref(announcement.id)} style={{ fontSize: 12, color: "var(--primary)", fontWeight: 500, textDecoration: "none", whiteSpace: "nowrap" }}>
+              {announcement.more_count ? `+${announcement.more_count} more · ` : ""}View <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
             </Link>
             <button
               onClick={() => setAnnouncementDismissed(true)}

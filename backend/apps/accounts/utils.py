@@ -198,6 +198,17 @@ def _activation_link(token_id) -> str:
 
     return frontend_url(f'/activate/{token_id}/')
 
+def _reset_link(token_id) -> str:
+    """Same shape as _activation_link, for an admin-triggered password
+    reset — a different landing page (/reset-password/, not /activate/)
+    since the employee isn't a new hire and shouldn't see onboarding copy."""
+    from apps.accounts.models import Company
+
+    company = Company.objects.first()
+    base = (company.portal_url if company else '') or ''
+    path = f'/reset-password/{token_id}/'
+    return f'{base.rstrip("/")}{path}' if base else path
+
 
 def send_activation_invite(user, *, created_by=None, extra_html: str = '', bulk_import: bool = False) -> tuple['PasswordResetToken', bool]:  # noqa: F821 - type-hint only, real import below to avoid a cycle
     """Issues a fresh single-use activation invite (replacing any

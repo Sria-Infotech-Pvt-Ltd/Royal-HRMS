@@ -7,6 +7,7 @@
 // server component that renders this shell but is no longer used directly.
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { setViewAsEmployee } from "@/lib/viewAs";
 import ViewAsStrip from "./_components/ViewAsStrip";
 import type { SessionPayload } from "@/lib/session";
@@ -26,8 +27,9 @@ import EssPayslipsTab from "./_components/EssPayslipsTab";
 import MyDocumentsTab from "./_components/MyDocumentsTab";
 import EmploymentTab from "./_components/EmploymentTab";
 import EssRequestsTab from "./_components/EssRequestsTab";
+import EssAnnouncementsTab from "./_components/EssAnnouncementsTab";
 
-type TabId = "home" | "profile" | "attendance" | "leave" | "payslips" | "tax" | "expenses" | "documents" | "growth" | "appraisals" | "assets" | "employment" | "requests" | "hrHelp";
+type TabId = "home" | "profile" | "attendance" | "leave" | "payslips" | "tax" | "expenses" | "documents" | "growth" | "appraisals" | "assets" | "employment" | "requests" | "announcements" | "hrHelp";
 
 // Labels exactly as the reference's tab bar spells them.
 const TABS: { id: TabId; label: string }[] = [
@@ -44,6 +46,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "assets",      label: "Policies & assets" },
   { id: "employment",  label: "Employment" },
   { id: "requests",    label: "Requests" },
+  { id: "announcements", label: "Announcements" },
   { id: "hrHelp",      label: "HR help" },
 ];
 
@@ -62,12 +65,17 @@ export default function EssShellClient({ session: _session, viewAsEmployee }: { 
   }, [viewAsEmployee]);
   const { data: status, refetch: refetchStatus } = useAttendanceStatus();
 
-  // Deep links (e.g. the top-nav avatar chip's "?tab=profile") land straight
-  // on the intended tab instead of always resetting to Home.
+  // Deep links (e.g. the top-nav avatar chip's "?tab=profile", or a bell
+  // notification's "?tab=announcements&announcement=12") land straight on the
+  // intended tab instead of always resetting to Home. Reads the router's search
+  // params, so a link followed while already on this page switches tabs too.
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const requestedAnnouncement = Number(searchParams.get("announcement"));
+  const linkedAnnouncementId = Number.isInteger(requestedAnnouncement) && requestedAnnouncement > 0 ? requestedAnnouncement : null;
   useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("tab");
-    if (requested && TAB_IDS.has(requested)) setTab(requested as TabId);
-  }, []);
+    if (requestedTab && TAB_IDS.has(requestedTab)) setTab(requestedTab as TabId);
+  }, [requestedTab, linkedAnnouncementId]);
 
   return (
     <div className="ess-shell">
@@ -102,6 +110,7 @@ export default function EssShellClient({ session: _session, viewAsEmployee }: { 
       {tab === "assets"     && <PoliciesAssetsTab />}
       {tab === "employment" && <EmploymentTab onNavigateToDocuments={() => setTab("documents")} />}
       {tab === "requests"   && <EssRequestsTab />}
+      {tab === "announcements" && <EssAnnouncementsTab openAnnouncementId={linkedAnnouncementId} />}
       {tab === "hrHelp"     && <HrHelpTab />}
 
       <div className="ess-footer-note">

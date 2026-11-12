@@ -7,6 +7,7 @@ export const API = {
     resetPassword: "/reset-password/",
     changePassword: "/change-password/",
     inviteCheck: (token: string) => `/invite/${token}/`,
+    adminResetCheck: (token: string) => `/password-reset-link/${token}/`,
     onboardingLink: "/onboarding/link/",
     onboardingHrContact: "/onboarding/hr-contact/",
   },

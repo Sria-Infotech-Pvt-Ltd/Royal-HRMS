@@ -190,10 +190,9 @@ class ProfilePhotoUploadTests(TestCase):
         resp  = client.post(reverse('my-profile-photo'), {'photo': photo}, format='multipart')
         self.assertEqual(resp.status_code, 200, resp.data)
 
-    def test_role_without_permission_is_denied(self):
-        # HR revoked employees.edit_own_profile from this role — self-service
-        # photo upload/remove must now be blocked, with a clear 403 message
-        # rather than silently doing nothing.
+    def test_role_without_edit_own_profile_can_still_manage_own_photo(self):
+        # Product decision (supersedes 0174's intent for the photo only): every signed-in user manages their own
+        # display photo. employees.edit_own_profile now gates editing profile DETAILS, not the photo.
         role = make_role('locked_down_employee')
         make_user('photo-locked@test.com', role=role)
         client = APIClient()
@@ -201,7 +200,7 @@ class ProfilePhotoUploadTests(TestCase):
 
         photo = _make_image_upload(150 * 1024)
         resp  = client.post(reverse('my-profile-photo'), {'photo': photo}, format='multipart')
-        self.assertEqual(resp.status_code, 403, resp.data)
+        self.assertEqual(resp.status_code, 200, resp.data)
 
         resp = client.delete(reverse('my-profile-photo'))
-        self.assertEqual(resp.status_code, 403, resp.data)
+        self.assertEqual(resp.status_code, 200, resp.data)

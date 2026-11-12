@@ -5392,3 +5392,61 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Note:** `OnboardingApprovalView.post()` (the candidate-review approval endpoint) does NOT itself enforce required-document-type presence — only the Hire wizard's `HireActionCompleteView` does. Whatever actually rejected this specific candidate's approval was not confirmed by direct DB inspection (the candidate wasn't found in this session's connected Neon DB — likely a different environment than what was live-tested against). Both real bugs found by code reading were fixed regardless; if Confirm & Activate still fails for someone, check the (now visible) error banner text and report it back.
 
 **Tests:** full `apps.accounts.tests_hire_wizard` + `tests_onboarding_face_gate` (48 tests) OK after both changes. `tsc`/ESLint clean.
+
+## Local setup fixes, ESS Home/Profile UI, Announcements tab, responsive top bar (2026-11-12)
+
+**By:** Rithwika - **Branch:** Rithwika. Everything below is in the working tree, nothing committed. None of the UI was checked in a browser; only `eslint` and `tsc` on the touched files.
+
+**Local setup (Windows, Python 3.14)**
+- `backend/requirements.txt`: `PyYAML` 6.0.2 -> 6.0.3. 6.0.2 has no Python 3.14 wheel, so pip tried to compile it and failed (needs MSVC build tools). 6.0.3 ships a cp314 wheel. Other pins (`msgpack`, `rapidfuzz`, `indiapins`, `channels-redis`) may hit the same problem; the fallback is a Python 3.12/3.13 venv.
+- Celery worker could not start: nothing was listening on Redis `127.0.0.1:6379` (no Redis on this machine, no WSL, no Docker). Memurai (`winget install --id Memurai.MemuraiDeveloper -e`) needs an Administrator shell; the install from a non-elevated session was cancelled (exit 1602). **Still to do by hand.** If the backend `.env` sets a Redis password, Memurai needs the same one (`requirepass` in `memurai.conf`).
+- `frontend/next.config.ts`: `__dirname` is not defined (the file is compiled as an ES module). `turbopack.root` now uses `path.dirname(fileURLToPath(import.meta.url))`.
+- `@next/swc-win32-x64-msvc` was corrupt ("not a valid Win32 application"); deleting that package folder and running `npm install` fixed it.
+- `@tabler/icons-webfont` was installed without its `.woff/.woff2/.ttf` files (only `.svg`), so `app/layout.tsx` failed with "Can't resolve ./fonts/tabler-icons.ttf". The package folder was emptied while a running dev server held it, so `npm install` failed with EBUSY. **Fix: stop `npm run dev`, delete `node_modules/@tabler/icons-webfont` and `.next`, run `npm install`, check that `dist/fonts` has the font files, restart.** Not confirmed finished.
+- **Frontend was calling the wrong backend.** `frontend/` had no env file, so `next.config.ts` fell back to `http://localhost:8000` (the pricing tool backend). New `frontend/.env.local` (gitignored) sets `NEXT_PUBLIC_API_URL` and `INTERNAL_API_URL` to `http://localhost:8001`. Use `localhost`, not `127.0.0.1`, or the auth cookies are not sent. Next.js reads env files only at startup, so restart `npm run dev` after changing it. `backend/config/settings.py`: port 8001 added to the DEBUG-only `CSRF_TRUSTED_ORIGINS`.
+
+**Employee workspace (ESS) UI**
+- Audit Trail (`employees/_components/EmployeeDrawerAuditTrail.tsx`): the list scrolls inside a ~96px box so only the latest entry shows at rest.
+- "My record at a glance" (`ess/_components/ProfileSummaryTab.tsx` and `profile/ProfileClient.tsx`): tiles are `repeat(auto-fill, minmax(200px, 280px))` instead of two stretched columns.
+- Home: new "Time worked today" card (`ess/_components/HomeWorkedTodayCard.tsx`, hook `hooks/useWorkedToday.ts`). Hidden until the first punch of the day. Live session timer plus the day total, a PUNCH IN tile (first punch-in) and a PUNCH OUT tile (latest punch-out, shown only when punched out), and the Punched In/Out badge. Reads `API.attendance.today` (same data as the My Attendance clock widget), refetches when the Home status changes and on the `attendance:updated` event. Not shown when an admin is viewing someone else's workspace.
+- New **Announcements** tab in the ESS tab bar (between Requests and HR help): `ess/_components/EssAnnouncementsTab.tsx` and `EssAnnouncementDetailModal.tsx`, wired in `ess/_client.tsx`. Read-only list (category filters, paging, like) using the existing `API.announcements.*`; the list endpoint only needs a signed-in user, unlike the management page `/dashboard/announcements`, which needs `announcements.view`. Opening one records a view, which makes the server mark its bell notification read. Posting/editing stays on the management page.
+- Bell notification click: `lib/notificationRoutes.ts` now sends the `announcement` module to `/dashboard/ess?tab=announcements&announcement=<id>` (the notification's `reference_id` is the announcement id; a non-numeric one opens the tab only). `ess/_client.tsx` reads the tab from `useSearchParams`, so the link also works when already on the workspace page. `notificationRoutes.test.ts` updated.
+  - Known: HR/admins who post announcements also land on the workspace tab from the bell (they reach posting from the sidebar). Re-clicking the same notification right after closing its detail view does not reopen it (the URL is unchanged).
+
+**Top bar responsiveness**
+- `components/dashboard/TopNavLinks.tsx`: the links collapse into the single Menu button only when they do not fit. It measures the links' natural width against the space its slot gets (`ResizeObserver`, re-checked when fonts load), replacing the fixed 940px CSS switch, which could not suit a 7-module admin bar vs a 2-module employee bar.
+- `app/aira-theme.css` (appended block): links never wrap or shrink; search shrinks to 150px at <=1100px and hides the shortcut hint; at <=760px the bar is one 52px row (it used to wrap onto two rows, 98px tall); at <=400px only the brand logo shows. Search is still hidden below 640px (existing rule, unchanged).
+
+**Tests / verification**
+- `vitest` crashes in this environment ("Cannot read properties of undefined (reading 'config')") even on untouched test files such as `navConfig.test.ts`, so the updated route test was not run. The route function was checked directly in Node instead. `tsc --noEmit` reports only pre-existing `face-api.js` missing-types errors.
+
+
+## Integration of Rithwika, Improvements and 05-nov-2026 into New-AI; employee photo self-service (2026-11-12)
+
+**By:** New-AI session - **Branch:** New-AI. Merged by applying each branch's diff onto the working tree (not `git merge`, because the tree held uncommitted announcements/attachments work). Checked with `tsc`, `eslint`, `vitest` (80 files / 604 tests), `next build` and `manage.py check`. **Not run: any database-dependent backend test and any browser test.**
+
+**What came in**
+- `origin/Rithwika` (513f39d4): see the "Local setup fixes, ESS Home/Profile UI..." section above. The announcement bell route uses **Rithwika's** version: `/dashboard/ess?tab=announcements&announcement=<id>` (the local `?open=<id>` route is no longer used by the bell; `lib/announcementLink.ts` and the dashboard Updates card still use `/dashboard/announcements?open=<id>`).
+- `origin/Improvements` (3e7a8a0c): Company Code Admin on Edit with current-admin prefill (`branches/_components/branchAdminOptions.ts`), ESS attendance calendar and weekly attendance (`EssAttendanceCalendar.tsx`, `lib/attendanceCalendarGrid.ts`, `lib/weeklyAttendance.ts`), workforce widgets, hire wizard changes, `core/redis_connection.py` (local Redis fail-fast when DEBUG) and `core/logging_handlers.py` (Windows-safe log rotation).
+- `origin/05-nov-2026` (1c633337): admin password reset no longer emails a temporary password; it emails a single-use 24h link to `/reset-password/<token>` (`AdminResetCheckView`, `GET /password-reset-link/<token>/`, `_reset_link` in `accounts/utils.py`, `proxy.ts` lets that page load signed out). The email template body is rewritten by migration `0213_password_reset_by_admin_link_not_password`.
+
+**Conflicts and how they were resolved (so nobody redoes them)**
+- Branch Management: Improvements' Edit-prefill implementation was used. Kept from the local version: the vacant-seat filter (Add form only; Edit needs the current admin's seat), the "Complete the Company Code Admin details below" save message, and the empty-seats wording. The local `loadLeaderOptions` helper was removed (it raced with the Edit loader).
+- Edit-form employee list: Improvements dropped the old `status=active` filter (it hid onboarding/probation employees). Inactive accounts are still excluded client-side (`is_active !== false`); employees on notice are NOT excluded. Only the first 50 employees are loaded.
+- `settings.py`, `aira-theme.css`, `utils.py`, `endpoints.ts`, `proxy.ts`: both sides' additions kept.
+
+**Migrations (read before running `migrate`)**
+- Two incoming accounts migrations were numbered `0212`/`0213` while New-AI already had `0212_employee_id_ranges`...`0219`, giving two leaf nodes. Neither chain was edited. `0220_merge_password_reset_link_and_signed_offer_letter` joins them (no operations).
+- `0212_repair_employee_code_series_columns` re-adds `prefix`/`padding` to `hrms_employee_code_series`, which `0212_employee_id_ranges` drops (nothing uses them). `0221_drop_obsolete_employee_code_series_columns` drops them again (`DROP COLUMN IF EXISTS`). **Forward discards whatever is stored in those two columns; reverse is a no-op and does not restore them.**
+- Verified only by loading the migration graph without a database: single leaf `0221`, no pending model changes. **No migration has been applied to Neon or any database.**
+- A database that lacked those columns and applied neither chain would still fail at `0212_employee_id_ranges`'s `RemoveField` (not fixable without editing a pushed migration).
+
+**Employee profile photo (behaviour change)**
+- Every signed-in user can now upload/remove their own profile photo: the `employees.edit_own_profile` check was removed from `ProfilePhotoView` (`views_profile_photo.py`), and the camera button is always shown in `ess/_components/ProfileSummaryTab.tsx` and `profile/ProfileClient.tsx`. Editing profile *details* is still gated by `employees.edit_own_profile` (revoked from the employee role by migration 0174), so employees without it use "Request profile correction".
+- `tests_profile_photo.py`: `test_role_without_permission_is_denied` became `test_role_without_edit_own_profile_can_still_manage_own_photo` (expects 200). Not run (needs a database).
+
+**Still open**
+- Browser testing of everything above, and the database-dependent tests (`apps.branch.tests_branch_admin_flow`, `apps.accounts.tests_hire_wizard`, announcements/attachments/email tests, `tests_profile_photo`), ideally on a private test database (`TEST_DB_SUFFIX=<name>`, or a local PostgreSQL via `DATABASE_URL` + `DB_SSL_MODE=disable`). Local PostgreSQL 17 on 5432 needs a password; Docker Desktop was not running.
+- No backend test covers the new admin-reset link flow.
+- 9 existing ESLint warnings (assessments, payroll, attendance month view, email-templates): none introduced here; two are `react-hooks/exhaustive-deps`, which CLAUDE.md section 8 forbids.
+- Local setup notes from Rithwika's section still apply (Redis, `frontend/.env.local`). On this machine the backend runs on port 8000 and `.env.local` points there.

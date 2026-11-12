@@ -110,23 +110,22 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       <div className="card mb-16" style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 20 }}>
         <div style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
           <Avatar text={ini} size={72} photoUrl={photoUrl} />
-          {canEditOwnProfile && (
-            <button
-              type="button"
-              onClick={() => setShowPhotoModal(true)}
-              suppressHydrationWarning
-              title="Change profile photo"
-              style={{
-                position: "absolute", bottom: -2, right: -2,
-                width: 26, height: 26, borderRadius: "50%",
-                background: "var(--primary)", color: "#fff",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                border: "2px solid #fff", cursor: "pointer",
-              }}
-             aria-label="Change profile photo">
-              <i className="ti ti-camera" style={{ fontSize: 12 }} />
-            </button>
-          )}
+          {/* Any signed-in user manages their own photo; only editing profile details is permission-gated. */}
+          <button
+            type="button"
+            onClick={() => setShowPhotoModal(true)}
+            suppressHydrationWarning
+            title="Change profile photo"
+            style={{
+              position: "absolute", bottom: -2, right: -2,
+              width: 26, height: 26, borderRadius: "50%",
+              background: "var(--primary)", color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: "2px solid #fff", cursor: "pointer",
+            }}
+           aria-label="Change profile photo">
+            <i className="ti ti-camera" style={{ fontSize: 12 }} />
+          </button>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: "var(--on-bg)" }}>
@@ -200,7 +199,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           <div style={{ fontWeight: 700, fontSize: 15 }}>My record at a glance</div>
           <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>Review official fields, then open the full record for all sections.</div>
         </div>
-        <div style={{ padding: "4px 20px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div style={{ padding: "4px 20px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 280px))", gap: 14 }}>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>EMPLOYEE ID</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{profile?.employee_id ?? "—"}</div>

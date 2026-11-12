@@ -35,7 +35,7 @@ export default function AnnouncementCard() {
         <div className="card-title"><i className="ti ti-speakerphone" /> Latest Announcement</div>
         {!loading && announcement && (
           <a href="/dashboard/announcements" className="btn btn-ghost btn-sm">
-            All <i className="ti ti-arrow-right" style={{ fontSize: 11, marginLeft: 3 }} />
+            All{announcement.more_count ? ` (+${announcement.more_count})` : ""} <i className="ti ti-arrow-right" style={{ fontSize: 11, marginLeft: 3 }} />
           </a>
         )}
       </div>
@@ -60,6 +60,10 @@ export default function AnnouncementCard() {
             }}>
               {announcement.category}
             </span>
+          )}
+          {announcement.image_url && (
+            // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed storage address, not a static asset
+            <img src={announcement.image_url} alt="" loading="lazy" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, marginBottom: 10, display: "block" }} />
           )}
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--on-bg)", lineHeight: 1.4, marginBottom: 8 }}>
             {announcement.title}

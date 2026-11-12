@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import uuid
+
 from django.conf import settings
 from django.db import models
+
+from core.storage import AuthenticatedImageKitStorage, announcement_attachment_upload_path
 
 
 class Announcement(models.Model):
@@ -43,6 +47,10 @@ class Announcement(models.Model):
                         )
     is_pinned         = models.BooleanField(default=False)
     send_email        = models.BooleanField(default=False)
+    # External links shown with the announcement: [{"title": str, "url": "http(s)://..."}], validated on write
+    # (apps.announcements.services_attachments.clean_links).
+    # db_default keeps the column fillable by code that does not know about it (another branch running against the same database).
+    links             = models.JSONField(default=list, db_default=[], blank=True)
     posted_by         = models.ForeignKey(
                             settings.AUTH_USER_MODEL,
                             on_delete=models.SET_NULL,
@@ -66,6 +74,32 @@ class Announcement(models.Model):
 
     def __str__(self) -> str:
         return self.title
+
+
+class AnnouncementAttachment(models.Model):
+    """An image or PDF attached to an announcement. The file lives in private storage; it is reached only through the authorized
+    download endpoint or a short-lived signed URL, never a permanent public one."""
+    TYPE_IMAGE    = 'image'
+    TYPE_DOCUMENT = 'document'
+    TYPE_CHOICES  = [(TYPE_IMAGE, 'Image'), (TYPE_DOCUMENT, 'Document')]
+
+    id                = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    announcement      = models.ForeignKey(Announcement, on_delete=models.CASCADE, related_name='attachments')
+    attachment_type   = models.CharField(max_length=10, choices=TYPE_CHOICES)
+    file              = models.FileField(upload_to=announcement_attachment_upload_path, storage=AuthenticatedImageKitStorage(), max_length=255)
+    original_filename = models.CharField(max_length=255)
+    file_size         = models.PositiveIntegerField()
+    content_type      = models.CharField(max_length=100)
+    created_at        = models.DateTimeField(auto_now_add=True)
+    updated_at        = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_announcement_attachments'
+        ordering = ['created_at']
+        indexes  = [models.Index(fields=['announcement', 'attachment_type'], name='ann_attach_ann_type_idx')]
+
+    def __str__(self) -> str:
+        return f'{self.original_filename} ({self.attachment_type}) → {self.announcement_id}'
 
 
 class AnnouncementReaction(models.Model):

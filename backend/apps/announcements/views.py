@@ -4,9 +4,10 @@ import logging
 
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, F, Prefetch, Q, QuerySet, Sum
+from django.db.models import Count, F, Prefetch, QuerySet, Sum
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
@@ -16,6 +17,9 @@ from core.responses import error, first_error, get_client_ip, success
 from apps.accounts.models import AuditLog
 from apps.announcements.models import Announcement, AnnouncementReaction
 from apps.announcements.serializers import AnnouncementSerializer, AnnouncementWriteSerializer
+from apps.announcements.services_announcements_visibility import visible_announcements
+from apps.announcements.services_attachment_changes import apply_changes, precheck
+from apps.announcements.services_attachments import AttachmentError, delete_stored_files
 from apps.notifications.models import Notification
 
 logger = logging.getLogger(__name__)
@@ -68,17 +72,7 @@ class CanPostAnnouncement(BasePermission):
 
 def _visible_qs(request) -> 'QuerySet[Announcement]':
     """Return the base Announcement queryset scoped to what `request.user` may see."""
-    if _has_perm(request.user, 'announcements.edit'):
-        qs = Announcement.objects.all()
-    else:
-        from apps.accounts.services_approval import resolve_employee_org_unit_chain
-        qs = Announcement.objects.filter(
-            Q(visibility=Announcement.VISIBILITY_ALL)
-            | Q(visibility=Announcement.VISIBILITY_DEPARTMENT,
-                target_org_unit_id__in=resolve_employee_org_unit_chain(request.user))
-            | Q(visibility=Announcement.VISIBILITY_BRANCH,
-                target_branch__branch_name=request.user.branch)
-        )
+    qs = visible_announcements(request.user)
 
     # Meta.ordering alone isn't enough here — annotate() below adds a GROUP BY,
     # which makes Django treat the queryset as unordered unless order_by() is
@@ -87,6 +81,7 @@ def _visible_qs(request) -> 'QuerySet[Announcement]':
     return qs.annotate(
         reaction_count=Count('reactions', distinct=True)
     ).order_by('-is_pinned', '-created_at').prefetch_related(
+        'attachments',
         Prefetch(
             'reactions',
             queryset=AnnouncementReaction.objects.filter(user=request.user),
@@ -97,8 +92,19 @@ def _visible_qs(request) -> 'QuerySet[Announcement]':
 
 # ─── Views ────────────────────────────────────────────────────────────────────
 
+def _attachment_input(data: dict) -> dict:
+    """The attachment part of a validated payload. `links` is None when the request did not mention links at all."""
+    return {
+        'images':     list(data.get('images', [])),
+        'documents':  list(data.get('documents', [])),
+        'remove_ids': set(data.get('remove_attachment_ids', [])),
+        'links':      data['links'] if 'links' in data else None,
+    }
+
+
 class AnnouncementListCreateView(APIView):
     permission_classes = [IsAuthenticated, CanPostAnnouncement, HasCompletedOnboardingStatus]
+    parser_classes     = [JSONParser, MultiPartParser, FormParser]
 
     def get(self, request):
         qs = _visible_qs(request)
@@ -149,6 +155,11 @@ class AnnouncementListCreateView(APIView):
             return error(first_error(serializer.errors), data=serializer.errors)
 
         data = serializer.validated_data
+        extras = _attachment_input(data)
+        try:
+            precheck(None, images=extras['images'], documents=extras['documents'], remove_ids=extras['remove_ids'])
+        except AttachmentError as exc:
+            return error(str(exc))
         announcement = Announcement.objects.create(
             title             = data['title'],
             body              = data['body'],
@@ -160,6 +171,11 @@ class AnnouncementListCreateView(APIView):
             send_email        = data.get('send_email', False),
             posted_by         = request.user,
         )
+        try:
+            attachment_changes = apply_changes(announcement, **extras)
+        except AttachmentError as exc:
+            transaction.set_rollback(True)     # nothing of this announcement is kept
+            return error(str(exc))
 
         AuditLog.objects.create(
             user       = request.user,
@@ -167,7 +183,7 @@ class AnnouncementListCreateView(APIView):
             module     = 'announcements',
             object_id  = str(announcement.pk),
             changes    = {'title': announcement.title, 'category': announcement.category,
-                          'visibility': announcement.visibility},
+                          'visibility': announcement.visibility, **attachment_changes},
             ip_address = get_client_ip(request),
         )
 
@@ -204,6 +220,7 @@ class AnnouncementListCreateView(APIView):
 
 class AnnouncementDetailView(APIView):
     permission_classes = [IsAuthenticated, CanPostAnnouncement, HasCompletedOnboardingStatus]
+    parser_classes     = [JSONParser, MultiPartParser, FormParser]
 
     def _get_object(self, request, pk: int) -> Announcement:
         qs  = _visible_qs(request)
@@ -229,6 +246,11 @@ class AnnouncementDetailView(APIView):
             return error(first_error(serializer.errors), data=serializer.errors)
 
         data = serializer.validated_data
+        extras = _attachment_input(data)
+        try:
+            precheck(ann, images=extras['images'], documents=extras['documents'], remove_ids=extras['remove_ids'])
+        except AttachmentError as exc:
+            return error(str(exc))
         ann.title             = data['title']
         ann.body              = data['body']
         ann.category          = data['category']
@@ -238,6 +260,11 @@ class AnnouncementDetailView(APIView):
         ann.is_pinned         = data.get('is_pinned', False)
         ann.send_email        = data.get('send_email', False)
         ann.save()
+        try:
+            attachment_changes = apply_changes(ann, **extras)      # links and attachments not mentioned are left as they are
+        except AttachmentError as exc:
+            transaction.set_rollback(True)
+            return error(str(exc))
 
         AuditLog.objects.create(
             user       = request.user,
@@ -245,7 +272,7 @@ class AnnouncementDetailView(APIView):
             module     = 'announcements',
             object_id  = str(ann.pk),
             changes    = {'title': ann.title, 'category': ann.category,
-                          'visibility': ann.visibility},
+                          'visibility': ann.visibility, **attachment_changes},
             ip_address = get_client_ip(request),
         )
 
@@ -260,6 +287,11 @@ class AnnouncementDetailView(APIView):
             return error(first_error(serializer.errors), data=serializer.errors)
 
         data = serializer.validated_data
+        extras = _attachment_input(data)
+        try:
+            precheck(ann, images=extras['images'], documents=extras['documents'], remove_ids=extras['remove_ids'])
+        except AttachmentError as exc:
+            return error(str(exc))
         for field in ('title', 'body', 'category', 'visibility', 'is_pinned', 'send_email'):
             if field in data:
                 setattr(ann, field, data[field])
@@ -268,13 +300,19 @@ class AnnouncementDetailView(APIView):
         if 'target_branch' in data:
             ann.target_branch = data.get('target_branch')
         ann.save()
+        try:
+            attachment_changes = apply_changes(ann, **extras)
+        except AttachmentError as exc:
+            transaction.set_rollback(True)
+            return error(str(exc))
 
         AuditLog.objects.create(
             user       = request.user,
             action     = 'announcement_updated',
             module     = 'announcements',
             object_id  = str(ann.pk),
-            changes    = {k: str(v) for k, v in data.items()},
+            changes    = {**{k: str(v) for k, v in data.items() if k not in ('images', 'documents', 'links', 'remove_attachment_ids')},
+                          **attachment_changes},
             ip_address = get_client_ip(request),
         )
 
@@ -289,7 +327,10 @@ class AnnouncementDetailView(APIView):
         ann = self._get_object(request, pk)
         ann_title = ann.title
         ann_id    = ann.pk
+        stored_files = [attachment.file.name for attachment in ann.attachments.all()]
         ann.delete()
+        if stored_files:
+            transaction.on_commit(lambda: delete_stored_files(stored_files))
 
         AuditLog.objects.create(
             user       = request.user,
@@ -308,18 +349,7 @@ class AnnouncementReactView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def post(self, request, pk: int):
-        from apps.accounts.services_approval import resolve_employee_org_unit_chain
-        announcement = get_object_or_404(
-            Announcement.objects.filter(
-                Q(visibility=Announcement.VISIBILITY_ALL)
-                | Q(visibility=Announcement.VISIBILITY_DEPARTMENT,
-                    target_org_unit_id__in=resolve_employee_org_unit_chain(request.user))
-                | Q(visibility=Announcement.VISIBILITY_BRANCH,
-                    target_branch__branch_name=request.user.branch)
-            ) if not _has_perm(request.user, 'announcements.edit')
-            else Announcement.objects.all(),
-            pk=pk,
-        )
+        announcement = get_object_or_404(visible_announcements(request.user), pk=pk)
 
         reaction, created = AnnouncementReaction.objects.get_or_create(
             announcement=announcement,

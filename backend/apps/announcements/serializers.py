@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from rest_framework import serializers
 
 from core.permissions import has_perm as _has_perm
@@ -7,7 +9,34 @@ from core.permissions import has_perm as _has_perm
 from apps.accounts.models import OrgUnit
 from apps.branch.models import Branch
 
-from .models import Announcement
+from .models import Announcement, AnnouncementAttachment
+from .services_attachments import AttachmentError, check_upload, clean_links
+
+logger = logging.getLogger(__name__)
+
+
+class AnnouncementAttachmentSerializer(serializers.ModelSerializer):
+    """An attachment as the viewer sees it. `url` (images only) is a short-lived signed address for showing the picture;
+    `download_path` is the authorised endpoint (relative to the API root) that every download goes through."""
+
+    url           = serializers.SerializerMethodField()
+    download_path = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = AnnouncementAttachment
+        fields = ['id', 'attachment_type', 'original_filename', 'file_size', 'content_type', 'url', 'download_path']
+
+    def get_url(self, obj: AnnouncementAttachment) -> str:
+        if obj.attachment_type != AnnouncementAttachment.TYPE_IMAGE:
+            return ''
+        try:
+            return obj.file.url
+        except Exception:  # a storage hiccup must not break the whole announcement list
+            logger.exception('Could not build an image URL for announcement attachment %s.', obj.pk)
+            return ''
+
+    def get_download_path(self, obj: AnnouncementAttachment) -> str:
+        return f'/announcements/{obj.announcement_id}/attachments/{obj.pk}/download/'
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):
@@ -20,6 +49,8 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     target_org_unit_name  = serializers.SerializerMethodField()
     target_branch_name    = serializers.SerializerMethodField()
     can_edit              = serializers.SerializerMethodField()
+    attachments           = AnnouncementAttachmentSerializer(many=True, read_only=True)
+    links                 = serializers.JSONField(read_only=True)
 
     class Meta:
         model  = Announcement
@@ -30,7 +61,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             'is_pinned', 'send_email',
             'posted_by', 'posted_by_name', 'posted_by_role',
             'views_count', 'reactions_count', 'has_reacted',
-            'can_edit', 'created_at', 'updated_at',
+            'can_edit', 'attachments', 'links', 'created_at', 'updated_at',
         ]
 
     # ── posted_by fields ──────────────────────────────────────────────────────
@@ -100,6 +131,32 @@ class AnnouncementWriteSerializer(serializers.Serializer):
                         )
     is_pinned         = serializers.BooleanField(default=False, required=False)
     send_email        = serializers.BooleanField(default=False, required=False)
+    # Attachments (multipart/form-data): new files, links as a list or a JSON string, and ids of existing attachments to remove.
+    images            = serializers.ListField(child=serializers.FileField(allow_empty_file=True), required=False)
+    documents         = serializers.ListField(child=serializers.FileField(allow_empty_file=True), required=False)
+    links             = serializers.JSONField(required=False)
+    remove_attachment_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
+
+    def validate_images(self, files: list) -> list:
+        return self._check_files(files, AnnouncementAttachment.TYPE_IMAGE)
+
+    def validate_documents(self, files: list) -> list:
+        return self._check_files(files, AnnouncementAttachment.TYPE_DOCUMENT)
+
+    @staticmethod
+    def _check_files(files: list, kind: str) -> list:
+        for file in files:
+            try:
+                check_upload(file, kind)
+            except AttachmentError as exc:
+                raise serializers.ValidationError(str(exc)) from None
+        return files
+
+    def validate_links(self, value) -> list:
+        try:
+            return clean_links(value)
+        except AttachmentError as exc:
+            raise serializers.ValidationError(str(exc)) from None
 
     def validate_title(self, value: str) -> str:
         value = value.strip()

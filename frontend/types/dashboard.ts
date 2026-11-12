@@ -65,6 +65,10 @@ export interface AnnouncementData {
   posted_on?:  string;
   author?:     string;
   created_by?: string | { name: string };
+  /** How many other announcements this person can see. */
+  more_count?: number;
+  image_url?:        string;
+  attachment_count?: number;
 }
 
 export interface AuditLogEntry {

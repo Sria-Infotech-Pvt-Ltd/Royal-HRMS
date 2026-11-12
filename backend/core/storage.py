@@ -184,6 +184,12 @@ def document_center_upload_path(instance, filename) -> str:
     return f'documents/{stamp}/{filename}'
 
 
+def announcement_attachment_upload_path(instance, filename) -> str:
+    # Private (AuthenticatedImageKitStorage on the model): reached only through a signed, expiring URL minted after the viewer's
+    # access to the announcement has been checked. `filename` is always a server-generated name, never the uploaded one.
+    return f'announcements/{filename}'
+
+
 def email_template_attachment_upload_path(instance, filename) -> str:
     return f'email_template_attachments/{filename}'
 

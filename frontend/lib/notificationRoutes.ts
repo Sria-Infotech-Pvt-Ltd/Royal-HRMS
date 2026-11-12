@@ -5,7 +5,8 @@ export const MODULE_ROUTES: Record<NotificationModule, string> = {
   leave:          "/dashboard/leave",
   attendance:     "/dashboard/my-attendance",
   regularization: "/dashboard/my-attendance",
-  announcement:   "/dashboard/announcements",
+  // The employee workspace's Announcements tab: readable by every employee, unlike the management page.
+  announcement:   "/dashboard/ess?tab=announcements",
   holiday:        "/dashboard/attendance",
   permission:     "/dashboard/leave",
   promotion:      "/dashboard/profile",
@@ -28,6 +29,10 @@ export function notificationRoute(notification: Pick<Notification, "module" | "r
       const employeeId = reference.slice(EMPLOYEE_REFERENCE_PREFIX.length).trim();
       if (employeeId) return `/dashboard/employees/${encodeURIComponent(employeeId)}`;
     }
+  }
+  if (notification.module === "announcement" && /^\d+$/.test((notification.reference_id ?? "").trim())) {
+    // reference_id is the announcement's id: open that one, not just the list.
+    return `${MODULE_ROUTES.announcement}&announcement=${notification.reference_id.trim()}`;
   }
   return MODULE_ROUTES[notification.module] ?? "/dashboard";
 }
