@@ -5360,3 +5360,35 @@ Also on 2026-11-10: the new Neon database was migrated from empty (521 migration
 **Related findings, not changed (ask before doing):**
 - Org-chart "Assign holder" dropdown is empty for newly imported teams: `OrgStructureClient.tsx` loads employees with `status=active` (account enabled AND onboarding complete AND activated), so employees still in Onboarding are not offered. Proposed small frontend change: also offer Onboarding employees. Assigning someone already seated moves them (their old seat is closed).
 - Reporting manager after import comes from the org chart: the person holding the unit's chief seat (or the nearest ancestor's), same branch name, active. In the checked database 43 chief seats existed and none was held, so nobody resolved. Alternatives: the Excel column "Reporting Manager Employee ID", or assign by hand.
+
+
+## System Admin dashboard had no workforce analytics (2026-11-12)
+
+**Symptom:** the System Admin dashboard showed only onboarding/approval/branch-health stats — no present/absent-today, no headcount or payroll trends — even though a superuser holds every permission those numbers need. All of that already existed, just only on the separate HR dashboard.
+
+**Stage 1 (reuse only, no new backend):** `AdminDashboard.tsx` now also renders the same `useDashboardOverview()`-backed KPI row (Total Headcount, Present Today, Payroll Ready), the weekly attendance trend (`AttendanceTrend`/`AttendanceInsights`), and the full `WorkforceOperations` panel (recruitment funnel, attendance/leave/payroll/performance/reports/settings overviews, system health) the HR dashboard already had. Nothing new on the backend; pure composition of existing, already-tested widgets.
+
+**Stage 2 (new, historical trends):** `backend/apps/dashboard/views/trends.py` — three new endpoints, each `IsAuthenticated` + `employees.view` gated, cached 1h:
+- `GET /dashboard/trends/headcount/` — total active headcount at the end of each of the last 6 months, via `services_headcount.get_headcount(as_of=month_end)` (same function Employees > As Of already uses, so the two always agree).
+- `GET /dashboard/trends/leave/` — approved vs. rejected `LeaveRequest` counts per month, bucketed by `created_at` (pending/cancelled excluded).
+- `GET /dashboard/trends/payroll-cost/` — total `EmployeePayslip.net_pay` per `PayrollCycle`, excluding draft/cancelled/in-progress cycles.
+New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart cards, plain divs — no chart library, same visual language as `DeptHeadcountChart.tsx`), wired into `AdminDashboard.tsx` below `WorkforceOperations`.
+
+**Tests:** `apps/dashboard/tests_trends.py` (5 new: permission gating, headcount growth over time, leave status bucketing, draft-cycle exclusion from payroll cost) + full `apps.dashboard` suite (36 tests) OK. `tsc`/ESLint clean on both stages.
+
+**Caveat:** this Neon dev DB has very few leave requests and payroll cycles right now, so the Leave and Payroll Cost charts will look mostly empty until more real data accumulates — expected, not a bug.
+
+**Gotcha for whoever works in this tree next:** mid-session the shared working directory was found silently switched to a different local branch (`onboarding-v2`) carrying another session's large uncommitted Onboarding V2 feature (dozens of new files/migrations). It was stashed intact (not discarded) before switching back to `New-AI` — if you're picking up Onboarding V2, check `git stash list` on `onboarding-v2` rather than assuming the work was lost.
+
+
+## Signed Offer Letter required + Confirm & Activate looked like it did nothing (2026-11-12)
+
+**Symptom:** on the candidate-review "Review — <name>" modal (`OnboardingDrawer.tsx`), HR scrolled through the document checklist, clicked "Confirm & Activate", confirmed the "Approve and activate..." dialog, and the screen just sat there — looked exactly like the 2026-11-10 PAN-masking bug (see above), but that one was already fixed.
+
+**Root cause #1 (real, separate bug):** the error banner (`actionErr`) renders at the very top of the modal's scrollable body, but Confirm/Approve is a footer button only reached after scrolling down past Basic Info and the documents list. A rejected action's error was genuinely there the whole time — just off-screen above the fold. Fixed: `errorBannerRef` + a `useEffect` that `scrollIntoView({behavior:"smooth", block:"start"})`s the banner the moment `actionErr` is set.
+
+**Root cause #2 (this candidate's specific rejection) + product decision:** Signed Offer Letter was marked a required document type (`0170_fix_required_document_types`, alongside Cancelled Cheque) — reasonable in general, but blocking/confusing for candidates who can't upload a signed copy yet. Per explicit instruction, reverted to optional: `0219_signed_offer_letter_optional.py` (DocumentTypeConfig) + the Hire wizard's own copy in `DocumentsChecklistStep.tsx` (kept in sync deliberately — see 0170's own docstring on what happens when these two copies disagree). Cancelled Cheque is untouched.
+
+**Note:** `OnboardingApprovalView.post()` (the candidate-review approval endpoint) does NOT itself enforce required-document-type presence — only the Hire wizard's `HireActionCompleteView` does. Whatever actually rejected this specific candidate's approval was not confirmed by direct DB inspection (the candidate wasn't found in this session's connected Neon DB — likely a different environment than what was live-tested against). Both real bugs found by code reading were fixed regardless; if Confirm & Activate still fails for someone, check the (now visible) error banner text and report it back.
+
+**Tests:** full `apps.accounts.tests_hire_wizard` + `tests_onboarding_face_gate` (48 tests) OK after both changes. `tsc`/ESLint clean.
