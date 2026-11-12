@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import DocPreviewModal from "@/components/DocPreviewModal";
@@ -73,6 +73,16 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   // its presence here means "already positioned," matching the backend's
   // own needs_conversion check (onboarding_approval.py).
   const alreadyPositioned = Boolean(user.employee_id);
+  // The error banner renders at the very top of this modal's scrollable
+  // body, but Confirm/Approve is a footer button reached only after
+  // scrolling down through documents/sections — a rejected action
+  // otherwise left the banner off-screen above the fold, which looked
+  // exactly like "I clicked Confirm and nothing happened" even though the
+  // error was there the whole time.
+  const errorBannerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (actionErr) errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [actionErr]);
   const [showAssign, setShowAssign] = useState(false);
   const [orgUnitId,   setOrgUnitId]   = useState("");
   const [selPosition, setSelPosition] = useState("");
@@ -306,7 +316,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
         </>
       }
     >
-          {actionErr && <div className="alert alert-error" style={{ marginBottom: "1rem" }}>{actionErr}</div>}
+          {actionErr && <div ref={errorBannerRef} className="alert alert-error" style={{ marginBottom: "1rem" }}>{actionErr}</div>}
           {/* For an already-positioned employee the "Assign Position" box (which normally shows assignErr) is not rendered, so a
               refused Confirm used to look like a button that does nothing. */}
           {alreadyPositioned && assignErr && (
