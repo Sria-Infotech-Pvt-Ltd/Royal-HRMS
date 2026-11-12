@@ -341,10 +341,26 @@ class LeavePolicyUpdateSerializer(serializers.ModelSerializer):
         return data
 
 
-class LeaveBalanceSerializer(serializers.ModelSerializer):
+class _LeaveTypeLabelMixin:
+    """leave_type_display = the name HR gave the leave type (e.g. "Pink Leave" for
+    menstrual_leave). Django's get_leave_type_display() only knows the built-in
+    choices and returned the raw key for custom types. One query per serializer
+    (shared across a list)."""
+
+    def get_leave_type_display(self, obj) -> str:
+        labels = getattr(self, '_leave_type_labels', None)
+        if labels is None:
+            labels = dict(LeavePolicy.objects.exclude(leave_type_label='')
+                          .values_list('leave_type', 'leave_type_label'))
+            self._leave_type_labels = labels
+        return (labels.get(obj.leave_type) or dict(LEAVE_TYPE_CHOICES).get(obj.leave_type)
+                or obj.leave_type.replace('_', ' ').title())
+
+
+class LeaveBalanceSerializer(_LeaveTypeLabelMixin, serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
     available_days = serializers.SerializerMethodField()
-    leave_type_display = serializers.CharField(source='get_leave_type_display', read_only=True)
+    leave_type_display = serializers.SerializerMethodField()
 
     class Meta:
         model  = LeaveBalance
@@ -361,12 +377,12 @@ class LeaveBalanceSerializer(serializers.ModelSerializer):
         return float(obj.total_days - obj.used_days)
 
 
-class LeaveRequestSerializer(serializers.ModelSerializer):
+class LeaveRequestSerializer(_LeaveTypeLabelMixin, serializers.ModelSerializer):
     employee_name      = serializers.SerializerMethodField()
     employee_code      = serializers.SerializerMethodField()
     employee_dept      = serializers.SerializerMethodField()
     employee_branch    = serializers.SerializerMethodField()
-    leave_type_display = serializers.CharField(source='get_leave_type_display', read_only=True)
+    leave_type_display = serializers.SerializerMethodField()
     duration_display   = serializers.CharField(source='get_duration_display', read_only=True)
     l1_approver_name   = serializers.SerializerMethodField()
     l2_approver_name   = serializers.SerializerMethodField()

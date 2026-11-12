@@ -10,7 +10,7 @@ import {
   LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
   LeaveTypeKey, DurationKey, LeaveTypeConfig,
   buildApplicableLeaveTypes,
-  calcWorkingDays, fmtDate,
+  calcWorkingDays, documentRule, fmtDate,
 } from "../_data";
 
 interface LeaveForm {
@@ -111,6 +111,14 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
     : null;
   const { data: preview, loading: previewLoading } = useFetch<LeavePreview>(previewUrl);
 
+  // Document required / optional follows the leave type's settings (Attachment
+  // Required, Medical Certificate Required after N days) — the server applies the same rule.
+  const docDays = preview?.actual_leave_days ?? workDays;
+  const doc = useMemo(
+    () => documentRule(policy, docDays, ltConfig.requiresDoc),
+    [policy, docDays, ltConfig.requiresDoc],
+  );
+
   const previewHolidays = preview?.company_holidays ?? [];
   const previewWeekOffs = preview?.week_offs ?? [];
   const insufficientBalance = !!preview && !preview.sufficient_balance && !preview.lop_enabled;
@@ -128,7 +136,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                                                             e.to_date   = "End date must be on or after start date.";
     if (!form.reason.trim())                                e.reason    = "Please provide a reason.";
     if (form.reason.trim().length < 10)                     e.reason    = "Reason must be at least 10 characters.";
-    if (ltConfig.requiresDoc && !docFile)                   e.doc       = "Supporting document is required for this leave type.";
+    if (doc.required && !docFile)                           e.doc       = doc.hint || "Supporting document is required for this leave type.";
     // Once the server preview has loaded, it's authoritative — defer to
     // insufficientBalance below instead of this local, holiday-blind estimate.
     if (!preview && overLimit)                              e.from_date = `Only ${available} working day(s) available.`;
@@ -436,10 +444,11 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
             <div>
               <div className="flex items-center gap-2 mb-1.5">
                 <Lbl text="Supporting Document" />
-                {ltConfig.requiresDoc
+                {doc.required
                   ? <span className="text-xs font-semibold text-red-500 -mt-1.5">(Required)</span>
                   : <span className="text-xs text-[var(--on-variant)] -mt-1.5">(Optional)</span>}
               </div>
+              {doc.hint && <p className="text-xs text-[var(--on-variant)] -mt-0.5 mb-1.5">{doc.hint}</p>}
               {docFile ? (
                 <div className="flex items-center gap-3 p-3.5 bg-green-50 border border-green-200 rounded-xl">
                   <i className="ti ti-file-check text-green-600 text-lg" />

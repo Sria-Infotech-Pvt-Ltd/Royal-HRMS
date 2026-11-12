@@ -537,6 +537,11 @@ def _validate_leave_policy(policy, employee, duration, total_days, start, end, d
             return f'Leave can only be applied {policy.maximum_future_days} day(s) in advance.'
     if policy.attachment_required and not document:
         return 'An attachment is required for this leave type.'
+    # Medical certificate: required for leave of medical_certificate_after_days or more
+    # days (the same rule the Apply Leave form shows).
+    cert_days = policy.medical_certificate_after_days or 0
+    if policy.medical_certificate_required and not document and float(total_days) >= cert_days:
+        return f'A medical certificate is required for leave of {cert_days} or more day(s).'
     if policy.applicable_branches:
         emp_branch = (getattr(employee, 'branch', '') or '').strip()
         if emp_branch and emp_branch not in policy.applicable_branches:

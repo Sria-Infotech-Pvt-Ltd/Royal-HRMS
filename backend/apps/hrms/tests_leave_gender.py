@@ -231,3 +231,38 @@ class GenderChangeUpdatesBalancesTests(GenderLeaveBase):
         self.pink(applicable_gender='female')
         self.assertEqual(self.put('all').status_code, 200)
         self.assertTrue(LeaveBalance.objects.filter(employee=self.man, leave_type=PINK).exists())
+
+
+class ManageLeaveCreditsGenderTests(GenderLeaveBase):
+    """Employee profile -> Manage Leave Credits: a female-only type is not offered for
+    a man, and adding days of it to a man is refused (removing stays allowed)."""
+
+    def test_pink_not_offered_or_creditable_for_men(self):
+        self.pink()
+        hr = self.client_for('gl.hr@test.com')
+        year = datetime.date.today().year
+        offered = lambda emp: {t['value'] for t in hr.get(
+            reverse('leave-credit-overview', kwargs={'employee_id': emp}), {'year': year}
+        ).data['data']['assignable_leave_types']}
+        self.assertNotIn(PINK, offered('GLM1'))
+        self.assertIn(PINK, offered('GLF1'))
+        adjust = lambda emp, amount: hr.post(reverse('leave-credit-adjust', kwargs={'employee_id': emp}), {
+            'leave_type': PINK, 'year': year, 'amount': amount, 'reason': 'test', 'idempotency_key': f'k-{emp}-{amount}',
+        }, format='json')
+        resp = adjust('GLM1', 2)
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn('gender restriction', resp.data['message'])
+        self.assertFalse(LeaveBalance.objects.filter(employee=self.man, leave_type=PINK).exists())
+        self.assertIn(adjust('GLF1', 2).status_code, (200, 201))
+
+
+class LeaveTypeNameTests(GenderLeaveBase):
+    """Requests and balances of a custom type show its name ("Pink Leave G"), not the key."""
+
+    def test_custom_type_shows_its_name(self):
+        self.pink()
+        self.balance(self.woman)
+        self.assertEqual(self.apply('gl.woman@test.com').data['data']['leave_type_display'], 'Pink Leave G')
+        c = self.client_for('gl.woman@test.com')
+        rows = c.get(reverse('leave-balance'), {'year': self.leave_date.year}).data['data']
+        self.assertEqual({r['leave_type']: r['leave_type_display'] for r in rows}[PINK], 'Pink Leave G')

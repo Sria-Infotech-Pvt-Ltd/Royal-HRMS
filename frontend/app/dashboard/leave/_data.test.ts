@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildApplicableLeaveTypes, buildLeaveTypesList, type LeavePolicy } from "./_data";
+import { buildApplicableLeaveTypes, buildLeaveTypesList, documentRule, type LeavePolicy } from "./_data";
 
 const policy = (leave_type: string, over: Partial<LeavePolicy> = {}): LeavePolicy => ({
   id: 1, leave_type, leave_type_display: leave_type === "pink_leave" ? "Pink Leave" : leave_type, annual_days: 12,
@@ -31,5 +31,17 @@ describe("buildApplicableLeaveTypes (Apply Leave picker)", () => {
   it("leaves the full HR list unchanged", () => {
     const all = buildLeaveTypesList([policy("maternity", { eligible_for_me: false })]).map(t => t.key);
     expect(all).toContain("maternity");
+  });
+});
+
+describe("documentRule (Supporting Document required / optional)", () => {
+  it("follows the leave type settings", () => {
+    expect(documentRule(policy("sick"), 5, true).required).toBe(false);              // setting off -> optional
+    expect(documentRule(policy("casual", { attachment_required: true }), 1, false).required).toBe(true);
+    const cert = policy("sick", { medical_certificate_required: true, medical_certificate_after_days: 3 });
+    expect(documentRule(cert, 2, false)).toEqual({ required: false,
+      hint: "A medical certificate is required for leave of 3 or more days." });
+    expect(documentRule(cert, 3, false).required).toBe(true);
+    expect(documentRule(undefined, 1, true).required).toBe(true);                    // not loaded yet: built-in default
   });
 });

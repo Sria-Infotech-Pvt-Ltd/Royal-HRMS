@@ -118,6 +118,27 @@ export interface LeavePolicy {
   updated_at:            string;
   /** The signed-in employee may apply for this type (active + eligibility rules such as gender). */
   eligible_for_me?:      boolean;
+  medical_certificate_after_days?: number;
+}
+
+// Whether the Apply Leave form must ask for a supporting document — follows the
+// leave type's settings (same rule as the server):
+//   Attachment Required             → always required
+//   Medical Certificate Required    → required for leave of N or more days
+//                                     (N = "Certificate Required After")
+//   neither                         → optional
+// `fallback` (the built-in default) only applies while the policy hasn't loaded.
+export function documentRule(
+  policy: LeavePolicy | undefined, days: number, fallback: boolean,
+): { required: boolean; hint: string } {
+  if (!policy) return { required: fallback, hint: "" };
+  if (policy.attachment_required) return { required: true, hint: "" };
+  if (policy.medical_certificate_required) {
+    const n = Number(policy.medical_certificate_after_days ?? 0);
+    const hint = `A medical certificate is required for leave of ${n} or more day${n === 1 ? "" : "s"}.`;
+    return { required: days >= n, hint };
+  }
+  return { required: false, hint: "" };
 }
 
 export interface LeaveBalance {
