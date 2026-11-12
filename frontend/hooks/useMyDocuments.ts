@@ -18,6 +18,10 @@ export type DocumentStatus = "pending" | "verified" | "rejected";
 
 export interface ApiDocumentSubmission {
   id: string;
+  /** "onboarding" rows were uploaded during onboarding and are read-only here. */
+  source: "submission" | "onboarding";
+  /** Heading to show: the document type's name for onboarding documents, the file name otherwise. */
+  title: string;
   category: DocumentCategory;
   category_display: string;
   file_name: string;

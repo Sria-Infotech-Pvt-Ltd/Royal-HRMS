@@ -106,13 +106,15 @@ function MyDocumentsList({ submissions, loading, error, onDelete }: {
 
 function DocumentRow({ doc, onDelete }: { doc: ApiDocumentSubmission; onDelete: (doc: ApiDocumentSubmission) => void }) {
   // HR-verified documents are part of the employee's record — the server refuses to delete them, so no button.
-  const canDelete = doc.status !== "verified";
+  // Documents uploaded during onboarding are read-only here (HR manages them).
+  const canDelete = doc.status !== "verified" && doc.source !== "onboarding";
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-v)", gap: 12 }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.file_name}</div>
+        <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</div>
         <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
           {doc.category_display} · {doc.expiry_date ? formatDate(doc.expiry_date) : "No expiry"}
+          {doc.title !== doc.file_name && ` · ${doc.file_name}`}
           {!doc.file_url && " · File not stored (submitted before uploads were kept)"}
         </div>
       </div>
