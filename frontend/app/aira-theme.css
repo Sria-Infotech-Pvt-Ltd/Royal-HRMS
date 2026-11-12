@@ -774,3 +774,24 @@ main>div:has(>.wf-dashboard){padding:0}
 .nm-signout{display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;border:0;border-radius:12px;background:none;padding:10px 12px;font-size:13px;font-weight:600;color:var(--crit,#c0392b);transition:background .12s}
 .nm-signout:hover{background:var(--sunken)}
 
+
+/* ---- Top bar responsiveness ----
+   Whether the links show as a bar or collapse into the Menu button is decided in TopNavLinks.tsx by measuring, so it
+   works for any number of modules (the old fixed 940px switch could not). Links never wrap or shrink. */
+.nav-desktop>*{flex:none}
+.nav-desktop .navlink{white-space:nowrap}
+
+/* Mid widths: let search shrink rather than push the other controls off the bar. */
+@media (max-width:1100px){.topnav .navsearch{flex:0 1 150px;min-width:0;width:150px}.topnav .navsearch .kbd{display:none}}
+
+/* Phones and small tablets: one tidy row (brand, Menu, then theme / bell / profile on the right) instead of two wrapped rows. */
+@media (max-width:760px){
+  .topnav{flex-wrap:nowrap!important;height:52px;min-height:52px;padding:0 12px;gap:8px}
+  .topnav .brandmark{height:auto;min-width:0}
+  .topnav .navright{gap:6px}
+  .topnav .iconbtn{width:32px;height:32px}
+  .topnav .who-chip{padding:3px}
+  .topnav .who-chip .ti-chevron-down,.topnav .who-chip .ti-chevron-up{display:none}
+}
+/* Very narrow phones: the brand shrinks to its logo so Menu and the controls never overflow. */
+@media (max-width:400px){.topnav .brandcopy{display:none}.topnav .nav-mobile .who-chip{padding-right:7px}}

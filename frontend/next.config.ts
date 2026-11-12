@@ -1,3 +1,5 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
 // Destination for the /api/* proxy, called server-side by the Next.js
@@ -20,7 +22,7 @@ const nextConfig: NextConfig = {
   // up looking for lockfiles and finds the repo-root package-lock.json above
   // frontend/ too, so it guesses the wrong root and warns on every dev/build.
   turbopack: {
-    root: __dirname,
+    root: path.dirname(fileURLToPath(import.meta.url)),
   },
   // Prevent Next.js from 308-redirecting /api/login/ → /api/login before the
   // rewrite runs. Without this, Django's APPEND_SLASH raises a RuntimeError on

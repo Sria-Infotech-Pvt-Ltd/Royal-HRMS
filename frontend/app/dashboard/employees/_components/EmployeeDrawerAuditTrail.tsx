@@ -19,6 +19,9 @@ export interface AuditTrailRow {
   created_at: string;
 }
 
+/** About one entry tall (plus a peek of the next, so it reads as scrollable). */
+const AUDIT_LIST_MAX_HEIGHT = 96;
+
 interface Props {
   rows: AuditTrailRow[] | null;
   /** The endpoint refused this viewer (needs audit.view): say so instead of
@@ -38,21 +41,25 @@ export default function EmployeeDrawerAuditTrail({ rows, forbidden = false, load
       ) : !rows || rows.length === 0 ? (
         <p className="hint">No access recorded yet in this session.</p>
       ) : (
-        rows.map(row => (
-          <div key={row.id} className="actrow">
-            <span className="bar" />
-            <div className="meta">
-              <div className="t1">{row.description || (row.action === "profile_viewed_self" ? "Record viewed" : row.action.replace(/_/g, " "))}</div>
-              <div className="t2">
-                {row.actor_name} · {row.action === "profile_viewed_self" ? "Employee (self-service)" : (row.actor_role || "Admin")}
+        // Newest first: only the latest entry shows at rest, the rest scroll
+        // inside this box so a long history doesn't stretch the whole form.
+        <div style={{ maxHeight: AUDIT_LIST_MAX_HEIGHT, overflowY: "auto", paddingRight: 6 }}>
+          {rows.map(row => (
+            <div key={row.id} className="actrow">
+              <span className="bar" />
+              <div className="meta">
+                <div className="t1">{row.description || (row.action === "profile_viewed_self" ? "Record viewed" : row.action.replace(/_/g, " "))}</div>
+                <div className="t2">
+                  {row.actor_name} · {row.action === "profile_viewed_self" ? "Employee (self-service)" : (row.actor_role || "Admin")}
+                </div>
+              </div>
+              <div className="dates" style={{ textAlign: "right" }}>
+                {formatDateSlash(row.created_at)}
+                <div className="actdel">{formatTimeHm(row.created_at)}</div>
               </div>
             </div>
-            <div className="dates" style={{ textAlign: "right" }}>
-              {formatDateSlash(row.created_at)}
-              <div className="actdel">{formatTimeHm(row.created_at)}</div>
-            </div>
-          </div>
-        ))
+          ))}
+        </div>
       )}
     </SectionCard>
   );

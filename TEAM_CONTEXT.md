@@ -5360,3 +5360,31 @@ Also on 2026-11-10: the new Neon database was migrated from empty (521 migration
 **Related findings, not changed (ask before doing):**
 - Org-chart "Assign holder" dropdown is empty for newly imported teams: `OrgStructureClient.tsx` loads employees with `status=active` (account enabled AND onboarding complete AND activated), so employees still in Onboarding are not offered. Proposed small frontend change: also offer Onboarding employees. Assigning someone already seated moves them (their old seat is closed).
 - Reporting manager after import comes from the org chart: the person holding the unit's chief seat (or the nearest ancestor's), same branch name, active. In the checked database 43 chief seats existed and none was held, so nobody resolved. Alternatives: the Excel column "Reporting Manager Employee ID", or assign by hand.
+
+## Local setup fixes, ESS Home/Profile UI, Announcements tab, responsive top bar (2026-11-12)
+
+**By:** Rithwika - **Branch:** Rithwika. Everything below is in the working tree, nothing committed. None of the UI was checked in a browser; only `eslint` and `tsc` on the touched files.
+
+**Local setup (Windows, Python 3.14)**
+- `backend/requirements.txt`: `PyYAML` 6.0.2 -> 6.0.3. 6.0.2 has no Python 3.14 wheel, so pip tried to compile it and failed (needs MSVC build tools). 6.0.3 ships a cp314 wheel. Other pins (`msgpack`, `rapidfuzz`, `indiapins`, `channels-redis`) may hit the same problem; the fallback is a Python 3.12/3.13 venv.
+- Celery worker could not start: nothing was listening on Redis `127.0.0.1:6379` (no Redis on this machine, no WSL, no Docker). Memurai (`winget install --id Memurai.MemuraiDeveloper -e`) needs an Administrator shell; the install from a non-elevated session was cancelled (exit 1602). **Still to do by hand.** If the backend `.env` sets a Redis password, Memurai needs the same one (`requirepass` in `memurai.conf`).
+- `frontend/next.config.ts`: `__dirname` is not defined (the file is compiled as an ES module). `turbopack.root` now uses `path.dirname(fileURLToPath(import.meta.url))`.
+- `@next/swc-win32-x64-msvc` was corrupt ("not a valid Win32 application"); deleting that package folder and running `npm install` fixed it.
+- `@tabler/icons-webfont` was installed without its `.woff/.woff2/.ttf` files (only `.svg`), so `app/layout.tsx` failed with "Can't resolve ./fonts/tabler-icons.ttf". The package folder was emptied while a running dev server held it, so `npm install` failed with EBUSY. **Fix: stop `npm run dev`, delete `node_modules/@tabler/icons-webfont` and `.next`, run `npm install`, check that `dist/fonts` has the font files, restart.** Not confirmed finished.
+- **Frontend was calling the wrong backend.** `frontend/` had no env file, so `next.config.ts` fell back to `http://localhost:8000` (the pricing tool backend). New `frontend/.env.local` (gitignored) sets `NEXT_PUBLIC_API_URL` and `INTERNAL_API_URL` to `http://localhost:8001`. Use `localhost`, not `127.0.0.1`, or the auth cookies are not sent. Next.js reads env files only at startup, so restart `npm run dev` after changing it. `backend/config/settings.py`: port 8001 added to the DEBUG-only `CSRF_TRUSTED_ORIGINS`.
+
+**Employee workspace (ESS) UI**
+- Audit Trail (`employees/_components/EmployeeDrawerAuditTrail.tsx`): the list scrolls inside a ~96px box so only the latest entry shows at rest.
+- "My record at a glance" (`ess/_components/ProfileSummaryTab.tsx` and `profile/ProfileClient.tsx`): tiles are `repeat(auto-fill, minmax(200px, 280px))` instead of two stretched columns.
+- Home: new "Time worked today" card (`ess/_components/HomeWorkedTodayCard.tsx`, hook `hooks/useWorkedToday.ts`). Hidden until the first punch of the day. Live session timer plus the day total, a PUNCH IN tile (first punch-in) and a PUNCH OUT tile (latest punch-out, shown only when punched out), and the Punched In/Out badge. Reads `API.attendance.today` (same data as the My Attendance clock widget), refetches when the Home status changes and on the `attendance:updated` event. Not shown when an admin is viewing someone else's workspace.
+- New **Announcements** tab in the ESS tab bar (between Requests and HR help): `ess/_components/EssAnnouncementsTab.tsx` and `EssAnnouncementDetailModal.tsx`, wired in `ess/_client.tsx`. Read-only list (category filters, paging, like) using the existing `API.announcements.*`; the list endpoint only needs a signed-in user, unlike the management page `/dashboard/announcements`, which needs `announcements.view`. Opening one records a view, which makes the server mark its bell notification read. Posting/editing stays on the management page.
+- Bell notification click: `lib/notificationRoutes.ts` now sends the `announcement` module to `/dashboard/ess?tab=announcements&announcement=<id>` (the notification's `reference_id` is the announcement id; a non-numeric one opens the tab only). `ess/_client.tsx` reads the tab from `useSearchParams`, so the link also works when already on the workspace page. `notificationRoutes.test.ts` updated.
+  - Known: HR/admins who post announcements also land on the workspace tab from the bell (they reach posting from the sidebar). Re-clicking the same notification right after closing its detail view does not reopen it (the URL is unchanged).
+
+**Top bar responsiveness**
+- `components/dashboard/TopNavLinks.tsx`: the links collapse into the single Menu button only when they do not fit. It measures the links' natural width against the space its slot gets (`ResizeObserver`, re-checked when fonts load), replacing the fixed 940px CSS switch, which could not suit a 7-module admin bar vs a 2-module employee bar.
+- `app/aira-theme.css` (appended block): links never wrap or shrink; search shrinks to 150px at <=1100px and hides the shortcut hint; at <=760px the bar is one 52px row (it used to wrap onto two rows, 98px tall); at <=400px only the brand logo shows. Search is still hidden below 640px (existing rule, unchanged).
+
+**Tests / verification**
+- `vitest` crashes in this environment ("Cannot read properties of undefined (reading 'config')") even on untouched test files such as `navConfig.test.ts`, so the updated route test was not run. The route function was checked directly in Node instead. `tsc --noEmit` reports only pre-existing `face-api.js` missing-types errors.
+

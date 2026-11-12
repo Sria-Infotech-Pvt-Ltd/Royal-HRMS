@@ -174,7 +174,7 @@ export default function ProfileSummaryTab() {
           <div style={{ fontWeight: 700, fontSize: 15 }}>My record at a glance</div>
           <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>Review official fields, then open the full record for all sections.</div>
         </div>
-        <div style={{ padding: "4px 20px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div style={{ padding: "4px 20px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 280px))", gap: 14 }}>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>EMPLOYEE ID</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.employee_id ?? "—"}</div>

@@ -1,8 +1,10 @@
 "use client";
 
-// The top bar's page links: direct links plus one dropdown per section. Below 940px everything collapses into a
-// single menu button. Which page is "current" underlines its section and highlights it inside the dropdown.
+// The top bar's page links: direct links plus one dropdown per section. When the links do not fit in the space the bar
+// leaves them (which depends on how many modules this person has, not just the screen width), everything collapses
+// into a single menu button. Which page is "current" underlines its section and highlights it inside the dropdown.
 
+import { useLayoutEffect, useRef, useState } from "react";
 import { MENU_ATTRIBUTE, type OpenMenu } from "@/hooks/useOpenMenu";
 import type { BarEntry, NavItem } from "@/lib/navConfig";
 import NavMenuItems from "@/components/dashboard/NavMenuItems";
@@ -30,15 +32,48 @@ function PanelHeader({ title, count }: { title: string; count: number }) {
   );
 }
 
+const LINK_GAP_PX = 2;
+
 export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Props) {
+  const slotRef = useRef<HTMLDivElement>(null);
+  const linksRef = useRef<HTMLElement>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Compare the links' natural width with the room the bar gives this slot. The links stay laid out (just hidden)
+  // while collapsed, so their natural width can still be measured and the bar re-expands as soon as there is room.
+  useLayoutEffect(() => {
+    const slot = slotRef.current;
+    const links = linksRef.current;
+    if (!slot || !links) return undefined;
+    function measure() {
+      if (!slot || !links) return;
+      const children = Array.from(links.children) as HTMLElement[];
+      const needed = children.reduce((sum, child) => sum + child.offsetWidth, 0) + LINK_GAP_PX * Math.max(0, children.length - 1);
+      setIsCollapsed(needed > slot.clientWidth);
+    }
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(slot);
+    document.fonts?.ready.then(measure).catch(() => { /* fonts API unavailable: the observer still covers resizes */ });
+    return () => observer.disconnect();
+  }, [bar]);
+
   function select(item: NavItem) {
     menu.close();
     onNavigate(item.path);
   }
 
   return (
-    <>
-      <nav className="nav-desktop h-full min-w-0 flex-1 items-center gap-0.5" aria-label="Main">
+    <div ref={slotRef} className="relative flex h-full min-w-0 flex-1 items-center">
+      <nav
+        ref={linksRef}
+        className="nav-desktop h-full items-center gap-0.5"
+        aria-label="Main"
+        aria-hidden={isCollapsed}
+        style={isCollapsed
+          ? { display: "flex", position: "absolute", left: 0, top: 0, visibility: "hidden", pointerEvents: "none" }
+          : { display: "flex" }}
+      >
         {bar.map(entry => {
           if (entry.kind === "link") {
             const { item } = entry;
@@ -75,7 +110,7 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
         })}
       </nav>
 
-      <div className="nav-mobile relative" {...{ [MENU_ATTRIBUTE]: "" }}>
+      <div className="nav-mobile relative" style={{ display: isCollapsed ? "block" : "none" }} {...{ [MENU_ATTRIBUTE]: "" }}>
         <button
           type="button"
           className="who-chip"
@@ -97,6 +132,6 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }

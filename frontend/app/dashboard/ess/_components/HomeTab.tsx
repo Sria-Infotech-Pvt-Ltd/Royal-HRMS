@@ -26,6 +26,7 @@ import {
 import HomeStatTiles from "./HomeStatTiles";
 import HomeQuickActions from "./HomeQuickActions";
 import HomeTodayPanel from "./HomeTodayPanel";
+import HomeWorkedTodayCard from "./HomeWorkedTodayCard";
 import HomeRequestsList from "./HomeRequestsList";
 import HomePayslipsPanel from "./HomePayslipsPanel";
 import HomeProjectsPanel from "./HomeProjectsPanel";
@@ -164,6 +165,8 @@ export default function HomeTab({ onNavigate, status, isReadOnly = false }: Prop
   return (
     <div>
       <HomeStatTiles tiles={tiles} />
+
+      {!isReadOnly && <HomeWorkedTodayCard status={status} />}
 
       {!isReadOnly && <EssFaceIdCard />}
 
