@@ -3098,3 +3098,114 @@ sudo supervisorctl status | grep royalhrms
     plan, Platform Admin mobile layout, Add Company code check, GST default
     for non-INR, DEMO2026 Aug / Sep payroll cleanup confirmation, staging and
     `backend/.env.example` still missing.
+
+------------------------------------------------------------------------
+
+# 36. Server operations log (2026-10-28 → 2026-11-12)
+
+Infrastructure and operations work, not application code. Secrets, passwords
+and personal data are not recorded here. Word documents for the client's
+deployment team (listed at the end) are kept outside the repo.
+
+## RIS inactive accounts deleted (2026-10-28)
+-   After the RIS → RSS conversion (§32), 8 inactive **duplicate** accounts
+    (same person re-created with a different email: same name, phone and
+    date of joining) and 1 inactive former employee who had never logged in
+    were deleted, after HR confirmation.
+-   Checked first with Django's deletion `Collector`: only auto-created rows
+    (`LeaveBalance`, `EmployeeWeeklyOffAssignment`, one `EmployeeProfile`); no
+    attendance, payroll, leave usage or documents; no links on other records
+    cleared. Each delete ran in one transaction with an `AuditLog` row
+    (`employee_duplicate_accounts_deleted`, `employee_inactive_account_deleted`).
+-   Restore points (contain personal data, delete when no longer needed):
+    `/root/backups/royalhrms_db_before_delete_dupes_20261028_0653.dump`,
+    `/root/backups/royalhrms_db_before_delete_RSS0605PP_20261028_0659.dump`.
+
+## Google Maps key deployed (2026-11-10)
+-   `GOOGLE_MAPS_API_KEY` added to `backend/.env` (backup
+    `backend/.env.bak_20261110_0726`), `manage.py check` clean,
+    `royalhrms_backend` + `royalhrms_celery_worker` restarted. Server was on
+    `9970fdb` at the time.
+-   First live call returned `REQUEST_DENIED`: the server calls Google over
+    **IPv6** (`2a02:4780:75:8f41::1`) and the key allowed only the IPv4
+    address. Fixed by adding the IPv6 address to the key's IP restriction;
+    re-test returned a Google address with no fallback warning.
+-   **Any future IP-restricted API key must list both the IPv4 and the IPv6
+    address of this server.**
+
+## Live server inventory (2026-11-12) — corrections to §§2–24
+-   **Third application, bito:** `bitojobs.com`, `www.bitojobs.com`; folder
+    `/var/www/bito/app/bito-jobs/backend`; Supervisor `bito_daphne`
+    (`daphne -b 127.0.0.1 -p 8002 app.main:app`) and `bito_worker`
+    (`python -m app.worker`); Linux user `bito`. Its Nginx `server_name` also
+    contains the bare IP `2.25.73.246`.
+-   **CareerBuddy dev copy:** `dev.careerbuddy4u.com`;
+    `/var/www/careerbuddy4u-dev/app`; Supervisor `careerbuddy_daphne_dev`
+    (`/usr/local/bin/careerbuddy-daphne-dev.sh`, Daphne on 127.0.0.1:8010).
+-   **Docker is installed** (contrary to §16): one container `minio`
+    (`quay.io/minio/minio`) published on 0.0.0.0:9000 (API) and :9001
+    (console). UFW also allows 9000/9001 (IPv4), and Docker-published ports
+    bypass UFW anyway, so **the MinIO console is reachable from the
+    internet**. CareerBuddy prod and dev proxy `/storage/` → 127.0.0.1:9000.
+-   PostgreSQL is `postgresql@16-main`; MySQL also listens on 127.0.0.1:33060.
+-   **Ports to add to the "do not reuse" list (§10):** 3001, 5432, 8001,
+    8002, 8010, 9000, 9001, 33060.
+-   Exporter service names are `nginx-exporter` and
+    `prometheus-mysqld-exporter` (not the names in §12).
+-   Certificates (auto-renewed by certbot): careerbuddy4u.com 2026-12-28,
+    bitojobs.com 2027-01-05, dev.careerbuddy4u.com 2027-01-26, royalhrms.com
+    (+ www, api) 2027-01-29, monitor.careerbuddy4u.com 2027-01-30.
+-   Disk 17 GB used of 193 GB; no swap; no scheduled database dumps for any
+    application; unattended-upgrades reports a package it could not install.
+
+## Grafana (2026-11-11)
+-   `https://monitor.careerbuddy4u.com`, Grafana 13.1.0. Nobody had the admin
+    password, so it was reset (backup `/root/backups/grafana_20261111_1703.db`).
+    Run the CLI as user `grafana` **from `/usr/share/grafana`** — from `/root`
+    it panics with "error getting work directory: permission denied":
+    `cd /usr/share/grafana && ... | sudo -u grafana grafana cli --homepath /usr/share/grafana --config /etc/grafana/grafana.ini admin reset-admin-password --password-from-stdin`.
+    The password is held by the owner, not recorded.
+-   The server and Grafana belong to the client; the client's team gets its
+    own Grafana user (organisation role Admin). Full visibility is agreed.
+
+## CareerBuddy-only monitoring (applied 2026-11-12)
+-   Backup of all changed files: `/root/backups/cb_metrics_20261112_0909`.
+-   `nginx.conf`: `log_format cb_json` (JSON: time, host, ip, method, uri
+    **without query string**, status, bytes, `request_time`,
+    `upstream_response_time`, user agent) after the shared `access_log` line.
+-   `sites-available/careerbuddy4u`, 443 block: its own log
+    `/var/log/nginx/careerbuddy4u.access.log cb_json` plus the shared
+    `access.log` (kept). `nginx -t` + reload, no downtime.
+-   Promtail: new job `careerbuddy_access` (labels `app=careerbuddy`,
+    `job=careerbuddy`, `env=production`, `method` extracted). The two shared
+    Nginx jobs were relabelled `host=all-sites` — the old `host=careerbuddy4u.com`
+    label was wrong, that log contains every site.
+-   Grafana dashboard **"CareerBuddy — Production"** (17 panels): visitors,
+    requests, logins per minute for `/users/login/` and
+    `/employer/accounts/employer/login/`, error rate, response time
+    (p95 / average), slowest pages, MySQL, server.
+-   Rollback: copy the files back from the backup folder, `nginx -t &&
+    systemctl reload nginx`, `systemctl restart promtail`.
+-   Not done: process-exporter (per-application CPU/RAM); Loki retention to
+    confirm (the logs contain visitor IP addresses).
+
+## CareerBuddy capacity findings (for its pilot — CareerBuddy team's decision)
+-   One Daphne process (about 8 threads for normal Django views, about one
+    CPU), no Celery or worker, `proxy_read_timeout 86400` on `location /`,
+    `client_max_body_size 300M`, Nginx `worker_connections 768`.
+-   Recommended before a 500-user pilot: 3–4 Daphne processes on free ports,
+    `ASGI_THREADS` 16–32, 4 GB swap, 60–120 s timeout for normal pages, stop
+    the dev copy during the pilot, and a load test.
+
+## Documents for the client deployment team (not in the repo)
+-   `Server_Architecture_srv1795199_v1.0.docx`,
+    `Application_Update_Procedures_v1.0.docx` (Royal HRMS standard procedure;
+    CareerBuddy part is a DRAFT for their team to confirm),
+    `CareerBuddy_Metrics_Plan_v1.1.docx`, `careerbuddy_production_dashboard.json`.
+
+## Open items
+-   MinIO 9000/9001 public exposure; swap; scheduled database backups;
+    pending OS updates and reboot; bito answering on the bare IP.
+-   CareerBuddy pilot fixes and load test; process-exporter; Loki retention.
+-   Delete old dumps in `/root/backups/` once they are no longer needed
+    (they contain personal data).
