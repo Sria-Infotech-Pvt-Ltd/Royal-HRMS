@@ -31,6 +31,7 @@ from apps.dashboard.views.people import (
     EmployeeRecentRequestsView,
 )
 from apps.dashboard.views.employee_projects import EmployeeProjectAssignmentsView
+from apps.dashboard.views.trends import HeadcountTrendView, LeaveTrendView, PayrollCostTrendView
 __all__ = [
     'MyBirthdayWidgetsView',
     'ManagerDashboardView',
@@ -59,4 +60,7 @@ __all__ = [
     'EmployeeActionItemsView',
     'EmployeeRecentRequestsView',
     'EmployeeProjectAssignmentsView',
+    'HeadcountTrendView',
+    'LeaveTrendView',
+    'PayrollCostTrendView',
 ]

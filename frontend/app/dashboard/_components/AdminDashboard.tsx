@@ -9,6 +9,7 @@ import BirthdayWidget        from "@/components/dashboard/BirthdayWidget";
 import AuditLogsWidget       from "@/components/dashboard/AuditLogsWidget";
 import { KpiCard, AttendanceTrend, AttendanceInsights, WfIcon } from "@/components/dashboard/WorkforceWidgets";
 import WorkforceOperations   from "@/components/dashboard/WorkforceOperations";
+import { HeadcountTrendCard, LeaveTrendCard, PayrollCostTrendCard } from "@/components/dashboard/TrendCharts";
 import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { useRouter } from "next/navigation";
 import type { SessionPayload } from "@/lib/session";
@@ -87,6 +88,15 @@ export default function AdminDashboard({ session }: Props) {
       </div>
 
       <WorkforceOperations overview={overview ?? null} overviewLoading={overviewLoading} />
+
+      {/* Historical trends — headcount growth, leave approvals/rejections, payroll cost */}
+      <div className="grid-2 mb-20">
+        <HeadcountTrendCard />
+        <LeaveTrendCard />
+      </div>
+      <div className="mb-20">
+        <PayrollCostTrendCard />
+      </div>
 
       {/* Announcement */}
       <AnnouncementCard />
