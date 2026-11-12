@@ -7,7 +7,13 @@ import DeptHeadcountChart    from "@/components/dashboard/DeptHeadcountChart";
 import EmployeeLifecycleTabs from "@/components/dashboard/EmployeeLifecycleTabs";
 import BirthdayWidget        from "@/components/dashboard/BirthdayWidget";
 import AuditLogsWidget       from "@/components/dashboard/AuditLogsWidget";
+import { KpiCard, AttendanceTrend, AttendanceInsights, WfIcon } from "@/components/dashboard/WorkforceWidgets";
+import WorkforceOperations   from "@/components/dashboard/WorkforceOperations";
+import { useDashboardOverview } from "@/hooks/useDashboardOverview";
+import { useRouter } from "next/navigation";
 import type { SessionPayload } from "@/lib/session";
+
+const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : null);
 
 interface Props { session: SessionPayload }
 
@@ -30,11 +36,57 @@ const QUICK_ACTIONS: QuickAction[] = [
 
 export default function AdminDashboard({ session }: Props) {
   const firstName = session.name.split(" ")[0];
+  const router = useRouter();
+  // Same company-wide workforce analytics the Workforce (HR) Dashboard
+  // shows — a superuser holds every permission those widgets check, so
+  // nothing here is hidden; this is strictly additive to KpiConsole's own
+  // branch/approval/onboarding health pills below, not a replacement.
+  const { data: overview, loading: overviewLoading } = useDashboardOverview();
+  const totalHeadcount = overview?.total_headcount ?? 0;
+  const presentToday = overview?.present_today ?? 0;
+  const attendancePct = overview?.attendance_pct ?? 0;
+  const payrollReady = overview?.payroll_ready ?? 0;
+  const payrollTotal = overview?.payroll_total ?? 0;
+  const payrollBlocked = overview?.payroll_blocked ?? 0;
 
   return (
     <>
       {/* KPI Console — welcome + health pills + live stats */}
       <KpiConsole firstName={firstName} />
+
+      {/* Company-wide workforce analytics — headcount, attendance, payroll readiness */}
+      <div className="wf-stats mb-20">
+        <KpiCard
+          label="TOTAL HEADCOUNT" icon={WfIcon.people} tone="brand" loading={overviewLoading}
+          value={totalHeadcount} sub="company-wide"
+          onClick={() => router.push("/dashboard/employees")}
+        />
+        <KpiCard
+          label="PRESENT TODAY" icon={WfIcon.check} tone="ok" loading={overviewLoading}
+          value={presentToday} sub={`${attendancePct}% attendance`}
+          progress={attendancePct}
+          onClick={() => router.push("/dashboard/attendance")}
+        />
+        <KpiCard
+          label="PAYROLL READY" icon={WfIcon.wallet} tone="info" loading={overviewLoading}
+          value={payrollReady} sub={`${payrollBlocked} records blocked`}
+          trend={payrollBlocked > 0 ? { text: "Action", tone: "warn" } : null}
+          progress={pct(payrollReady, payrollTotal)}
+          onClick={() => router.push("/dashboard/payroll")}
+        />
+      </div>
+
+      <div className="card mb-20">
+        <div className="card-header">
+          <div className="card-title"><i className="ti ti-chart-line" /> Attendance this week</div>
+        </div>
+        <div className="card-body wf-week">
+          <AttendanceTrend data={overview?.weekly_attendance ?? []} total={totalHeadcount} loading={overviewLoading} />
+          <AttendanceInsights data={overview?.weekly_attendance ?? []} total={totalHeadcount} loading={overviewLoading} />
+        </div>
+      </div>
+
+      <WorkforceOperations overview={overview ?? null} overviewLoading={overviewLoading} />
 
       {/* Announcement */}
       <AnnouncementCard />
