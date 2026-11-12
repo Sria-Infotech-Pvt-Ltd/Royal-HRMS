@@ -9,7 +9,7 @@ import { getLeaveYear } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
   LeaveTypeKey, DurationKey, LeaveTypeConfig,
-  buildLeaveTypesList,
+  buildApplicableLeaveTypes,
   calcWorkingDays, fmtDate,
 } from "../_data";
 
@@ -64,10 +64,10 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const { data: balances } = useFetch<LeaveBalance[]>(API.leave.balance + `?year=${currentYear}`);
   const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
 
-  // The 6 built-ins plus any active custom LeavePolicy (e.g. "Pink Leave")
-  // — see buildLeaveTypesList's own docstring for why this replaces the
-  // old hardcoded LEAVE_TYPES_LIST here.
-  const leaveTypes = useMemo(() => buildLeaveTypesList(policies), [policies]);
+  // The built-ins plus any active custom LeavePolicy (e.g. "Pink Leave"), limited
+  // to the types this employee is eligible for (gender etc.) — see
+  // buildApplicableLeaveTypes.
+  const leaveTypes = useMemo(() => buildApplicableLeaveTypes(policies), [policies]);
   const leaveTypeMap = useMemo(
     () => Object.fromEntries(leaveTypes.map(lt => [lt.key, lt])),
     [leaveTypes],

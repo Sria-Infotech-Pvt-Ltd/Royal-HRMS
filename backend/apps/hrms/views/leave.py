@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, Exists, F, OuterRef, Q, Sum
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
@@ -545,10 +545,10 @@ def _validate_leave_policy(policy, employee, duration, total_days, start, end, d
         emp_dept = (getattr(employee, 'department', '') or '').strip()
         if emp_dept and emp_dept not in policy.applicable_departments:
             return 'You are not eligible for this leave type (department restriction).'
-    if policy.applicable_gender != 'all':
-        emp_gender = (getattr(employee, 'gender', '') or '').lower().strip()
-        if emp_gender and emp_gender != policy.applicable_gender:
-            return 'You are not eligible for this leave type (gender restriction).'
+    # Gender lives on EmployeeProfile (employee.profile.gender), not on User — the
+    # same rule _eligible_for_policy() uses when balances are created.
+    if not _gender_allows(employee, policy):
+        return 'You are not eligible for this leave type (gender restriction).'
     if policy.minimum_service_period:
         joining = getattr(employee, 'date_of_joining', None) or getattr(employee, 'joining_date', None)
         if joining:
@@ -588,8 +588,13 @@ class LeavePolicyView(APIView):
     def get(self, request):
         self._ensure_policies()
         from core.cache_service import LeavePolicyCacheService
-        policies = LeavePolicyCacheService.get_all()
-        return success('Leave policies retrieved.', LeavePolicySerializer(policies, many=True).data)
+        policies = list(LeavePolicyCacheService.get_all())
+        data = LeavePolicySerializer(policies, many=True).data
+        # Whether the requesting employee may apply for each type (active, and the
+        # gender rule allows them) — the Apply Leave picker shows only these.
+        for row, policy in zip(data, policies):
+            row['eligible_for_me'] = bool(policy.is_active and _gender_allows(request.user, policy))
+        return success('Leave policies retrieved.', data)
 
     def put(self, request, leave_type: str):
         if not (_has_perm(request.user, 'settings.edit') or _has_perm(request.user, 'leave.approve')):
@@ -600,7 +605,14 @@ class LeavePolicyView(APIView):
         serializer = LeavePolicyUpdateSerializer(policy, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
+        old_gender = policy.applicable_gender
         serializer.save()
+        # Gender rule changed (e.g. All -> Female only): this year's unused balances
+        # held by employees the rule no longer allows are removed, so they stop
+        # seeing / holding that leave. Used or HR-credited balances are kept.
+        removed = 0
+        if policy.applicable_gender != old_gender:
+            removed = _remove_unused_gender_ineligible_balances(policy, _current_year())
         # Re-sync LeaveBalance rows against the policy's (possibly just
         # changed) eligibility rules — covers widened/narrowed branch,
         # department, designation, gender or minimum_service_period, and
@@ -611,7 +623,10 @@ class LeavePolicyView(APIView):
         # docstring for why employees who lost eligibility are left alone.
         if policy.is_active:
             _allocate_new_policy_for_existing_employees(policy)
-        return success('Policy updated.', LeavePolicySerializer(policy).data)
+        msg = 'Policy updated.'
+        if removed:
+            msg += f' Removed {removed} unused balance(s) from employees this leave type no longer applies to.'
+        return success(msg, LeavePolicySerializer(policy).data)
 
     def patch(self, request, leave_type: str):
         return self.put(request, leave_type)
@@ -701,7 +716,8 @@ class LeaveBalanceView(APIView):
         except (TypeError, ValueError):
             return error('year must be a valid integer.')
         from apps.accounts.models import User
-        employees = User.objects.filter(is_active=True, onboarding_status='complete').exclude(employee_id='')
+        employees = (User.objects.filter(is_active=True, onboarding_status='complete').exclude(employee_id='')
+                     .select_related('profile'))
 
         specific_id = request.data.get('employee_id')
         if specific_id:
@@ -709,10 +725,15 @@ class LeaveBalanceView(APIView):
 
         policies = {p.leave_type: p for p in LeavePolicy.objects.filter(is_active=True)}
         created_count = 0
+        today = timezone.localdate()
 
         for emp in employees:
             for lt, policy in policies.items():
                 if lt == LEAVE_LWP:
+                    continue
+                # Same eligibility rules (gender, branch, department, designation,
+                # service period) as every other balance-creating path.
+                if not _eligible_for_policy(emp, policy, today):
                     continue
                 balance, created = LeaveBalance.objects.get_or_create(
                     employee=emp, leave_type=lt, year=year,
@@ -962,6 +983,11 @@ class LeaveRequestListCreateView(APIView):
 
         from core.cache_service import LeavePolicyCacheService
         policy     = LeavePolicyCacheService.get(leave_type)
+        # The cache returns active policies only; a deactivated leave type (built-ins
+        # such as Paternity pass the serializer) must not be applied for at all —
+        # otherwise every rule of that type (gender, notice, ...) would be skipped.
+        if policy is None and LeavePolicy.objects.filter(leave_type=leave_type, is_active=False).exists():
+            return error('This leave type is not available.')
         total_days = _calc_working_days(start, end, duration, policy, request.user)
 
         if total_days <= 0:
@@ -1575,6 +1601,47 @@ def _eligible_for_policy(employee, policy, today) -> bool:
         if emp_gender != policy.applicable_gender:
             return False
     return True
+
+
+def _gender_allows(employee, policy) -> bool:
+    """The policy's gender rule allows this employee. Gender comes from
+    employee.profile; an employee without a recorded gender is not eligible for a
+    gender-restricted type (same rule as _eligible_for_policy())."""
+    if policy.applicable_gender in ('', 'all'):
+        return True
+    profile = getattr(employee, 'profile', None)
+    return bool(profile and (profile.gender or '').lower() == policy.applicable_gender)
+
+
+def _remove_unused_gender_ineligible_balances(policy, year: int) -> int:
+    """Delete `year`'s LeaveBalance rows of this type held by employees whose
+    recorded gender the policy doesn't allow — only when completely unused: no
+    days used, no credit history (it would cascade), no leave request of this
+    type that year. Employees without a recorded gender are left for HR.
+    Returns the number of rows removed."""
+    if policy.applicable_gender in ('', 'all'):
+        return 0
+    from django.core.cache import cache
+    requested = LeaveRequest.objects.filter(
+        employee_id=OuterRef('employee_id'), leave_type=policy.leave_type, start_date__year=year)
+    rows = (LeaveBalance.objects
+            .filter(leave_type=policy.leave_type, year=year, used_days=0, credit_transactions__isnull=True,
+                    employee__profile__isnull=False)
+            .exclude(employee__profile__gender__in=('', policy.applicable_gender))
+            .exclude(Exists(requested)))
+    employee_ids = list(rows.values_list('employee_id', flat=True))
+    if not employee_ids:
+        return 0
+    with transaction.atomic():
+        _, per_model = LeaveBalance.objects.filter(
+            leave_type=policy.leave_type, year=year, employee_id__in=employee_ids, used_days=0,
+            credit_transactions__isnull=True).delete()
+    for emp_id in employee_ids:
+        cache.delete(f'dashboard:employee:leave_balance:{emp_id}:{year}')
+    removed = per_model.get(LeaveBalance._meta.label, 0)
+    logger.info('Removed %d unused "%s" balance(s) (%d) from employees outside its gender rule.',
+                removed, policy.leave_type, year)
+    return removed
 
 
 def _build_carry_forward_rows(employees, policies, from_year, to_year, today):

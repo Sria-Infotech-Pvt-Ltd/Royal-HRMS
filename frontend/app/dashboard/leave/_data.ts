@@ -86,6 +86,20 @@ export function buildLeaveTypesList(policies: LeavePolicy[] | null | undefined):
   return [...LEAVE_TYPES_LIST, ...customs];
 }
 
+// The leave types the signed-in employee may apply for: the list above, minus
+// any type whose policy is inactive or whose rules (e.g. gender) don't allow
+// this employee (`eligible_for_me`, computed by the API). Built-ins without a
+// policy row stay visible. Empty while the policies are still loading, so a
+// restricted type never flashes up. The server enforces the same rules on apply.
+export function buildApplicableLeaveTypes(policies: LeavePolicy[] | null | undefined): LeaveTypeConfig[] {
+  if (!policies) return [];
+  const byKey = new Map(policies.map(p => [p.leave_type, p]));
+  return buildLeaveTypesList(policies).filter(lt => {
+    const p = byKey.get(lt.key);
+    return !p || (p.is_active && p.eligible_for_me !== false);
+  });
+}
+
 // ─── API response types ───────────────────────────────────────────────────────
 
 export interface LeavePolicy {
@@ -102,6 +116,8 @@ export interface LeavePolicy {
   attachment_required:          boolean;
   medical_certificate_required: boolean;
   updated_at:            string;
+  /** The signed-in employee may apply for this type (active + eligibility rules such as gender). */
+  eligible_for_me?:      boolean;
 }
 
 export interface LeaveBalance {
