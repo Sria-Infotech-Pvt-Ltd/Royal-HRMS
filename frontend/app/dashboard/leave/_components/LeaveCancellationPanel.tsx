@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { useToast } from "@/components/ToastProvider";
 import { apiMessage, cancellationBadge, cancellationReasonError, rejectRemarksError } from "@/lib/approvalWorkflows";
 import type { LeaveRequest } from "../_data";
 
@@ -20,25 +21,27 @@ export default function LeaveCancellationPanel({ request: r, onChanged }: Props)
   const [mode, setMode] = useState<"" | "request" | "reject">("");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const { showToast } = useToast();
 
   const badge = cancellationBadge(r.cancellation_status);
   if (!badge && !r.can_request_cancellation) return null;
 
   async function submit(action: "request" | "approve" | "reject") {
     setBusy(true);
-    setErr("");
     try {
       if (action === "request") {
         await clientApi.post(API.leave.cancellationRequest(r.id), { reason: text });
       } else {
         await clientApi.post(API.leave.cancellationDecision(r.id), { action, remarks: action === "reject" ? text : "" });
       }
+      showToast(action === "request" ? "Cancellation requested. You will be notified once it is decided."
+        : action === "approve" ? "Cancellation approved — the days are back in the balance." : "Cancellation rejected.",
+        "success");
       setMode("");
       setText("");
       onChanged();
     } catch (e) {
-      setErr(apiMessage(e, "Something went wrong. Please try again."));
+      showToast(apiMessage(e, "Something went wrong. Please try again."), "error");
     } finally {
       setBusy(false);
     }
@@ -58,7 +61,6 @@ export default function LeaveCancellationPanel({ request: r, onChanged }: Props)
       {r.cancellation_remarks && r.cancellation_status !== "requested" && (
         <p className="text-xs text-[var(--on-variant)] mt-1">Decision note: “{r.cancellation_remarks}”</p>
       )}
-      {err && <p className="text-xs text-red-600 mt-2" role="alert">{err}</p>}
 
       {mode === "" && (
         <div className="flex gap-2 mt-3 justify-end">
@@ -72,7 +74,7 @@ export default function LeaveCancellationPanel({ request: r, onChanged }: Props)
               <button className="btn btn-ghost" disabled={busy} onClick={() => { setMode("reject"); setText(""); }}>
                 Reject cancellation
               </button>
-              <button className="btn btn-primary" disabled={busy} onClick={() => submit("approve")}>
+              <button className="btn btn-filled" disabled={busy} onClick={() => submit("approve")}>
                 Approve cancellation
               </button>
             </>
@@ -95,7 +97,7 @@ export default function LeaveCancellationPanel({ request: r, onChanged }: Props)
           )}
           <div className="flex gap-2 mt-2 justify-end">
             <button className="btn btn-ghost" onClick={() => setMode("")}>Back</button>
-            <button className="btn btn-primary" disabled={busy || !!inputError}
+            <button className="btn btn-filled" disabled={busy || !!inputError}
                     onClick={() => submit(mode === "request" ? "request" : "reject")}>
               {busy ? "Saving…" : mode === "request" ? "Send request" : "Reject"}
             </button>

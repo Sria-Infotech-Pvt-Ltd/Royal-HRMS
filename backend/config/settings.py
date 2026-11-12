@@ -93,6 +93,7 @@ TENANT_APPS = (
     'apps.assessments',
     'apps.notifications',
     'apps.approvals',
+    'apps.training',
     'apps.dashboard',
     'apps.payroll',
     'apps.voice_commands',
@@ -415,6 +416,12 @@ CELERY_BEAT_SCHEDULE = {
     'run-approval-escalations': {
         'task':     'apps.approvals.tasks.run_approval_escalations',
         'schedule': crontab(hour=9, minute=30),
+    },
+    # Runs daily at 08:00 IST — training due-soon reminders and overdue notices
+    # (companies with the Training & Learning module only).
+    'training-deadline-notifications': {
+        'task':     'apps.training.tasks.training_deadline_notifications',
+        'schedule': crontab(hour=8, minute=0),
     },
     # Runs daily at 00:05 IST — sends birthday wishes (email + in-app
     # notifications) to employees. Offset 5 min past midnight rather than

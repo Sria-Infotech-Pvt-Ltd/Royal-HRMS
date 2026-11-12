@@ -8,6 +8,7 @@ import { useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
+import { useToast } from "@/components/ToastProvider";
 import {
   apiMessage, escalationTimeline, toEscalationForm, validateEscalation,
   type EscalationForm, type EscalationSettings, type PersonRef,
@@ -22,8 +23,7 @@ export default function EscalationSettingsCard() {
   const [draft, setDraft] = useState<EscalationForm | null>(null);
   const form = draft ?? (data ? toEscalationForm(data) : null);
   const [saving, setSaving] = useState(false);
-  const [apiError, setApiError] = useState("");
-  const [saved, setSaved] = useState(false);
+  const { showToast } = useToast();
 
   if (status === 403) return null;
   if (loading || !form) {
@@ -37,18 +37,16 @@ export default function EscalationSettingsCard() {
 
   function set<K extends keyof EscalationForm>(key: K, value: EscalationForm[K]) {
     if (form) setDraft({ ...form, [key]: value });
-    setSaved(false);
   }
 
   async function save() {
     if (!form || Object.keys(errors).length) return;
     setSaving(true);
-    setApiError("");
     try {
       await clientApi.put(API.approvals.escalationSettings, { ...form, escalation_head: form.escalation_head || null });
-      setSaved(true);
+      showToast("Escalation settings saved.", "success");
     } catch (err) {
-      setApiError(apiMessage(err, "Failed to save escalation settings."));
+      showToast(apiMessage(err, "Failed to save escalation settings."), "error");
     } finally {
       setSaving(false);
     }
@@ -74,7 +72,7 @@ export default function EscalationSettingsCard() {
   );
 
   return (
-    <div className="settings-card" style={{ marginTop: 16 }} data-testid="escalation-settings">
+    <div className="card card-body" style={{ marginTop: 16 }} data-testid="escalation-settings">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: 15, color: "var(--on-bg)" }}>
@@ -141,11 +139,9 @@ export default function EscalationSettingsCard() {
         {timeline.map(s => <li key={`${s.day}-${s.text}`}><strong>Day {s.day}:</strong> {s.text}</li>)}
       </ol>
 
-      {apiError && <div className="alert alert-error" style={{ marginTop: 12 }}><i className="ti ti-alert-circle" /> {apiError}</div>}
       {canEdit && (
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginTop: 14 }}>
-          {saved && <span className="text-[12px] text-green-700"><i className="ti ti-check" /> Saved</span>}
-          <button className="btn btn-primary" onClick={save} disabled={saving || Object.keys(errors).length > 0}>
+          <button className="btn btn-filled" onClick={save} disabled={saving || Object.keys(errors).length > 0}>
             {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save Escalation Settings"}
           </button>
         </div>

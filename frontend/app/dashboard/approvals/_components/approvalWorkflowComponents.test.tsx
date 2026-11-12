@@ -11,6 +11,8 @@ vi.mock("@/hooks/useFetch", () => ({
     return { data: key ? fetched[key] : null, loading: false, error: null, status: null, refetch: () => {} };
   },
 }));
+// Components report results with top-right toasts (components/ToastProvider).
+vi.mock("@/components/ToastProvider", () => ({ useToast: () => ({ showToast: () => {} }) }));
 vi.mock("@/lib/clientApi", () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn() } }));
 
 import EscalationSettingsCard from "@/app/dashboard/settings/approval-rules/_components/EscalationSettingsCard";

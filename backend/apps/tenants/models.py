@@ -48,6 +48,8 @@ MODULE_ASSESSMENTS        = 'assessments'
 MODULE_DOCUMENTS          = 'documents'
 MODULE_ASSETS             = 'assets'
 MODULE_WFH                = 'wfh'
+# Strict from the start: off for every company until a Platform Admin enables it.
+MODULE_TRAINING           = 'training'
 
 ALL_MODULES = [
     MODULE_ANNOUNCEMENTS,
@@ -63,6 +65,7 @@ ALL_MODULES = [
     MODULE_DOCUMENTS,
     MODULE_ASSETS,
     MODULE_WFH,
+    MODULE_TRAINING,
 ]
 
 MODULE_LABELS = {
@@ -79,6 +82,7 @@ MODULE_LABELS = {
     MODULE_DOCUMENTS:       'Document Management',
     MODULE_ASSETS:          'Asset Management',
     MODULE_WFH:             'Work From Home',
+    MODULE_TRAINING:        'Training & Learning',
 }
 
 

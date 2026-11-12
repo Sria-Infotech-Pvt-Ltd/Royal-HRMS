@@ -8,6 +8,7 @@ import { useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
+import { useToast } from "@/components/ToastProvider";
 import { apiMessage, rejectRemarksError } from "@/lib/approvalWorkflows";
 import { fmtDate, type LeaveRequest } from "@/app/dashboard/leave/_data";
 
@@ -16,21 +17,20 @@ export default function LeaveCancellationsSection() {
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [remarks, setRemarks] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const { showToast } = useToast();
 
   async function decide(r: LeaveRequest, action: "approve" | "reject") {
     if (action === "reject" && rejectRemarksError(remarks)) return;
     if (action === "approve" && !window.confirm(`Cancel ${r.employee_name}'s approved leave and return the days?`)) return;
     setBusy(r.id);
-    setMsg(null);
     try {
       await clientApi.post(API.leave.cancellationDecision(r.id), { action, remarks: action === "reject" ? remarks : "" });
-      setMsg({ ok: true, text: action === "approve" ? "Leave cancelled and balance restored." : "Cancellation rejected." });
+      showToast(action === "approve" ? "Leave cancelled and balance restored." : "Cancellation rejected.", "success");
       setRejecting(null);
       setRemarks("");
       refetch();
     } catch (err) {
-      setMsg({ ok: false, text: apiMessage(err, "Failed to save the decision.") });
+      showToast(apiMessage(err, "Failed to save the decision."), "error");
     } finally {
       setBusy(null);
     }
@@ -38,12 +38,11 @@ export default function LeaveCancellationsSection() {
 
   const rows = data ?? [];
   return (
-    <div className="settings-card" data-testid="leave-cancellations">
+    <div className="card card-body" data-testid="leave-cancellations">
       <div style={{ fontWeight: 600, fontSize: 15 }}>Leave cancellation requests</div>
       <div className="text-[12px] text-[var(--on-variant)] mt-1 mb-3">
         Approved leave the employee wants to cancel before it starts.
       </div>
-      {msg && <div className={`alert ${msg.ok ? "alert-success" : "alert-error"} mb-3`}>{msg.text}</div>}
       {loading && <div className="text-[13px] text-[var(--on-variant)]">Loading…</div>}
       {error && <div className="alert alert-error">{error}</div>}
       {!loading && !error && rows.length === 0 && (
@@ -64,7 +63,7 @@ export default function LeaveCancellationsSection() {
                 <button className="btn btn-ghost" disabled={busy === r.id} onClick={() => { setRejecting(r.id); setRemarks(""); }}>
                   Reject
                 </button>
-                <button className="btn btn-primary" disabled={busy === r.id} onClick={() => decide(r, "approve")}>
+                <button className="btn btn-filled" disabled={busy === r.id} onClick={() => decide(r, "approve")}>
                   Approve cancellation
                 </button>
               </div>
@@ -77,7 +76,7 @@ export default function LeaveCancellationsSection() {
                         onChange={e => setRemarks(e.target.value)} />
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
                 <button className="btn btn-ghost" onClick={() => setRejecting(null)}>Back</button>
-                <button className="btn btn-primary" disabled={busy === r.id || !!rejectRemarksError(remarks)}
+                <button className="btn btn-filled" disabled={busy === r.id || !!rejectRemarksError(remarks)}
                         onClick={() => decide(r, "reject")}>
                   Reject cancellation
                 </button>

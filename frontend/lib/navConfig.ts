@@ -51,6 +51,7 @@ const ALL_NAV: NavEntry[] = [
   // not just Manager/HR; the page itself scopes what each viewer sees.
   { id: "separation", icon: "ti-logout", label: "Separation & Exit", path: "/dashboard/separation", permission: null },
   { id: "documents", icon: "ti-folder", label: "Document Center", path: "/dashboard/documents", permission: "documents.view" },
+  { id: "training", icon: "ti-school", label: "Training & Learning", path: "/dashboard/training", permission: "training.view" },
 
   { section: "My" },
   { id: "my-attendance", icon: "ti-clock-check", label: "My Attendance", path: "/dashboard/my-attendance", permission: null },
@@ -69,6 +70,8 @@ const ALL_NAV: NavEntry[] = [
   // (i.e. everyone assigned an onboarding assessment) had no sidebar link to
   // it at all, matching the my-attendance/my-payslip self-service pattern.
   { id: "my-assessments", icon: "ti-clipboard-check", label: "My Assessments", path: "/dashboard/assessments", permission: null },
+  // Self-service: the courses assigned to me (the API returns only my own).
+  { id: "my-learning", icon: "ti-book", label: "My Learning", path: "/dashboard/my-learning", permission: null },
   { id: "referrals", icon: "ti-user-plus", label: "My Referrals", path: "/dashboard/referrals", permission: null },
   { id: "profile", icon: "ti-user-circle", label: "My Profile", path: "/dashboard/profile", permission: null },
 

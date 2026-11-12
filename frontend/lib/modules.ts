@@ -35,6 +35,8 @@ export const ROUTE_MODULES: Record<string, string> = {
   "/dashboard/email-logs": "recruitment",
   "/dashboard/referrals": "recruitment",
   "/dashboard/assessments": "assessments",
+  "/dashboard/training": "training",
+  "/dashboard/my-learning": "training",
   "/dashboard/separation": "separation",
   "/dashboard/announcements": "announcements",
   "/dashboard/documents": "documents",

@@ -80,11 +80,12 @@ NOTIFICATION_MODULES = {
     'leave': 'leave', 'holiday': 'leave', 'attendance': 'attendance', 'regularization': 'attendance',
     'permission': 'attendance', 'facial_recognition': 'face_attendance', 'expense': 'expenses',
     'separation': 'separation', 'documents': 'documents', 'payroll': 'payroll', 'announcement': 'announcements',
+    'training': 'training',
 }
 AUDIT_MODULES = {
     'leave': 'leave', 'attendance': 'attendance', 'payroll': 'payroll', 'recruitment': 'recruitment',
     'assets': 'assets', 'documents': 'documents', 'announcement': 'announcements', 'wfh': 'wfh',
-    'assessments': 'assessments', 'expenses': 'expenses', 'separation': 'separation',
+    'assessments': 'assessments', 'expenses': 'expenses', 'separation': 'separation', 'training': 'training',
 }
 
 
