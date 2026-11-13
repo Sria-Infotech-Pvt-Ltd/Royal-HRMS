@@ -2,8 +2,8 @@
 
 // "My projects" on the employee's Home tab — the projects they're currently assigned to in Project Budgeting
 // (read-only here). Same data as the Employment tab's Work Status section (useWorkStatus), just the current ones.
-// Renders nothing while loading and when there is no current assignment: most employees aren't on a project, and an
-// empty card would only be noise on their Home page.
+// Always shown (loading, error and empty included) so an employee can tell "nothing assigned" apart from "not working";
+// it disappears only when the account has no employee ID at all (404) or may not see Work Status (403).
 
 import { useWorkStatus } from "@/hooks/useWorkStatus";
 import { STATUS_BADGE, endLabel, fmtDate, statusLabel } from "@/components/work-status/workStatusFormat";
@@ -15,18 +15,18 @@ interface Props {
 }
 
 export default function HomeProjectsPanel({ onViewAll }: Props) {
-  const { data, loading } = useWorkStatus();
+  const { data, loading, error, status } = useWorkStatus();
   const current = data?.current ?? [];
 
-  if (loading || current.length === 0) return null;
+  if (status === 403 || status === 404) return null;
 
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <div className="card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
-          <div className="card-title" style={{ fontSize: 20 }}><i className="ti ti-briefcase" /> My projects</div>
+          <div className="card-title" style={{ fontSize: 20 }}><i className="ti ti-briefcase" /> Work status</div>
           <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--on-variant)" }}>
-            Assigned in Project Budgeting.
+            Projects assigned to you in Project Budgeting.
           </p>
         </div>
         <button onClick={onViewAll} className="btn btn-ghost btn-sm">
@@ -34,6 +34,19 @@ export default function HomeProjectsPanel({ onViewAll }: Props) {
         </button>
       </div>
 
+      {loading && !data ? (
+        <div style={{ padding: "16px 20px", fontSize: 13, color: "var(--on-variant)" }}>
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+        </div>
+      ) : error || !data ? (
+        <div style={{ padding: "16px 20px", fontSize: 13, color: "var(--on-variant)" }}>
+          Could not load your project assignments right now.
+        </div>
+      ) : current.length === 0 ? (
+        <div style={{ padding: "16px 20px", fontSize: 13, color: "var(--on-variant)" }}>
+          No project is assigned to you in Project Budgeting right now.
+        </div>
+      ) : (
       <div>
         {current.slice(0, MAX_PROJECTS_SHOWN).map(assignment => (
           <div
@@ -57,6 +70,7 @@ export default function HomeProjectsPanel({ onViewAll }: Props) {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
