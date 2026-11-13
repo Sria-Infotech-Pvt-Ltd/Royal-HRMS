@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useDepartmentOptions } from "@/hooks/useDepartmentOptions";
@@ -9,7 +9,8 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import {
-  attendanceExportFilename, attendanceExportParams, exportRangeProblem, type AttendanceExportMode,
+  attendanceExportFilename, attendanceExportParams, exportRangeProblem,
+  type AttendanceExportMode, type AttendanceExportScope,
 } from "@/lib/attendanceExport";
 import { useToast } from "@/components/ToastProvider";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
@@ -22,6 +23,8 @@ interface Props {
 }
 
 interface BranchOption { id: number; branch_name: string }
+
+interface ExportEmployeeOption { id: string; employee_id: string; full_name: string; department: string; status?: string }
 
 const STATUS_BADGE: Record<string, string> = {
   present:    "badge badge-success",
@@ -80,6 +83,25 @@ export default function AttendanceTab({ onMutated }: Props) {
   const [exportMonth, setExportMonth]   = useState(todayISO().slice(0, 7));
   const [exportFrom, setExportFrom]     = useState(`${todayISO().slice(0, 8)}01`);
   const [exportTo, setExportTo]         = useState(todayISO());
+  const [exportScope, setExportScope]   = useState<AttendanceExportScope>("all");
+  const [empQuery, setEmpQuery]         = useState("");
+  const [empSearch, setEmpSearch]       = useState("");
+  const [empDropOpen, setEmpDropOpen]   = useState(false);
+  const [exportEmployee, setExportEmployee] = useState<ExportEmployeeOption | null>(null);
+
+  // Search the employees API (already scoped to the caller's branch / direct
+  // reports) as the user types, rather than loading a capped list up front.
+  useEffect(() => {
+    const t = setTimeout(() => setEmpSearch(empQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [empQuery]);
+  const empSearchUrl = canExport && exportScope === "single" && !exportEmployee && empSearch.length >= 2
+    ? `${API.employees.list}${toQuery({ search: empSearch, page_size: 20 })}`
+    : null;
+  const { data: empResults, loading: empLoading, error: empError } =
+    useFetch<{ results: ExportEmployeeOption[] }>(empSearchUrl);
+  // The export only covers active employees.
+  const empOptions = (empResults?.results ?? []).filter(e => e.status !== "inactive").slice(0, 8);
 
   // hr_admin never gets to choose a branch — it's always their own, locked.
   const branch = unrestricted ? branchInput : effectiveBranch;
@@ -116,6 +138,7 @@ export default function AttendanceTab({ onMutated }: Props) {
     try {
       const exportInput = {
         mode: exportMode, date, month: exportMonth, fromDate: exportFrom, toDate: exportTo, branch, department,
+        employeeId: exportScope === "single" ? exportEmployee?.employee_id : undefined,
       };
       const url = `${API.attendance.export}${toQuery(attendanceExportParams(exportInput))}`;
       const response = await clientApi.get(url, { responseType: "blob" });
@@ -231,17 +254,69 @@ export default function AttendanceTab({ onMutated }: Props) {
           </>
         )}
         {canExport && (
+          <select
+            className="field-input"
+            style={{ width: 150 }}
+            aria-label="Export employees"
+            value={exportScope}
+            onChange={e => setExportScope(e.target.value as AttendanceExportScope)}
+          >
+            <option value="all">All Employees</option>
+            <option value="single">Single Employee</option>
+          </select>
+        )}
+        {canExport && exportScope === "single" && (
+          <div style={{ position: "relative", width: 230 }}>
+            <input
+              className="field-input"
+              style={{ width: "100%", paddingLeft: 28 }}
+              aria-label="Export employee"
+              placeholder="Search employee by name or ID…"
+              value={empQuery}
+              onChange={e => { setEmpQuery(e.target.value); setExportEmployee(null); setEmpDropOpen(true); }}
+              onFocus={() => setEmpDropOpen(true)}
+              onBlur={() => setTimeout(() => setEmpDropOpen(false), 160)}
+            />
+            <i className="ti ti-search" style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "var(--on-variant)", pointerEvents: "none" }} />
+            {empDropOpen && !exportEmployee && empSearchUrl && (
+              <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, minWidth: 260, background: "var(--bg)", border: "1px solid var(--outline-v)", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 50, overflow: "hidden" }}>
+                {empLoading && <div style={{ padding: "9px 14px", fontSize: 12, color: "var(--on-variant)" }}>Searching…</div>}
+                {!empLoading && empError && <div style={{ padding: "9px 14px", fontSize: 12, color: "var(--error)" }}>{empError}</div>}
+                {!empLoading && !empError && empOptions.length === 0 && (
+                  <div style={{ padding: "9px 14px", fontSize: 12, color: "var(--on-variant)" }}>No matching employees.</div>
+                )}
+                {!empLoading && empOptions.map(emp => (
+                  <div
+                    key={emp.id}
+                    onMouseDown={() => { setExportEmployee(emp); setEmpQuery(`${emp.full_name} (${emp.employee_id})`); setEmpDropOpen(false); }}
+                    style={{ padding: "9px 14px", cursor: "pointer", fontSize: 13, borderBottom: "1px solid var(--outline-v)" }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{emp.full_name}</span>
+                    <span style={{ marginLeft: 8, fontSize: 11, color: "var(--on-variant)" }}>{emp.employee_id}{emp.department ? ` · ${emp.department}` : ""}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {canExport && (
           <button
             className="btn btn-ghost btn-sm"
             onClick={handleExport}
-            disabled={exporting || (exportMode === "month" && !exportMonth) || !!rangeProblem}
-            title={rangeProblem ?? undefined}
+            disabled={
+              exporting || (exportMode === "month" && !exportMonth) || !!rangeProblem
+              || (exportScope === "single" && !exportEmployee)
+            }
+            title={rangeProblem ?? (exportScope === "single" && !exportEmployee ? "Select an employee to export." : undefined)}
           >
             <i className="ti ti-download" /> {exporting ? "Exporting…" : "Export CSV"}
           </button>
         )}
         {canExport && rangeProblem && (
           <span role="alert" style={{ fontSize: 11.5, color: "var(--error)" }}>{rangeProblem}</span>
+        )}
+        {canExport && !rangeProblem && exportScope === "single" && !exportEmployee && (
+          <span role="alert" style={{ fontSize: 11.5, color: "var(--error)" }}>Select an employee from the list to export.</span>
         )}
         {canImport && (
           <button className="btn btn-filled btn-sm" onClick={() => setShowImport(true)}>

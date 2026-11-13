@@ -4,6 +4,7 @@ from apps.accounts.views_notice_period_import import NoticePeriodImportSampleVie
 from apps.accounts.views_policy import (
     CompanyContactDetailView,
     CompanyContactListCreateView,
+    ContactApproversView,
     DocumentAcknowledgeView,
     DocumentAcknowledgementListView,
     MyPendingAcknowledgementsView,
@@ -172,4 +173,5 @@ urlpatterns = [
     # Company Contact Matrix
     path('company-contacts/',          CompanyContactListCreateView.as_view(), name='company-contact-list'),
     path('company-contacts/<int:pk>/', CompanyContactDetailView.as_view(),     name='company-contact-detail'),
+    path('company-contacts/approvers/', ContactApproversView.as_view(),     name='company-contact-approvers'),
 ]

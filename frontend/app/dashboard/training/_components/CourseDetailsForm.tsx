@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import { API_BASE } from "@/lib/config";
 import { useFetch } from "@/hooks/useFetch";
@@ -22,7 +22,17 @@ export default function CourseDetailsForm({ course, canEdit, onSaved, onContinue
 }) {
   const canLink = usePermission("training.manage_assessments");
   const canAssign = usePermission("training.assign");
-  const { data: assessments } = useFetch<AssessmentOption[]>(canLink ? API.training.assessments : null);
+  const canCreateAssessment = usePermission("assessments.create");
+  const { data: assessments, refetch: refetchAssessments } =
+    useFetch<AssessmentOption[]>(canLink ? API.training.assessments : null);
+  // "+ New Assessment" opens the Assessments module in a new tab (the course
+  // form keeps its unsaved edits); reload the list when the user comes back.
+  useEffect(() => {
+    if (!canLink) return;
+    const onFocus = () => refetchAssessments();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [canLink, refetchAssessments]);
   const { data: picker } = useFetch<{ departments: string[]; branches: string[] }>(
     canAssign ? API.training.employees : null);
   const [draft, setDraft] = useState<CourseForm | null>(null);
@@ -141,16 +151,31 @@ export default function CourseDetailsForm({ course, canEdit, onSaved, onContinue
           and attempt limit apply. Taking it here does not affect onboarding assessments.
         </div>
         {canLink ? (
-          <select className="field-input field-select" style={{ maxWidth: 420 }} value={form.assessment} disabled={!canEdit}
-                  onChange={e => set("assessment", e.target.value)} aria-label="Linked assessment">
-            <option value="">— No assessment —</option>
-            {course.assessment && !assessments?.some(a => a.id === course.assessment?.id) && (
-              <option value={course.assessment.id}>{course.assessment.title}</option>
+          <>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <select className="field-input field-select" style={{ maxWidth: 420 }} value={form.assessment} disabled={!canEdit}
+                      onChange={e => set("assessment", e.target.value)} aria-label="Linked assessment">
+                <option value="">— No assessment —</option>
+                {course.assessment && !assessments?.some(a => a.id === course.assessment?.id) && (
+                  <option value={course.assessment.id}>{course.assessment.title}</option>
+                )}
+                {(assessments ?? []).map(a => (
+                  <option key={a.id} value={a.id}>{a.title} ({a.questions} questions, pass {a.pass_percentage}%)</option>
+                ))}
+              </select>
+              {canEdit && canCreateAssessment && (
+                <a className="btn btn-ghost btn-sm" href="/dashboard/assessments?create=1" target="_blank" rel="noopener"
+                   title="Create a new assessment in the Assessments module (opens in a new tab)">
+                  <i className="ti ti-plus" /> New Assessment
+                </a>
+              )}
+            </div>
+            {canEdit && canCreateAssessment && (
+              <div className="text-[12px] text-[var(--on-variant)] mt-1">
+                A new assessment appears in this list once it is active and has at least one question.
+              </div>
             )}
-            {(assessments ?? []).map(a => (
-              <option key={a.id} value={a.id}>{a.title} ({a.questions} questions, pass {a.pass_percentage}%)</option>
-            ))}
-          </select>
+          </>
         ) : (
           <div className="text-[13px]">{course.assessment ? course.assessment.title : "None"}</div>
         )}

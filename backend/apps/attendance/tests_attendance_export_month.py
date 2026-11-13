@@ -281,3 +281,55 @@ class MonthExportTests(TestCase):
         resp = self._export(month='2026-09')
         self.assertEqual(resp['Content-Disposition'], 'attachment; filename="attendance_2026-09.csv"')
         self.assertEqual(len(self._by(_rows(resp), 'MEX001')), 30)
+
+    # ── Single-employee export ────────────────────────────────────────────────
+
+    def test_single_employee_month_range_and_day(self):
+        self._work(self.emp, date(2026, 9, 1), 'Office')
+        resp = self._export(month='2026-09', employee='MEX001')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Disposition'], 'attachment; filename="attendance_MEX001_2026-09.csv"')
+        rows = _rows(resp)
+        self.assertEqual({r['employee_id'] for r in rows}, {'MEX001'})
+        self.assertEqual(len(rows), 30)
+        self.assertEqual(self._by(rows, 'MEX001')['01-09-2026']['clock_in_location'], 'Office')
+
+        rows = _rows(self._export(from_date='2026-09-01', to_date='2026-09-05', employee='MEX001'))
+        self.assertEqual({r['employee_id'] for r in rows}, {'MEX001'})
+        self.assertEqual(len(rows), 5)
+
+        resp = self._export(date='2026-09-01', employee='MEX001')
+        self.assertEqual(resp['Content-Disposition'], 'attachment; filename="attendance_MEX001_2026-09-01.csv"')
+        rows = _rows(resp)
+        self.assertEqual([r['employee_id'] for r in rows], ['MEX001'])
+        self.assertEqual(rows[0]['status'], 'Present')
+
+    def test_single_employee_is_exact_match_not_partial(self):
+        make_user('mex.emp10@test.com', role=make_role('mex_staff10'), employee_id='MEX0010',
+                  full_name='Gamma Emp', branch=BRANCH)
+        ids = {r['employee_id'] for r in _rows(self._export(month='2026-09', employee='MEX001'))}
+        self.assertEqual(ids, {'MEX001'})
+        self.assertEqual(self._export(month='2026-09', employee='MEX00').status_code, 404)
+
+    def test_single_employee_outside_scope_is_not_found(self):
+        # Branch-scoped HR: an employee in another branch looks the same as an unknown ID.
+        self.assertEqual(self._export(month='2026-09', employee='MEX009').status_code, 404)
+        self.assertEqual(self._export(month='2026-09', employee='NOPE1').status_code, 404)
+
+        manager = make_user('mex.smgr@test.com',
+                            role=make_role('mex_smgr', can_manage_team=True, permission_codenames=EXPORT_PERMS),
+                            employee_id='MEXSMGR', full_name='Single Mgr', branch=BRANCH)
+        self.emp2.reporting_manager = manager
+        self.emp2.save(update_fields=['reporting_manager'])
+        self.assertEqual(self._export(manager, month='2026-09', employee='MEX001').status_code, 404)
+        ids = {r['employee_id'] for r in _rows(self._export(manager, month='2026-09', employee='MEX002'))}
+        self.assertEqual(ids, {'MEX002'})
+
+        viewer = make_user('mex.sview@test.com', role=make_role('mex_sview', permission_codenames=['attendance.view']),
+                           employee_id='MEXSVW', full_name='Single Viewer', branch=BRANCH)
+        self.assertEqual(self._export(viewer, month='2026-09', employee='MEX001').status_code, 403)
+
+    def test_blank_employee_keeps_bulk_export(self):
+        resp = self._export(month='2026-09', employee='')
+        self.assertEqual(resp['Content-Disposition'], 'attachment; filename="attendance_2026-09.csv"')
+        self.assertTrue({'MEX001', 'MEX002'} <= {r['employee_id'] for r in _rows(resp)})

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import re
 
 from django.http import HttpResponse
 from rest_framework.parsers import MultiPartParser
@@ -40,6 +41,7 @@ from apps.attendance.services_hr import (
     bulk_assign_shift,
     bulk_assign_weekly_off,
     get_attendance_detail,
+    filtered_employees,
     get_attendance_list,
     get_dashboard_stats,
     get_shift_assignment_history,
@@ -860,12 +862,19 @@ class HRAttendanceExportView(APIView):
         filters = ser.validated_data
         filters['branch'] = _branch_scope(request.user, filters.get('branch', ''))
         filters['employee_ids'] = _manager_scope_employee_ids(request.user)
+        # Single-employee export: same message whether the ID doesn't exist or
+        # is outside the caller's scope, so it can't be used to probe IDs.
+        employee_prefix = ''
+        if filters.get('employee'):
+            if not filtered_employees(filters).exists():
+                return error('Employee not found.', http_status=404)
+            employee_prefix = re.sub(r'[^A-Za-z0-9_-]', '_', filters['employee']) + '_'
         if 'range_start' in filters:
             csv_content = export_attendance_range_csv(filters)
-            filename = f"attendance_{filters['range_label']}.csv"
+            filename = f"attendance_{employee_prefix}{filters['range_label']}.csv"
         else:
             csv_content = export_attendance_csv(filters)
-            filename = f"attendance_{filters['date'].strftime('%Y-%m-%d')}.csv"
+            filename = f"attendance_{employee_prefix}{filters['date'].strftime('%Y-%m-%d')}.csv"
 
         response = HttpResponse(csv_content, content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'

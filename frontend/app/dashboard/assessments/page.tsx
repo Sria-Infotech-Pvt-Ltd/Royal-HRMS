@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Fragment } from "react";
+import { useEffect, useRef, useState, Fragment } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -141,7 +141,7 @@ export default function AssessmentsPage() {
   );
   const assessments = data?.results ?? [];
 
-  const { data: settingsData } = useFetch<AssessmentSettings>(
+  const { data: settingsData, loading: settingsLoading } = useFetch<AssessmentSettings>(
     isAdminView ? API.settings.assessmentConfig : null
   );
 
@@ -198,6 +198,20 @@ export default function AssessmentsPage() {
     });
     setFormErr(""); setFormModal({ open: true, target: null });
   }
+
+  // /dashboard/assessments?create=1 (the Training course form's "+ New
+  // Assessment") opens the New Assessment form once the defaults have loaded.
+  const autoCreateDone = useRef(false);
+  useEffect(() => {
+    if (autoCreateDone.current || !canCreate || settingsLoading) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("create") !== "1") return;
+    autoCreateDone.current = true;
+    params.delete("create");
+    window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params}` : ""}`);
+    openCreate();
+  });
+
   function openEdit(a: Assessment) {
     setForm({
       title: a.title, description: a.description, is_active: a.is_active, is_default: a.is_default,

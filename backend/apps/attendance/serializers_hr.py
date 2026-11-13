@@ -43,9 +43,13 @@ class AttendanceExportFilterSerializer(AttendanceListFilterSerializer):
     """Export filters: the list filters for one `date`, `month=YYYY-MM` for the
     whole month, or `from_date` + `to_date` (at most MAX_RANGE_DAYS) — exactly
     one of the three. Month and date-range exports add range_start / range_end
-    (a month's end capped at today) and range_label for the file name."""
+    (a month's end capped at today) and range_label for the file name.
+
+    `employee` (an exact employee ID) limits any of the three to one employee,
+    still inside the caller's branch / direct-report scope."""
     MAX_RANGE_DAYS = 31
 
+    employee = serializers.CharField(required=False, allow_blank=True, default='', max_length=50, trim_whitespace=True)
     month = serializers.RegexField(r'^\d{4}-\d{2}$', required=False, allow_blank=True, default='',
                                    error_messages={'invalid': 'month must be in YYYY-MM format.'})
     from_date = serializers.DateField(required=False)

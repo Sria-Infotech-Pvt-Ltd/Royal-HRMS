@@ -5,6 +5,7 @@ export const API = {
     acknowledgements:        (id: number) => `/documents/${id}/acknowledgements/`,
     contacts:                "/company-contacts/",
     contactDetail:           (id: number) => `/company-contacts/${id}/`,
+    contactApprovers:        (workflow: string) => `/company-contacts/approvers/?workflow=${encodeURIComponent(workflow)}`,
   },
 
   auth: {
