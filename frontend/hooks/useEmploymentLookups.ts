@@ -14,7 +14,13 @@ export interface PersonOption { id: string; uuid?: string; full_name: string; em
 export interface NamedOption { id: string; name: string }
 export interface StructureOption extends NamedOption { is_default?: boolean; is_active?: boolean }
 
+export interface BranchOption { id: number; branch_name: string; branch_code?: string }
+
+// The branch list endpoint caps page_size at 50; only active branches may be assigned to an employee.
+const BRANCH_PARAMS = { page_size: 50, status: "active" };
+
 export interface EmploymentLookups {
+  branches: BranchOption[];
   positions: PositionOption[];
   people: PersonOption[];
   weeklyPolicies: NamedOption[];
@@ -22,7 +28,7 @@ export interface EmploymentLookups {
   structures: StructureOption[];
 }
 
-const EMPTY: EmploymentLookups = { positions: [], people: [], weeklyPolicies: [], shiftPolicies: [], structures: [] };
+const EMPTY: EmploymentLookups = { branches: [], positions: [], people: [], weeklyPolicies: [], shiftPolicies: [], structures: [] };
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cached: { data: EmploymentLookups; expiresAt: number } | null = null;
 
@@ -40,10 +46,12 @@ export function useEmploymentLookups(): EmploymentLookups {
       clientApi.get<Paged<NamedOption>>(API.attendance.weeklyDayPolicies, { params }),
       clientApi.get<Paged<NamedOption>>(API.attendance.workingHoursPolicies, { params }),
       clientApi.get<{ data: unknown }>(API.payroll.structures),
-    ]).then(([positions, people, weekly, shifts, structures]) => {
+      clientApi.get<Paged<BranchOption>>(API.employees.branches, { params: BRANCH_PARAMS }),
+    ]).then(([positions, people, weekly, shifts, structures, branches]) => {
       const rows = <T,>(result: PromiseSettledResult<{ data: Paged<T> }>): T[] =>
         result.status === "fulfilled" ? (result.value.data.data.results ?? []) : [];
       const resolved: EmploymentLookups = {
+        branches: rows(branches),
         positions: rows(positions).filter(position => position.is_active),
         people: rows(people),
         weeklyPolicies: rows(weekly),
@@ -51,7 +59,7 @@ export function useEmploymentLookups(): EmploymentLookups {
         structures: structures.status === "fulfilled" ? rowsOf<StructureOption>(structures.value.data.data).filter(s => s.is_active !== false) : [],
       };
       setLookups(resolved);
-      if ([positions, people, weekly, shifts, structures].every(result => result.status === "fulfilled")) {
+      if ([positions, people, weekly, shifts, structures, branches].every(result => result.status === "fulfilled")) {
         cached = { data: resolved, expiresAt: Date.now() + CACHE_TTL_MS };
       }
     });
