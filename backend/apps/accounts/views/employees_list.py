@@ -647,9 +647,15 @@ class EmployeeStatsView(APIView):
         # branch_names/department_names always come from base_qs (ignores the
         # branch filter below) so the branch dropdown never shrinks to just
         # the currently-selected branch once one is picked.
-        branch_names = list(
-            base_qs.exclude(branch='').values_list('branch', flat=True).distinct().order_by('branch')
+        branch_names = set(
+            base_qs.exclude(branch='').values_list('branch', flat=True).distinct()
         )
+        # An org-wide user (settings.edit) filters by ANY Company Code, including one nobody has been hired into yet;
+        # building the list from employees alone hid every empty branch. Scoped users keep seeing only their own.
+        if _has_perm(request.user, 'settings.edit'):
+            from apps.branch.models import Branch
+            branch_names |= set(Branch.objects.filter(status=Branch.STATUS_ACTIVE).values_list('branch_name', flat=True))
+        branch_names = sorted(branch_names)
         # The legacy `department` string is blank for anyone hired onto a
         # real Position (assign_position() only back-fills it when the
         # Position's OrgUnit chain has an is_department_level ancestor,

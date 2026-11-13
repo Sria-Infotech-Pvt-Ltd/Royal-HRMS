@@ -160,3 +160,23 @@ class BranchLookupForDropdownTests(_BranchChangeBase):
     def test_a_user_without_branches_view_is_refused(self):
         response = self._as(self.viewer).get(reverse('branch-list-create'), {'status': 'active'})
         self.assertEqual(response.status_code, 403)
+
+
+class EmployeeDirectoryLocationFilterTests(_BranchChangeBase):
+    """GET /employees/stats/ feeds the Locations filter on the Employee directory."""
+
+    def _branch_names(self, user):
+        response = self._as(user).get(reverse('employee-stats'))
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()['data']['branch_names']
+
+    def test_org_wide_admin_sees_every_active_branch_including_one_with_no_employees(self):
+        # Only Kondapur has an employee; Mulugu is empty. Both must be offered. The inactive branch must not be.
+        self.assertEqual(self._branch_names(self.admin), ['Kondapur', 'Mulugu'])
+
+    def test_a_branch_text_an_employee_still_carries_is_not_dropped(self):
+        make_user('emp-old@test.com', employee_id='20000009', branch='Legacy Name')
+        self.assertEqual(self._branch_names(self.admin), ['Kondapur', 'Legacy Name', 'Mulugu'])
+
+    def test_branch_scoped_user_still_sees_only_their_own_branch(self):
+        self.assertEqual(self._branch_names(self.hr), ['Kondapur'])
