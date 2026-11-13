@@ -317,3 +317,16 @@ def branch_employee_counts() -> dict:
         if branch_pk is not None:
             counts[branch_pk] = counts.get(branch_pk, 0) + count
     return counts
+
+
+def sync_employee_branch_names(branch) -> int:
+    """Copy this branch's current name onto the employees assigned to it (by branch_fk) and return how many changed.
+
+    User.branch is a deprecated copy of Branch.branch_name that ~90 call sites still compare by exact text (see the
+    comment on User.branch), so renaming a branch without this leaves its employees with a name that no longer matches
+    any branch: the directory keeps showing the old name and branch-scoped checks miss them. Call it inside the same
+    transaction as the rename. Audit-log rows keep the name that was true when they were written.
+    """
+    from apps.accounts.models import User
+
+    return User.objects.filter(branch_fk=branch).exclude(branch=branch.branch_name).update(branch=branch.branch_name)
