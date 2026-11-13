@@ -60,7 +60,8 @@ const ROW_ICONS: Record<string, string> = {
 interface ApprovalsProps {
   rows: TeamApprovalRow[];
   isLoading: boolean;
-  onOpen: () => void;
+  // null when the manager may not open the Approvals page — that page would bounce them back to their workspace.
+  onOpen: (() => void) | null;
 }
 
 export function PendingTeamApprovalsCard({ rows, isLoading, onOpen }: ApprovalsProps) {
@@ -68,12 +69,12 @@ export function PendingTeamApprovalsCard({ rows, isLoading, onOpen }: ApprovalsP
     <section className={styles.card}>
       <div className={styles.cardHead}>
         <h2 className={styles.cardTitle}><i className="ti ti-inbox" /> Pending Team Approvals{rows.length > 0 && !isLoading ? ` (${totalTeamPending(rows)})` : ""}</h2>
-        <button type="button" className={styles.viewAll} onClick={onOpen}>View All →</button>
+        {onOpen && <button type="button" className={styles.viewAll} onClick={onOpen}>View All →</button>}
       </div>
       {isLoading && <div className={styles.emptyFill}>Loading…</div>}
       {!isLoading && rows.length === 0 && <div className={styles.emptyFill}>No approval workflows are assigned to you.</div>}
       {!isLoading && rows.map(row => (
-        <button key={row.key} type="button" className={styles.row} onClick={onOpen}>
+        <button key={row.key} type="button" className={styles.row} onClick={onOpen ?? undefined} disabled={!onOpen}>
           <span className={styles.rowLeft}>
             <span className={styles.rowIcon}><i className={`ti ${ROW_ICONS[row.key] ?? "ti-file"}`} /></span>
             <span>
