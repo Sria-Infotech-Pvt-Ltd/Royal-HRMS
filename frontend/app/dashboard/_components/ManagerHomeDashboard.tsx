@@ -17,6 +17,10 @@ import { useAnyPermission, usePermission } from "@/hooks/usePermission";
 import { pendingFor, teamApprovalRows, totalTeamPending } from "@/lib/managerHome";
 import type { SessionPayload } from "@/lib/session";
 
+const APPROVALS_ROUTE_PERMISSIONS = [
+  "leave.approve", "expenses.approve", "payroll.edit", "employees.approve", "employees.raise_action", "facial_recognition.approve",
+];
+
 export default function ManagerHomeDashboard({ session }: { session: SessionPayload }) {
   const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
@@ -24,10 +28,9 @@ export default function ManagerHomeDashboard({ session }: { session: SessionPayl
   const data = useManagerHomeData(now);
 
   // Exactly what the /dashboard/approvals route guard (proxy.ts) accepts — linking there without one of these just
-  // bounces the manager back to their workspace.
-  const canOpenApprovals = useAnyPermission(
-    "leave.approve", "expenses.approve", "payroll.edit", "employees.approve", "employees.raise_action", "facial_recognition.approve",
-  );
+  // bounces the manager back to their workspace. Read from the server-provided session, not the client-side hook, so the
+  // server HTML and the first client render agree (the hook is empty during SSR and caused a hydration mismatch).
+  const canOpenApprovals = !!session.is_superuser || APPROVALS_ROUTE_PERMISSIONS.some(permission => session.permissions.includes(permission));
   const canSeeAttendance = usePermission("attendance.view");
   const canSeeTeam = usePermission("employees.view");
   const canSeeReports = useAnyPermission(
