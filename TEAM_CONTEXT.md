@@ -5450,3 +5450,13 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 - No backend test covers the new admin-reset link flow.
 - 9 existing ESLint warnings (assessments, payroll, attendance month view, email-templates): none introduced here; two are `react-hooks/exhaustive-deps`, which CLAUDE.md section 8 forbids.
 - Local setup notes from Rithwika's section still apply (Redis, `frontend/.env.local`). On this machine the backend runs on port 8000 and `.env.local` points there.
+
+## Nav dropdown path labels removed; ESS attendance calendar hover card (2026-11-13)
+
+**By:** New-AI session - **Branch:** New-AI. Uncommitted. Frontend only, no backend or migration change. Checked with `vitest` on `EssAttendanceCalendar.test.tsx` (10 tests pass) and `tsc` (no errors in the touched file). **Not checked in a browser.**
+
+**Top-bar dropdowns:** each row showed the page's route (e.g. `/dashboard/interview-list`) under its name. It looked like a leaked API path but was just `item.path` rendered in a `nm-path` span. Removed from `components/dashboard/NavMenuItems.tsx`, which is shared by the section dropdowns, the profile menu and the narrow-screen menu, so all of them lose it. The `.nm-path` CSS rule is now unused and can be deleted.
+
+**ESS Attendance calendar (`ess/_components/EssAttendanceCalendar.tsx`, `app/ess-theme.css`):** hovering (or keyboard-focusing) a date now opens a hover card (`DayTip`) with the date, status (holiday name when there is one), Punched in, Punched out and Hours; "No punches recorded" when the day has none. It replaces the browser `title` tooltip, which was slow and easy to miss. The data was already in each day's `DayRecord` (`clockIn`, `clockOut`, `hours`), so no API change. The card is `position: fixed`, positioned from the cell's bounding rect, because `.ess-cal-grid` has `overflow: hidden` and would clip an absolute one. It flips above the cell near the bottom of the viewport and stays inside the screen edges (the height is an estimate, `TIP_HEIGHT_ESTIMATE`). Cells got `tabIndex={0}`. The `aria-label` keeps the old title text, which `EssAttendanceCalendar.test.tsx` asserts on.
+
+**Open / suspected data issue:** in a screenshot, 11 Nov showed **Incomplete** on the calendar while Recent punches listed "In 14:16 - Out 15:13" for the same day. The calendar reads `rec.clock_in_display` / `clock_out_display` from the `AttendanceRecord` (`services_attendance.py` ~line 1094); Recent punches reads the raw punches (~line 894). If the two disagree, the hover card for that day will show no times. Not investigated yet.

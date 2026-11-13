@@ -97,6 +97,13 @@
 .ess-cal-cell.non-working .ess-cal-status{color:var(--muted)}
 .ess-cal-status .ess-status-dot{flex:0 0 auto}
 .ess-cal-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ess-cal-cell:not(.outside):hover,.ess-cal-cell:not(.outside):focus-visible{background:color-mix(in srgb,var(--brand) 6%,var(--surface));outline:none}
+.ess-cal-tip{position:fixed;z-index:60;display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 12px 32px rgba(24,20,48,.18);color:var(--ink);font-size:11px;pointer-events:none;text-align:left}
+.ess-cal-tip strong{font-size:12px}
+.ess-cal-tip-status,.ess-cal-tip-empty{color:var(--muted);font-weight:600}
+.ess-cal-tip dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:2px 0 0}
+.ess-cal-tip dt{color:var(--muted)}
+.ess-cal-tip dd{margin:0;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
 @container (max-width:460px){.ess-cal-cell{align-items:center;min-height:52px;padding:5px 2px}.ess-cal-date{align-self:center}.ess-cal-label{display:none}}
 @container (max-width:300px){.ess-cal-cell{min-height:42px;gap:3px}.ess-cal-weekdays span{font-size:9px;letter-spacing:0;padding:6px 0}}
 .ess-calendar-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin:0 0 10px}

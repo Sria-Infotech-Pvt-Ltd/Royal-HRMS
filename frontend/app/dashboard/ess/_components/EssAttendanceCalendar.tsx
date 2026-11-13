@@ -5,6 +5,7 @@
 // .ess-status-dot classes (ess-theme.css) through dayClass(); the data is the
 // unchanged calendar.days map from useAttendanceDashboard.
 
+import { useState, type SyntheticEvent } from "react";
 import { buildMonthGrid, isoDate, WEEKDAY_SHORT } from "@/lib/attendanceCalendarGrid";
 import type { DayRecord } from "@/types/attendance";
 
@@ -57,19 +58,58 @@ function dayTitle(day: number, monthName: string, year: number, record: DayRecor
   return parts.join(" — ");
 }
 
+const TIP_WIDTH = 190;
+const TIP_GAP = 6;
+const TIP_HEIGHT_ESTIMATE = 130;
+
+interface TipPosition { left: number; top: number }
+
+/** Hover card for one day: punch in, punch out and hours. Fixed-positioned so the grid's overflow:hidden cannot clip it. */
+function DayTip({ heading, record, position }: { heading: string; record: DayRecord | undefined; position: TipPosition }) {
+  const hasPunch = Boolean(record?.clockIn || record?.clockOut);
+  return (
+    <div className="ess-cal-tip" role="tooltip" style={{ left: position.left, top: position.top, width: TIP_WIDTH }}>
+      <strong>{heading}</strong>
+      {record?.status && <span className="ess-cal-tip-status">{record.holiday_name ? `${record.status}: ${record.holiday_name}` : record.status}</span>}
+      {hasPunch ? (
+        <dl>
+          <dt>Punched in</dt><dd>{record?.clockIn || "—"}</dd>
+          <dt>Punched out</dt><dd>{record?.clockOut || "—"}</dd>
+          {record?.hours && (<><dt>Hours</dt><dd>{record.hours}</dd></>)}
+        </dl>
+      ) : (
+        <span className="ess-cal-tip-empty">No punches recorded</span>
+      )}
+    </div>
+  );
+}
+
 function DayCell({ day, year, month, record, isToday }: {
   day: number; year: number; month: number; record: DayRecord | undefined; isToday: boolean;
 }) {
+  const [tipPosition, setTipPosition] = useState<TipPosition | null>(null);
   const statusClass = dayClass(record?.status);
   const label = record?.holiday_name || record?.status || "";
   const title = dayTitle(day, MONTH_LONG[month - 1], year, record);
+
+  function showTip(event: SyntheticEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const left = Math.min(Math.max(8, rect.left + rect.width / 2 - TIP_WIDTH / 2), window.innerWidth - TIP_WIDTH - 8);
+    const isRoomBelow = rect.bottom + TIP_GAP + TIP_HEIGHT_ESTIMATE < window.innerHeight;
+    setTipPosition({ left, top: isRoomBelow ? rect.bottom + TIP_GAP : Math.max(8, rect.top - TIP_GAP - TIP_HEIGHT_ESTIMATE) });
+  }
+
   return (
     <div
       role="cell"
+      tabIndex={0}
       className={`ess-cal-cell${NON_WORKING.has(statusClass) ? " non-working" : ""}${isToday ? " today" : ""}`}
       data-date={isoDate(year, month, day)}
-      title={title}
       aria-label={title}
+      onMouseEnter={showTip}
+      onMouseLeave={() => setTipPosition(null)}
+      onFocus={showTip}
+      onBlur={() => setTipPosition(null)}
     >
       <span className="ess-cal-date" aria-current={isToday ? "date" : undefined}>{day}</span>
       {label && (
@@ -78,6 +118,7 @@ function DayCell({ day, year, month, record, isToday }: {
           <span className="ess-cal-label">{label}</span>
         </span>
       )}
+      {tipPosition && <DayTip heading={`${day} ${MONTH_LONG[month - 1]} ${year}`} record={record} position={tipPosition} />}
     </div>
   );
 }
