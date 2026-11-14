@@ -79,10 +79,12 @@ describe("EssAttendanceCalendar", () => {
     for (const [className, label] of [
       ["present", "Present"], ["late", "Late"], ["absent", "Absent"], ["half-day", "Half Day"],
       ["leave", "On Leave"], ["weekly-off", "Weekly Off"], ["holiday", "Founders Day"],
-      ["incomplete", "Missing Clock Out"], ["not-joined", "Not Joined"],
+      ["incomplete", "Missing Clock Out"],
     ]) {
       expect(html).toContain(`ess-status-dot ${className}" aria-hidden="true"></i><span class="ess-cal-label">${label}</span>`);
     }
+    // Days outside the employment window render blank.
+    expect(html).not.toContain("Not Joined");
     expect(html).toContain("2 November 2026 — Present — In 09:05 · Out 18:10");
   });
 

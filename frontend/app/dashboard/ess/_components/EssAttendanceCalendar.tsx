@@ -19,7 +19,6 @@ const LEGEND: ReadonlyArray<[string, string]> = [
   ["leave", "On leave"],
   ["unrecorded", "Week off / Holiday"],
   ["incomplete", "Incomplete"],
-  ["not-joined", "Not joined"],
 ];
 
 /** Maps the backend's display status to the colour class used by .ess-status-dot. */
@@ -84,10 +83,13 @@ function DayTip({ heading, record, position }: { heading: string; record: DayRec
   );
 }
 
-function DayCell({ day, year, month, record, isToday }: {
+function DayCell({ day, year, month, record: rawRecord, isToday }: {
   day: number; year: number; month: number; record: DayRecord | undefined; isToday: boolean;
 }) {
   const [tipPosition, setTipPosition] = useState<TipPosition | null>(null);
+  // Days outside the employment window (before joining / after last working day) are left blank, not labelled.
+  const isOutsideEmployment = ["not employed", "not joined"].includes((rawRecord?.status ?? "").toLowerCase());
+  const record = isOutsideEmployment ? undefined : rawRecord;
   const statusClass = dayClass(record?.status);
   const label = record?.holiday_name || record?.status || "";
   const title = dayTitle(day, MONTH_LONG[month - 1], year, record);

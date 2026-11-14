@@ -411,6 +411,28 @@ class HireCompletionRequiredFieldTests(HireWizardTestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn('pan card', resp.data['message'].lower())
 
+    def test_hire_completes_with_only_the_five_required_documents(self):
+        """Cancelled Cheque and Signed Offer Letter are optional (migrations 0219 and 0222): the hire must not be refused
+        for lacking them, and the message for a missing required one must not ask for them."""
+        from apps.accounts.models import EmployeeDocument
+        resp = self._complete_with({})
+        self.assertEqual(resp.status_code, 201, resp.data)
+        # On completion the temporary uploads are copied onto the real employee and cleaned up, so the employee's own
+        # documents are what show which ones the hire went through with.
+        stored = set(EmployeeDocument.objects.filter(user_id=resp.data['data']['created_employee']).values_list('document_type', flat=True))
+        self.assertEqual(
+            stored, {'pan_card', 'aadhaar_card', 'tenth_certificate', 'twelfth_certificate', 'degree_certificate'},
+        )
+        self.assertNotIn('cancelled_cheque', stored)
+        self.assertNotIn('signed_offer_letter', stored)
+
+    def test_the_refusal_for_missing_documents_does_not_ask_for_the_optional_ones(self):
+        resp = self._complete_with({}, upload_required_docs=False)
+        self.assertEqual(resp.status_code, 400)
+        message = resp.data['message'].lower()
+        self.assertNotIn('cancelled cheque', message)
+        self.assertNotIn('signed offer letter', message)
+
     def test_negative_ctc_blocks_hire(self):
         resp = self._complete_with({'annual_ctc': '-50000'})
         self.assertEqual(resp.status_code, 400)
@@ -515,6 +537,18 @@ class HireCompletionSideEffectTests(HireWizardTestCase):
         self.assertTrue(EmployeeDocument.objects.filter(user=employee).exists())
         # Temporary hire-action-scoped rows are gone once copied.
         self.assertFalse(HireActionDocument.objects.filter(hire_action=self.action).exists())
+
+    def test_documents_attached_by_hr_at_hire_are_recorded_as_verified(self):
+        resp = self._complete(self.action)
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.action.refresh_from_db()
+        from apps.accounts.models import EmployeeDocument
+        documents = EmployeeDocument.objects.filter(user=self.action.created_employee)
+        self.assertTrue(documents.exists())
+        for document in documents:
+            self.assertEqual(document.verification_status, EmployeeDocument.VERIFICATION_VERIFIED)
+            self.assertIsNotNone(document.verified_by_id)
+            self.assertIsNotNone(document.verified_at)
 
     def test_created_employee_has_reserved_employee_id(self):
         resp = self._complete(self.action)
