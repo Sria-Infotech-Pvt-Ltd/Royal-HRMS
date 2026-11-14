@@ -5496,3 +5496,18 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 - Decision needed: the API accepts any branch name string and does not check that it matches a real branch (it only avoids a stale `branch_fk`). The UI cannot send an invalid one, but a direct API call can. Validating it would be a behaviour change, so it was not done.
 - Unrelated bug seen in the dev-server log: `POST /api/branch/branches/check-location/` returns 500 when `city` is `"__other__"` (`branch/views.py` ~line 512 passes the raw value to `City.objects.filter(pk=...)`). Not touched.
 - `tests_assignment_guards_actions` failure above needs an owner.
+
+## ESS attendance calendar: status colours on the whole cell (2026-11-14)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. `vitest` on `EssAttendanceCalendar.test.tsx` (10 pass) and `tsc` clean for the file. **Not checked in a browser.**
+
+**Complaint:** the ESS Attendance calendar "showed no colours" for Present/Absent. The colours were defined (`.ess-status-dot.*` in `ess-theme.css`), but they only appeared as an 8px dot next to a black label, so they were easy to miss.
+
+**Changes (`ess/_components/EssAttendanceCalendar.tsx`, `app/ess-theme.css`):**
+- Working-day cells with a status of present, late, absent, half-day, leave or incomplete get a class `st-<status>` (set `TINTED`) and a ~12% tint of that status colour as the cell background. The status label text also takes the colour (`.ess-cal-status.<status>`). Weekly off / holiday / not joined keep the muted grey tint (`non-working`); days with no record stay plain.
+- Hover/focus now draws an inset brand-colour outline instead of changing the background, so it no longer hides the status tint.
+- `dayClass()` now maps the backend label "Not Employed" (`STATUS_DISPLAY_MAP`) to `not-joined`; before, only "Not Joined" matched and those days fell back to the generic grey.
+
+**Reverses an earlier test decision:** `EssAttendanceCalendar.test.tsx` used to assert that working days are NOT filled with a background colour. That test was rewritten (present/absent cells get `st-*`, week-offs stay `non-working`, blank days plain), on the user's explicit request after the dot-only version was not visible enough.
+
+**Not changed:** the separate My Attendance calendar (`my-attendance/_components/AttendanceCalendar.tsx`) already tints cells from the backend's `_STATUS_COLOR` (absent = `#ef4444`). If colours are missing there, that is a different problem. Earlier suspected data issue still open: 11 Nov showed Incomplete while Recent punches listed In 14:16 / Out 15:13 (calendar reads `clock_in_display`/`clock_out_display` from the record, Recent punches reads raw punches).

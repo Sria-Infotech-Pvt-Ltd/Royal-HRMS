@@ -88,10 +88,12 @@ describe("EssAttendanceCalendar", () => {
     expect(html).toContain("2 November 2026 — Present — In 09:05 · Out 18:10");
   });
 
-  it("does not fill working days with a background colour; only week-offs and holidays get the muted tint", () => {
-    const html = render(2026, 11, { "2": record("Present"), "8": record("Weekly Off") });
-    expect(html).toMatch(/class="ess-cal-cell"[^>]*data-date="2026-11-02"/);
+  it("tints working-day cells in their status colour; week-offs and holidays get the muted tint; blank days stay plain", () => {
+    const html = render(2026, 11, { "2": record("Present"), "4": record("Absent"), "8": record("Weekly Off") });
+    expect(html).toMatch(/class="ess-cal-cell st-present"[^>]*data-date="2026-11-02"/);
+    expect(html).toMatch(/class="ess-cal-cell st-absent"[^>]*data-date="2026-11-04"/);
     expect(html).toMatch(/class="ess-cal-cell non-working"[^>]*data-date="2026-11-08"/);
+    expect(html).toMatch(/class="ess-cal-cell"[^>]*data-date="2026-11-03"/);
   });
 
   it("marks today and disables the Today button while the current month is shown", () => {

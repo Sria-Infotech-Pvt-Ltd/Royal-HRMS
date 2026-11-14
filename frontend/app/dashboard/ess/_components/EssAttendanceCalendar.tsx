@@ -32,11 +32,14 @@ export function dayClass(status: string | undefined): string {
   if (value === "weekly off") return "weekly-off";
   if (value === "holiday") return "holiday";
   if (value === "incomplete" || value === "missing clock out") return "incomplete";
-  if (value === "not joined") return "not-joined";
+  // The backend labels days outside the employment window "Not Employed" (STATUS_DISPLAY_MAP); the legend calls it "Not joined".
+  if (value === "not joined" || value === "not employed") return "not-joined";
   return "unrecorded";
 }
 
 const NON_WORKING = new Set(["weekly-off", "holiday", "not-joined"]);
+// Working-day statuses whose whole cell is tinted in the status colour (see .st-* in ess-theme.css).
+const TINTED = new Set(["present", "late", "absent", "half-day", "leave", "incomplete"]);
 
 interface EssAttendanceCalendarProps {
   year: number;
@@ -105,7 +108,7 @@ function DayCell({ day, year, month, record: rawRecord, isToday }: {
     <div
       role="cell"
       tabIndex={0}
-      className={`ess-cal-cell${NON_WORKING.has(statusClass) ? " non-working" : ""}${isToday ? " today" : ""}`}
+      className={`ess-cal-cell${TINTED.has(statusClass) ? ` st-${statusClass}` : ""}${NON_WORKING.has(statusClass) ? " non-working" : ""}${isToday ? " today" : ""}`}
       data-date={isoDate(year, month, day)}
       aria-label={title}
       onMouseEnter={showTip}
@@ -115,7 +118,7 @@ function DayCell({ day, year, month, record: rawRecord, isToday }: {
     >
       <span className="ess-cal-date" aria-current={isToday ? "date" : undefined}>{day}</span>
       {label && (
-        <span className="ess-cal-status">
+        <span className={`ess-cal-status ${statusClass}`}>
           <i className={`ess-status-dot ${statusClass}`} aria-hidden="true" />
           <span className="ess-cal-label">{label}</span>
         </span>
