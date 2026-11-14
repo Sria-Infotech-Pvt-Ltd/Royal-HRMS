@@ -60,9 +60,14 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
           </span>
         </div>
         <div className="flex items-center" style={{ gap: 6, flexShrink: 0, whiteSpace: "nowrap" }}>
+        {/* View and Replace are icon-only, like Delete: the row stays compact. The tooltip and the accessible name carry the
+            words ("View PAN card", "Replace PAN card") so a screen reader and a hover still say what each one does. */}
         {existing.file_url && (
-          <a href={existing.file_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" title={`View ${label}`}>
-            <i className="ti ti-eye" /> View
+          <a
+            href={existing.file_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm"
+            title={`View ${label}`} aria-label={`View ${label}`}
+          >
+            <i className="ti ti-eye" aria-hidden="true" />
           </a>
         )}
         <button
@@ -70,8 +75,11 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
           onClick={() => inputRef.current?.click()}
           className="btn btn-ghost btn-sm"
           disabled={uploading}
+          title={`Replace ${label}`}
+          aria-label={`Replace ${label}`}
+          aria-busy={uploading}
         >
-          Replace
+          <i className={`ti ${uploading ? "ti-loader-2 animate-spin" : "ti-replace"}`} aria-hidden="true" />
         </button>
         {onDelete && (
           <button
