@@ -180,3 +180,35 @@ class EmployeeDirectoryLocationFilterTests(_BranchChangeBase):
 
     def test_branch_scoped_user_still_sees_only_their_own_branch(self):
         self.assertEqual(self._branch_names(self.hr), ['Kondapur'])
+
+
+class StaleBranchTextTests(_BranchChangeBase):
+    """A renamed Company Code leaves its employees carrying the OLD name as text (User.branch) while branch_fk is right.
+    The directory must offer, and filter by, the real name only."""
+
+    def setUp(self):
+        super().setUp()
+        self.stale = make_user('emp-stale@test.com', employee_id='20000010', branch='Kondapur Old Name')
+        type(self.stale).objects.filter(pk=self.stale.pk).update(branch_fk=self.kondapur)   # linked, but text is stale
+
+    def _stats(self, **params):
+        response = self._as(self.admin).get(reverse('employee-stats'), params)
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()['data']
+
+    def test_the_old_name_is_not_offered_only_real_company_codes(self):
+        self.assertEqual(self._stats()['branch_names'], ['Kondapur', 'Mulugu'])
+
+    def test_filtering_by_the_real_name_finds_employees_still_carrying_the_old_text(self):
+        # Kondapur: the base employee (text matches) plus the stale one (matches through the link).
+        self.assertEqual(self._stats(branch='Kondapur')['total'], 2)
+
+    def test_the_employee_list_filters_the_same_way(self):
+        response = self._as(self.admin).get(reverse('employee-list-create'), {'branch': 'Kondapur', 'page_size': 50})
+        self.assertEqual(response.status_code, 200, response.content)
+        ids = {row['employee_id'] if 'employee_id' in row else row['id'] for row in response.json()['data']['results']}
+        self.assertIn('20000010', ids)
+        self.assertIn('20000001', ids)
+
+    def test_filtering_by_the_old_text_still_works_for_old_links(self):
+        self.assertEqual(self._stats(branch='Kondapur Old Name')['total'], 1)

@@ -18,6 +18,7 @@ import io
 from dataclasses import dataclass, field
 from typing import Callable
 
+from apps.dashboard import services_reports_timesheet as timesheet_reports
 from core.permissions import has_perm
 
 MAX_ROWS = 20000
@@ -199,6 +200,8 @@ def _candidates(user, params: dict) -> ReportData:
 
 _REQUEST_STATUS = (('pending', 'Pending'), ('l2_pending', 'Awaiting HR'), ('approved', 'Approved'), ('rejected', 'Rejected'), ('cancelled', 'Cancelled'))
 
+_TIMESHEET_FILTERS = (FilterSpec('from', 'From week', 'date'), FilterSpec('to', 'To week', 'date'))
+
 REPORTS: tuple[ReportSpec, ...] = (
     ReportSpec('employees', 'Employee directory', 'People in your scope with status, branch and manager.', 'employees.export', _employees,
                (_status_filter(('active', 'Active'), ('onboarding', 'Onboarding'), ('exited', 'Exited')),), ('Email', 'Phone')),
@@ -217,6 +220,15 @@ REPORTS: tuple[ReportSpec, ...] = (
                (_status_filter(('pending', 'Pending'), ('screening', 'Screening'), ('interview_scheduled', 'Interview scheduled'),
                                ('interview_done', 'Interview done'), ('selected', 'Selected'), ('offer_sent', 'Onboarding link sent'),
                                ('converted', 'Converted'), ('rejected', 'Rejected')),)),
+    # Weekly timesheets: one permission (timesheet.report); rows are limited to the sheets the person may see (never drafts, never their own).
+    ReportSpec('timesheets', 'Timesheets (employee-wise)', 'One row per employee per week with project, billable and attendance hours.',
+               'timesheet.report', timesheet_reports.employee_wise, _TIMESHEET_FILTERS + (_status_filter(('submitted', 'Submitted'), ('approved', 'Approved'), ('returned', 'Sent back')),)),
+    ReportSpec('timesheet_projects', 'Timesheets (project-wise hours)', 'Hours logged per project, with billable split and people count.',
+               'timesheet.report', timesheet_reports.project_wise, _TIMESHEET_FILTERS + (_status_filter(('submitted', 'Submitted'), ('approved', 'Approved')),)),
+    ReportSpec('timesheet_billable', 'Timesheets (billable vs non-billable)', 'Billable and non-billable hours per employee.',
+               'timesheet.report', timesheet_reports.billable_split, _TIMESHEET_FILTERS + (_status_filter(('submitted', 'Submitted'), ('approved', 'Approved')),)),
+    ReportSpec('timesheet_weekly', 'Timesheets (weekly summary)', 'Per week: how many are in, awaiting, approved, sent back or late, and the hours.',
+               'timesheet.report', timesheet_reports.weekly_summary, _TIMESHEET_FILTERS),
 )
 
 _BY_KEY = {spec.key: spec for spec in REPORTS}

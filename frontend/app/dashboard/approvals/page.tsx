@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { usePermission, useAnyPermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import TeamApprovalsSection from "./_components/TeamApprovalsSection";
 import AttendanceApprovalTab from "./_components/AttendanceApprovalTab";
 import FaceRegistrationApprovalsTab from "./_components/FaceRegistrationApprovalsTab";
 import PersonnelActionsTab from "./_components/PersonnelActionsTab";
+import TimesheetApprovalsTab from "./_components/TimesheetApprovalsTab";
 import MyApprovalsOverview from "./_components/MyApprovalsOverview";
-import { approvalSectionsFor, type ApprovalSectionKey } from "@/lib/approvalSections";
+import { approvalSectionsFor, sectionFromLink, type ApprovalSectionKey } from "@/lib/approvalSections";
 
 type Section = ApprovalSectionKey;
 
@@ -29,9 +31,14 @@ export default function ApprovalsPage() {
     user?.is_superuser === true ||
     hasPayrollView;
 
+  // Timesheets: the assigned approver is usually the reporting manager (a team seat), or HR (leave.approve is what the HR
+  // fallback is found by; timesheet.approve is the explicit grant). The server lists only the sheets this person may decide.
+  const holdsTimesheetApprove = useAnyPermission("timesheet.approve", "leave.approve");
+  const canApproveTimesheets = user?.can_manage_team === true || user?.is_superuser === true || holdsTimesheetApprove;
+
   const sections = useMemo(
-    () => approvalSectionsFor({ canApprove, canApproveAttendance, canSeePersonnel, canApproveFace }),
-    [canApprove, canApproveAttendance, canApproveFace, canSeePersonnel],
+    () => approvalSectionsFor({ canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace }),
+    [canApprove, canApproveAttendance, canApproveTimesheets, canApproveFace, canSeePersonnel],
   );
 
   useEffect(() => {
@@ -39,6 +46,13 @@ export default function ApprovalsPage() {
       setSection(sections[0].key);
     }
   }, [section, sections]);
+
+  // A link such as a timesheet bell notice opens a named tab (?section=timesheets), once this person's tabs are known.
+  const linkedSection = useSearchParams().get("section");
+  useEffect(() => {
+    const wanted = sectionFromLink(linkedSection, sections);
+    if (wanted) setSection(wanted);
+  }, [linkedSection, sections]);
 
   return (
     <div>
@@ -58,10 +72,11 @@ export default function ApprovalsPage() {
 
       {section === "overview" && (
         <MyApprovalsOverview
-          canApprove={canApprove} canApproveAttendance={canApproveAttendance}
+          canApprove={canApprove} canApproveAttendance={canApproveAttendance} canApproveTimesheets={canApproveTimesheets}
           canSeePersonnel={canSeePersonnel} canApproveFace={canApproveFace} onOpen={setSection}
         />
       )}
+      {section === "timesheets"        && canApproveTimesheets && <TimesheetApprovalsTab />}
       {section === "approvals"         && canApprove           && <TeamApprovalsSection />}
       {section === "attendance"        && canApproveAttendance && <div className="settings-card"><AttendanceApprovalTab /></div>}
       {section === "personnel"         && canSeePersonnel      && <PersonnelActionsTab />}

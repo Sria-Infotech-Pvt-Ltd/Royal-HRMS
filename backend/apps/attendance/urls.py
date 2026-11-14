@@ -2,6 +2,16 @@
 from django.urls import path
 
 from apps.attendance.views_device import DevicePunchPushView
+from apps.attendance.views.timesheets import (
+    MyTimesheetSubmitView,
+    MyTimesheetView,
+    MyTimesheetWeekView,
+    TeamTimesheetListView,
+    TimesheetApproveView,
+    TimesheetDetailView,
+    TimesheetReturnView,
+    TimesheetUnlockView,
+)
 from apps.attendance.views import (
     AbsenceAlertPolicyDetailView,
     AbsenceAlertPolicyListCreateView,
@@ -98,6 +108,15 @@ urlpatterns = [
     path('today/',      TodayAttendanceView.as_view(),    name='attendance-today'),
     path('my-shift/',   MyShiftView.as_view(),            name='attendance-my-shift'),
     path('my-weekly-timesheet/', MyWeeklyTimesheetView.as_view(), name='attendance-my-weekly-timesheet'),
+    # Weekly project timesheets (the old my-weekly-timesheet/ above stays for existing clients)
+    path('timesheets/my/', MyTimesheetView.as_view(), name='timesheet-my'),
+    path('timesheets/my/<str:week>/', MyTimesheetWeekView.as_view(), name='timesheet-my-week'),
+    path('timesheets/my/<str:week>/submit/', MyTimesheetSubmitView.as_view(), name='timesheet-my-submit'),
+    path('timesheets/team/', TeamTimesheetListView.as_view(), name='timesheet-team'),
+    path('timesheets/<uuid:pk>/', TimesheetDetailView.as_view(), name='timesheet-detail'),
+    path('timesheets/<uuid:pk>/approve/', TimesheetApproveView.as_view(), name='timesheet-approve'),
+    path('timesheets/<uuid:pk>/return/', TimesheetReturnView.as_view(), name='timesheet-return'),
+    path('timesheets/<uuid:pk>/unlock/', TimesheetUnlockView.as_view(), name='timesheet-unlock'),
     path('stats/',      AttendanceStatsView.as_view(),    name='attendance-stats'),
     path('summary/',    AttendanceSummaryView.as_view(),  name='attendance-summary'),
     path('calendar/',   AttendanceCalendarView.as_view(), name='attendance-calendar'),

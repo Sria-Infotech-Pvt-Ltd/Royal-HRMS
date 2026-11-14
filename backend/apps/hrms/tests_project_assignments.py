@@ -38,9 +38,19 @@ def _row(assignment_id: int, **overrides) -> dict:
     return row
 
 
+def _block_real_task_queue(test_case) -> 'patch':
+    """The fallback pull is queued with Celery. These tests must never put a real task on the broker the developer's own
+    worker is listening to (it would run against the dev database), so queueing is replaced by a mock for the whole test."""
+    patcher = patch('apps.hrms.tasks.pull_employee_assignments.apply_async')
+    mock = patcher.start()
+    test_case.addCleanup(patcher.stop)
+    return mock
+
+
 class PushTestCase(TestCase):
     def setUp(self):
         cache.clear()
+        self.queued_pulls = _block_real_task_queue(self)
         self.client = APIClient(raise_request_exception=False)
         self.url = reverse(PUSH_URL_NAME)
         ExternalAPIKey.objects.create(name='project_budget_tool', key_hash=hashlib.sha256(RAW_KEY.encode()).hexdigest())
@@ -386,12 +396,24 @@ class WorkStatusPermissionTests(PushTestCase):
         self.assertEqual((data['current'], data['history']['count']), ([], 0))
 
     @override_settings(PROJECT_BUDGET_API_BASE_URL='http://budget.invalid', PROJECT_BUDGET_API_KEY='k')
-    def test_own_work_status_asks_budgeting_once_when_nothing_is_stored(self):
-        with patch('apps.hrms.services_project_sync._get_all_pages', return_value=[_row(77, assignment_end_date=None)]) as pull:
+    def test_own_work_status_answers_at_once_and_queues_one_background_pull_when_nothing_is_stored(self):
+        # The pull no longer runs inside the request (it used to, and could stall the page for 10 s+). The view answers from
+        # what is stored, flags `sync_pending`, and queues ONE background pull. More in tests_project_sync_queue.py.
+        from apps.hrms.services_project_sync import run_employee_assignments_pull
+        rows = [_row(77, assignment_end_date=None)]
+        with patch('apps.hrms.services_project_sync._get_all_pages', return_value=rows) as pull:
             first = self.get(self.stranger).data['data']
             self.get(self.stranger)
-        self.assertEqual([a['assignment_id'] for a in first['current']], [77])
-        self.assertEqual(pull.call_count, 1)
+        pull.assert_not_called()                                   # nothing talks to Project Budgeting inside the request
+        self.assertEqual((first['current'], first['sync_pending']), ([], True))
+        self.queued_pulls.assert_called_once()                     # two page loads, one queued pull
+
+        with patch('apps.hrms.services_project_sync._get_all_pages', return_value=rows):
+            run_employee_assignments_pull('EMP00022')              # the background job runs
+        after = self.get(self.stranger).data['data']
+        self.assertEqual([a['assignment_id'] for a in after['current']], [77])
+        self.assertFalse(after['sync_pending'])
+        self.queued_pulls.assert_called_once()                     # and nothing was queued again
 
     def test_removed_and_ended_assignments_are_not_current(self):
         self.push('EMP00021', [])
@@ -438,6 +460,7 @@ class ProjectSyncStatusTests(PushTestCase):
 class EmployeeProjectsDashboardTests(TestCase):
     def setUp(self):
         cache.clear()
+        self.queued_pulls = _block_real_task_queue(self)
         role = make_role('project_dash_role')
         self.employee = make_user('proj1@test.com', role=role, employee_id='EMP00010')
         self.other = make_user('proj2@test.com', role=role, employee_id='EMP00011')
@@ -467,20 +490,26 @@ class EmployeeProjectsDashboardTests(TestCase):
     def test_unauthenticated_is_rejected(self):
         self.assertIn(APIClient().get(self.url).status_code, (401, 403))
 
+    # The fallback pull no longer runs inside the request (it used to, and could stall the dashboard for 10 s+): the view
+    # answers from what is stored and queues ONE background pull. The pull itself is covered in tests_project_sync_queue.py.
     @override_settings(PROJECT_BUDGET_API_BASE_URL='http://budget.invalid', PROJECT_BUDGET_API_KEY='k')
-    def test_fallback_pull_fills_empty_employee_once(self):
-        with patch('apps.hrms.services_project_sync._get_all_pages', return_value=[_row(7)]) as pull:
+    def test_empty_employee_gets_an_immediate_answer_and_one_queued_pull(self):
+        with patch('apps.hrms.services_project_sync._get_all_pages') as pull:
             resp = self.client.get(self.url)
             self.client.get(self.url)
-        self.assertEqual(resp.data['data']['count'], 1)
-        self.assertEqual(pull.call_count, 1)
+        pull.assert_not_called()                       # nothing talks to Project Budgeting inside the request
+        self.assertEqual((resp.status_code, resp.data['data']['count']), (200, 0))
+        self.assertTrue(resp.data['data']['sync_pending'])
+        self.queued_pulls.assert_called_once()          # two page loads, one queued pull
 
     @override_settings(PROJECT_BUDGET_API_BASE_URL='http://budget.invalid', PROJECT_BUDGET_API_KEY='k')
-    def test_failed_fallback_pull_does_not_break_the_dashboard_and_is_logged(self):
+    def test_a_failed_background_pull_is_logged_and_leaves_the_dashboard_working(self):
+        from apps.hrms.services_project_sync import run_employee_assignments_pull
         with patch('apps.hrms.services_project_sync._get_all_pages', side_effect=ProjectSyncError('boom')):
-            resp = self.client.get(self.url)
+            run_employee_assignments_pull('EMP00010')
+        resp = self.client.get(self.url)
         self.assertEqual((resp.status_code, resp.data['data']['count']), (200, 0))
-        self.assertTrue(ProjectSyncLog.objects.filter(source='pull', status='failed').exists())
+        self.assertTrue(ProjectSyncLog.objects.filter(source='pull', status='failed', employee_code='EMP00010').exists())
 
     @override_settings(PROJECT_BUDGET_API_BASE_URL='', PROJECT_BUDGET_API_KEY='')
     def test_fallback_is_off_when_not_configured(self):

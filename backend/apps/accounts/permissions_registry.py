@@ -52,6 +52,21 @@ CODE_DEFINED_PERMISSIONS = [
         "Open an employee's workspace (attendance, leave, payslips, tax, requests...) read-only, exactly as they see it.",
         True,
     ),
+    (
+        'timesheet.approve', 'timesheet', 'approve',
+        "Approve or send back weekly timesheets as the HR fallback approver, within your scope (the assigned manager does not need this).",
+        False,
+    ),
+    (
+        'timesheet.unlock', 'timesheet', 'unlock',
+        'Reopen an approved weekly timesheet for correction, with a mandatory reason. The earlier version stays in its history.',
+        True,
+    ),
+    (
+        'timesheet.report', 'timesheet', 'report',
+        'Run the timesheet reports (employee hours, project hours, billable hours, weekly summary) for your scope.',
+        False,
+    ),
 ]
 
 

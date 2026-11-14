@@ -13,15 +13,19 @@ import { useAttendanceDashboard } from "@/hooks/useAttendanceDashboard";
 import { useFetch } from "@/hooks/useFetch";
 import { useWeeklyTimesheet } from "@/hooks/useWeeklyTimesheet";
 import { API } from "@/lib/api/endpoints";
+import { dueDayLabel, timesheetCardState } from "@/lib/timesheet";
+import TimesheetCardAction from "@/components/timesheet/TimesheetCardAction";
 import RegularizationModal from "../../my-attendance/_components/RegularizationModal";
 import MyCorrectionDetailModal from "../../my-requests/_components/MyCorrectionDetailModal";
-import {
-  MyCorrectionRequest, PaginatedResponse, STATUS_LABEL, toDisplayStatus,
-} from "../../my-requests/_data";
+import WfhRequestModal from "../../work-from-home/_components/WfhRequestModal";
+import WfhRequestDetailModal from "../../work-from-home/_components/WfhRequestDetailModal";
+import { MyCorrectionRequest, PaginatedResponse } from "../../my-requests/_data";
 import type { RecentPunchRow } from "@/types/attendance";
+import type { WorkFromHomeRequest } from "@/types/workFromHome";
+import AttendanceRequestsCard from "./AttendanceRequestsCard";
 import EssAttendanceCalendar from "./EssAttendanceCalendar";
+import { MONTH_LONG, buildAttendanceRequestRows } from "./attendanceRequestRows";
 
-const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const RECENT_PUNCHES = 3;
 const RECENT_REQUESTS = 5;
 
@@ -29,18 +33,11 @@ function punchDetail(row: RecentPunchRow): string {
   return row.clockOut ? `In ${row.clockIn} · Out ${row.clockOut}` : `In ${row.clockIn} · ${row.source}`;
 }
 
-function correctionTitle(dateIso: string): string {
-  const date = new Date(`${dateIso}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? "Correction" : `${date.getDate()} ${MONTH_LONG[date.getMonth()]} correction`;
-}
-
-function TimesheetCard() {
-  const { data, submitting, submit } = useWeeklyTimesheet();
+function TimesheetCard({ isReadOnly, onOpen }: { isReadOnly: boolean; onOpen?: (weekStart: string) => void }) {
+  const { data } = useWeeklyTimesheet();
   if (!data) return <div className="ess-card"><h2>Weekly timesheet</h2><p>Loading…</p></div>;
-  const remaining = Math.max(0, data.target_hours - data.hours_logged);
   const weekEnding = new Date(`${data.week_end}T12:00:00`);
-  const due = new Date(`${data.week_start}T12:00:00`);
-  due.setDate(due.getDate() + 4);
+  const card = timesheetCardState(data, dueDayLabel(data.week_start));
   return (
     <div className="ess-card">
       <div className="ess-pagehead">
@@ -48,32 +45,24 @@ function TimesheetCard() {
           <h2>Weekly timesheet</h2>
           <p>{data.hours_logged} of {data.target_hours} hours logged for the current week.</p>
         </div>
-        <button className="rvbtn pri" type="button" onClick={submit} disabled={submitting || data.submitted}>
-          {data.submitted ? "Submitted" : submitting ? "Submitting…" : "Submit timesheet"}
-        </button>
+        {!isReadOnly && <TimesheetCardAction summary={data} className="rvbtn pri" onOpen={onOpen} />}
       </div>
       <div className="ess-list">
         <div className="ess-row">
           <div>
             <b>Week ending {weekEnding.getDate()} {MONTH_LONG[weekEnding.getMonth()]}</b>
-            <small>
-              {data.submitted
-                ? "Submitted — thank you."
-                : remaining > 0
-                  ? `${remaining} hour${remaining === 1 ? "" : "s"} remaining · Submit after completing your work summary.`
-                  : "Target reached — ready to submit."}
-            </small>
+            <small>{card.subtitle}</small>
           </div>
-          <span className={`state${data.submitted ? " ok" : ""}`}>
-            {data.submitted ? "SUBMITTED" : `DUE ${due.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}`}
-          </span>
+          <span className={`state${card.isDone ? " ok" : ""}`}>{card.badge}</span>
         </div>
       </div>
     </div>
   );
 }
 
-export default function EssAttendanceTab() {
+/** `isReadOnly`: an admin viewing someone else's workspace. The server honours "view as" for reads only, so a WFH request
+ *  made from there would be filed on the admin's own account; the entry is hidden instead. */
+export default function EssAttendanceTab({ isReadOnly = false, onViewAllRequests, onOpenTimesheet }: { isReadOnly?: boolean; onViewAllRequests?: () => void; onOpenTimesheet?: (weekStart: string) => void }) {
   const [displayedMonth, setDisplayedMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -86,8 +75,11 @@ export default function EssAttendanceTab() {
   // source fields at all, which is why this card was always missing them.
   const recentPunches = useFetch<RecentPunchRow[]>(`${API.attendance.recentPunches}?limit=${RECENT_PUNCHES}`);
   const corrections = useFetch<PaginatedResponse<MyCorrectionRequest>>(`${API.attendance.myCorrections}?page_size=100`);
+  const wfh = useFetch<PaginatedResponse<WorkFromHomeRequest>>(`${API.workFromHome.requests}?page_size=100`);
   const [showRegularize, setShowRegularize] = useState(false);
+  const [showWfh, setShowWfh] = useState(false);
   const [detail, setDetail] = useState<MyCorrectionRequest | null>(null);
+  const [wfhDetail, setWfhDetail] = useState<WorkFromHomeRequest | null>(null);
 
   function changeMonth(offset: number) {
     setDisplayedMonth(current => new Date(current.getFullYear(), current.getMonth() + offset, 1));
@@ -99,18 +91,23 @@ export default function EssAttendanceTab() {
   }
 
   const punches = recentPunches.data ?? [];
-  const requests = [...(corrections.data?.results ?? [])]
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .slice(0, RECENT_REQUESTS);
+  const requestRows = buildAttendanceRequestRows(corrections.data?.results ?? [], wfh.data?.results ?? [], RECENT_REQUESTS);
 
   return (
     <section className="ess-page">
       <div className="ess-pagehead">
         <div>
           <h2>Attendance</h2>
-          <p>Punch status, monthly calendar and regularization requests.</p>
+          <p>Punch status, monthly calendar, regularization and work-from-home requests.</p>
         </div>
-        <button className="rvbtn pri" type="button" onClick={() => setShowRegularize(true)}>Regularize attendance</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!isReadOnly && (
+            <button className="rvbtn" type="button" onClick={() => setShowWfh(true)}>
+              <i className="ti ti-home-2" aria-hidden="true" /> Request work from home
+            </button>
+          )}
+          <button className="rvbtn pri" type="button" onClick={() => setShowRegularize(true)}>Regularize attendance</button>
+        </div>
       </div>
 
       <div className="ess-grid">
@@ -143,35 +140,18 @@ export default function EssAttendanceTab() {
       </div>
 
       <div className="ess-grid">
-        <TimesheetCard />
-        <div className="ess-card">
-          <h2>Attendance requests</h2>
-          <p>Corrections remain visible beside original punches.</p>
-          <div className="ess-list">
-            {requests.length === 0 && (
-              <div className="ess-row"><div><b>No correction requests yet</b><small>Use Regularize attendance if a punch was missed or recorded incorrectly.</small></div></div>
-            )}
-            {requests.map(request => {
-              const status = toDisplayStatus(request.status);
-              const approver = request.l2_approver_name || request.l1_approver_name;
-              return (
-                <button key={request.id} className="ess-row ess-row-link" type="button" onClick={() => setDetail(request)}>
-                  <div>
-                    <b>{correctionTitle(request.date)}</b>
-                    <small>{status === "approved" && approver ? `Approved by ${approver}` : STATUS_LABEL[status]} · View details</small>
-                  </div>
-                  <span className={`state${status === "approved" ? " ok" : ""}`}>{STATUS_LABEL[status].toUpperCase()}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <TimesheetCard isReadOnly={isReadOnly} onOpen={onOpenTimesheet} />
+        <AttendanceRequestsCard rows={requestRows} onOpenCorrection={setDetail} onOpenWfh={setWfhDetail} onViewAll={onViewAllRequests} />
       </div>
 
       {showRegularize && (
         <RegularizationModal onClose={() => setShowRegularize(false)} onSuccess={() => { refetch(); corrections.refetch(); }} />
       )}
+      {/* The form shows its own "Request Submitted" screen. A new WFH request is pending, so it changes no punches or
+          calendar day yet (only an approved one does); only the request list needs refreshing. */}
+      {showWfh && <WfhRequestModal onClose={() => setShowWfh(false)} onCreated={() => wfh.refetch()} />}
       {detail && <MyCorrectionDetailModal request={detail} onClose={() => setDetail(null)} />}
+      {wfhDetail && <WfhRequestDetailModal request={wfhDetail} onClose={() => setWfhDetail(null)} onChanged={() => wfh.refetch()} readOnly={isReadOnly} />}
     </section>
   );
 }

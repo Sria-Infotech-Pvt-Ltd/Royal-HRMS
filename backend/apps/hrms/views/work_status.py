@@ -12,7 +12,7 @@ from core.responses import error, success
 from apps.accounts.models import User
 from apps.hrms.models import ProjectAssignment, ProjectSyncLog
 from apps.hrms.services_project_assignments import STATUS_COMPLETED, STATUS_REMOVED
-from apps.hrms.services_project_sync import sync_employee_assignments_if_unknown
+from apps.hrms.services_project_sync import queue_employee_assignments_sync
 from apps.hrms.services_work_status import (
     MANAGED_IN,
     assignment_dict,
@@ -34,7 +34,7 @@ def _can_view_work_status(viewer: User, employee: User) -> bool:
     return not _employee_out_of_branch_scope(viewer, employee)
 
 
-def _work_status_response(request, employee: User):
+def _work_status_response(request, employee: User, *, sync_pending: bool = False):
     today = timezone.localdate()
     history_page, paginator = paginate(history_queryset(employee.employee_id), request, default_page_size=20)
     current = [a for a in history_queryset(employee.employee_id) if is_current(a, today)]
@@ -45,6 +45,9 @@ def _work_status_response(request, employee: User):
         'managed_in':         MANAGED_IN,
         'is_read_only':       True,
         'last_synced_at':     last_synced_at(),
+        # True while a background pull from Project Budgeting for this employee may still be running; the page refreshes
+        # once shortly after (it never polls). Always False when someone else's Work Status is being viewed.
+        'sync_pending':       sync_pending,
         'current':            [assignment_dict(a, today) for a in current],
         'conflicts':          find_conflicts(current),
         'history':            paginated_data(paginator, history_page, [assignment_dict(a, today) for a in history_page]),
@@ -58,9 +61,10 @@ class MyWorkStatusView(APIView):
     def get(self, request):
         if not request.user.employee_id:
             return error('Your account has no employee ID.', http_status=404)
-        # Nothing stored for this employee yet (e.g. a push was missed): ask Project Budgeting once. Never raises.
-        sync_employee_assignments_if_unknown(request.user.employee_id)
-        return _work_status_response(request, request.user)
+        # Nothing stored for this employee yet (e.g. a push was missed): queue ONE background pull from Project Budgeting.
+        # The response is built from what is stored right now and never waits for it. Never raises.
+        sync_pending = queue_employee_assignments_sync(request.user.employee_id)
+        return _work_status_response(request, request.user, sync_pending=sync_pending)
 
 
 class EmployeeWorkStatusView(APIView):

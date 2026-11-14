@@ -39,6 +39,7 @@ const MODULES = [
   { value: 'branch',        label: 'Company Code'  },
   { value: 'announcements', label: 'Announcements' },
   { value: 'birthday',      label: 'Birthday'      },
+  { value: 'timesheet',     label: 'Timesheet'     },
 ];
 
 function actionClass(action: string): string {

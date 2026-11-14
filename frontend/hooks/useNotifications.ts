@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import axios from "axios";
-import clientApi, { isSessionKnownExpired, onSessionExpired } from "@/lib/clientApi";
+import clientApi, { isSessionKnownExpired, onSessionExpired, refreshAccessTokenQuietly } from "@/lib/clientApi";
 import { pollWhileSessionLive } from "@/lib/pollWhileSessionLive";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
-import { API_URL, API_BASE } from "@/lib/config";
+import { API_URL } from "@/lib/config";
 import type {
   Notification, NotificationListResponse, UnreadCountResponse,
 } from "@/types/notifications";
@@ -41,12 +40,12 @@ function notificationsSocketUrl(): string | null {
 // stall well past 15 minutes. Reconnecting after that with the stale cookie
 // gets rejected (WSREJECT) even though the session is still perfectly valid.
 // Refreshing right before each (re)connect attempt closes that gap.
-function refreshTokenSilently(): Promise<void> {
-  return axios
-    .post(`${API_BASE}/token/refresh/`, {}, { withCredentials: true, headers: { "Content-Type": "application/json" } })
-    .then(() => undefined)
-    .catch(() => undefined);
-}
+//
+// This used to POST to /token/refresh/ itself, outside the shared refresh coordination in clientApi.ts. The server rotates
+// the refresh token on every use and blacklists the old one, so that call could race the interceptor's own refresh (or a
+// refresh in another tab) with the same cookie, and whichever lost got a 401. It now goes through the one shared path
+// (cross-tab lock, recent-refresh check, a single in-flight call) and never throws or touches the session state.
+const refreshTokenSilently = refreshAccessTokenQuietly;
 
 export function useNotifications() {
   const { showToast } = useToast();

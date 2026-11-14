@@ -2997,11 +2997,13 @@ class ApprovalWorkflowRule(models.Model):
     WORKFLOW_EXPENSE               = 'expense'
     WORKFLOW_ATTENDANCE_CORRECTION = 'attendance_correction'
     WORKFLOW_WFH                   = 'wfh'
+    WORKFLOW_TIMESHEET             = 'timesheet'
     WORKFLOW_CHOICES = [
         (WORKFLOW_LEAVE,                 'Leave Request'),
         (WORKFLOW_EXPENSE,               'Expense Claim'),
         (WORKFLOW_ATTENDANCE_CORRECTION, 'Attendance Correction'),
         (WORKFLOW_WFH,                   'Work From Home Request'),
+        (WORKFLOW_TIMESHEET,             'Weekly Timesheet'),
     ]
 
     workflow_type    = models.CharField(max_length=25, choices=WORKFLOW_CHOICES, unique=True)

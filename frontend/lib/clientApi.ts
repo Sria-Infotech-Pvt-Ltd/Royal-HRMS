@@ -37,9 +37,16 @@ export function onSessionExpired(listener: () => void): () => void {
   return () => window.removeEventListener("session:expired", listener);
 }
 
+const DEFAULT_TIMEOUT_MS = 15000;
+// A request that carries a file. How long it takes is set by the person's upload speed, not by the server: measured on a
+// 0.3-0.5 Mbit/s connection, a 1.2 MB document needs ~20 s to reach the file store, 40+ s with two uploading at once. At
+// the 15 s default the browser gave up, showed "could not reach the server", and the upload then finished and was saved on
+// the server anyway. The server's own limits (5 MB per file, its storage client's timeouts) still apply.
+const UPLOAD_TIMEOUT_MS = 120000;
+
 const clientApi = axios.create({
   baseURL: API_BASE,
-  timeout: 15000,
+  timeout: DEFAULT_TIMEOUT_MS,
   headers: { "Content-Type": "application/json" },
   withCredentials: true,
 });
@@ -50,6 +57,8 @@ clientApi.interceptors.request.use((config) => {
   // can set multipart/form-data with the correct boundary automatically.
   if (config.data instanceof FormData) {
     delete config.headers["Content-Type"];
+    // Longer timeout for a file upload, unless the caller chose its own (a different value from the instance default).
+    if (config.timeout === DEFAULT_TIMEOUT_MS) config.timeout = UPLOAD_TIMEOUT_MS;
   }
   // While an admin views an employee's workspace, ask the server to answer as that employee (read-only). A request
   // that already sets the header (even empty, to stay as the signed-in person) is left alone.
@@ -105,22 +114,50 @@ function markRefreshedNow(): void {
   try { localStorage.setItem(LAST_REFRESH_KEY, String(Date.now())); } catch { /* best-effort */ }
 }
 
+// The refresh call is made with plain axios (not clientApi, whose interceptor would try to refresh the refresh), so it needs
+// its own timeout: without one a hung refresh would hold the cross-tab lock, and every request queued behind it, forever.
+const REFRESH_TIMEOUT_MS = 15000;
+
 async function callTokenRefresh(): Promise<void> {
   if (recentlyRefreshedElsewhere()) return;
   await axios.post(
     `${API_BASE}/token/refresh/`,
     {},
-    { withCredentials: true, headers: { "Content-Type": "application/json" } }
+    { withCredentials: true, headers: { "Content-Type": "application/json" }, timeout: REFRESH_TIMEOUT_MS }
   );
   markRefreshedNow();
 }
 
+// One refresh at a time within this tab, whoever asks (the 401 interceptor, the notification socket, the onboarding page).
+// navigator.locks already serializes tabs, but it is not available everywhere, and callers that queue behind the lock would
+// otherwise each go on to make their own call.
+let inFlightRefresh: Promise<void> | null = null;
+
 export function refreshAccessToken(): Promise<void> {
+  if (inFlightRefresh) return inFlightRefresh;
   const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
-  if (locks) {
-    return locks.request<void>(REFRESH_LOCK_NAME, () => callTokenRefresh());
-  }
-  return callTokenRefresh();
+  const attempt = locks ? locks.request<void>(REFRESH_LOCK_NAME, () => callTokenRefresh()) : callTokenRefresh();
+  inFlightRefresh = attempt.finally(() => { inFlightRefresh = null; });
+  return inFlightRefresh;
+}
+
+/**
+ * Refresh the access cookie for a background caller (the notification socket) without touching session state: same lock,
+ * same recent-refresh check, same single in-flight call as every other refresh, and it never throws. If the session really
+ * is over, the next ordinary request gets a 401 and the interceptor below ends it properly.
+ */
+export function refreshAccessTokenQuietly(): Promise<void> {
+  return refreshAccessToken().catch(() => undefined);
+}
+
+/**
+ * True only when the server said the refresh token itself is no good: 401, which is what /token/refresh/ answers for an
+ * invalid, expired, already-rotated or missing token. Anything else says nothing about the token and must not end the
+ * session: a 503 ("database temporarily unavailable"), another 5xx, a timeout or dropped connection (no response at all), or
+ * a 403.
+ */
+export function isRefreshTokenRejected(err: unknown): boolean {
+  return axios.isAxiosError(err) && err.response?.status === 401;
 }
 
 function dispatchSessionExpired() {
@@ -180,7 +217,10 @@ clientApi.interceptors.response.use(
       return clientApi(original);
     } catch (refreshErr) {
       flushQueue(refreshErr, false);
-      dispatchSessionExpired();
+      // Only a refresh token the server rejected ends the session. A transient failure (a 503 while the database blips, a
+      // timeout, a dropped connection) fails just this request and leaves the session intact: the person stays signed in
+      // and the next request tries the refresh again.
+      if (isRefreshTokenRejected(refreshErr)) dispatchSessionExpired();
       return Promise.reject(normaliseError(refreshErr));
     } finally {
       isRefreshing = false;

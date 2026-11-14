@@ -34,6 +34,7 @@ from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
 from apps.attendance.models import AttendanceCorrection, WorkingHoursPolicy, WeeklyTimesheetSubmission
+from apps.attendance.models_timesheet import STATUS_APPROVED, STATUS_SUBMITTED, Timesheet
 from apps.attendance.serializers_my_attendance import (
     CalendarSerializer,
     CorrectionReadSerializer,
@@ -250,6 +251,13 @@ class MyWeeklyTimesheetView(APIView):
         ).first()
         data['submitted'] = submission is not None
         data['submitted_at'] = submission.submitted_at.isoformat() if submission else None
+        # Additive, for old clients: the real weekly timesheet (attendance/timesheets/) also counts as submitted. The
+        # old tick-box row above is still honoured and still written by POST; nothing about it was removed or migrated.
+        sheet = Timesheet.objects.filter(employee=request.user, week_start=week_start).first()
+        data['timesheet_status'] = sheet.status if sheet else None
+        if sheet and sheet.status in (STATUS_SUBMITTED, STATUS_APPROVED) and not data['submitted']:
+            data['submitted'] = True
+            data['submitted_at'] = sheet.submitted_at.isoformat() if sheet.submitted_at else None
         return success('Weekly timesheet retrieved.', data)
 
     def post(self, request: Request) -> Response:

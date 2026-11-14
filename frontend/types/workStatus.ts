@@ -49,6 +49,8 @@ export interface WorkStatusResponse {
   managed_in:         string;
   is_read_only:       boolean;
   last_synced_at:     string | null;
+  /** True while a background pull from Project Budgeting may still be running for this employee. Absent on older servers. */
+  sync_pending?:      boolean;
   current:            WorkStatusAssignment[];
   conflicts:          WorkStatusConflict[];
   history:            WorkStatusHistoryPage;
