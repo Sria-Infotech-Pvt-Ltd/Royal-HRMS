@@ -2495,6 +2495,8 @@ _EMP_PHONE_RE         = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
 # (QA #64); keeping only '%Y-%m-%d' fixes both the ambiguity and the
 # duplicated message text.
 _EMP_IMPORT_DATE_FMTS = ['%Y-%m-%d']
+# Date of Birth is written DD-MM-YYYY (DD/MM/YYYY too); the ISO form keeps working.
+_EMP_IMPORT_DOB_FMTS  = ['%d/%m/%Y', '%d-%m-%Y', '%Y-%m-%d']
 _EMP_VALID_GENDERS    = frozenset({'male', 'female', 'other'})
 _EMP_VALID_BLOOD      = frozenset({'a+', 'a-', 'b+', 'b-', 'o+', 'o-', 'ab+', 'ab-'})
 
@@ -2525,7 +2527,7 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
                                              allow_blank=True, default='')
     date_of_birth   = serializers.DateField(
                           required=False, allow_null=True, default=None,
-                          input_formats=_EMP_IMPORT_DATE_FMTS,
+                          input_formats=_EMP_IMPORT_DOB_FMTS,
                       )
     blood_group          = serializers.CharField(max_length=5, required=False,
                                                   allow_blank=True, default='')

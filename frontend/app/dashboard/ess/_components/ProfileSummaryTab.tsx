@@ -11,13 +11,15 @@
 import { isFutureDate } from "@/lib/employeeLifecycle";
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useMyApprovals } from "@/hooks/useMyApprovals";
+import type { ApprovalChain } from "@/types/approvers";
 import { API } from "@/lib/api/endpoints";
-import { formatDateSlash } from "@/lib/formatDate";
+import { formatDate } from "@/lib/formatDate";
 import EmployeeDrawer from "@/app/dashboard/employees/_components/EmployeeDrawer";
 import ProfileCorrectionModal from "./ProfileCorrectionModal";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import ProfilePhotoModal from "@/components/ProfilePhotoModal";
-import { directoryStatusLabel, initials } from "@/app/dashboard/employees/_data";
+import { initials } from "@/app/dashboard/employees/_data";
 import type { Employee } from "@/app/dashboard/employees/_data";
 
 interface ProfileSummaryData {
@@ -63,7 +65,7 @@ function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  return formatDateSlash(d);
+  return formatDate(d);
 }
 
 function toDrawerEmployee(d: ProfileSummaryData, photoUrl?: string | null): Employee {
@@ -83,8 +85,17 @@ function toDrawerEmployee(d: ProfileSummaryData, photoUrl?: string | null): Empl
   };
 }
 
+/** Name of the person who will approve at this stage, as resolved by the server (the same chain leave requests use). */
+function approverName(chain: ApprovalChain | null | undefined, stage: "l1" | "l2"): string {
+  const item = chain?.stages.find(entry => entry.stage === stage);
+  if (!item) return "—";
+  if (item.status === "skipped") return "Not applicable";
+  return item.user?.full_name || "Not assigned";
+}
+
 export default function ProfileSummaryTab() {
   const { data } = useFetch<ProfileSummaryData>(API.employees.me);
+  const { chain } = useMyApprovals();
   const [showRecord, setShowRecord] = useState(false);
   const [showCorrection, setShowCorrection] = useState(false);
   const [correctionSubmitted, setCorrectionSubmitted] = useState(false);
@@ -171,7 +182,7 @@ export default function ProfileSummaryTab() {
           <div style={{ fontWeight: 700, fontSize: 15 }}>My record at a glance</div>
           <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>Review official fields, then open the full record for all sections.</div>
         </div>
-        <div style={{ padding: "4px 20px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 280px))", gap: 14 }}>
+        <div style={{ padding: "4px 20px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(200px, calc((100% - 42px) / 4)), 1fr))", gap: 14 }}>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>EMPLOYEE ID</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.employee_id ?? "—"}</div>
@@ -194,10 +205,6 @@ export default function ProfileSummaryTab() {
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.work_location || data?.branch || "—"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>REPORTING MANAGER</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.reporting_manager?.name || "Not assigned"}</div>
-          </div>
-          <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>MOBILE NUMBER</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.phone || "—"}</div>
           </div>
@@ -206,10 +213,12 @@ export default function ProfileSummaryTab() {
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4, wordBreak: "break-all" }}>{data?.email || "—"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>EMPLOYMENT STATUS</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>
-              {data?.employment_status_display || (data ? directoryStatusLabel(toDrawerEmployee(data)) : "—")}
-            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>L1 APPROVER</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{approverName(chain, "l1")}</div>
+          </div>
+          <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>L2 APPROVER (HR)</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{approverName(chain, "l2")}</div>
           </div>
         </div>
       </div>

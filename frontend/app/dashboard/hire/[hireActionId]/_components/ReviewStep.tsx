@@ -11,7 +11,7 @@ import type { BasicPayDraft } from "./BasicPayStep";
 import type { StatutoryDraft } from "./StatutoryAccountsStep";
 import { REQUIRED_DOC_LABELS } from "./DocumentsChecklistStep";
 import { maritalStatusLabel } from "@/lib/maritalStatus";
-import { formatDateSlash } from "@/lib/formatDate";
+import { formatDate, formatDateSlash } from "@/lib/formatDate";
 
 interface Props {
   reservedEmployeeId: string;
@@ -174,7 +174,7 @@ export default function ReviewStep(props: Props) {
           <h4>PERSONAL</h4>
           <div className="kvlist">
             <Row label="Legal name" value={`${firstName} ${lastName}`.trim()} />
-            <Row label="Date of birth" value={formatDateSlash(form.date_of_birth)} />
+            <Row label="Date of birth" value={formatDate(form.date_of_birth)} />
             <Row label="Gender" value={form.gender ? form.gender[0].toUpperCase() + form.gender.slice(1) : ""} />
             <Row label="Marital status" value={maritalStatusLabel(form.marital_status)} />
             <Row label="Father/mother" value={form.father_name} />

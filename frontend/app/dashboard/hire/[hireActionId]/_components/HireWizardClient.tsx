@@ -879,7 +879,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Date of birth <span style={{ color: "var(--error)" }}>*</span></label>
-                  <DateInput value={form.date_of_birth} onChange={iso => setForm(f => ({ ...f, date_of_birth: iso }))} className="field-input" />
+                  <DateInput value={form.date_of_birth} onChange={iso => setForm(f => ({ ...f, date_of_birth: iso }))} className="field-input" separator="-" />
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Gender <span style={{ color: "var(--error)" }}>*</span></label>

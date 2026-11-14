@@ -10,7 +10,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
-import { formatDateSlash } from "@/lib/formatDate";
+import { formatDate, formatDateSlash } from "@/lib/formatDate";
 import { directoryStatusLabel, fullName, reportingManagerDisplay, type Employee } from "../_data";
 import type { EmployeeSalaryConfig } from "@/types/payroll";
 import { SectionCard, Row, ageYears, titleCase, STATUS_CHIP } from "./EmployeeDrawerParts";
@@ -223,7 +223,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
   const departmentValue = orgUnitParent ? `${orgUnitName} › ${orgUnitParent}` : orgUnitName;
 
   const dobValue = p?.date_of_birth
-    ? `${formatDateSlash(p.date_of_birth)}${ageYears(p.date_of_birth) !== null ? ` · ${ageYears(p.date_of_birth)} yrs` : ""}`
+    ? `${formatDate(p.date_of_birth)}${ageYears(p.date_of_birth) !== null ? ` · ${ageYears(p.date_of_birth)} yrs` : ""}`
     : undefined;
   // Show the account number masked until it is explicitly revealed (the card is titled "Masked").
   const accountValue = revealed?.account_number || p?.account_number_masked;

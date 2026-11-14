@@ -26,6 +26,7 @@ import ProfilePhotoModal from "@/components/ProfilePhotoModal";
 import SeparationCard from "./_components/SeparationCard";
 import ProfileDocumentsCard from "./ProfileDocumentsCard";
 import ProfileFaceIdCard from "./ProfileFaceIdCard";
+import { formatDate } from "@/lib/formatDate";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import {
   type ProfileData, type DocumentItem,
@@ -206,7 +207,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>DATE OF BIRTH</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{fmtDate(profile?.profile?.date_of_birth)}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{profile?.profile?.date_of_birth ? formatDate(profile.profile.date_of_birth) : "—"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>DATE OF JOINING</div>

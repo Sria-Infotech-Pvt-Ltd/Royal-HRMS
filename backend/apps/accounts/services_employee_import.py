@@ -39,6 +39,7 @@ EMAIL_RE = re.compile(
     r'^[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$'
 )
 ISO_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+DMY_DATE_RE = re.compile(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$')
 PIN_RE = re.compile(r'^\d{6}$')
 
 
@@ -66,7 +67,7 @@ COLUMNS: tuple[Column, ...] = (
     Column('reporting_manager', 'Reporting Manager Employee ID', False, 'Employee ID of an existing, active manager. Leave blank to use the org chart. Not allowed for manager positions.', '10000004'),
     Column('personal_email', 'Personal Email', False, 'A valid personal email address.', 'asha@example.com', is_core=False),
     Column('gender', 'Gender', False, 'Male, Female or Other.', 'Female', is_core=False),
-    Column('date_of_birth', 'Date of Birth', False, 'YYYY-MM-DD, in the past.', '1995-06-20', is_core=False),
+    Column('date_of_birth', 'Date of Birth', False, 'DD-MM-YYYY, in the past.', '20-06-1995', is_core=False),
     Column('blood_group', 'Blood Group', False, 'A+, A-, B+, B-, O+, O-, AB+ or AB-.', 'B+', is_core=False),
     Column('address_line1', 'Address Line 1', False, 'Current address.', '12 Main Street', is_core=False),
     Column('address_line2', 'Address Line 2', False, 'Current address, second line.', 'Kondapur', is_core=False),
@@ -209,6 +210,18 @@ def _iso_date(raw: str) -> datetime.date | None:
         return None
 
 
+def _dob_date(raw: str) -> datetime.date | None:
+    """Date of Birth as people write it, DD-MM-YYYY (DD/MM/YYYY also accepted); the ISO form the API uses still works."""
+    match = DMY_DATE_RE.match(raw.strip())
+    if match:
+        day, month, year = (int(part) for part in match.groups())
+        try:
+            return datetime.date(year, month, day)
+        except ValueError:
+            return None
+    return _iso_date(raw.strip())
+
+
 class _Lookups:
     """Everything a validation pass needs, loaded once for the whole file."""
 
@@ -295,9 +308,9 @@ def _check_optional_text(values: dict, result: RowResult) -> None:
         result.errors.append('PIN Code must be exactly 6 digits.')
     dob = values.get('date_of_birth', '')
     if dob:
-        result.date_of_birth = _iso_date(dob)
+        result.date_of_birth = _dob_date(dob)
         if result.date_of_birth is None:
-            result.errors.append('Date of Birth must be a real date written as YYYY-MM-DD.')
+            result.errors.append('Date of Birth must be a real date written as DD-MM-YYYY.')
         elif result.date_of_birth >= datetime.date.today():
             result.errors.append('Date of Birth must be in the past.')
 
@@ -363,7 +376,7 @@ def _mark_in_file_duplicates(results: list[RowResult]) -> None:
                 result.errors.append(f'Duplicate: the same Mobile Number appears in row {first_by_phone[phone]}.')
             else:
                 first_by_phone[phone] = result.row
-        identity = (result.values.get('first_name', '').lower(), result.values.get('last_name', '').lower(), result.values.get('date_of_birth', ''))
+        identity = (result.values.get('first_name', '').lower(), result.values.get('last_name', '').lower(), result.date_of_birth.isoformat() if result.date_of_birth else '')
         if all(identity):
             if identity in first_by_identity:
                 result.is_duplicate = True

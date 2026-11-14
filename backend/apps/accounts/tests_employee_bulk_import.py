@@ -197,6 +197,15 @@ class PreviewTests(_ImportCase):
         for fragment in ('First Name', 'Date of Joining', 'Mobile Number', 'Employment Type', 'Gender', 'Blood Group', 'PIN Code', 'Date of Birth', 'Personal Email'):
             self.assertIn(fragment, errors)
 
+    def test_date_of_birth_is_read_as_dd_mm_yyyy(self):
+        from apps.accounts.services_employee_import import _dob_date
+        import datetime
+        expected = datetime.date(1995, 6, 20)
+        for written in ('20/06/1995', '20-06-1995', '1995-06-20', ' 20/06/1995 '):
+            self.assertEqual(_dob_date(written), expected, written)
+        for bad in ('31/02/1995', '06/20/1995', '20/06/95', 'soon'):
+            self.assertIsNone(_dob_date(bad), bad)
+
     def test_missing_required_values_and_missing_columns(self):
         data = self.preview(self.hr, [self.row(1, first_name='', position='')]).json()['data']
         self.assertIn('First Name is required.', data['rows'][0]['errors'])

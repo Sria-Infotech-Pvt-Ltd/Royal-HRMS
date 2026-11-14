@@ -5511,3 +5511,23 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Reverses an earlier test decision:** `EssAttendanceCalendar.test.tsx` used to assert that working days are NOT filled with a background colour. That test was rewritten (present/absent cells get `st-*`, week-offs stay `non-working`, blank days plain), on the user's explicit request after the dot-only version was not visible enough.
 
 **Not changed:** the separate My Attendance calendar (`my-attendance/_components/AttendanceCalendar.tsx`) already tints cells from the backend's `_STATUS_COLOR` (absent = `#ef4444`). If colours are missing there, that is a different problem. Earlier suspected data issue still open: 11 Nov showed Incomplete while Recent punches listed In 14:16 / Out 15:13 (calendar reads `clock_in_display`/`clock_out_display` from the record, Recent punches reads raw punches).
+
+
+## ESS calendar, notification routing, L1/L2 profile cards, DOB as DD-MM-YYYY (2026-11-14)
+
+**By:** New-AI session - **Branch:** New-AI. Not checked in a browser.
+
+**Changes**
+- **Attendance calendar (`EssAttendanceCalendar.tsx`):** days before joining or after the last working day ("Not Employed" / "Not joined") are left blank instead of labelled; the legend entry was removed. Test updated.
+- **Notification routing (`lib/notificationRoutes.ts`):** confirmation and promotion notices open the Employment tab (`/dashboard/ess?tab=employment`), not My Profile. The own-profile welcome notice (`reference_id` "profile") opens `/dashboard`. Tests in `notificationRoutes.test.ts`.
+- **Hire-time documents (commit 2929b2c3):** documents an HR admin checks during the hire wizard are saved as verified (`views_hire_complete._copy_hire_action_documents`), so My Documents no longer shows them Pending. Six existing documents were corrected on Neon.
+- **ESS "Record at a glance" (`ProfileSummaryTab.tsx`):** 2 rows x 4 cards: Employee ID, Date of birth, Date of joining, Work location, Mobile, Work email, L1 Approver, L2 Approver (HR). L1/L2 come from `useMyApprovals` (`API.employees.myApprovals`) and show "Not assigned" when no approver exists. Reporting Manager and Employment Status cards were removed.
+- **DOB format DD-MM-YYYY** (display, typing and import; API and DB stay yyyy-mm-dd): My Profile, ESS profile card, onboarding drawer, hire Review step and Directory full record use `formatDate`. DOB inputs (hire wizard, onboarding family step, Edit Record employee and family member) use `DateInput separator="-"`. Import (`services_employee_import._dob_date`, legacy `EmployeeBulkImportRowSerializer`) accepts DD-MM-YYYY, DD/MM/YYYY and yyyy-mm-dd; template hint, example and sample row use DD-MM-YYYY. Test: `test_date_of_birth_is_read_as_dd_mm_yyyy`.
+
+**Checks:** bulk-import suites 47 + 16 pass on Neon; vitest 101 pass (employees, profile, candidate-review, ess); `tsc` and `eslint` clean on touched files.
+
+**Open**
+- Other dates (Directory list, joining dates elsewhere) still use `formatDateSlash`; only DOB was switched.
+- `edit-record-demo` (`EditRecordModalMock.tsx`) uses a native date input, so its format follows the browser locale.
+- Employee 10000001's profile lost father's name, gender, PAN, Aadhaar and bank fields after hire (still in `HireAction.draft_data`); only DOB was restored. Cause unknown.
+- `backend/config/settings.py` has loosened throttle rates and CRLF churn from another session; not committed here.

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import DocPreviewModal from "@/components/DocPreviewModal";
+import { formatDate } from "@/lib/formatDate";
 import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
@@ -338,7 +339,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
             {user.profile && (
               <>
                 <SectionCard icon="ti-id-badge-2" title="Personal">
-                  <Row label="DOB"             value={user.profile.date_of_birth} />
+                  <Row label="DOB"             value={user.profile.date_of_birth ? formatDate(user.profile.date_of_birth) : ""} />
                   <Row label="Gender"          value={user.profile.gender} />
                   <Row label="Marital Status"  value={maritalStatusLabel(user.profile.marital_status)} />
                   <Row label="Father Name"     value={user.profile.father_name} />

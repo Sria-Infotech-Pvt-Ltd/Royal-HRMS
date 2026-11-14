@@ -5,8 +5,8 @@ describe("notificationRoute", () => {
   it("opens the employee a joining notice is about", () => {
     expect(notificationRoute({ module: "system", reference_id: "employee:10000009" })).toBe("/dashboard/employees/10000009")
   })
-  it("opens your own profile for the welcome notice", () => {
-    expect(notificationRoute({ module: "system", reference_id: "profile" })).toBe("/dashboard/profile")
+  it("opens the dashboard for your own welcome notice", () => {
+    expect(notificationRoute({ module: "system", reference_id: "profile" })).toBe("/dashboard")
   })
   it("escapes the employee id", () => {
     expect(notificationRoute({ module: "system", reference_id: "employee:A/B" })).toBe("/dashboard/employees/A%2FB")
@@ -27,7 +27,36 @@ describe("notificationRoute", () => {
     expect(notificationRoute({ module: "announcement", reference_id: "x" })).toBe("/dashboard/ess?tab=announcements")
     expect(notificationRoute({ module: "announcement", reference_id: "" })).toBe("/dashboard/ess?tab=announcements")
   })
+  it("opens the Employment tab, not My Profile, for confirmation and promotion notices", () => {
+    expect(notificationRoute({ module: "confirmation", reference_id: "abc" })).toBe("/dashboard/ess?tab=employment")
+    expect(notificationRoute({ module: "promotion", reference_id: "abc" })).toBe("/dashboard/ess?tab=employment")
+  })
   it("falls back for a module the app does not know", () => {
     expect(notificationRoute({ module: "brand_new" as never, reference_id: "" })).toBe("/dashboard")
+  })
+})
+
+describe("notificationRoute: timesheet notices", () => {
+  const SHEET = "2026-11-09:7b0f5c3e-1111-4222-8333-444455556666"
+  it("takes an approver to Approvals > Timesheets when a timesheet is submitted for them", () => {
+    expect(notificationRoute({ module: "timesheet", notification_type: "timesheet_submitted", reference_id: SHEET })).toBe("/dashboard/approvals?section=timesheets")
+  })
+  it("takes an approver to Approvals > Timesheets from the Monday reminder", () => {
+    expect(notificationRoute({ module: "timesheet", notification_type: "timesheet_reminder", reference_id: "approver-day:2026-11-16" })).toBe("/dashboard/approvals?section=timesheets")
+  })
+  it("opens that week's timesheet in My Workspace when your own sheet is approved or sent back", () => {
+    for (const type of ["timesheet_approved", "timesheet_returned"]) {
+      expect(notificationRoute({ module: "timesheet", notification_type: type, reference_id: SHEET })).toBe("/dashboard/ess?tab=timesheet&week=2026-11-09")
+    }
+  })
+  it("opens that week from the Friday reminder", () => {
+    expect(notificationRoute({ module: "timesheet", notification_type: "timesheet_reminder", reference_id: "employee-week:2026-11-09" })).toBe("/dashboard/ess?tab=timesheet&week=2026-11-09")
+  })
+  it("still opens the timesheet view (this week) when the reference has no week, and never the bare dashboard", () => {
+    expect(notificationRoute({ module: "timesheet", notification_type: "timesheet_approved", reference_id: "" })).toBe(MODULE_ROUTES.timesheet)
+    expect(notificationRoute({ module: "timesheet", reference_id: "garbage" })).toBe("/dashboard/ess?tab=timesheet")
+  })
+  it("treats an older notice without a type as the employee's own sheet", () => {
+    expect(notificationRoute({ module: "timesheet", reference_id: SHEET })).toBe("/dashboard/ess?tab=timesheet&week=2026-11-09")
   })
 })
