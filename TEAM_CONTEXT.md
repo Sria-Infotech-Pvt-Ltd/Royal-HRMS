@@ -5690,3 +5690,14 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Fix:** new `hooks/useTodayAttendanceMode.ts` returns `"wfh"` when today is inside one of the employee's approved requests, else `"office"`. `ClockInButton` and `ClockWidget` both use it, so every clock-in surface behaves the same.
 
 **Still open (decision for the owner):** the browser still chooses the mode and the server trusts it. An employee on an approved WFH day can still punch as `office` at the office (allowed, silently) if the page fails to load the request. Options discussed: allow silently (today), allow with a flag for HR, or refuse. Not built.
+
+
+## Admin dashboard: open HR Help tickets (profile corrections etc.) on the Pending Approvals card (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Test: `components/dashboard/PendingApprovalsWidget.test.tsx` (2 new); `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser.
+
+**Why:** a profile correction raised by an employee is an HR Help ticket (see the earlier entries), not an approval, so it never appears on the Approvals page. The admin (superuser) lands on `/dashboard` and only had the bell notification pointing at it.
+
+**Change:** `components/dashboard/PendingApprovalsWidget.tsx` (shown on `AdminDashboard.tsx`) gets an "HR Help Requests" row showing the number of open tickets (`GET /hr-help/requests/?status=open&page_size=1`, count only) that opens `/dashboard/ess?tab=hrHelp`, and the open-ticket count is added to the card's "N pending" badge. Everyone who can see this card sees every ticket (superuser or `settings.edit`), so the count is organisation-wide. "In progress" tickets are not counted (the list filter takes one status).
+
+**Not done:** HR (non-admin) dashboards are unchanged; tickets still have no Approve/Reject and resolving one does not edit the profile.

@@ -5,13 +5,19 @@ import { API } from "@/lib/api/endpoints";
 import type { PendingApprovals } from "@/types/dashboard";
 
 interface ApprovalRow {
-  key:   keyof Omit<PendingApprovals, "total_pending">;
+  key:   string;
   icon:  string;
   bg:    string;
   color: string;
   label: string;
   href:  string;
 }
+
+// HR Help tickets (profile corrections, payroll queries, ...) are not approvals, but they wait for the same people, so they get a row here.
+const HR_HELP_KEY = "hr_help_requests";
+const HR_HELP_ROW: ApprovalRow = {
+  key: HR_HELP_KEY, icon: "ti-help-circle", bg: "rgba(0,106,159,0.12)", color: "var(--info)", label: "HR Help Requests", href: "/dashboard/ess?tab=hrHelp",
+};
 
 const ROWS: ApprovalRow[] = [
   { key: "leave_requests",      icon: "ti-beach",      bg: "rgba(23,144,90,0.12)", color: "var(--success)", label: "Leave Requests",      href: "/dashboard/approvals"   },
@@ -22,8 +28,16 @@ const ROWS: ApprovalRow[] = [
 
 export default function PendingApprovalsWidget() {
   const { data, loading } = useFetch<PendingApprovals>(API.dashboard.pendingApprovals);
+  // Anyone who can see this widget sees every ticket, so the open count is organisation-wide.
+  const { data: openTickets } = useFetch<{ count: number }>(`${API.hrHelp.list}?status=open&page_size=1`);
 
-  const total = data?.total_pending ?? 0;
+  const openTicketCount = openTickets?.count ?? 0;
+  const total = (data?.total_pending ?? 0) + openTicketCount;
+
+  function countFor(row: ApprovalRow): number {
+    if (row.key === HR_HELP_KEY) return openTicketCount;
+    return data?.[row.key as keyof Omit<PendingApprovals, "total_pending">] ?? 0;
+  }
 
   return (
     <div className="card mb-16">
@@ -40,8 +54,8 @@ export default function PendingApprovalsWidget() {
         </div>
       ) : (
         <div style={{ padding: 0 }}>
-          {ROWS.map(row => {
-            const count = data?.[row.key] ?? 0;
+          {[...ROWS, HR_HELP_ROW].map(row => {
+            const count = countFor(row);
             return (
               <a
                 key={row.key}
