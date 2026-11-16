@@ -5845,3 +5845,20 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 - The address is split at commas and de-duplicated, so a city repeated in the address and city fields prints once.
 
 **Not done:** no digital signature image or QR code verification, and the brand colour (violet) is fixed in code.
+
+
+## Employment letter: richer layout, driven by the company settings (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Backend only (no model change, no migration). Tests: `accounts/tests_employment_letter.py` (14, pass; text read back with `pypdf`). Rendered for the local test employee against the real company row: 1 page, the company logo present on the page. `npm run build` run before the push. **The page was not looked at visually** (no PDF-to-image tool here): open the downloaded letter and say what to adjust. Replaces the layout in the previous letter entry.
+
+**Why:** the owner still found the letter plain and said the company data entered in the settings must come through.
+
+**Layout (`accounts/services_employment_letter.py`, same `render_employment_letter_pdf(employee)`):** double page border (violet outer, gold inner, gold corner squares), a faint company-name watermark, a coloured header banner (company logo in a white tile, name, registered office, contact line, CIN), reference and date, a subject bar, a bordered details table with a header band and shaded rows, a signature block with a dashed company-seal circle, and a colour footer strip with the reference on every page.
+
+**Company data used (Settings > Company):** logo, company name, address (de-duplicated with city, state, PIN), official phone, primary email, website, CIN, and the authorised signatory (`signatory_full_name`, `signatory_designation`); without a signatory it falls back to "Authorised Signatory / HR Operations". A missing item is left out, never printed as "not on record".
+
+**Logo storage gotcha:** `Company.logo` is on **ImageKit**, which Django cannot read back (`ImageKitStorage does not support reading files back`). The letter first tries a normal read, then fetches the logo's own URL (5 s timeout, 5 MB cap, must decode as an image); any failure just skips the logo and the letter is still issued. Tests never touch real storage (stand-in logo objects and a patched `requests.get`).
+
+**Heads-up:** an earlier draft of one test saved a throwaway image through the real storage; if ImageKit shows files named `letter-test-logo*.png` or `letter-test-broken*.png`, delete them.
+
+**Not done:** digital signature image, QR verification code, a configurable brand colour.
