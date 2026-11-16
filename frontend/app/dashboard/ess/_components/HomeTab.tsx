@@ -189,7 +189,7 @@ export default function HomeTab({ onNavigate, status, isReadOnly = false }: Prop
         <HomeRequestsList items={requestItems.slice(0, 5)} onViewAll={() => onNavigate("requests")} />
         <HomePayslipsPanel
           payslips={payslips?.results ?? []}
-          showForm16={hasForm16}
+          form16FyStartYear={hasForm16 ? prevFyStart.getFullYear() : null}
           onViewAll={() => onNavigate("payslips")}
         />
       </div>

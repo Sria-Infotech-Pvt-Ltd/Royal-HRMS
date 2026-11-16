@@ -5808,3 +5808,14 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **What was wrong with the previous entry:** it said no employment-letter endpoint exists and made the Home button open the HR Help request form. That came from a stale code comment. The endpoint exists: `GET /employees/me/employment-letter/` (`accounts/views/my_profile.py::MyEmploymentLetterPdfView`, `accounts/services_employment_letter.py`, reportlab, built from the employee record and the Company letterhead), and `EmploymentTab.tsx` already offers it as a download.
 
 **Final change:** `ess/_components/HomePayslipsPanel.tsx`: "Employment letter" is a download link to that endpoint (same `API_BASE` + `API.employees.myEmploymentLetterPdf` as the Employment tab); no request form, no toast. Form 16 still links to the Document Center. The earlier note about HR having no screen for document-request tickets still stands for other HR Help topics, but this button no longer creates one.
+
+
+## ESS Home: Form 16 also downloads the real PDF; nothing there goes to the Document Center (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Tests: `HomePayslipsPanel.test.tsx` (4); 81 ESS tests pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser. Follows the correction entry above.
+
+**Why:** the owner: the Document Center is the company library of policies, forms and templates and is not an employee's own area, so employee buttons must not send people there.
+
+**Change:** `ess/_components/HomePayslipsPanel.tsx`: the **Form 16** button now downloads `GET /payroll/my-payslips/form16/<fy>/pdf/` (the same endpoint as the Tax tab) for the previous financial year; `HomeTab.tsx` passes `form16FyStartYear` (the previous FY's start year, or `null` when that year has no payslip, which hides the button) in place of the old `showForm16` flag. Employment letter was already a download. The panel now has no link to `/dashboard/documents`.
+
+**Still pointing employees at the Document Center (not changed, owner to decide):** the "View expense policy" fallback in `ess/_components/ExpensesTab.tsx` (only when no expense policy has been uploaded), and the "Documents" quick link in `dashboard/_components/EmployeeDashboard.tsx`.

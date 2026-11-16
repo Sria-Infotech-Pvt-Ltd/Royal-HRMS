@@ -1,13 +1,10 @@
 "use client";
 
-// Right-column "Payslips & documents" panel. Payslip rows come from the same
-// /payroll/my-payslips/ fetch HomeTab.tsx already makes for the stat tile —
-// this just renders the most recent few plus a download link. "Form 16" and
-// "Employment letter" are company-issued documents. The employment letter is a real PDF generated on demand for the signed-in
-// employee (GET /employees/me/employment-letter/ - the same download the Employment tab offers), so its button
-// downloads it. Form 16 has no such endpoint, so it links to the shared Document Center (/dashboard/documents) rather than a
-// fabricated URL; it intentionally does NOT route into the ESS "Documents" tab - that tab is MyDocumentsTab, a personal
-// "submit my own document for verification" screen.
+// Right-column "Payslips & documents" panel. Payslip rows come from the same /payroll/my-payslips/ fetch HomeTab.tsx already makes
+// for the stat tile - this just renders the most recent few plus a download link. "Form 16" and "Employment letter" are real PDFs
+// generated on demand for the signed-in employee (GET /payroll/my-payslips/form16/<fy>/pdf/ and GET /employees/me/employment-letter/,
+// the same downloads the Tax and Employment tabs offer), so both buttons download them. Nothing here sends an employee to the
+// company Document Center: that is the policies / forms / templates library, not a place for an employee's own documents.
 
 import { API } from "@/lib/api/endpoints";
 import { API_BASE } from "@/lib/config";
@@ -21,14 +18,13 @@ interface HomePayslipRow {
 
 interface Props {
   payslips:   HomePayslipRow[];
-  // Whether a previous-FY payslip actually exists — see HomeTab's hasForm16.
-  // Hidden rather than shown unconditionally: a fresh joiner with no closed
-  // FY behind them has no Form 16 to link to yet.
-  showForm16: boolean;
+  // Start year of the previous financial year when it actually has a payslip (see HomeTab), else null. The Form 16 button is
+  // hidden rather than shown unconditionally: a fresh joiner with no closed FY behind them has no Form 16 yet.
+  form16FyStartYear: number | null;
   onViewAll:  () => void;
 }
 
-export default function HomePayslipsPanel({ payslips, showForm16, onViewAll }: Props) {
+export default function HomePayslipsPanel({ payslips, form16FyStartYear, onViewAll }: Props) {
   return (
     <div className="card">
       <div className="card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
@@ -67,12 +63,12 @@ export default function HomePayslipsPanel({ payslips, showForm16, onViewAll }: P
       )}
 
       <div style={{ display: "flex", gap: 10, padding: "14px 20px", borderTop: "1px solid var(--outline-v)" }}>
-        {showForm16 && (
-          <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
-            <i className="ti ti-file-invoice" /> Form 16
+        {/* Content-Disposition: attachment makes the browser download each PDF, so no target="_blank" is needed. */}
+        {form16FyStartYear !== null && (
+          <a href={`${API_BASE}${API.payroll.form16Pdf(form16FyStartYear)}`} className="btn btn-ghost btn-sm">
+            <i className="ti ti-download" /> Form 16
           </a>
         )}
-        {/* Content-Disposition: attachment makes the browser download the PDF, so no target="_blank" is needed. */}
         <a href={`${API_BASE}${API.employees.myEmploymentLetterPdf}`} className="btn btn-ghost btn-sm">
           <i className="ti ti-download" /> Employment letter
         </a>
