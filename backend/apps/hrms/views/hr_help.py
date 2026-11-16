@@ -44,6 +44,13 @@ class HRHelpRequestListCreateView(APIView):
         status_param = request.query_params.get('status')
         if status_param:
             queryset = queryset.filter(status=status_param)
+        # topic / exclude_topic split the staff queue, e.g. profile corrections apart from every other HR question.
+        topic_param = request.query_params.get('topic')
+        if topic_param:
+            queryset = queryset.filter(topic=topic_param)
+        exclude_topic_param = request.query_params.get('exclude_topic')
+        if exclude_topic_param:
+            queryset = queryset.exclude(topic=exclude_topic_param)
 
         page_obj, paginator = paginate(queryset, request, default_page_size=20)
         serializer = HRHelpRequestSerializer(page_obj.object_list, many=True)

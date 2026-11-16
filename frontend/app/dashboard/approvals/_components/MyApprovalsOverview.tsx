@@ -9,6 +9,7 @@ import { useApprovalOverview } from "@/hooks/useApprovalOverview";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import HrRequestsTab from "./HrRequestsTab";
+import { PROFILE_CORRECTION_TOPIC } from "@/app/dashboard/ess/_components/ProfileCorrectionModal";
 import { useTimesheetPending } from "@/hooks/useTimesheetQueue";
 import { KIND_LABELS, KIND_SCOPE_NOTES } from "@/lib/approvalOverview";
 import type { ApprovalSectionKey } from "@/lib/approvalSections";
@@ -41,11 +42,20 @@ export default function MyApprovalsOverview({
   canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace, canRespondHrHelp = false, openHrRequestsInitially = false, onOpen,
 }: MyApprovalsOverviewProps) {
   const [isMineOnly, setIsMineOnly] = useState(false);
-  const [isHrRequestsOpen, setIsHrRequestsOpen] = useState(openHrRequestsInitially);
-  // Anyone who answers HR Help tickets sees every ticket, so what is waiting is also theirs to act on.
-  const openTickets = useFetch<{ count: number }>(canRespondHrHelp ? `${API.hrHelp.list}?status=open&page_size=1` : null);
-  const openTicketCount = openTickets.data?.count ?? 0;
-  useEffect(() => { if (openHrRequestsInitially) setIsHrRequestsOpen(true); }, [openHrRequestsInitially]);
+  const [isCorrectionsOpen, setIsCorrectionsOpen] = useState(openHrRequestsInitially);
+  const [isOtherHelpOpen, setIsOtherHelpOpen] = useState(openHrRequestsInitially);
+  // Anyone who answers HR Help tickets sees every ticket, so what is waiting is also theirs to act on. Profile corrections get
+  // their own row; every other topic (payroll, leave, documents, ...) shares a second row so none of them is left without one.
+  const openCount = (filter: string) => (canRespondHrHelp ? `${API.hrHelp.list}?status=open&page_size=1&${filter}` : null);
+  const openCorrections = useFetch<{ count: number }>(openCount(`topic=${PROFILE_CORRECTION_TOPIC}`));
+  const openOtherHelp = useFetch<{ count: number }>(openCount(`exclude_topic=${PROFILE_CORRECTION_TOPIC}`));
+  const correctionCount = openCorrections.data?.count ?? 0;
+  const otherHelpCount = openOtherHelp.data?.count ?? 0;
+  useEffect(() => {
+    if (!openHrRequestsInitially) return;
+    setIsCorrectionsOpen(true);
+    setIsOtherHelpOpen(true);
+  }, [openHrRequestsInitially]);
   const overview = useApprovalOverview({ includeTeam: canApprove, includeFace: canApproveFace });
   const timesheetsWaiting = useTimesheetPending(canApproveTimesheets);
 
@@ -73,10 +83,15 @@ export default function MyApprovalsOverview({
       pending: null, mine: null, section: "personnel" as const,
     }] : []),
     ...(canRespondHrHelp ? [{
-      key: "hr_requests", label: "HR requests",
-      scope: "Profile corrections and other questions employees send to HR. Everyone who answers them, and any full-access user, sees all of them.",
-      pending: openTicketCount, mine: openTicketCount, section: "overview" as const,
-      open: () => setIsHrRequestsOpen(open => !open),
+      key: "profile_corrections", label: "Profile corrections",
+      scope: "Changes employees ask HR to make to their profile. Everyone who answers HR Help tickets, and any full-access user, sees all of them.",
+      pending: correctionCount, mine: correctionCount, section: "overview" as const,
+      open: () => setIsCorrectionsOpen(open => !open),
+    }, {
+      key: "other_hr_requests", label: "Other HR requests",
+      scope: "Payroll, leave, attendance, document and policy questions employees send to HR. Same visibility as profile corrections.",
+      pending: otherHelpCount, mine: otherHelpCount, section: "overview" as const,
+      open: () => setIsOtherHelpOpen(open => !open),
     }] : []),
   ];
 
@@ -107,13 +122,22 @@ export default function MyApprovalsOverview({
                 <td>{row.pending ?? "—"}</td>
                 <td>{row.mine ?? "—"}</td>
                 <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{row.scope}</td>
-                <td><button className="btn btn-outline btn-sm" onClick={() => (row.open ? row.open() : onOpen(row.section))}>{row.key === "hr_requests" && isHrRequestsOpen ? "Hide" : "Open"}</button></td>
+                <td><button className="btn btn-outline btn-sm" onClick={() => (row.open ? row.open() : onOpen(row.section))}>{(row.key === "profile_corrections" && isCorrectionsOpen) || (row.key === "other_hr_requests" && isOtherHelpOpen) ? "Hide" : "Open"}</button></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {canRespondHrHelp && isHrRequestsOpen && <div style={{ padding: "0 16px 16px" }}><HrRequestsTab onChanged={openTickets.refetch} /></div>}
+      {canRespondHrHelp && isCorrectionsOpen && (
+        <div style={{ padding: "0 16px 16px" }}>
+          <HrRequestsTab title="Profile corrections" topic={PROFILE_CORRECTION_TOPIC} onChanged={openCorrections.refetch} />
+        </div>
+      )}
+      {canRespondHrHelp && isOtherHelpOpen && (
+        <div style={{ padding: "0 16px 16px" }}>
+          <HrRequestsTab title="Other HR requests" excludeTopic={PROFILE_CORRECTION_TOPIC} onChanged={openOtherHelp.refetch} />
+        </div>
+      )}
       <p style={{ fontSize: 11, color: "var(--on-variant)", padding: "8px 16px 14px", margin: 0 }}>
         Counts show only what the server lets you see. Onboarding approvals are in Review &amp; Onboarding, and bank-change
         requests are in the employee record; they are not part of this list.

@@ -5727,3 +5727,14 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change:** the tab is gone (`lib/approvalSections.ts` no longer has an `hr_requests` section). `approvals/_components/MyApprovalsOverview.tsx` gets an **HR requests** row (Waiting and For me to act on = the open-ticket count, "Who sees it" note) for people who answer tickets (`hr_help.respond`) and full-access users. Its button opens the queue (`HrRequestsTab`, status filters + Respond form) in place below the table, and turns into Hide. A person whose only approval duty is HR Help still gets the overview. The bell notice and the admin dashboard row still link to `/dashboard/approvals?section=hr_requests`, which now opens the overview with the queue already showing.
 
 **Row count refresh (fixed later the same day):** `HrRequestsTab` takes an optional `onChanged`; saving a ticket calls it, and the overview passes the open-count refetch, so the row's number updates at once (test in `HrRequestsTab.test.tsx`). Before this, the count only changed after a reload.
+
+
+## My Approvals: separate "Profile corrections" and "Other HR requests" rows (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. No migration. Tests: backend `hrms/tests_hr_help_list_scope.py` (now 5); frontend 611 pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser. Revises the two entries above.
+
+**Owner's request:** the single "HR requests" row should say "Profile corrections".
+
+**Change:** `approvals/_components/MyApprovalsOverview.tsx` now has two rows for people who answer HR Help tickets: **Profile corrections** (open tickets with topic `profile_correction`) and **Other HR requests** (open tickets of every other topic, so payroll, leave, document and policy questions keep a row). Each row's button opens its own list in place (`HrRequestsTab` now takes `title`, `topic`, `excludeTopic`, `onChanged`) and each count refreshes after a ticket is saved. A link with `?section=hr_requests` opens both lists. Backend `HRHelpRequestListCreateView.get` accepts `topic=` and `exclude_topic=`.
+
+**Not done:** the list still shows Topic/Priority/Status columns; the Section, Field and Reason of a profile correction are only visible after pressing Respond (offered as a follow-up).

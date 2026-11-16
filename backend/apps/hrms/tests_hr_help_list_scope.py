@@ -36,6 +36,10 @@ class HrHelpListScopeTests(TestCase):
         self.assertEqual(self._ids(self.employee), {str(self.theirs.id)})
         self.assertEqual(self._ids(self.employee, '?mine=1'), {str(self.theirs.id)})
 
+    def test_staff_can_split_profile_corrections_from_every_other_topic(self):
+        self.assertEqual(self._ids(self.staff, '?topic=profile_correction'), {str(self.theirs.id)})
+        self.assertEqual(self._ids(self.staff, '?exclude_topic=profile_correction'), {str(self.own.id)})
+
     def test_staff_can_still_filter_the_queue_by_status(self):
         self.assertEqual(self._ids(self.staff, '?status=open'), {str(self.own.id), str(self.theirs.id)})
         self.assertEqual(self._ids(self.staff, '?status=resolved'), set())

@@ -21,8 +21,8 @@ afterEach(() => { cleanup(); urls.length = 0; patch.mockReset(); });
 
 describe("HrRequestsTab", () => {
   it("lists every employee's open ticket with who raised it and a Respond action", () => {
-    render(<HrRequestsTab />);
-    expect(urls[0]).toBe(`${API.hrHelp.list}?page_size=100&status=open`);
+    render(<HrRequestsTab title="Profile corrections" topic="profile_correction" />);
+    expect(urls[0]).toBe(`${API.hrHelp.list}?page_size=100&status=open&topic=profile_correction`);
     expect(screen.getByText("Asha Rao")).toBeTruthy();
     expect(screen.getByText("Profile correction")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Respond" }));
@@ -30,17 +30,17 @@ describe("HrRequestsTab", () => {
   });
 
   it("filters by status, and All drops the status filter", () => {
-    render(<HrRequestsTab />);
+    render(<HrRequestsTab title="Other HR requests" excludeTopic="profile_correction" />);
     fireEvent.click(screen.getByRole("button", { name: "Resolved" }));
-    expect(urls.at(-1)).toBe(`${API.hrHelp.list}?page_size=100&status=resolved`);
+    expect(urls.at(-1)).toBe(`${API.hrHelp.list}?page_size=100&status=resolved&exclude_topic=profile_correction`);
     fireEvent.click(screen.getByRole("button", { name: "All" }));
-    expect(urls.at(-1)).toBe(`${API.hrHelp.list}?page_size=100`);
+    expect(urls.at(-1)).toBe(`${API.hrHelp.list}?page_size=100&exclude_topic=profile_correction`);
   });
 
   it("tells the page after a ticket is changed, so the My Approvals count can refresh", async () => {
     patch.mockResolvedValue({ data: {} });
     const onChanged = vi.fn();
-    render(<HrRequestsTab onChanged={onChanged} />);
+    render(<HrRequestsTab title="Profile corrections" onChanged={onChanged} />);
     fireEvent.click(screen.getByRole("button", { name: "Respond" }));
     fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "in_progress" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

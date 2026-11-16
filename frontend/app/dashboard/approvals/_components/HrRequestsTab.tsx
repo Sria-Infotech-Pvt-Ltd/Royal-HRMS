@@ -21,13 +21,20 @@ const FILTERS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
 ];
 
 interface HrRequestsTabProps {
+  /** Card heading, e.g. "Profile corrections". */
+  title: string;
+  /** Only tickets on this topic. */
+  topic?: string;
+  /** Every topic except this one. */
+  excludeTopic?: string;
   /** Called after a ticket was changed, so a count shown elsewhere (the My Approvals row) can refresh. */
   onChanged?: () => void;
 }
 
-export default function HrRequestsTab({ onChanged }: HrRequestsTabProps) {
+export default function HrRequestsTab({ title, topic, excludeTopic, onChanged }: HrRequestsTabProps) {
   const [filter, setFilter] = useState<StatusFilter>("open");
-  const query = `${API.hrHelp.list}?page_size=100${filter === "all" ? "" : `&status=${filter}`}`;
+  const topicFilter = `${topic ? `&topic=${topic}` : ""}${excludeTopic ? `&exclude_topic=${excludeTopic}` : ""}`;
+  const query = `${API.hrHelp.list}?page_size=100${filter === "all" ? "" : `&status=${filter}`}${topicFilter}`;
   const { data, loading, error, refetch } = useFetch<PagedResponse<HrHelpRequest>>(query);
   const requests = data?.results ?? [];
   function handleUpdated() {
@@ -39,7 +46,7 @@ export default function HrRequestsTab({ onChanged }: HrRequestsTabProps) {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-headset" /> HR requests</div>
+        <div className="card-title"><i className="ti ti-headset" /> {title}</div>
         <div role="group" aria-label="Filter by status" style={{ display: "flex", gap: 6 }}>
           {FILTERS.map(option => (
             <button
@@ -61,7 +68,7 @@ export default function HrRequestsTab({ onChanged }: HrRequestsTabProps) {
       ) : requests.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-headset" />
-          <h3>No {filter === "all" ? "" : `${filterLabel} `}HR requests</h3>
+          <h3>No {filter === "all" ? "" : `${filterLabel} `}{title.toLowerCase()}</h3>
           <p>Requests raised by employees will appear here.</p>
         </div>
       ) : (
