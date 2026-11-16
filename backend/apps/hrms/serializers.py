@@ -9,7 +9,9 @@ from rest_framework import serializers
 from core.file_validation import validate_file_content as _validate_file_content
 from core.permissions import has_perm as _has_perm
 
-from .services_profile_correction import profile_correction_problem
+from .profile_change_fields import spec_for_key, spec_for_label
+from .services_profile_change import ProfileChangeError, clean_new_value, current_value
+from .services_profile_correction import parse_profile_correction, profile_correction_problem
 from .models import (
     APPROVAL_PENDING,
     CarryForwardLog,
@@ -1286,6 +1288,9 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
     priority_display    = serializers.CharField(source='get_priority_display', read_only=True)
     status_display      = serializers.CharField(source='get_status_display', read_only=True)
     assigned_to_name     = serializers.SerializerMethodField()
+    change_label         = serializers.SerializerMethodField()
+    change_needs_system_admin = serializers.SerializerMethodField()
+    submitted_by_code    = serializers.SerializerMethodField()
 
     class Meta:
         model  = HRHelpRequest
@@ -1293,7 +1298,20 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
             'id', 'request_ref', 'topic', 'topic_display', 'priority', 'priority_display',
             'message', 'status', 'status_display', 'response',
             'submitted_by_name', 'assigned_to_name', 'created_at', 'updated_at', 'resolved_at',
+            'change_field', 'change_label', 'change_old_value', 'change_new_value', 'change_decision', 'change_applied_at',
+            'change_needs_system_admin', 'submitted_by_code',
         ]
+
+    def get_submitted_by_code(self, obj: HRHelpRequest) -> str:
+        return obj.submitted_by.employee_id if obj.submitted_by_id else ''
+
+    def get_change_label(self, obj: HRHelpRequest) -> str:
+        spec = spec_for_key(obj.change_field)
+        return spec.label if spec else ''
+
+    def get_change_needs_system_admin(self, obj: HRHelpRequest) -> bool:
+        spec = spec_for_key(obj.change_field)
+        return bool(spec and spec.full_access_only)
 
     def get_request_ref(self, obj: HRHelpRequest) -> str:
         if obj.request_number is None:
@@ -1308,9 +1326,12 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
 
 
 class HRHelpRequestCreateSerializer(serializers.ModelSerializer):
+    # The new value for a profile field that HR can apply in one step; required for those fields, ignored for every other ticket.
+    change_new_value = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
     class Meta:
         model  = HRHelpRequest
-        fields = ['topic', 'priority', 'message']
+        fields = ['topic', 'priority', 'message', 'change_new_value']
 
     def validate_message(self, value):
         value = value.strip()
@@ -1323,7 +1344,23 @@ class HRHelpRequestCreateSerializer(serializers.ModelSerializer):
             problem = profile_correction_problem(attrs.get('message', ''))
             if problem:
                 raise serializers.ValidationError({'message': problem})
+            attrs.update(self._structured_change(attrs))
+        else:
+            attrs.pop('change_new_value', None)
         return attrs
+
+    def _structured_change(self, attrs) -> dict:
+        """For a field HR can apply in one step: which field, its current value, and the cleaned new value."""
+        section, field, _reason = parse_profile_correction(attrs.get('message', ''))
+        spec = spec_for_label(section, field)
+        if spec is None:
+            return {'change_new_value': ''}
+        request = self.context.get('request')
+        try:
+            new_value = clean_new_value(request.user, spec, attrs.get('change_new_value', ''))
+        except ProfileChangeError as exc:
+            raise serializers.ValidationError({'change_new_value': exc.message}) from None
+        return {'change_field': spec.key, 'change_old_value': current_value(request.user, spec), 'change_new_value': new_value}
 
 
 class HRHelpRequestRespondSerializer(serializers.ModelSerializer):

@@ -34,6 +34,9 @@ describe("notificationRoute", () => {
   it("opens the HR Help queue for a new HR Help ticket notice", () => {
     expect(notificationRoute({ module: "system", reference_id: "hr-help" })).toBe("/dashboard/approvals?section=hr_requests")
   })
+  it("opens My Profile for the decision on your own profile correction", () => {
+    expect(notificationRoute({ module: "system", reference_id: "profile-change" })).toBe("/dashboard/ess?tab=profile")
+  })
   it("falls back for a module the app does not know", () => {
     expect(notificationRoute({ module: "brand_new" as never, reference_id: "" })).toBe("/dashboard")
   })

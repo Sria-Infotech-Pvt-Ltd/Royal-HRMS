@@ -18,6 +18,8 @@ from .views import (
     HolidayBulkImportView,
     HolidayDetailView,
     HolidayListCreateView,
+    HRHelpChangeFieldsView,
+    HRHelpDecideChangeView,
     HRHelpRequestDetailView,
     HRHelpRequestListCreateView,
     LeaveApprovalView,
@@ -154,6 +156,8 @@ urlpatterns = [
     # HR Help
     path('hr-help/requests/',            HRHelpRequestListCreateView.as_view(), name='hr-help-request-list'),
     path('hr-help/requests/<uuid:pk>/',  HRHelpRequestDetailView.as_view(),     name='hr-help-request-detail'),
+    path('hr-help/requests/<uuid:pk>/decide-change/', HRHelpDecideChangeView.as_view(), name='hr-help-decide-change'),
+    path('hr-help/change-fields/',       HRHelpChangeFieldsView.as_view(),      name='hr-help-change-fields'),
 
     # Employee document submissions (ESS -> Documents self-service).
     # NOTE: deliberately NOT nested under "documents/" — apps.accounts.urls

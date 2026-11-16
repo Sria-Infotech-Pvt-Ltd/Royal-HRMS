@@ -1017,6 +1017,13 @@ class HRHelpRequest(models.Model):
     )
     response       = models.TextField(blank=True, default='')
     resolved_at    = models.DateTimeField(null=True, blank=True)
+    # A profile correction that carries a new value HR can apply in one step (see services_profile_change.py). change_field is the
+    # key of the profile field; empty for every other ticket. change_decision is '' until HR approves ('applied') or declines.
+    change_field      = models.CharField(max_length=40, blank=True, default='')
+    change_old_value  = models.TextField(blank=True, default='')
+    change_new_value  = models.TextField(blank=True, default='')
+    change_decision   = models.CharField(max_length=10, blank=True, default='')
+    change_applied_at = models.DateTimeField(null=True, blank=True)
     created_at     = models.DateTimeField(auto_now_add=True)
     updated_at     = models.DateTimeField(auto_now=True)
 

@@ -12,7 +12,9 @@ from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
 from apps.hrms.models import HRHelpRequest
+from apps.hrms.profile_change_fields import spec_for_label
 from apps.hrms.profile_correction_fields import OTHER_FIELD, OTHER_SECTION, PROFILE_CORRECTION_FIELDS
+from apps.hrms.tests_profile_change_apply import sample_value
 
 REASON = 'Entered the wrong year at onboarding'
 FRONTEND_FIELDS = Path(__file__).resolve().parents[3] / 'frontend' / 'app' / 'dashboard' / 'ess' / '_components' / 'profileCorrectionFields.ts'
@@ -29,13 +31,15 @@ class ProfileCorrectionValidationTests(TestCase):
         self.client.force_authenticate(user=make_user('pc-valid@test.com', role=make_role('pc_valid_emp', permission_codenames=[])))
         self.url = reverse('hr-help-request-list')
 
-    def _post(self, topic: str, message: str):
-        return self.client.post(self.url, {'topic': topic, 'priority': 'normal', 'message': message}, format='json')
+    def _post(self, topic: str, message: str, **extra):
+        return self.client.post(self.url, {'topic': topic, 'priority': 'normal', 'message': message, **extra}, format='json')
 
     def test_every_listed_pair_is_accepted(self):
         for section, fields in PROFILE_CORRECTION_FIELDS.items():
             for field in fields:
-                response = self._post('profile_correction', _message(section, field))
+                spec = spec_for_label(section, field)
+                extra = {'change_new_value': sample_value(spec)} if spec else {}   # a field HR can apply in one step needs its new value
+                response = self._post('profile_correction', _message(section, field), **extra)
                 self.assertEqual(response.status_code, 201, (section, field, response.data))
 
     def test_a_field_from_another_section_is_rejected(self):

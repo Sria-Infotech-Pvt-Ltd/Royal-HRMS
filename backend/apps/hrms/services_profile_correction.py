@@ -14,6 +14,14 @@ _MESSAGE_PATTERN = re.compile(r'^Section: (?P<section>.+?)\. Field to change: (?
 MALFORMED_MESSAGE = 'Please choose a section and a field to change, and describe the reason.'
 
 
+def parse_profile_correction(message: str) -> tuple[str, str, str]:
+    """(section, field, reason) of an already-validated profile-correction message."""
+    match = _MESSAGE_PATTERN.match(message.strip())
+    if match is None:
+        return '', '', ''
+    return match.group('section'), match.group('field'), match.group('reason').strip()
+
+
 def profile_correction_problem(message: str) -> str | None:
     """Why `message` is not an acceptable profile-correction request, or None when it is."""
     match = _MESSAGE_PATTERN.match(message.strip())

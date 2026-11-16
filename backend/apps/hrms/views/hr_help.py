@@ -12,6 +12,8 @@ from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 
 from ..models import HR_HELP_RESOLVED, HRHelpRequest
+from ..profile_change_fields import public_registry
+from ..services_profile_change import ProfileChangeError, apply_change, reject_change
 from ..serializers import (
     HRHelpRequestCreateSerializer,
     HRHelpRequestRespondSerializer,
@@ -57,7 +59,7 @@ class HRHelpRequestListCreateView(APIView):
         return success('HR help requests retrieved.', paginated_data(paginator, page_obj, serializer.data))
 
     def post(self, request):
-        serializer = HRHelpRequestCreateSerializer(data=request.data)
+        serializer = HRHelpRequestCreateSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
 
@@ -126,3 +128,36 @@ class HRHelpRequestDetailView(APIView):
         help_request = serializer.save(resolved_at=resolved_at)
         logger.info('HR help request #%s updated by %s (status=%s)', help_request.request_number, request.user.email, help_request.status)
         return success('Request updated.', HRHelpRequestSerializer(help_request).data)
+
+
+class HRHelpChangeFieldsView(APIView):
+    """GET /hr-help/change-fields/ — the profile fields an employee can ask to change with a new value (and how to draw each input)."""
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
+
+    def get(self, request):
+        return success('Profile change fields retrieved.', public_registry())
+
+
+class HRHelpDecideChangeView(APIView):
+    """POST /hr-help/requests/<id>/decide-change/ {decision: 'approve' | 'reject', note} — HR / the System Admin applies or declines
+    the new value a profile-correction ticket carries, and the ticket is resolved in the same step."""
+    permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
+
+    def post(self, request, pk):
+        if not _can_respond(request.user):
+            return error('Permission denied.', http_status=403)
+        ticket = HRHelpRequest.objects.select_related('submitted_by', 'assigned_to').filter(pk=pk).first()
+        if ticket is None:
+            return error('Request not found.', http_status=404)
+        decision = (request.data.get('decision') or '').strip()
+        note = (request.data.get('note') or '').strip()
+        if decision not in ('approve', 'reject'):
+            return error('Choose approve or reject.')
+        try:
+            if decision == 'approve':
+                apply_change(ticket, request.user, note)
+            else:
+                reject_change(ticket, request.user, note)
+        except ProfileChangeError as exc:
+            return error(exc.message)
+        return success('Request updated.', HRHelpRequestSerializer(ticket).data)

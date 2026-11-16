@@ -64,6 +64,8 @@ from .wfh_saved_locations import (
 from .hr_help import (
     HRHelpRequestListCreateView,
     HRHelpRequestDetailView,
+    HRHelpChangeFieldsView,
+    HRHelpDecideChangeView,
 )
 from .employee_documents import (
     EmployeeDocumentSubmissionDetailView,

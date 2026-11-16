@@ -7,6 +7,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { HrHelpRequest } from "@/types/hrHelp";
+import HrHelpChangePanel from "./HrHelpChangePanel";
 
 const STATUS_BADGE: Record<string, string> = {
   open: "badge-warn", in_progress: "badge-info", resolved: "badge-success",
@@ -54,7 +55,10 @@ export default function HrHelpRow({ entry, canRespond, onUpdated }: HrHelpRowPro
         {canRespond && <td>{entry.submitted_by_name}</td>}
         <td>{entry.topic_display}</td>
         <td>{entry.priority_display}</td>
-        <td><span className={`badge ${STATUS_BADGE[entry.status]}`}>{entry.status_display}</span></td>
+        <td>
+          <span className={`badge ${STATUS_BADGE[entry.status]}`}>{entry.status_display}</span>
+          {entry.change_decision && <span className="badge badge-info" style={{ marginLeft: 6 }}>{entry.change_decision === "applied" ? "Updated" : "Declined"}</span>}
+        </td>
         <td style={{ color: "var(--on-variant)" }}>{fmtDateTime(entry.created_at)}</td>
         {canRespond && (
           <td>
@@ -69,6 +73,7 @@ export default function HrHelpRow({ entry, canRespond, onUpdated }: HrHelpRowPro
           <td colSpan={7} style={{ background: "var(--bg-mid)" }}>
             <div style={{ padding: 14 }}>
               <p style={{ fontSize: 13, marginBottom: 10 }}>{entry.message}</p>
+              {entry.change_field && <HrHelpChangePanel entry={entry} note={response} onDecided={() => { onUpdated(); setExpanded(false); }} />}
               {err && <div className="alert alert-error" style={{ marginBottom: 10 }}>{err}</div>}
               <div className="field-group" style={{ marginBottom: 10, width: 180 }}>
                 <label className="field-label">Status</label>

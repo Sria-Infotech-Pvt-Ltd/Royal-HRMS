@@ -7,6 +7,10 @@ import { CORRECTION_SECTIONS, OTHER_FIELD, OTHER_SECTION, fieldsForSection } fro
 
 const post = vi.fn();
 vi.mock("@/lib/clientApi", () => ({ default: { post: (...args: unknown[]) => post(...args) } }));
+const changeFields = [
+  { key: "full_name", section: "Personal details", label: "Full name", kind: "text", max_length: 150, choices: [], full_access_only: false },
+];
+vi.mock("@/hooks/useFetch", () => ({ useFetch: () => ({ data: changeFields, loading: false, error: null, refetch: vi.fn() }) }));
 
 beforeEach(() => post.mockReset().mockResolvedValue({ data: {} }));
 afterEach(() => cleanup());
@@ -47,12 +51,30 @@ describe("ProfileCorrectionModal", () => {
     expect(await screen.findByText("Please choose which field needs to change.")).toBeTruthy();
     expect(post).not.toHaveBeenCalled();
 
-    fireEvent.change(selects()[1], { target: { value: "Date of joining" } });
+    fireEvent.change(selects()[1], { target: { value: "Marital status" } });   // HR cannot apply this one in a single step: no new value is asked
     fireEvent.click(screen.getByRole("button", { name: "Submit request" }));
     await waitFor(() => expect(onSubmitted).toHaveBeenCalled());
     expect(post).toHaveBeenCalledWith(API.hrHelp.list, {
       topic: "profile_correction", priority: "normal",
-      message: "Section: Personal details. Field to change: Date of joining. Reason: Entered the wrong year",
+      message: "Section: Personal details. Field to change: Marital status. Reason: Entered the wrong year",
     });
+  });
+
+  it("asks for the new value of a field HR can apply, and sends it with the request", async () => {
+    const onSubmitted = vi.fn();
+    render(<ProfileCorrectionModal onClose={vi.fn()} onSubmitted={onSubmitted} />);
+    fireEvent.change(selects()[1], { target: { value: "Full name" } });
+    fireEvent.change(screen.getByPlaceholderText("Reason for correction"), { target: { value: "The name on my ID card differs" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit request" }));
+    expect(await screen.findByText("Enter the new full name.")).toBeTruthy();
+    expect(post).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByPlaceholderText("New full name"), { target: { value: "  Gadde Durga Prasad " } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit request" }));
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalled());
+    expect(post).toHaveBeenCalledWith(API.hrHelp.list, expect.objectContaining({
+      message: "Section: Personal details. Field to change: Full name. Reason: The name on my ID card differs",
+      change_new_value: "Gadde Durga Prasad",
+    }));
   });
 });

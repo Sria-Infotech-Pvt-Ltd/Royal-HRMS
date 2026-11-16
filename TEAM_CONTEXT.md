@@ -5749,3 +5749,20 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change:** `MyApprovalsOverview.tsx` has one row, **Profile corrections**, whose list opens in place. The admin dashboard's Pending Approvals card row is now "Profile Corrections" too and counts only `topic=profile_correction`. The server's `topic` / `exclude_topic` filters stay.
 
 **Consequence to know:** HR Help tickets on other topics (payroll, leave, document, policy questions) no longer have a staff screen: My Workspace > HR help is now employee-only and Approvals shows only profile corrections. The bell notice still fires for every new ticket and opens the profile corrections list. Decide where staff should answer the other topics.
+
+
+## Profile corrections carry the new value; HR / the System Admin applies it in one step (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. **Migration `hrms/0054_hr_help_profile_change` (run `migrate hrms` on every server).** Tests: backend 34 pass (`tests_profile_change_apply.py` new, 18 tests; with the validation, list-scope and notification tests); frontend 819 pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser.
+
+**Why:** the owner wanted real-world behaviour: the employee says what the new value is, HR or the admin opens the request and the change is made on that exact field and the request is closed as resolved, instead of HR retyping it from a free-text note. Before this, a name could not be changed at all after onboarding (the Edit Record name boxes are read-only and the server refused a `full_name` edit with 409).
+
+**How it works**
+- `hrms/profile_change_fields.py` lists the fields that support this (name, middle and display name, date of birth, place of birth, gender, marital status, nationality, parents' names, blood group, languages, joining date, mobile number, current and permanent address parts, emergency contact). Anything else (bank and statutory, family and nominees, login email, "Other") stays a plain HR Help ticket handled by hand. `GET /hr-help/change-fields/` gives the frontend each field's input kind and choices.
+- `HRHelpRequest` gets `change_field`, `change_old_value`, `change_new_value`, `change_decision` (`''`/`applied`/`rejected`) and `change_applied_at`. When a `profile_correction` ticket names a supported field, the new value is required, validated (date, 10-digit mobile and uniqueness, 6-digit PIN, choice lists, length, not equal to the current value) and the current value is stored beside it.
+- `POST /hr-help/requests/<id>/decide-change/` `{decision: approve|reject, note}` (`services_profile_change.py`): approve re-validates, writes the value to the user or profile record (the onboarding name lock does not apply to an approved correction), writes an `employee_profile_corrected` audit entry with before and after, resolves the ticket and notifies the employee (`reference_id` `profile-change`, opens My Profile). Reject needs a reason. Who may decide: holders of `hr_help.respond` and full-access users; the joining date needs `settings.edit` (System Admin). A request can be decided once.
+- Frontend: `ProfileCorrectionModal` asks for the new value with the right input (date, choice list, text) for supported fields; `HrHelpChangePanel` (inside an open row of the My Approvals Profile corrections list) shows current -> requested with **Open employee record**, **Apply requested change** and **Decline**; the employee's list shows an Updated / Declined badge.
+
+**Decision to confirm:** the owner also described "redirect HR to the field in Edit Record, they change it, then resolve". Edit Record cannot edit a name (First and Last name are read-only there), so the one-click Apply does that job for the name; "Open employee record" opens the full-record drawer for context. Deep-linking into a field of Edit Record is not built.
+
+**Not done:** no proof document upload on the request; approving does not recalculate attendance, leave or payroll after a joining-date change.
