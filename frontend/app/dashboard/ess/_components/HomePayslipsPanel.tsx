@@ -4,12 +4,17 @@
 // /payroll/my-payslips/ fetch HomeTab.tsx already makes for the stat tile —
 // this just renders the most recent few plus a download link. "Form 16" and
 // "Employment letter" are company-issued documents with no dedicated
-// endpoint/document-type in this repo, so those two quick links go straight
-// to the shared Document Center (/dashboard/documents, category=form/other)
-// rather than a fabricated direct-download URL. They intentionally do NOT
-// route into the ESS "Documents" tab — that tab is MyDocumentsTab, a
-// personal "submit my own document for verification" screen, not a place to
-// browse company-provided forms/letters.
+// endpoint/document-type in this repo. Form 16 links to the shared Document
+// Center (/dashboard/documents) rather than a fabricated direct-download URL;
+// it intentionally does NOT route into the ESS "Documents" tab — that tab is
+// MyDocumentsTab, a personal "submit my own document for verification" screen.
+// The employment letter is something HR issues on request, so its button opens
+// the "Employment letter" request form (an HR Help document request) instead
+// of an empty Document Center.
+
+import { useState } from "react";
+import { useToast } from "@/components/ToastProvider";
+import EmployeeRequestModal from "../../my-requests/_components/EmployeeRequestModal";
 
 interface HomePayslipRow {
   cycle:       string;
@@ -28,6 +33,8 @@ interface Props {
 }
 
 export default function HomePayslipsPanel({ payslips, showForm16, onViewAll }: Props) {
+  const { showToast } = useToast();
+  const [isLetterRequestOpen, setIsLetterRequestOpen] = useState(false);
   return (
     <div className="card">
       <div className="card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
@@ -71,10 +78,16 @@ export default function HomePayslipsPanel({ payslips, showForm16, onViewAll }: P
             <i className="ti ti-file-invoice" /> Form 16
           </a>
         )}
-        <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsLetterRequestOpen(true)} suppressHydrationWarning>
           <i className="ti ti-mail" /> Employment letter
-        </a>
+        </button>
       </div>
+      {isLetterRequestOpen && (
+        <EmployeeRequestModal
+          onClose={() => setIsLetterRequestOpen(false)}
+          onSubmitted={() => { setIsLetterRequestOpen(false); showToast("Your employment letter request was sent to HR.", "success"); }}
+        />
+      )}
     </div>
   );
 }

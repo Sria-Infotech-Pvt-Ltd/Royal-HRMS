@@ -5786,3 +5786,16 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Fix:** `employees/_components/EmployeeFullRecordBody.tsx` now has an Email row (and the `emergency_email` field in its profile type); the onboarding review drawer (`candidate-review/_components/OnboardingDrawer.tsx`) got the same row. The API already returned the field.
 
 **Note:** the employee's own My Profile pages do not show an emergency contact at all; not changed.
+
+
+## ESS Home "Employment letter" button opens the request form (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Test: `ess/_components/HomePayslipsPanel.test.tsx` (3 new); ESS tests pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser.
+
+**Symptom:** the "Employment letter" button in My Workspace > Home > Payslips & documents opened the Document Center (`/dashboard/documents`), which was empty ("No documents found").
+
+**Cause:** deliberate earlier design: no letter-download endpoint exists, so both quick links pointed at the Document Center. An employment letter is really issued by HR on request (HR Help ticket, topic `document_request`, the "Employment letter" type of `my-requests/_components/EmployeeRequestModal.tsx`).
+
+**Change:** `ess/_components/HomePayslipsPanel.tsx`: the Employment letter button now opens `EmployeeRequestModal` (Employment letter is its first and default type) and shows a toast when the request is sent; the request then appears under Requests and in HR's HR Help list (`topic=document_request`, i.e. under the Approvals "Other" topics, which have no staff screen since the Profile corrections row replaced the HR Help queue: see the earlier entry). Form 16 still links to the Document Center.
+
+**Open:** HR still has no screen for non-profile HR Help tickets such as this one; decide where staff should answer them.
