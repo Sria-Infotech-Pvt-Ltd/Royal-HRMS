@@ -463,10 +463,10 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon':                 '300/hour',
         'user':                 '3000/hour',
-        'login':                '20/hour',
-        'forgot_password':      '5/hour',
-        'reset_password':       '10/hour',
-        'otp_verify':           '10/hour',
+        'login':                '200/hour',
+        'forgot_password':      '30/hour',
+        'reset_password':       '50/hour',
+        'otp_verify':           '50/hour',
         'resend_invite':        '5/hour',
         # Paid voice paths (each call bills a provider), limited per signed-in user. Tunable per environment through
         # these env vars without a code change - see apps/voice_commands/throttles.py.
