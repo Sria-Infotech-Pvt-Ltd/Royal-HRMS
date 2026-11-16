@@ -427,9 +427,12 @@ class EmployeeDetailView(APIView):
                 datetime.strptime(doj, '%Y-%m-%d')
             except ValueError:
                 return error('date_of_joining must be in YYYY-MM-DD format.')
-            if locked and doj != str(employee.date_of_joining):
+            # Once onboarding is complete only a full-access user (settings.edit / superuser) may correct the joining date,
+            # e.g. an employee who entered the wrong year. Same gate as the manual employee_id correction below; the change is
+            # audit-logged and still refused if it overlaps a previous employment.
+            if locked and doj != str(employee.date_of_joining) and not _has_perm(request.user, 'settings.edit'):
                 return error(
-                    'Date of joining is locked once onboarding is complete and can no longer be changed here.',
+                    'Date of joining is locked once onboarding is complete. Only a System Admin can correct it.',
                     http_status=status.HTTP_409_CONFLICT,
                 )
             if str(employee.date_of_joining) != doj:

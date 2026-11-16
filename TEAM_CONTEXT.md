@@ -5602,3 +5602,14 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Problem:** a late punch-in is stored with status `late`, not `present`. The top "Present today" card already added Present + Late + Incomplete, but the "Present" chip and the Present list filter matched status `present` exactly, so late employees appeared only under Late.
 
 **Fix (`attendance/services_hr.py`):** `summary_chips.present` = present + late; the `status=present` list filter matches `present` and `late`. Late stays a subset: the Late chip and Late filter still show only late people. The chips are therefore not additive (Present already contains Late), same as the top card. Incomplete is still counted only in the top card. No frontend change was needed.
+
+
+## Joining date can be corrected by a full-access user after onboarding (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Backend only. Tests: `accounts/tests_employee_joining_date_correction.py` (3 new) plus 51 existing employee-detail/edit-draft/branch-change tests, all pass on the local test database. Not checked in a browser.
+
+**Trigger:** an employee onboarded with the wrong joining year (2026 instead of 2025) and raised a profile correction (an HR Help ticket, see the entry above). Editing it from Edit Record returned `409 "Date of joining is locked once onboarding is complete..."` (`PUT /api/employees/10000065/` on the server).
+
+**Change (`accounts/views/employees_detail.py`, `_update_fields`):** the lock now lets through anyone with `settings.edit` (or a superuser), the same gate the manual employee_id correction uses. HR editors with only `employees.edit` still get 409, now with the message "Only a System Admin can correct it." Resending the unchanged date is never refused. The existing checks are untouched: a new date may not fall before the last working day of a previous employment, and the change is audit-logged (`changes.date_of_joining`, plus an `employee_joining_date_changed` entry when the employee has separations).
+
+**Not done / watch:** nothing recalculates already-processed attendance, leave accrual or payroll for the corrected period; check the attendance calendar and leave balance of the employee after the change. Plain HR users cannot make this correction, so the HR Help ticket needs a System Admin to action it.
