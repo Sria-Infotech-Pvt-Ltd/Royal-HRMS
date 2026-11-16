@@ -9,8 +9,7 @@ vi.mock("@/hooks/useFetch", () => ({
   useFetch: (url: string | null) => {
     urls.push(url);
     const isCorrectionCount = url?.includes("status=open&page_size=1&topic=profile_correction") ?? false;
-    const isOtherCount = url?.includes("status=open&page_size=1&exclude_topic=profile_correction") ?? false;
-    const data = isCorrectionCount ? { count: 3 } : isOtherCount ? { count: 5 } : { results: [], count: 0 };
+    const data = isCorrectionCount ? { count: 3 } : { results: [], count: 0 };
     return { data, loading: false, error: null, refetch: vi.fn() };
   },
 }));
@@ -28,31 +27,27 @@ describe("My Approvals overview: HR requests row", () => {
   it("is absent, and fetches nothing, for people who do not answer HR Help tickets", () => {
     render(<MyApprovalsOverview {...base} canApprove />);
     expect(screen.queryByText("Profile corrections")).toBeNull();
-    expect(screen.queryByText("Other HR requests")).toBeNull();
     expect(urls.some(url => url?.startsWith(API.hrHelp.list))).toBe(false);
   });
 
-  it("has a Profile corrections row and an Other HR requests row, each with its own open count", () => {
+  it("has one Profile corrections row with the open count", () => {
     render(<MyApprovalsOverview {...base} canRespondHrHelp />);
     expect(screen.getByText("Profile corrections").closest("tr")?.textContent).toContain("3");
-    expect(screen.getByText("Other HR requests").closest("tr")?.textContent).toContain("5");
+    expect(screen.queryByText("Other HR requests")).toBeNull();
   });
 
-  it("opens each queue in place, filtered to its own topics, not as another tab", () => {
+  it("opens the profile corrections queue in place, not as another tab", () => {
     const onOpen = vi.fn();
     render(<MyApprovalsOverview {...base} onOpen={onOpen} canRespondHrHelp />);
-    const [openCorrections] = screen.getAllByRole("button", { name: "Open" });
-    fireEvent.click(openCorrections);
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(onOpen).not.toHaveBeenCalled();
-    expect(screen.getAllByRole("button", { name: "Hide" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Hide" })).toBeTruthy();
     expect(urls).toContain(`${API.hrHelp.list}?page_size=100&status=open&topic=profile_correction`);
-    expect(urls).not.toContain(`${API.hrHelp.list}?page_size=100&status=open&exclude_topic=profile_correction`);
   });
 
   it("shows the queue straight away when a link asked for it", () => {
     render(<MyApprovalsOverview {...base} canRespondHrHelp openHrRequestsInitially />);
-    expect(screen.getAllByRole("button", { name: "Hide" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Hide" })).toBeTruthy();
     expect(urls).toContain(`${API.hrHelp.list}?page_size=100&status=open&topic=profile_correction`);
-    expect(urls).toContain(`${API.hrHelp.list}?page_size=100&status=open&exclude_topic=profile_correction`);
   });
 });

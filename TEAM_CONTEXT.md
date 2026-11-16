@@ -5738,3 +5738,14 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change:** `approvals/_components/MyApprovalsOverview.tsx` now has two rows for people who answer HR Help tickets: **Profile corrections** (open tickets with topic `profile_correction`) and **Other HR requests** (open tickets of every other topic, so payroll, leave, document and policy questions keep a row). Each row's button opens its own list in place (`HrRequestsTab` now takes `title`, `topic`, `excludeTopic`, `onChanged`) and each count refreshes after a ticket is saved. A link with `?section=hr_requests` opens both lists. Backend `HRHelpRequestListCreateView.get` accepts `topic=` and `exclude_topic=`.
 
 **Not done:** the list still shows Topic/Priority/Status columns; the Section, Field and Reason of a profile correction are only visible after pressing Respond (offered as a follow-up).
+
+
+## My Approvals: only the "Profile corrections" row (the "Other HR requests" row removed) (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. 611 frontend tests pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser. Revises the entry above.
+
+**Owner's feedback:** the second row was not wanted; profile corrections are what gets approved there.
+
+**Change:** `MyApprovalsOverview.tsx` has one row, **Profile corrections**, whose list opens in place. The admin dashboard's Pending Approvals card row is now "Profile Corrections" too and counts only `topic=profile_correction`. The server's `topic` / `exclude_topic` filters stay.
+
+**Consequence to know:** HR Help tickets on other topics (payroll, leave, document, policy questions) no longer have a staff screen: My Workspace > HR help is now employee-only and Approvals shows only profile corrections. The bell notice still fires for every new ticket and opens the profile corrections list. Decide where staff should answer the other topics.

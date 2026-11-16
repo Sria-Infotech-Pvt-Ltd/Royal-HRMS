@@ -2,6 +2,7 @@
 
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { PROFILE_CORRECTION_TOPIC } from "@/app/dashboard/ess/_components/ProfileCorrectionModal";
 import type { PendingApprovals } from "@/types/dashboard";
 
 interface ApprovalRow {
@@ -13,10 +14,10 @@ interface ApprovalRow {
   href:  string;
 }
 
-// HR Help tickets (profile corrections, payroll queries, ...) are not approvals, but they wait for the same people, so they get a row here.
-const HR_HELP_KEY = "hr_help_requests";
+// Profile corrections are HR Help tickets, not approvals, but they wait for the same people, so they get a row here.
+const HR_HELP_KEY = "profile_corrections";
 const HR_HELP_ROW: ApprovalRow = {
-  key: HR_HELP_KEY, icon: "ti-help-circle", bg: "rgba(0,106,159,0.12)", color: "var(--info)", label: "HR Help Requests", href: "/dashboard/approvals?section=hr_requests",
+  key: HR_HELP_KEY, icon: "ti-help-circle", bg: "rgba(0,106,159,0.12)", color: "var(--info)", label: "Profile Corrections", href: "/dashboard/approvals?section=hr_requests",
 };
 
 const ROWS: ApprovalRow[] = [
@@ -29,7 +30,7 @@ const ROWS: ApprovalRow[] = [
 export default function PendingApprovalsWidget() {
   const { data, loading } = useFetch<PendingApprovals>(API.dashboard.pendingApprovals);
   // Anyone who can see this widget sees every ticket, so the open count is organisation-wide.
-  const { data: openTickets } = useFetch<{ count: number }>(`${API.hrHelp.list}?status=open&page_size=1`);
+  const { data: openTickets } = useFetch<{ count: number }>(`${API.hrHelp.list}?status=open&page_size=1&topic=${PROFILE_CORRECTION_TOPIC}`);
 
   const openTicketCount = openTickets?.count ?? 0;
   const total = (data?.total_pending ?? 0) + openTicketCount;

@@ -18,9 +18,9 @@ vi.mock("@/hooks/useFetch", () => ({
 afterEach(() => { cleanup(); openTickets = { count: 4 }; });
 
 describe("PendingApprovalsWidget", () => {
-  it("shows open HR Help tickets as a row that opens the HR Help queue, and counts them in the total", () => {
+  it("shows open profile corrections as a row that opens the queue, and counts them in the total", () => {
     render(<PendingApprovalsWidget />);
-    const row = screen.getByText("HR Help Requests").closest("a");
+    const row = screen.getByText("Profile Corrections").closest("a");
     expect(row?.getAttribute("href")).toBe("/dashboard/approvals?section=hr_requests");
     expect(row?.textContent).toContain("4");
     expect(screen.getByText("7 pending")).toBeTruthy();
@@ -29,7 +29,7 @@ describe("PendingApprovalsWidget", () => {
   it("shows 0 tickets while the count is not available", () => {
     openTickets = null;
     render(<PendingApprovalsWidget />);
-    expect(screen.getByText("HR Help Requests").closest("a")?.textContent).toContain("0");
+    expect(screen.getByText("Profile Corrections").closest("a")?.textContent).toContain("0");
     expect(screen.getByText("3 pending")).toBeTruthy();
   });
 });
