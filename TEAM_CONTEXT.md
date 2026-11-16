@@ -5775,3 +5775,14 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Problem:** a correction raised before the new value was asked for (for example HR-00001, "change the name from G.Durga Prasad to Gadde Durga Prasad", free text only) showed no Apply button, and the Edit Record name boxes are read-only, so nobody could change the name.
 
 **Change:** for such a ticket (`topic='profile_correction'`, no `change_field`) whose message names a supported field, the list API returns `change_suggested_key` (`services_profile_change.suggested_spec`, read from the message). `HrHelpChangePanel` then shows the right input (`ProfileChangeValueInput`, now shared with the employee form), HR types the new value, and `POST /hr-help/requests/<id>/decide-change/` accepts `new_value`; approving stores field and value on the ticket and applies it exactly like a new-style request (validation, audit entry, resolve, employee notified). Declining works the same. A ticket about an unsupported field (bank, family, Other) still cannot be applied and says so.
+
+
+## Emergency contact email now shows on the employee record (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. 33 employee and candidate-review tests pass; `tsc`, `eslint` clean; `npm run build` run before the push. No new test (the record drawer has no component test); not checked in a browser.
+
+**Symptom:** after HR applied an approved profile correction for "Emergency contact email" (ticket HR-00003, applied; `EmployeeProfile.emergency_email` was saved), the full-record drawer showed nothing: its Emergency Contact card only had Name, Relationship and Phone.
+
+**Fix:** `employees/_components/EmployeeFullRecordBody.tsx` now has an Email row (and the `emergency_email` field in its profile type); the onboarding review drawer (`candidate-review/_components/OnboardingDrawer.tsx`) got the same row. The API already returned the field.
+
+**Note:** the employee's own My Profile pages do not show an emergency contact at all; not changed.

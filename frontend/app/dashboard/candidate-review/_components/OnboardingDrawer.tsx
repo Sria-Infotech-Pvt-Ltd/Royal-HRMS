@@ -411,6 +411,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                   <Row label="Name"         value={user.profile.emergency_name} />
                   <Row label="Relationship" value={user.profile.emergency_relationship} />
                   <Row label="Phone"        value={user.profile.emergency_phone} />
+                  <Row label="Email"        value={user.profile.emergency_email} />
                 </SectionCard>
               </>
             )}

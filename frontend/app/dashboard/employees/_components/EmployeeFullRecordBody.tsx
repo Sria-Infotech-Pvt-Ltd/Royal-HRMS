@@ -116,6 +116,7 @@ interface EmployeeDetailSensitive {
     emergency_name?:         string;
     emergency_relationship?: string;
     emergency_phone?:        string;
+    emergency_email?:        string;
     pan_masked?:            string;
     aadhaar_masked?:        string;
     account_number_masked?: string;
@@ -282,6 +283,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
           <Row label="Name" value={p?.emergency_name} />
           <Row label="Relationship" value={p?.emergency_relationship} />
           <Row label="Phone" value={p?.emergency_phone} />
+          <Row label="Email" value={p?.emergency_email} />
         </SectionCard>
 
         <SectionCard title="Basic Pay">
