@@ -29,7 +29,7 @@ import HomeTodayPanel from "./HomeTodayPanel";
 import HomeWorkedTodayCard from "./HomeWorkedTodayCard";
 import HomeRequestsList from "./HomeRequestsList";
 import HomePayslipsPanel from "./HomePayslipsPanel";
-import HomeProjectsPanel from "./HomeProjectsPanel";
+import WorkStatusPanel from "@/components/work-status/WorkStatusPanel";
 import ReportingApprovalsCard from "@/components/approvals/ReportingApprovalsCard";
 import EssFaceIdCard from "./EssFaceIdCard";
 import { currentFinancialYearStart } from "@/app/dashboard/my-payslip/_components/types";
@@ -183,7 +183,8 @@ export default function HomeTab({ onNavigate, status, isReadOnly = false }: Prop
 
       <ReportingApprovalsCard />
 
-      <HomeProjectsPanel onViewAll={() => onNavigate("employment")} />
+      {/* The same Work Status panel the Employment tab shows (current assignments + history). */}
+      <WorkStatusPanel />
 
       <div style={{ display: "grid", gridTemplateColumns: "5fr 3fr", gap: 14 }}>
         <HomeRequestsList items={requestItems.slice(0, 5)} onViewAll={() => onNavigate("requests")} />

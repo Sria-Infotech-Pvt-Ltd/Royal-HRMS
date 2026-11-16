@@ -5775,3 +5775,23 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Problem:** a correction raised before the new value was asked for (for example HR-00001, "change the name from G.Durga Prasad to Gadde Durga Prasad", free text only) showed no Apply button, and the Edit Record name boxes are read-only, so nobody could change the name.
 
 **Change:** for such a ticket (`topic='profile_correction'`, no `change_field`) whose message names a supported field, the list API returns `change_suggested_key` (`services_profile_change.suggested_spec`, read from the message). `HrHelpChangePanel` then shows the right input (`ProfileChangeValueInput`, now shared with the employee form), HR types the new value, and `POST /hr-help/requests/<id>/decide-change/` accepts `new_value`; approving stores field and value on the ticket and applies it exactly like a new-style request (validation, audit entry, resolve, employee notified). Declining works the same. A ticket about an unsupported field (bank, family, Other) still cannot be applied and says so.
+
+## Home Work Status, Announcements grid, Reports buttons, merges (2026-11-16)
+
+**By:** Rithwika - **Branch:** Rithwika. Follows the "Local setup fixes, ESS Home/Profile UI, Announcements tab, responsive top bar (2026-11-12)" section above. `eslint` and `tsc --noEmit` clean on the touched files; none of the UI was checked in a browser.
+
+**Employee workspace (ESS)**
+- Home tab (`ess/_components/HomeTab.tsx`): the Employment tab's `components/work-status/WorkStatusPanel` (current assignments plus history) now shows on Home, in place of the small "My projects" card. `ess/_components/HomeProjectsPanel.tsx` is deleted (nothing else used it). Difference from the old card: the panel always shows, with "Not currently assigned to a project" when empty, and hides itself only on a 403/404 from the server.
+- Announcements tab (`ess/_components/EssAnnouncementsTab.tsx`): the cards were one full-width column. They now sit in a responsive grid (`repeat(auto-fill, minmax(min(100%, 360px), 1fr))`, `alignItems: start`): several per row on wide screens, one on phones. Only this tab; the management page `/dashboard/announcements` keeps its single column.
+
+**Reports page**
+- `reports/_components/ReportCard.tsx`: the three buttons (Download CSV, Email report, Preview) are the same size on every card (equal-width grid, `repeat(auto-fit, minmax(128px, 1fr))`, labels centred, no wrapping). The card is now a flex column whose top part (title, description, filters) takes the leftover height, so the button row sits at the bottom and lines up across cards of different heights.
+
+**Work-from-home address search and Profile-correction dropdowns**
+- Both were first built locally and then found to be already on `New-AI` (same file names, more complete: WFH `location_source` plus larger clock-in radius on the backend; Profile correction Field dropdown with server-side validation and the HR "apply" flow). The local copies were stashed (`stash@{0}`, "local WFH address search + profile correction dropdown (superseded by New-AI)") and the `New-AI` versions are the ones in use. Drop the stash when no longer needed.
+
+**Git**
+- Merge conflicts from the first `New-AI` pull were resolved in `TEAM_CONTEXT.md` and `backend/config/settings.py` (upstream version taken for settings; port 8001 origins are already there). A later conflict on `HomeProjectsPanel.tsx` (deleted here, edited upstream) was resolved by keeping it deleted, since Home now renders `WorkStatusPanel`. Merge commits: `54e70442`, `b0024647`, `091e9ce2`. Nothing from this branch has been pushed.
+- `face-api.js` was reinstalled (its `.d.ts` files were missing, which caused TS7006 in `hooks/useFaceLivenessCapture.ts` at `npm run build`); `frontend/package-lock.json` changed as a result. A stray root `package-lock.json` (from an `npm install` in the wrong folder) should be deleted, not committed.
+
+**Still to do by hand:** install Memurai from an Administrator shell (see the 2026-11-12 section), confirm the Tabler font reinstall, then `git push -u origin Rithwika`.
