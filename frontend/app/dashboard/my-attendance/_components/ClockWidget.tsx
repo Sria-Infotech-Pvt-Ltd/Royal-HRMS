@@ -2,28 +2,11 @@
 
 import { useState } from "react";
 import { useClockWidget } from "@/hooks/useClockWidget";
-import { useFetch } from "@/hooks/useFetch";
-import { API } from "@/lib/api/endpoints";
+import { useTodayAttendanceMode } from "@/hooks/useTodayAttendanceMode";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
 import { formatLockoutCountdown } from "@/lib/faceApi/lockout";
 import type { PunchLocation } from "@/types/attendance";
-import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import { useAfterMount } from "@/hooks/useAfterMount";
-
-// Local calendar date, not UTC (Date.toISOString() would misdate the hours
-// just after local midnight, e.g. 12:30 AM IST is still UTC "yesterday" —
-// the exact case an employee clocking in right after midnight would hit).
-function localDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function isTodayWithin(r: WorkFromHomeRequest): boolean {
-  const today = localDateString(new Date());
-  return r.start_date <= today && today <= r.end_date;
-}
 
 function fmtTimer(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -57,15 +40,8 @@ export default function ClockWidget() {
   const [showFaceModal, setShowFaceModal] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
 
-  // No manual office/WFH toggle — mode is derived automatically from whether
-  // today falls inside one of the employee's own approved WFH requests.
-  // Server-side validation (services_geofencing.py's wfh strategy) is the
-  // real gate either way; this only decides which validation path a punch
-  // goes through, so it doesn't need to be authoritative.
-  const { data: wfhData } = useFetch<{ results: WorkFromHomeRequest[] }>(
-    `${API.workFromHome.requests}?status=approved&page_size=5`,
-  );
-  const MODE = (wfhData?.results ?? []).some(isTodayWithin) ? "wfh" : "office";
+  // No manual office/WFH toggle: the mode follows whether today is inside an approved WFH request (see useTodayAttendanceMode).
+  const MODE = useTodayAttendanceMode();
 
   const isClockedIn = session?.is_clocked_in ?? false;
 

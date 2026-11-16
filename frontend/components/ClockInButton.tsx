@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { useClockWidget } from "@/hooks/useClockWidget";
+import { useTodayAttendanceMode } from "@/hooks/useTodayAttendanceMode";
 import CorrectionModal from "@/app/dashboard/my-attendance/_components/CorrectionModal";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
 import { formatLockoutCountdown } from "@/lib/faceApi/lockout";
-import type { AttendanceMode, PunchLocation } from "@/types/attendance";
-
-const MODE: AttendanceMode = "office";
+import type { PunchLocation } from "@/types/attendance";
 
 function todayString() {
   const d = new Date();
@@ -24,6 +23,8 @@ interface Props {
 }
 
 export default function ClockInButton({ onPunchSuccess, variant = "default" }: Props) {
+  // "wfh" on an approved work-from-home day, so this button checks the WFH location like the My Attendance clock does.
+  const MODE = useTodayAttendanceMode();
   const {
     session, isLoading, isPunching, faceVerificationRequired, prepareLocation, punch,
     ensureFaceReady, isLockedOut, lockoutSecondsRemaining,

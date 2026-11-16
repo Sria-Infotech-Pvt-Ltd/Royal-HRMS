@@ -5677,3 +5677,16 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Field lists:** taken from the employee profile and onboarding data (personal, contact and address, emergency contact, bank including account number and IFSC, family and nominee). "Date of joining" sits under Personal details because there is no Employment section and it is the field most often entered wrongly. Fields outside these (PAN, Aadhaar, qualifications, work details) go through "Other (describe in the reason)".
 
 **Open:** the old free-text requests already in the queue are untouched; an older cached frontend that still sends free text will get a 400 until it reloads.
+
+
+## Fix: the ESS home / dashboard clock button ignored approved WFH days (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Tests: `hooks/useTodayAttendanceMode.test.tsx` (3 new); 77 tests pass across hooks, my-attendance and ess; `tsc`, `eslint` clean. Not checked in a browser.
+
+**Symptom:** an employee with an approved WFH request punched in from the office and got no warning. The punch row was `attendance_mode='office'`, with no distance and no inside/outside result (the branch has no geofence on).
+
+**Cause:** only the My Attendance page's `ClockWidget.tsx` worked out the WFH mode. `components/ClockInButton.tsx` (the button on the ESS home banner, the employee, HR and manager dashboards) had `const MODE = "office"` hard-coded, so a punch there never went through the WFH location check. A second, smaller cause on the dev machine: the page had loaded its WFH list while the database lacked the new `location_source` column, so it fell back to office.
+
+**Fix:** new `hooks/useTodayAttendanceMode.ts` returns `"wfh"` when today is inside one of the employee's approved requests, else `"office"`. `ClockInButton` and `ClockWidget` both use it, so every clock-in surface behaves the same.
+
+**Still open (decision for the owner):** the browser still chooses the mode and the server trusts it. An employee on an approved WFH day can still punch as `office` at the office (allowed, silently) if the page fails to load the request. Options discussed: allow silently (today), allow with a flag for HR, or refuse. Not built.
