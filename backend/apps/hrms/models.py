@@ -838,6 +838,13 @@ class LeaveRequest(models.Model):
 
 # ─── Work From Home Request ────────────────────────────────────────────────────
 
+WFH_SOURCE_GPS     = 'gps'
+WFH_SOURCE_ADDRESS = 'address'
+WFH_LOCATION_SOURCE_CHOICES = [
+    (WFH_SOURCE_GPS,     'GPS'),
+    (WFH_SOURCE_ADDRESS, 'Address'),
+]
+
 class WorkFromHomeRequest(models.Model):
     """
     Employee-submitted request to work from a declared location for a date
@@ -846,11 +853,9 @@ class WorkFromHomeRequest(models.Model):
     minus the leave-specific fields (balance, policy, document, handover).
 
     latitude/longitude are captured via the browser's own Geolocation API at
-    submit time, not a typed address — this app has no geocoding integration
-    anywhere (Branch geofencing itself is plain manually-entered lat/long,
-    see apps/branch/models.py), so there's no existing "address -> coordinates"
-    path to reuse, and adding one would be new infrastructure for a feature
-    that doesn't need it. The saved point is what a later WFH punch's GPS is
+    submit time (location_source='gps'), or looked up by the browser from a
+    typed address (location_source='address', approximate — the lookup happens
+    in the frontend, the server never geocodes). The saved point is what a later WFH punch's GPS is
     validated against (services_geofencing.py's wfh strategy), the same way
     an office punch is validated against its Branch's saved point.
     """
@@ -862,6 +867,8 @@ class WorkFromHomeRequest(models.Model):
     location_label = models.CharField(max_length=150, blank=True, default='')
     latitude     = models.DecimalField(max_digits=9, decimal_places=6)
     longitude    = models.DecimalField(max_digits=9, decimal_places=6)
+    # How the point was obtained: captured on the device (gps) or looked up from a typed address (address, approximate).
+    location_source = models.CharField(max_length=10, choices=WFH_LOCATION_SOURCE_CHOICES, default=WFH_SOURCE_GPS)
     status       = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default=REQ_PENDING, db_index=True)
 
     # L1 approval
@@ -929,6 +936,7 @@ class WFHSavedLocation(models.Model):
     label      = models.CharField(max_length=100)
     latitude   = models.DecimalField(max_digits=9, decimal_places=6)
     longitude  = models.DecimalField(max_digits=9, decimal_places=6)
+    location_source = models.CharField(max_length=10, choices=WFH_LOCATION_SOURCE_CHOICES, default=WFH_SOURCE_GPS)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -5628,3 +5628,24 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Migration:** `notifications/0013_hr_help_notification_type.py` (choices only).
 
 **Not done:** the notice is not gated by a per-user notification setting (no matching category), and no email is sent. Resolving a ticket still does not edit the profile and does not notify the employee.
+
+
+## WFH: add a location by searching an address; location_source stored and used at clock-in (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. **Not checked in a browser**: the address search calls the public Nominatim service from the browser, and the form flow was only exercised by unit tests.
+
+**Frontend**
+- `lib/geocode.ts` `searchAddress(query, signal?)`: OpenStreetMap Nominatim, `format=jsonv2`, `limit=5`, type-guarded response, friendly error on a non-OK reply. Nominatim's policy is about 1 request per second and no search-as-you-type; heavy use should go through a backend endpoint.
+- `work-from-home/_components/WfhAddressSearch.tsx`: search only on the Search button or Enter, at least 4 characters, "Searching…" state, inline error, "No match found" message, results as a `listbox` of `option` buttons.
+- `RequestWfhForm.tsx`: "I'm here now" / "Search address" tabs under "+ Add new location…"; `locationSource` is sent in both POST bodies (saved-location create and request create); a "Source" row in the Your Location panel; saved locations carry their source. Two small additions beyond the brief: the request POST also sends `saved_location_id` when a saved location is selected (so the server can copy that location's source), and the "Save as…" row now shows after an address pick too, otherwise an address location could never be saved and reused. The form file was already over the 200-line guideline (it is now larger); splitting it is not done.
+- `types/workFromHome.ts`: `WfhLocationSource`, optional `location_source` on `WorkFromHomeRequest` and `WFHSavedLocation`.
+
+**Backend**
+- `WFHSavedLocation` and `WorkFromHomeRequest` get `location_source` (`gps`/`address`, default `gps`); migration `hrms/0053_wfh_location_source.py`. Existing rows become `gps`.
+- Serializers: field added to the explicit field lists (read and write, validated against the two choices, `gps` when omitted). The approvals/detail serializer (`WorkFromHomeRequestSerializer`) returns it, so approvers can see the point was typed in. The approvals UI does not display it yet.
+- `WorkFromHomeRequestCreateSerializer` accepts optional `saved_location_id`; when given, that saved location's source overrides what the client sent, and another employee's saved location is refused.
+- Clock-in (`attendance/services_geofencing.py`): the WFH radius is now `settings.WFH_GPS_RADIUS_M` (default 200, the old hardcoded value) or `settings.WFH_ADDRESS_RADIUS_M` (default 500, chosen with the owner) when the request's source is `address`. Both are overridable by env vars (listed in `.env.example`). The accuracy tolerance is unchanged.
+
+**Tests:** `hrms/tests_wfh_location_source.py` (7), `attendance/tests_wfh_clock_in_radius.py` (4); `geocode.test.ts` (4), `WfhAddressSearch.test.tsx` (3); `WfhRequestModal.test.tsx` expectation updated for the two new fields. Existing WFH, geofencing, face-verification and query-efficiency tests still pass. `tsc`, `eslint` and `makemigrations --check` clean.
+
+**Open:** the approval screens (Approvals, WFH detail modal) do not yet show "Looked up from address"; the accuracy of a geocoded point is only as good as OpenStreetMap's data, which is why the radius is larger.

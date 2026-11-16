@@ -1,5 +1,8 @@
 // Field names mirror the raw API response (snake_case) — same convention
 // as types/orgChart.ts and the ApiEmployee/ApiProfile shapes elsewhere.
+/** How a WFH point was obtained: captured on the device, or looked up from a typed address (approximate). */
+export type WfhLocationSource = "gps" | "address";
+
 export interface WorkFromHomeRequest {
   id:               string;
   start_date:       string;
@@ -8,6 +11,8 @@ export interface WorkFromHomeRequest {
   location_label:   string;
   latitude:         string;
   longitude:        string;
+  /** Optional until the backend stores it; treat a missing value as "gps". */
+  location_source?: WfhLocationSource;
   status:           "pending" | "l2_pending" | "approved" | "rejected" | "cancelled";
   employee_name:    string;
   employee_code:    string;
@@ -31,6 +36,7 @@ export interface WFHSavedLocation {
   label:      string;
   latitude:   string;
   longitude:  string;
+  location_source?: WfhLocationSource;
   created_at: string;
 }
 

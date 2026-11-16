@@ -326,6 +326,11 @@ SEPARATION_ALLOW_REQUESTER_APPROVAL = env.bool('SEPARATION_ALLOW_REQUESTER_APPRO
 # Hire-wizard drafts untouched for this many days are discarded by the daily expire-stale-hire-drafts task.
 HIRE_DRAFT_EXPIRY_DAYS = env.int('HIRE_DRAFT_EXPIRY_DAYS', default=30)
 
+# Work-from-home clock-in radius, in metres, around the approved request's saved point. A point captured on the device (gps) is
+# precise; one looked up from a typed address is approximate, so it gets the larger radius.
+WFH_GPS_RADIUS_M = env.int('WFH_GPS_RADIUS_M', default=200)
+WFH_ADDRESS_RADIUS_M = env.int('WFH_ADDRESS_RADIUS_M', default=500)
+
 # Project Budget & Tracking tool — used only for the "My Projects" fallback pull when we hold no rows for an employee.
 # Blank means the fallback is switched off (the push webhook still works).
 PROJECT_BUDGET_API_BASE_URL = env('PROJECT_BUDGET_API_BASE_URL', default='')

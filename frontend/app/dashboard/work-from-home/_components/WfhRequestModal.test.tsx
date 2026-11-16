@@ -74,6 +74,7 @@ describe("WfhRequestModal", () => {
     expect(post).toHaveBeenCalledTimes(1);
     expect(post).toHaveBeenCalledWith(API.workFromHome.requests, {
       start_date: "2026-11-20", end_date: "2026-11-22", reason: "", location_label: "Home", latitude: 17.462542, longitude: 78.369547,
+      location_source: "gps", saved_location_id: "loc-1",
     });
     expect(onCreated).toHaveBeenCalledTimes(1);          // the host is told as soon as it is saved ...
     expect(onCreated).toHaveBeenCalledWith(created);

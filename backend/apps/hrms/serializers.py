@@ -510,7 +510,7 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
         model  = WorkFromHomeRequest
         fields = [
             'id', 'start_date', 'end_date', 'reason', 'location_label',
-            'latitude', 'longitude', 'status',
+            'latitude', 'longitude', 'location_source', 'status',
             'employee_name', 'employee_code', 'employee_dept', 'employee_branch',
             'employee_email', 'l1_approver_name', 'l1_skipped', 'l1_status', 'l1_remarks', 'l1_actioned_at',
             'l2_approver_name', 'l2_status', 'l2_remarks', 'l2_actioned_at',
@@ -565,9 +565,13 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
 
 
 class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
+    # Optional: the employee's saved location this request was made from. When given, its location_source is copied onto the
+    # request (the saved record is the authority on how that point was obtained), whatever the client sent.
+    saved_location_id = serializers.UUIDField(required=False, write_only=True)
+
     class Meta:
         model  = WorkFromHomeRequest
-        fields = ['start_date', 'end_date', 'reason', 'location_label', 'latitude', 'longitude']
+        fields = ['start_date', 'end_date', 'reason', 'location_label', 'latitude', 'longitude', 'location_source', 'saved_location_id']
 
     def to_internal_value(self, data):
         # The browser's Geolocation API returns far more decimal precision
@@ -597,7 +601,7 @@ class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
 class WFHSavedLocationSerializer(serializers.ModelSerializer):
     class Meta:
         model  = WFHSavedLocation
-        fields = ['id', 'label', 'latitude', 'longitude', 'created_at']
+        fields = ['id', 'label', 'latitude', 'longitude', 'location_source', 'created_at']
         read_only_fields = ['id', 'created_at']
 
     def to_internal_value(self, data):

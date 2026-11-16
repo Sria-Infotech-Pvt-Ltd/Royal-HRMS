@@ -321,11 +321,15 @@ def _validate_no_geofence(
     )
 
 
-# WFH punches are validated against the location saved on that day's
-# approved WorkFromHomeRequest — the radius mirrors a typical office's
-# default (see BranchManagement.tsx's own 150m default), just not
-# per-request configurable since nothing has asked for that yet.
-_WFH_DEFAULT_RADIUS_M = 200
+# WFH punches are validated against the location saved on that day's approved WorkFromHomeRequest. The radius comes from
+# settings (WFH_GPS_RADIUS_M, WFH_ADDRESS_RADIUS_M): a point captured on the device is precise, one looked up from a typed
+# address is approximate, so it gets the larger radius.
+def _wfh_radius_m(wfh_request) -> int:
+    from django.conf import settings
+
+    if getattr(wfh_request, 'location_source', 'gps') == 'address':
+        return settings.WFH_ADDRESS_RADIUS_M
+    return settings.WFH_GPS_RADIUS_M
 
 WFH_NO_APPROVED_REQUEST_MESSAGE = (
     'You need an approved work-from-home request covering today before you '
@@ -375,7 +379,8 @@ def _validate_wfh(
         latitude=float(wfh_request.latitude), longitude=float(wfh_request.longitude),
     )
     distance_m = haversine_distance(employee_coord, request_coord)
-    effective_radius = _WFH_DEFAULT_RADIUS_M + tolerance_m
+    radius_m = _wfh_radius_m(wfh_request)
+    effective_radius = radius_m + tolerance_m
 
     if distance_m <= effective_radius:
         return GeofenceResult(
@@ -389,7 +394,7 @@ def _validate_wfh(
         'approved WFH location "%s" (radius %sm + accuracy tolerance %.1fm = '
         'effective %.1fm; device-reported accuracy %s).',
         employee.pk, employee_coord.latitude, employee_coord.longitude, distance_m,
-        wfh_request.location_label or 'unnamed', _WFH_DEFAULT_RADIUS_M, tolerance_m,
+        wfh_request.location_label or 'unnamed', radius_m, tolerance_m,
         effective_radius, employee_accuracy,
     )
     return GeofenceResult(
