@@ -11,17 +11,9 @@ import { useState } from "react";
 import RequestModal from "@/components/RequestModal";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { CORRECTION_SECTIONS, fieldsForSection } from "./profileCorrectionFields";
 
 export const PROFILE_CORRECTION_TOPIC = "profile_correction";
-
-const SECTIONS = [
-  { value: "Personal details",     label: "Personal details" },
-  { value: "Contact & address",    label: "Contact & address" },
-  { value: "Emergency contact",    label: "Emergency contact" },
-  { value: "Bank details",         label: "Bank details" },
-  { value: "Family & nomination",  label: "Family & nomination" },
-  { value: "Other",                label: "Other" },
-];
 
 interface Props {
   onClose: () => void;
@@ -29,19 +21,24 @@ interface Props {
 }
 
 export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) {
-  const [section, setSection] = useState(SECTIONS[0].value);
+  const [section, setSection] = useState(CORRECTION_SECTIONS[0].value);
   const [field, setField] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function changeSection(value: string) {
+    setSection(value);
+    setField("");
+  }
+
   async function handleSubmit() {
     setError(null);
-    if (!field.trim()) { setError("Please enter which field needs to change."); return; }
+    if (!fieldsForSection(section).includes(field)) { setError("Please choose which field needs to change."); return; }
     if (reason.trim().length < 10) { setError("Please describe the reason in at least 10 characters."); return; }
     setSubmitting(true);
     try {
-      const message = `Section: ${section}. Field to change: ${field.trim()}. Reason: ${reason.trim()}`;
+      const message = `Section: ${section}. Field to change: ${field}. Reason: ${reason.trim()}`;
       await clientApi.post(API.hrHelp.list, { topic: PROFILE_CORRECTION_TOPIC, priority: "normal", message });
       onSubmitted();
     } catch (err: unknown) {
@@ -63,18 +60,16 @@ export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) 
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
           <label className="field-label">Section</label>
-          <select className="field-input field-select" value={section} onChange={e => setSection(e.target.value)}>
-            {SECTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          <select className="field-input field-select" value={section} onChange={e => changeSection(e.target.value)} suppressHydrationWarning>
+            {CORRECTION_SECTIONS.map(entry => <option key={entry.value} value={entry.value}>{entry.value}</option>)}
           </select>
         </div>
         <div className="field-group">
           <label className="field-label">Field to change</label>
-          <input
-            className="field-input"
-            value={field}
-            onChange={e => setField(e.target.value)}
-            placeholder="e.g. Mobile number"
-          />
+          <select className="field-input field-select" value={field} onChange={e => setField(e.target.value)} suppressHydrationWarning>
+            <option value="">Select a field…</option>
+            {fieldsForSection(section).map(name => <option key={name} value={name}>{name}</option>)}
+          </select>
         </div>
       </div>
       <div className="field-group">

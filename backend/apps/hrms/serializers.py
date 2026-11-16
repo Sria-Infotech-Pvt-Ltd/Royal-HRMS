@@ -9,6 +9,7 @@ from rest_framework import serializers
 from core.file_validation import validate_file_content as _validate_file_content
 from core.permissions import has_perm as _has_perm
 
+from .services_profile_correction import profile_correction_problem
 from .models import (
     APPROVAL_PENDING,
     CarryForwardLog,
@@ -1316,6 +1317,13 @@ class HRHelpRequestCreateSerializer(serializers.ModelSerializer):
         if len(value) < 10:
             raise serializers.ValidationError('Please describe your question or request in at least 10 characters.')
         return value
+
+    def validate(self, attrs):
+        if attrs.get('topic') == 'profile_correction':
+            problem = profile_correction_problem(attrs.get('message', ''))
+            if problem:
+                raise serializers.ValidationError({'message': problem})
+        return attrs
 
 
 class HRHelpRequestRespondSerializer(serializers.ModelSerializer):

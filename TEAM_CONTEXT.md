@@ -5662,3 +5662,18 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Fix:** `LOCATION_CHECKED_MODES = ["office", "wfh"]`: both modes now capture the device location and run the read-only `geofence-check` before the punch. Other modes are unchanged. The permission-denied toast names the mode.
 
 **Reminder:** the server must run `migrate hrms` and `migrate notifications` after deploying the WFH location_source and HR Help notification work, or WFH requests and punches fail with a missing-column 500 (seen locally).
+
+
+## Profile correction: Field is now a dropdown that depends on the Section, and the server checks the pair (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. No migration. Tests pass locally (backend 9 new, frontend 3 new); `tsc`, `eslint` clean. Not checked in a browser.
+
+**Frontend:** `ess/_components/profileCorrectionFields.ts` (new) holds `OTHER_SECTION`, `OTHER_FIELD`, `CORRECTION_SECTIONS` and `fieldsForSection()`. `ProfileCorrectionModal.tsx` now uses it: the Section list comes from it, "Field to change" is a `<select>` ("Select a field…" then that section's fields), changing the Section clears the field, and the field must belong to the section ("Please choose which field needs to change."). The submitted message is unchanged: `Section: <s>. Field to change: <f>. Reason: <r>`.
+
+**Backend:** `hrms/profile_correction_fields.py` holds the same map (`PROFILE_CORRECTION_FIELDS`); `hrms/services_profile_correction.py` parses the message and returns why it is unacceptable; `HRHelpRequestCreateSerializer.validate()` applies it only when `topic == 'profile_correction'`, answering 400 in the normal envelope for a malformed message, an unknown section, a field from another section, or a reason shorter than 10 characters. Other topics keep only the old 10-character message rule. Rejections are logged with the section/field names, never the reason text. The model and message format are unchanged.
+
+**Keeping them in sync:** `tests_profile_correction_validation.FrontendListsInSyncTests` parses the frontend file and fails if it differs from the server map (skipped when the frontend source is not next to the backend).
+
+**Field lists:** taken from the employee profile and onboarding data (personal, contact and address, emergency contact, bank including account number and IFSC, family and nominee). "Date of joining" sits under Personal details because there is no Employment section and it is the field most often entered wrongly. Fields outside these (PAN, Aadhaar, qualifications, work details) go through "Other (describe in the reason)".
+
+**Open:** the old free-text requests already in the queue are untouched; an older cached frontend that still sends free text will get a 400 until it reloads.
