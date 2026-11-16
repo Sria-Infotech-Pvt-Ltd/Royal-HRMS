@@ -5593,3 +5593,12 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change:** `hrms/views/hr_help.py` gets `_can_respond(user)` = `hr_help.respond` OR `is_full_access_actor` (superuser or `settings.edit`). The list, detail and PATCH use it, so the System Admin sees and answers every ticket even when their seat lacks `hr_help.respond`. `HrHelpTab.tsx` uses the same rule (`usePermission("hr_help.respond") || isUnrestrictedUser(user)`). No test added.
 
 **Throttle rates (committed and pushed as b0de8b20, 2026-11-16):** `backend/config/settings.py` login 20 to 200/hour, forgot_password 5 to 30, reset_password 10 to 50, otp_verify 10 to 50. This weakens brute-force protection; restore the old values before a production deploy if that is not intended.
+
+
+## HR Attendance: Present chip and Present list now include Late (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Backend only, no migration. Test: `attendance/tests_dashboard_present_includes_late.py` (3 tests pass on the local test database). Not checked in a browser.
+
+**Problem:** a late punch-in is stored with status `late`, not `present`. The top "Present today" card already added Present + Late + Incomplete, but the "Present" chip and the Present list filter matched status `present` exactly, so late employees appeared only under Late.
+
+**Fix (`attendance/services_hr.py`):** `summary_chips.present` = present + late; the `status=present` list filter matches `present` and `late`. Late stays a subset: the Late chip and Late filter still show only late people. The chips are therefore not additive (Present already contains Late), same as the top card. Incomplete is still counted only in the top card. No frontend change was needed.
