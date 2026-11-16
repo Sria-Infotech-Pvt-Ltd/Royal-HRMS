@@ -5716,3 +5716,14 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 - Links: the bell notification for a new ticket and the admin dashboard's "HR Help Requests" row now open `/dashboard/approvals?section=hr_requests`.
 
 **Not done:** there is still no Approve/Reject on a ticket, and resolving one does not change the employee's profile (the admin edits the record by hand; the joining date needs a System Admin). The Approvals "My Approvals" overview tab does not list HR Requests.
+
+
+## HR Requests moved from its own Approvals tab into the My Approvals table (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Tests: `MyApprovalsOverview.hrRequests.test.tsx` (3 new), `approvalSections.test.ts` updated; 609 tests pass in lib, approvals, ess and dashboard components; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser. Revises the entry just above.
+
+**Owner's request:** the separate "HR Requests" tab looked wrong; the requests should be in the My Approvals table with the other workflows.
+
+**Change:** the tab is gone (`lib/approvalSections.ts` no longer has an `hr_requests` section). `approvals/_components/MyApprovalsOverview.tsx` gets an **HR requests** row (Waiting and For me to act on = the open-ticket count, "Who sees it" note) for people who answer tickets (`hr_help.respond`) and full-access users. Its button opens the queue (`HrRequestsTab`, status filters + Respond form) in place below the table, and turns into Hide. A person whose only approval duty is HR Help still gets the overview. The bell notice and the admin dashboard row still link to `/dashboard/approvals?section=hr_requests`, which now opens the overview with the queue already showing.
+
+**Known small gap:** the row's count is read when the page loads; resolving a ticket in the queue updates the queue immediately but the row count only after a reload.

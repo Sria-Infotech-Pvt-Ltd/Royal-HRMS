@@ -4,8 +4,11 @@
 // It only counts what each workflow's own API returns for the signed-in user; it does not approve anything itself, and
 // every action stays in its own tab under that workflow's own authorization. Workflows keep different assignment
 // rules (see KIND_SCOPE_NOTES), which is why each line says how it is scoped.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApprovalOverview } from "@/hooks/useApprovalOverview";
+import { useFetch } from "@/hooks/useFetch";
+import { API } from "@/lib/api/endpoints";
+import HrRequestsTab from "./HrRequestsTab";
 import { useTimesheetPending } from "@/hooks/useTimesheetQueue";
 import { KIND_LABELS, KIND_SCOPE_NOTES } from "@/lib/approvalOverview";
 import type { ApprovalSectionKey } from "@/lib/approvalSections";
@@ -16,6 +19,10 @@ interface MyApprovalsOverviewProps {
   canApproveTimesheets: boolean;
   canSeePersonnel: boolean;
   canApproveFace: boolean;
+  /** Staff who answer HR Help tickets (profile corrections etc.): adds an "HR requests" row that opens the queue below the table. */
+  canRespondHrHelp?: boolean;
+  /** Show the HR requests queue straight away (a link such as the new-ticket bell notice asked for it). */
+  openHrRequestsInitially?: boolean;
   onOpen: (section: ApprovalSectionKey) => void;
 }
 
@@ -26,10 +33,19 @@ interface Row {
   pending: number | null;
   mine: number | null;
   section: ApprovalSectionKey;
+  /** Overrides going to a tab: the row opens something in place instead. */
+  open?: () => void;
 }
 
-export default function MyApprovalsOverview({ canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace, onOpen }: MyApprovalsOverviewProps) {
+export default function MyApprovalsOverview({
+  canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace, canRespondHrHelp = false, openHrRequestsInitially = false, onOpen,
+}: MyApprovalsOverviewProps) {
   const [isMineOnly, setIsMineOnly] = useState(false);
+  const [isHrRequestsOpen, setIsHrRequestsOpen] = useState(openHrRequestsInitially);
+  // Anyone who answers HR Help tickets sees every ticket, so what is waiting is also theirs to act on.
+  const openTickets = useFetch<{ count: number }>(canRespondHrHelp ? `${API.hrHelp.list}?status=open&page_size=1` : null);
+  const openTicketCount = openTickets.data?.count ?? 0;
+  useEffect(() => { if (openHrRequestsInitially) setIsHrRequestsOpen(true); }, [openHrRequestsInitially]);
   const overview = useApprovalOverview({ includeTeam: canApprove, includeFace: canApproveFace });
   const timesheetsWaiting = useTimesheetPending(canApproveTimesheets);
 
@@ -55,6 +71,12 @@ export default function MyApprovalsOverview({ canApprove, canApproveAttendance, 
     ...(canSeePersonnel ? [{
       key: "personnel", label: "Personnel actions", scope: "Promotions, transfers and similar actions at your stage of the chain. Open the tab to see what is due.",
       pending: null, mine: null, section: "personnel" as const,
+    }] : []),
+    ...(canRespondHrHelp ? [{
+      key: "hr_requests", label: "HR requests",
+      scope: "Profile corrections and other questions employees send to HR. Everyone who answers them, and any full-access user, sees all of them.",
+      pending: openTicketCount, mine: openTicketCount, section: "overview" as const,
+      open: () => setIsHrRequestsOpen(open => !open),
     }] : []),
   ];
 
@@ -85,12 +107,13 @@ export default function MyApprovalsOverview({ canApprove, canApproveAttendance, 
                 <td>{row.pending ?? "—"}</td>
                 <td>{row.mine ?? "—"}</td>
                 <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{row.scope}</td>
-                <td><button className="btn btn-outline btn-sm" onClick={() => onOpen(row.section)}>Open</button></td>
+                <td><button className="btn btn-outline btn-sm" onClick={() => (row.open ? row.open() : onOpen(row.section))}>{row.key === "hr_requests" && isHrRequestsOpen ? "Hide" : "Open"}</button></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {canRespondHrHelp && isHrRequestsOpen && <div style={{ padding: "0 16px 16px" }}><HrRequestsTab /></div>}
       <p style={{ fontSize: 11, color: "var(--on-variant)", padding: "8px 16px 14px", margin: 0 }}>
         Counts show only what the server lets you see. Onboarding approvals are in Review &amp; Onboarding, and bank-change
         requests are in the employee record; they are not part of this list.

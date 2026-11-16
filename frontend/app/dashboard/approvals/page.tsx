@@ -10,7 +10,6 @@ import FaceRegistrationApprovalsTab from "./_components/FaceRegistrationApproval
 import PersonnelActionsTab from "./_components/PersonnelActionsTab";
 import TimesheetApprovalsTab from "./_components/TimesheetApprovalsTab";
 import MyApprovalsOverview from "./_components/MyApprovalsOverview";
-import HrRequestsTab from "./_components/HrRequestsTab";
 import { isUnrestrictedUser } from "@/lib/auth";
 import { approvalSectionsFor, sectionFromLink, type ApprovalSectionKey } from "@/lib/approvalSections";
 
@@ -58,6 +57,11 @@ export default function ApprovalsPage() {
     const wanted = sectionFromLink(linkedSection, sections);
     if (wanted) setSection(wanted);
   }, [linkedSection, sections]);
+  // ?section=hr_requests (the bell notice, the dashboard row) opens the overview with the HR requests queue already showing.
+  const opensHrRequests = linkedSection === "hr_requests" && canRespondHrHelp;
+  useEffect(() => {
+    if (opensHrRequests) setSection("overview");
+  }, [opensHrRequests]);
 
   return (
     <div>
@@ -78,7 +82,8 @@ export default function ApprovalsPage() {
       {section === "overview" && (
         <MyApprovalsOverview
           canApprove={canApprove} canApproveAttendance={canApproveAttendance} canApproveTimesheets={canApproveTimesheets}
-          canSeePersonnel={canSeePersonnel} canApproveFace={canApproveFace} onOpen={setSection}
+          canSeePersonnel={canSeePersonnel} canApproveFace={canApproveFace} canRespondHrHelp={canRespondHrHelp}
+          openHrRequestsInitially={opensHrRequests} onOpen={setSection}
         />
       )}
       {section === "timesheets"        && canApproveTimesheets && <TimesheetApprovalsTab />}
@@ -86,7 +91,6 @@ export default function ApprovalsPage() {
       {section === "attendance"        && canApproveAttendance && <div className="settings-card"><AttendanceApprovalTab /></div>}
       {section === "personnel"         && canSeePersonnel      && <PersonnelActionsTab />}
       {section === "face_registration" && canApproveFace        && <div className="settings-card"><FaceRegistrationApprovalsTab /></div>}
-      {section === "hr_requests"       && canRespondHrHelp      && <HrRequestsTab />}
     </div>
   );
 }
