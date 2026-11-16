@@ -736,3 +736,39 @@ def _on_document_save(sender, instance, created, **kwargs):
     Notification.objects.bulk_create(notifications, ignore_conflicts=True)
     for notification in notifications:
         _push_live(notification)
+
+
+# ─── HR Help tickets ────────────────────────────────────────────────────────────
+
+@receiver(post_save, sender='hrms.HRHelpRequest')
+def _on_hr_help_request_created(sender, instance, created, **kwargs):
+    """Tells the HR side (hr_help.respond holders, superusers and settings.edit holders — the same people who see the queue)
+    that a ticket was raised, with a link to the HR Help queue. The employee is never notified about their own ticket."""
+    if not created:
+        return
+    ticket_id = instance.pk
+    transaction.on_commit(lambda: _notify_hr_help_request(ticket_id))
+
+
+def _notify_hr_help_request(ticket_id) -> None:
+    from django.db.models import Q
+
+    from apps.accounts.models import User
+    from apps.hrms.models import HRHelpRequest
+    from core.access import users_with_permission
+
+    try:
+        ticket = HRHelpRequest.objects.select_related('submitted_by').get(pk=ticket_id)
+        recipients = (
+            User.objects.filter(is_active=True)
+            .filter(users_with_permission('hr_help.respond') | users_with_permission('settings.edit') | Q(is_superuser=True))
+            .exclude(pk=ticket.submitted_by_id)
+            .distinct()
+        )
+        sender_name = ticket.submitted_by.full_name or ticket.submitted_by.email
+        for recipient in recipients:
+            _notify(recipient, f'New HR Help request: {ticket.get_topic_display()}',
+                    f'{sender_name} raised an HR Help request. Open the HR Help queue to review it.',
+                    'hr_help_request', 'system', 'hr-help', ticket.submitted_by)
+    except Exception:
+        logger.exception('Failed to notify HR about HR Help request %s', ticket_id)

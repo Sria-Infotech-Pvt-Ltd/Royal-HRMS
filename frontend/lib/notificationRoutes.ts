@@ -20,6 +20,8 @@ export const MODULE_ROUTES: Record<NotificationModule, string> = {
 
 /** System notifications that concern one employee carry a `reference_id` saying where to go. */
 const OWN_PROFILE_REFERENCE = "profile";
+const HR_HELP_REFERENCE = "hr-help";
+const PROFILE_CHANGE_REFERENCE = "profile-change";
 const EMPLOYEE_REFERENCE_PREFIX = "employee:";
 
 const TIMESHEET_WEEK = /(\d{4}-\d{2}-\d{2})/;
@@ -40,6 +42,8 @@ export function notificationRoute(notification: Pick<Notification, "module" | "r
   if (notification.module === "system") {
     const reference = notification.reference_id ?? "";
     if (reference === OWN_PROFILE_REFERENCE) return "/dashboard"; // the employee's own welcome notice opens the dashboard
+    if (reference === PROFILE_CHANGE_REFERENCE) return "/dashboard/ess?tab=profile"; // the decision on your own profile correction
+    if (reference === HR_HELP_REFERENCE) return "/dashboard/approvals?section=hr_requests"; // a new HR Help ticket opens the staff queue on the Approvals page
     if (reference.startsWith(EMPLOYEE_REFERENCE_PREFIX)) {
       const employeeId = reference.slice(EMPLOYEE_REFERENCE_PREFIX.length).trim();
       if (employeeId) return `/dashboard/employees/${encodeURIComponent(employeeId)}`;

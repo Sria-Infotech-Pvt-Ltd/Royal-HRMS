@@ -37,7 +37,7 @@ export default function MyRequestsSummaryTab() {
   const { data: expenseRaw } = useFetch<PaginatedResponse<Expense>>(`${API.expenses.list}?page_size=100`);
   const { data: correctionRaw } = useFetch<PaginatedResponse<MyCorrectionRequest>>(`${API.attendance.myCorrections}?page_size=100`);
   const { data: wfhRaw } = useFetch<PaginatedResponse<WorkFromHomeRequest>>(`${API.workFromHome.requests}?page_size=100`);
-  const { data: hrHelpRaw, refetch: refetchHrHelp } = useFetch<PaginatedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=100`);
+  const { data: hrHelpRaw, refetch: refetchHrHelp } = useFetch<PaginatedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=100&mine=1`);
 
   const items: MyRequestItem[] = useMemo(() => [
     ...(leaveRaw?.results ?? []).map(leaveToMyItem),

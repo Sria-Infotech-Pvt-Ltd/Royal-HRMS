@@ -16,6 +16,31 @@ export interface HrHelpRequest {
   created_at:         string;
   updated_at:         string;
   resolved_at:        string | null;
+  /** Employee id (e.g. 10000001) of whoever raised it, to open their record. */
+  submitted_by_code:  string;
+  /** Set on a profile correction that carries a new value HR can apply in one step; '' for every other ticket. */
+  change_field:       string;
+  change_label:       string;
+  change_old_value:   string;
+  change_new_value:   string;
+  /** '' until decided, then 'applied' or 'rejected'. */
+  change_decision:    "" | "applied" | "rejected";
+  change_applied_at:  string | null;
+  /** The joining date: only a System Admin may apply it. */
+  change_needs_system_admin: boolean;
+  /** An older, still open profile correction without a stored value: the field it is about, so HR can type the new value. */
+  change_suggested_key: string;
+}
+
+/** One profile field an employee can ask to change with a new value (GET /hr-help/change-fields/). */
+export interface ProfileChangeField {
+  key:        string;
+  section:    string;
+  label:      string;
+  kind:       "text" | "date" | "phone" | "pin" | "choice";
+  max_length: number;
+  choices:    { value: string; label: string }[];
+  full_access_only: boolean;
 }
 
 // Topic value backing "Document request" (e.g. the employment letter request

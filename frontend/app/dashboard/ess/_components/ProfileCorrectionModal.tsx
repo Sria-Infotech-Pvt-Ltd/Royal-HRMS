@@ -1,27 +1,19 @@
 "use client";
 
-// "Request profile correction" modal — submits via the generic HR Help
-// support-request endpoint (topic='profile_correction'), same reuse pattern
-// as AssetRequestModal.tsx: no dedicated correction-request model exists,
-// so the section/field/new value/reason fields are folded into
-// HRHelpRequest.message rather than adding a new Django model for this one
-// free-text request.
+// "Request profile correction" modal — submits via the generic HR Help support-request endpoint (topic='profile_correction').
+// The section / field / reason are folded into HRHelpRequest.message. For a field HR can apply in one step (the server lists them at
+// GET /hr-help/change-fields/) the employee also types the new value, which HR then approves and the server writes to the record.
 
 import { useState } from "react";
 import RequestModal from "@/components/RequestModal";
+import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import type { ProfileChangeField } from "@/types/hrHelp";
+import { CORRECTION_SECTIONS, fieldsForSection } from "./profileCorrectionFields";
+import ProfileChangeValueInput from "./ProfileChangeValueInput";
 
 export const PROFILE_CORRECTION_TOPIC = "profile_correction";
-
-const SECTIONS = [
-  { value: "Personal details",     label: "Personal details" },
-  { value: "Contact & address",    label: "Contact & address" },
-  { value: "Emergency contact",    label: "Emergency contact" },
-  { value: "Bank details",         label: "Bank details" },
-  { value: "Family & nomination",  label: "Family & nomination" },
-  { value: "Other",                label: "Other" },
-];
 
 interface Props {
   onClose: () => void;
@@ -29,20 +21,37 @@ interface Props {
 }
 
 export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) {
-  const [section, setSection] = useState(SECTIONS[0].value);
+  const [section, setSection] = useState(CORRECTION_SECTIONS[0].value);
   const [field, setField] = useState("");
+  const [newValue, setNewValue] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { data: changeFields } = useFetch<ProfileChangeField[]>(API.hrHelp.changeFields);
+  const spec = (changeFields ?? []).find(candidate => candidate.section === section && candidate.label === field) ?? null;
+
+  function changeSection(value: string) {
+    setSection(value);
+    setField("");
+    setNewValue("");
+  }
+
+  function changeField(value: string) {
+    setField(value);
+    setNewValue("");
+  }
 
   async function handleSubmit() {
     setError(null);
-    if (!field.trim()) { setError("Please enter which field needs to change."); return; }
+    if (!fieldsForSection(section).includes(field)) { setError("Please choose which field needs to change."); return; }
+    if (spec && !newValue.trim()) { setError(`Enter the new ${spec.label.toLowerCase()}.`); return; }
     if (reason.trim().length < 10) { setError("Please describe the reason in at least 10 characters."); return; }
     setSubmitting(true);
     try {
-      const message = `Section: ${section}. Field to change: ${field.trim()}. Reason: ${reason.trim()}`;
-      await clientApi.post(API.hrHelp.list, { topic: PROFILE_CORRECTION_TOPIC, priority: "normal", message });
+      const message = `Section: ${section}. Field to change: ${field}. Reason: ${reason.trim()}`;
+      await clientApi.post(API.hrHelp.list, {
+        topic: PROFILE_CORRECTION_TOPIC, priority: "normal", message, ...(spec ? { change_new_value: newValue.trim() } : {}),
+      });
       onSubmitted();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -63,20 +72,25 @@ export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) 
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
           <label className="field-label">Section</label>
-          <select className="field-input field-select" value={section} onChange={e => setSection(e.target.value)}>
-            {SECTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          <select className="field-input field-select" value={section} onChange={e => changeSection(e.target.value)} suppressHydrationWarning>
+            {CORRECTION_SECTIONS.map(entry => <option key={entry.value} value={entry.value}>{entry.value}</option>)}
           </select>
         </div>
         <div className="field-group">
           <label className="field-label">Field to change</label>
-          <input
-            className="field-input"
-            value={field}
-            onChange={e => setField(e.target.value)}
-            placeholder="e.g. Mobile number"
-          />
+          <select className="field-input field-select" value={field} onChange={e => changeField(e.target.value)} suppressHydrationWarning>
+            <option value="">Select a field…</option>
+            {fieldsForSection(section).map(name => <option key={name} value={name}>{name}</option>)}
+          </select>
         </div>
       </div>
+      {spec && (
+        <div className="field-group mb-16">
+          <label className="field-label">New {spec.label.toLowerCase()}</label>
+          <ProfileChangeValueInput spec={spec} value={newValue} onChange={setNewValue} />
+          <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "4px 0 0" }}>HR reviews this before your record is updated.</p>
+        </div>
+      )}
       <div className="field-group">
         <label className="field-label">Reason</label>
         <textarea

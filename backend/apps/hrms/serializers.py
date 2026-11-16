@@ -9,6 +9,9 @@ from rest_framework import serializers
 from core.file_validation import validate_file_content as _validate_file_content
 from core.permissions import has_perm as _has_perm
 
+from .profile_change_fields import spec_for_key, spec_for_label
+from .services_profile_change import ProfileChangeError, clean_new_value, current_value, suggested_spec
+from .services_profile_correction import parse_profile_correction, profile_correction_problem
 from .models import (
     APPROVAL_PENDING,
     CarryForwardLog,
@@ -510,7 +513,7 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
         model  = WorkFromHomeRequest
         fields = [
             'id', 'start_date', 'end_date', 'reason', 'location_label',
-            'latitude', 'longitude', 'status',
+            'latitude', 'longitude', 'location_source', 'status',
             'employee_name', 'employee_code', 'employee_dept', 'employee_branch',
             'employee_email', 'l1_approver_name', 'l1_skipped', 'l1_status', 'l1_remarks', 'l1_actioned_at',
             'l2_approver_name', 'l2_status', 'l2_remarks', 'l2_actioned_at',
@@ -565,9 +568,13 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
 
 
 class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
+    # Optional: the employee's saved location this request was made from. When given, its location_source is copied onto the
+    # request (the saved record is the authority on how that point was obtained), whatever the client sent.
+    saved_location_id = serializers.UUIDField(required=False, write_only=True)
+
     class Meta:
         model  = WorkFromHomeRequest
-        fields = ['start_date', 'end_date', 'reason', 'location_label', 'latitude', 'longitude']
+        fields = ['start_date', 'end_date', 'reason', 'location_label', 'latitude', 'longitude', 'location_source', 'saved_location_id']
 
     def to_internal_value(self, data):
         # The browser's Geolocation API returns far more decimal precision
@@ -597,7 +604,7 @@ class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
 class WFHSavedLocationSerializer(serializers.ModelSerializer):
     class Meta:
         model  = WFHSavedLocation
-        fields = ['id', 'label', 'latitude', 'longitude', 'created_at']
+        fields = ['id', 'label', 'latitude', 'longitude', 'location_source', 'created_at']
         read_only_fields = ['id', 'created_at']
 
     def to_internal_value(self, data):
@@ -1281,6 +1288,10 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
     priority_display    = serializers.CharField(source='get_priority_display', read_only=True)
     status_display      = serializers.CharField(source='get_status_display', read_only=True)
     assigned_to_name     = serializers.SerializerMethodField()
+    change_label         = serializers.SerializerMethodField()
+    change_needs_system_admin = serializers.SerializerMethodField()
+    submitted_by_code    = serializers.SerializerMethodField()
+    change_suggested_key = serializers.SerializerMethodField()
 
     class Meta:
         model  = HRHelpRequest
@@ -1288,7 +1299,27 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
             'id', 'request_ref', 'topic', 'topic_display', 'priority', 'priority_display',
             'message', 'status', 'status_display', 'response',
             'submitted_by_name', 'assigned_to_name', 'created_at', 'updated_at', 'resolved_at',
+            'change_field', 'change_label', 'change_old_value', 'change_new_value', 'change_decision', 'change_applied_at',
+            'change_needs_system_admin', 'submitted_by_code', 'change_suggested_key',
         ]
+
+    def get_change_suggested_key(self, obj: HRHelpRequest) -> str:
+        """For an older, still open profile correction without a stored value: the field it is about, so HR can type the new value."""
+        if obj.change_decision or obj.status == 'resolved':
+            return ''
+        spec = suggested_spec(obj)
+        return spec.key if spec else ''
+
+    def get_submitted_by_code(self, obj: HRHelpRequest) -> str:
+        return obj.submitted_by.employee_id if obj.submitted_by_id else ''
+
+    def get_change_label(self, obj: HRHelpRequest) -> str:
+        spec = spec_for_key(obj.change_field)
+        return spec.label if spec else ''
+
+    def get_change_needs_system_admin(self, obj: HRHelpRequest) -> bool:
+        spec = spec_for_key(obj.change_field)
+        return bool(spec and spec.full_access_only)
 
     def get_request_ref(self, obj: HRHelpRequest) -> str:
         if obj.request_number is None:
@@ -1303,15 +1334,41 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
 
 
 class HRHelpRequestCreateSerializer(serializers.ModelSerializer):
+    # The new value for a profile field that HR can apply in one step; required for those fields, ignored for every other ticket.
+    change_new_value = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
     class Meta:
         model  = HRHelpRequest
-        fields = ['topic', 'priority', 'message']
+        fields = ['topic', 'priority', 'message', 'change_new_value']
 
     def validate_message(self, value):
         value = value.strip()
         if len(value) < 10:
             raise serializers.ValidationError('Please describe your question or request in at least 10 characters.')
         return value
+
+    def validate(self, attrs):
+        if attrs.get('topic') == 'profile_correction':
+            problem = profile_correction_problem(attrs.get('message', ''))
+            if problem:
+                raise serializers.ValidationError({'message': problem})
+            attrs.update(self._structured_change(attrs))
+        else:
+            attrs.pop('change_new_value', None)
+        return attrs
+
+    def _structured_change(self, attrs) -> dict:
+        """For a field HR can apply in one step: which field, its current value, and the cleaned new value."""
+        section, field, _reason = parse_profile_correction(attrs.get('message', ''))
+        spec = spec_for_label(section, field)
+        if spec is None:
+            return {'change_new_value': ''}
+        request = self.context.get('request')
+        try:
+            new_value = clean_new_value(request.user, spec, attrs.get('change_new_value', ''))
+        except ProfileChangeError as exc:
+            raise serializers.ValidationError({'change_new_value': exc.message}) from None
+        return {'change_field': spec.key, 'change_old_value': current_value(request.user, spec), 'change_new_value': new_value}
 
 
 class HRHelpRequestRespondSerializer(serializers.ModelSerializer):

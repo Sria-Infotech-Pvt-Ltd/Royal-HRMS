@@ -5,7 +5,9 @@ import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
-import type { WorkFromHomeRequest, WFHSavedLocation } from "@/types/workFromHome";
+import type { WorkFromHomeRequest, WFHSavedLocation, WfhLocationSource } from "@/types/workFromHome";
+import type { GeocodeResult } from "@/lib/geocode";
+import WfhAddressSearch from "./WfhAddressSearch";
 import { formatDate } from "@/lib/formatDate";
 import DateInput from "@/components/shared/DateInput";
 import { confirmDialog } from "@/components/DialogProvider";
@@ -66,6 +68,8 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
   const [reason,       setReason]      = useState("");
   const [locationLabel, setLocationLabel] = useState("");
   const [coords,       setCoords]      = useState<Coords | null>(null);
+  const [locationSource, setLocationSource] = useState<WfhLocationSource>("gps");
+  const [captureMode,  setCaptureMode]  = useState<WfhLocationSource>("gps");
   const [locating,     setLocating]    = useState(false);
   const [locationError, setLocationError] = useState("");
   const [errors,       setErrors]      = useState<Record<string, string>>({});
@@ -94,6 +98,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
   function applySavedLocation(loc: WFHSavedLocation) {
     setSelectedLocationId(loc.id);
     setCoords({ latitude: Number(loc.latitude), longitude: Number(loc.longitude), accuracy: null });
+    setLocationSource(loc.location_source ?? "gps");
     setLocationLabel(loc.label);
     setLocationError("");
     setErrors(prev => { const n = { ...prev }; delete n.coords; return n; });
@@ -124,6 +129,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
           longitude: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
         });
+        setLocationSource("gps");
         setLocating(false);
         setErrors(prev => { const n = { ...prev }; delete n.coords; return n; });
       },
@@ -135,6 +141,20 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
     );
   }
 
+  function pickAddress(result: GeocodeResult) {
+    setCoords({ latitude: result.latitude, longitude: result.longitude, accuracy: null });
+    setLocationSource("address");
+    setLocationError("");
+    setErrors(prev => { const n = { ...prev }; delete n.coords; return n; });
+  }
+
+  function chooseCaptureMode(mode: WfhLocationSource) {
+    if (mode === captureMode) return;
+    setCaptureMode(mode);
+    setCoords(null);
+    setLocationError("");
+  }
+
   async function saveCurrentAsLocation() {
     if (!coords || !saveLabel.trim()) return;
     setSavingLocation(true);
@@ -143,6 +163,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
         label: saveLabel.trim(),
         latitude: coords.latitude,
         longitude: coords.longitude,
+        location_source: locationSource,
       });
       showToast("Location saved for next time.", "success");
       setSaveLabel("");
@@ -178,13 +199,14 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
     if (!startDate) e.startDate = "Start date is required.";
     if (!endDate) e.endDate = "End date is required.";
     if (startDate && endDate && endDate < startDate) e.endDate = "End date must be on or after start date.";
-    if (!coords) e.coords = "Select a saved location or capture your current one before submitting — this is what your clock-in will be checked against on WFH days.";
+    if (!coords) e.coords = "Select a saved location, capture your current one, or search an address before submitting — this is what your clock-in will be checked against on WFH days.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
   async function handleSubmit() {
     if (!validate() || !coords) return;
+    const savedForRequest = locations.find(l => l.id === selectedLocationId);
     setSubmitting(true);
     setSubmitError("");
     try {
@@ -195,6 +217,8 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
         location_label: locationLabel,
         latitude: coords.latitude,
         longitude: coords.longitude,
+        location_source: locationSource,
+        ...(savedForRequest ? { saved_location_id: savedForRequest.id } : {}),
       });
       const created = res.data.data as WorkFromHomeRequest;   // the API's response envelope carries the saved request
       setSubmitted(created);
@@ -210,7 +234,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
 
   function reset() {
     setStartDate(""); setEndDate(""); setReason(""); setLocationLabel("");
-    setCoords(null); setLocationError(""); setErrors({}); setSubmitted(null);
+    setCoords(null); setLocationSource("gps"); setCaptureMode("gps"); setLocationError(""); setErrors({}); setSubmitted(null);
     setSelectedLocationId(locations.length > 0 ? locations[0].id : NEW_LOCATION);
     if (locations.length > 0) applySavedLocation(locations[0]);
   }
@@ -281,7 +305,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
           <div>
             <Lbl text="Your Location" required />
             <p className="text-xs text-[var(--on-variant)] mb-2">
-              Pick a saved location, or capture a new one — this is what your clock-in on approved WFH days gets checked against.
+              Pick a saved location, capture a new one, or search an address — this is what your clock-in on approved WFH days gets checked against.
             </p>
             <select
               value={selectedLocationId}
@@ -292,29 +316,44 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
               {locations.map(loc => (
                 <option key={loc.id} value={loc.id}>{loc.label}</option>
               ))}
-              <option value={NEW_LOCATION}>+ Capture new location…</option>
+              <option value={NEW_LOCATION}>+ Add new location…</option>
             </select>
 
             {selectedLocationId === NEW_LOCATION && (
               <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={captureLocation}
-                  disabled={locating}
-                  suppressHydrationWarning
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all"
-                  style={coords
-                    ? { borderColor: "var(--success)", color: "var(--success)", background: "var(--success-c)" }
-                    : { borderColor: "var(--outline-v)", color: "var(--on-variant)" }}
-                >
-                  {locating ? (
-                    <><i className="ti ti-loader-2 animate-spin text-sm" /> Capturing…</>
-                  ) : coords ? (
-                    <><i className="ti ti-map-pin-check text-sm" /> Location captured</>
-                  ) : (
-                    <><i className="ti ti-map-pin text-sm" /> Capture my current location</>
-                  )}
-                </button>
+                <div role="tablist" aria-label="How to add the location" className="flex gap-2">
+                  <button type="button" role="tab" aria-selected={captureMode === "gps"} onClick={() => chooseCaptureMode("gps")}
+                    className={`btn btn-sm ${captureMode === "gps" ? "btn-filled" : "btn-ghost"}`} suppressHydrationWarning>
+                    <i className="ti ti-current-location" /> I&apos;m here now
+                  </button>
+                  <button type="button" role="tab" aria-selected={captureMode === "address"} onClick={() => chooseCaptureMode("address")}
+                    className={`btn btn-sm ${captureMode === "address" ? "btn-filled" : "btn-ghost"}`} suppressHydrationWarning>
+                    <i className="ti ti-search" /> Search address
+                  </button>
+                </div>
+
+                {captureMode === "address" ? (
+                  <WfhAddressSearch inputClassName={INPUT} onPick={pickAddress} />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={captureLocation}
+                    disabled={locating}
+                    suppressHydrationWarning
+                    className="flex items-center gap-2 mt-3 px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all"
+                    style={coords
+                      ? { borderColor: "var(--success)", color: "var(--success)", background: "var(--success-c)" }
+                      : { borderColor: "var(--outline-v)", color: "var(--on-variant)" }}
+                  >
+                    {locating ? (
+                      <><i className="ti ti-loader-2 animate-spin text-sm" /> Capturing…</>
+                    ) : coords ? (
+                      <><i className="ti ti-map-pin-check text-sm" /> Location captured</>
+                    ) : (
+                      <><i className="ti ti-map-pin text-sm" /> Capture my current location</>
+                    )}
+                  </button>
+                )}
 
                 {coords && (
                   <div className="flex items-center gap-2 mt-3">
@@ -382,6 +421,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
               <InfoRow label="Label" value={selectedSaved?.label || locationLabel || "Current Location"} />
               <InfoRow label="Latitude" value={coords.latitude.toFixed(6)} />
               <InfoRow label="Longitude" value={coords.longitude.toFixed(6)} />
+              <InfoRow label="Source" value={locationSource === "address" ? "Looked up from address" : "Captured on device"} />
               {coords.accuracy != null && (
                 <InfoRow label="Accuracy" value={`±${Math.round(coords.accuracy)}m`} />
               )}

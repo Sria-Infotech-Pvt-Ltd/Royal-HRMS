@@ -10,6 +10,7 @@ import FaceRegistrationApprovalsTab from "./_components/FaceRegistrationApproval
 import PersonnelActionsTab from "./_components/PersonnelActionsTab";
 import TimesheetApprovalsTab from "./_components/TimesheetApprovalsTab";
 import MyApprovalsOverview from "./_components/MyApprovalsOverview";
+import { isUnrestrictedUser } from "@/lib/auth";
 import { approvalSectionsFor, sectionFromLink, type ApprovalSectionKey } from "@/lib/approvalSections";
 
 type Section = ApprovalSectionKey;
@@ -23,6 +24,9 @@ export default function ApprovalsPage() {
   // a manager following the requests they raised. The server decides who may act on what.
   const canSeePersonnel = useAnyPermission("employees.approve", "payroll.edit", "employees.raise_action");
   const hasPayrollView  = usePermission("payroll.view");
+  // The HR Help queue: people who answer tickets, and full-access users (superuser / settings.edit) who see everything.
+  const holdsHrHelpRespond = usePermission("hr_help.respond");
+  const canRespondHrHelp = holdsHrHelpRespond || isUnrestrictedUser(user);
   // Managers, superusers, and anyone with payroll.view (payroll admins and HR
   // alike) get this tab — it's the only place attendance-cycle sign-off lives
   // now that Leave Management no longer has its own "Attendance Approvals" tab.
@@ -37,8 +41,8 @@ export default function ApprovalsPage() {
   const canApproveTimesheets = user?.can_manage_team === true || user?.is_superuser === true || holdsTimesheetApprove;
 
   const sections = useMemo(
-    () => approvalSectionsFor({ canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace }),
-    [canApprove, canApproveAttendance, canApproveTimesheets, canApproveFace, canSeePersonnel],
+    () => approvalSectionsFor({ canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace, canRespondHrHelp }),
+    [canApprove, canApproveAttendance, canApproveTimesheets, canApproveFace, canSeePersonnel, canRespondHrHelp],
   );
 
   useEffect(() => {
@@ -53,6 +57,11 @@ export default function ApprovalsPage() {
     const wanted = sectionFromLink(linkedSection, sections);
     if (wanted) setSection(wanted);
   }, [linkedSection, sections]);
+  // ?section=hr_requests (the bell notice, the dashboard row) opens the overview with the HR requests queue already showing.
+  const opensHrRequests = linkedSection === "hr_requests" && canRespondHrHelp;
+  useEffect(() => {
+    if (opensHrRequests) setSection("overview");
+  }, [opensHrRequests]);
 
   return (
     <div>
@@ -73,7 +82,8 @@ export default function ApprovalsPage() {
       {section === "overview" && (
         <MyApprovalsOverview
           canApprove={canApprove} canApproveAttendance={canApproveAttendance} canApproveTimesheets={canApproveTimesheets}
-          canSeePersonnel={canSeePersonnel} canApproveFace={canApproveFace} onOpen={setSection}
+          canSeePersonnel={canSeePersonnel} canApproveFace={canApproveFace} canRespondHrHelp={canRespondHrHelp}
+          openHrRequestsInitially={opensHrRequests} onOpen={setSection}
         />
       )}
       {section === "timesheets"        && canApproveTimesheets && <TimesheetApprovalsTab />}

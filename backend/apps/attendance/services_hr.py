@@ -141,7 +141,8 @@ def get_dashboard_stats(
             'total_employees': total_employees,
         },
         'summary_chips': {
-            'present':    status_counts.get('present', 0),
+            # Late employees did come in, so they are Present too (Late stays a subset, shown on its own chip).
+            'present':    status_counts.get('present', 0) + status_counts.get('late', 0),
             'late':       status_counts.get('late', 0),
             'absent':     absent,
             'on_leave':   on_leave,
@@ -309,6 +310,9 @@ def get_attendance_list(filters: dict) -> list[dict]:
                     & (Q(_lwd__isnull=True) | Q(_lwd__gte=target_date))
                 )
             )
+        elif status_f == 'present':
+            # Present includes Late: a late punch-in is still a day worked (same rule as the Present stat card).
+            employee_qs = employee_qs.filter(_status__in=['present', 'late'])
         else:
             employee_qs = employee_qs.filter(_status=status_f)
 

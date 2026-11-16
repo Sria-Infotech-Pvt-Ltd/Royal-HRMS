@@ -271,6 +271,8 @@ export const API = {
   hrHelp: {
     list: "/hr-help/requests/",
     detail: (id: string) => `/hr-help/requests/${id}/`,
+    decideChange: (id: string) => `/hr-help/requests/${id}/decide-change/`,
+    changeFields: "/hr-help/change-fields/",
   },
 
   // ESS "Documents" self-service submission list — deliberately separate

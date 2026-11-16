@@ -37,6 +37,11 @@ describe("approvalSectionsFor", () => {
     expect(keys({ canApprove: true, canApproveAttendance: true, canApproveTimesheets: true, canSeePersonnel: true, canApproveFace: true }))
       .toEqual(["overview", "approvals", "attendance", "timesheets", "personnel", "face_registration"]);
   });
+
+  it("shows the overview, and no extra tab, to someone whose only duty is answering HR Help tickets", () => {
+    expect(keys({ ...NONE, canRespondHrHelp: true })).toEqual(["overview"]);
+    expect(keys({ ...NONE, canApprove: true, canRespondHrHelp: true })).toEqual(["overview", "approvals"]);
+  });
 });
 
 describe("sectionFromLink", () => {

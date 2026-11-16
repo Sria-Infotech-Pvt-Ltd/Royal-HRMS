@@ -32,6 +32,7 @@ NOTIFICATION_TYPE_CHOICES = [
     ('timesheet_returned',       'Timesheet Sent Back'),
     ('timesheet_approved',       'Timesheet Approved'),
     ('timesheet_reminder',       'Timesheet Reminder'),
+    ('hr_help_request',          'HR Help Request'),
 ]
 
 MODULE_CHOICES = [

@@ -13,6 +13,9 @@ export interface ApprovalAccess {
   canSeePersonnel: boolean;
   /** facial_recognition.approve — Face ID registrations. */
   canApproveFace: boolean;
+  /** hr_help.respond, or full access (superuser / settings.edit): the queue of every employee's HR Help ticket, profile corrections
+   *  included. It is a row of the My Approvals overview (opened in place), not a tab of its own. */
+  canRespondHrHelp?: boolean;
 }
 
 export interface ApprovalSection {
@@ -35,5 +38,5 @@ export function approvalSectionsFor(access: ApprovalAccess): ApprovalSection[] {
     ...(access.canApproveFace ? [{ key: "face_registration" as const, label: "Face Registration", icon: "ti-face-id" }] : []),
   ];
   // The overview is the front door to the others: only worth showing when there is something to open.
-  return sections.length > 0 ? [{ key: "overview", label: "My Approvals", icon: "ti-inbox" }, ...sections] : sections;
+  return sections.length > 0 || access.canRespondHrHelp ? [{ key: "overview", label: "My Approvals", icon: "ti-inbox" }, ...sections] : sections;
 }

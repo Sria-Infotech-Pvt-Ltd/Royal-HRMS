@@ -5593,3 +5593,185 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change:** `hrms/views/hr_help.py` gets `_can_respond(user)` = `hr_help.respond` OR `is_full_access_actor` (superuser or `settings.edit`). The list, detail and PATCH use it, so the System Admin sees and answers every ticket even when their seat lacks `hr_help.respond`. `HrHelpTab.tsx` uses the same rule (`usePermission("hr_help.respond") || isUnrestrictedUser(user)`). No test added.
 
 **Throttle rates (committed and pushed as b0de8b20, 2026-11-16):** `backend/config/settings.py` login 20 to 200/hour, forgot_password 5 to 30, reset_password 10 to 50, otp_verify 10 to 50. This weakens brute-force protection; restore the old values before a production deploy if that is not intended.
+
+
+## HR Attendance: Present chip and Present list now include Late (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Backend only, no migration. Test: `attendance/tests_dashboard_present_includes_late.py` (3 tests pass on the local test database). Not checked in a browser.
+
+**Problem:** a late punch-in is stored with status `late`, not `present`. The top "Present today" card already added Present + Late + Incomplete, but the "Present" chip and the Present list filter matched status `present` exactly, so late employees appeared only under Late.
+
+**Fix (`attendance/services_hr.py`):** `summary_chips.present` = present + late; the `status=present` list filter matches `present` and `late`. Late stays a subset: the Late chip and Late filter still show only late people. The chips are therefore not additive (Present already contains Late), same as the top card. Incomplete is still counted only in the top card. No frontend change was needed.
+
+
+## Joining date can be corrected by a full-access user after onboarding (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Backend only. Tests: `accounts/tests_employee_joining_date_correction.py` (3 new) plus 51 existing employee-detail/edit-draft/branch-change tests, all pass on the local test database. Not checked in a browser.
+
+**Trigger:** an employee onboarded with the wrong joining year (2026 instead of 2025) and raised a profile correction (an HR Help ticket, see the entry above). Editing it from Edit Record returned `409 "Date of joining is locked once onboarding is complete..."` (`PUT /api/employees/10000065/` on the server).
+
+**Change (`accounts/views/employees_detail.py`, `_update_fields`):** the lock now lets through anyone with `settings.edit` (or a superuser), the same gate the manual employee_id correction uses. HR editors with only `employees.edit` still get 409, now with the message "Only a System Admin can correct it." Resending the unchanged date is never refused. The existing checks are untouched: a new date may not fall before the last working day of a previous employment, and the change is audit-logged (`changes.date_of_joining`, plus an `employee_joining_date_changed` entry when the employee has separations).
+
+**Not done / watch:** nothing recalculates already-processed attendance, leave accrual or payroll for the corrected period; check the attendance calendar and leave balance of the employee after the change. Plain HR users cannot make this correction, so the HR Help ticket needs a System Admin to action it.
+
+
+## Bell notification to HR when an HR Help ticket (e.g. profile correction) is raised (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Tests: `notifications/tests_hr_help_notification.py` (3) and `notificationRoutes.test.ts` (16) pass locally. `makemigrations --check` clean. Not checked in a browser.
+
+**Before:** an employee's HR Help ticket (including "Request profile correction", topic `profile_correction`) appeared in the ESS > HR Help queue but nobody was told it existed.
+
+**Now:** `notifications/signals.py` `_on_hr_help_request_created` (post_save on `hrms.HRHelpRequest`, `created` only, sent on commit) notifies every active user who holds `hr_help.respond` or `settings.edit`, plus superusers, excluding the submitter. These are the same people who see the queue (see the HR Help entry above). Title "New HR Help request: <topic>", `notification_type='hr_help_request'`, `module='system'`, `reference_id='hr-help'`; live push over the websocket as for other notices. A failure is logged and never blocks the ticket. The employee is not notified about their own ticket, and updating a ticket does not notify again.
+
+**Frontend:** `lib/notificationRoutes.ts` opens `/dashboard/ess?tab=hrHelp` for `system` + `hr-help`.
+
+**Migration:** `notifications/0013_hr_help_notification_type.py` (choices only).
+
+**Not done:** the notice is not gated by a per-user notification setting (no matching category), and no email is sent. Resolving a ticket still does not edit the profile and does not notify the employee.
+
+
+## WFH: add a location by searching an address; location_source stored and used at clock-in (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. **Not checked in a browser**: the address search calls the public Nominatim service from the browser, and the form flow was only exercised by unit tests.
+
+**Frontend**
+- `lib/geocode.ts` `searchAddress(query, signal?)`: OpenStreetMap Nominatim, `format=jsonv2`, `limit=5`, type-guarded response, friendly error on a non-OK reply. Nominatim's policy is about 1 request per second and no search-as-you-type; heavy use should go through a backend endpoint.
+- `work-from-home/_components/WfhAddressSearch.tsx`: search only on the Search button or Enter, at least 4 characters, "Searching…" state, inline error, "No match found" message, results as a `listbox` of `option` buttons.
+- `RequestWfhForm.tsx`: "I'm here now" / "Search address" tabs under "+ Add new location…"; `locationSource` is sent in both POST bodies (saved-location create and request create); a "Source" row in the Your Location panel; saved locations carry their source. Two small additions beyond the brief: the request POST also sends `saved_location_id` when a saved location is selected (so the server can copy that location's source), and the "Save as…" row now shows after an address pick too, otherwise an address location could never be saved and reused. The form file was already over the 200-line guideline (it is now larger); splitting it is not done.
+- `types/workFromHome.ts`: `WfhLocationSource`, optional `location_source` on `WorkFromHomeRequest` and `WFHSavedLocation`.
+
+**Backend**
+- `WFHSavedLocation` and `WorkFromHomeRequest` get `location_source` (`gps`/`address`, default `gps`); migration `hrms/0053_wfh_location_source.py`. Existing rows become `gps`.
+- Serializers: field added to the explicit field lists (read and write, validated against the two choices, `gps` when omitted). The approvals/detail serializer (`WorkFromHomeRequestSerializer`) returns it, so approvers can see the point was typed in. The approvals UI does not display it yet.
+- `WorkFromHomeRequestCreateSerializer` accepts optional `saved_location_id`; when given, that saved location's source overrides what the client sent, and another employee's saved location is refused.
+- Clock-in (`attendance/services_geofencing.py`): the WFH radius is now `settings.WFH_GPS_RADIUS_M` (default 200, the old hardcoded value) or `settings.WFH_ADDRESS_RADIUS_M` (default 500, chosen with the owner) when the request's source is `address`. Both are overridable by env vars (listed in `.env.example`). The accuracy tolerance is unchanged.
+
+**Tests:** `hrms/tests_wfh_location_source.py` (7), `attendance/tests_wfh_clock_in_radius.py` (4); `geocode.test.ts` (4), `WfhAddressSearch.test.tsx` (3); `WfhRequestModal.test.tsx` expectation updated for the two new fields. Existing WFH, geofencing, face-verification and query-efficiency tests still pass. `tsc`, `eslint` and `makemigrations --check` clean.
+
+**Open:** the approval screens (Approvals, WFH detail modal) do not yet show "Looked up from address"; the accuracy of a geocoded point is only as good as OpenStreetMap's data, which is why the radius is larger.
+
+
+## Fix: WFH punch-in always failed because the web clock sent no location (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Test: `hooks/useClockWidget.test.tsx` (3 pass); `tsc` and `eslint` clean. Not checked on a real device.
+
+**Symptom:** an employee with an approved WFH request could not punch in on the server.
+
+**Cause:** `prepareLocation` in `hooks/useClockWidget.ts` returned immediately for every mode except `office`, so a `wfh` punch (the clock widget picks `wfh` by itself when today is inside an approved request) went to the server with null latitude/longitude. `_validate_wfh` (`attendance/services_geofencing.py`) requires coordinates and refuses with "Your location is required to clock in at this branch...". Both `ClockWidget.tsx` and `components/ClockInButton.tsx` use this hook.
+
+**Fix:** `LOCATION_CHECKED_MODES = ["office", "wfh"]`: both modes now capture the device location and run the read-only `geofence-check` before the punch. Other modes are unchanged. The permission-denied toast names the mode.
+
+**Reminder:** the server must run `migrate hrms` and `migrate notifications` after deploying the WFH location_source and HR Help notification work, or WFH requests and punches fail with a missing-column 500 (seen locally).
+
+
+## Profile correction: Field is now a dropdown that depends on the Section, and the server checks the pair (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. No migration. Tests pass locally (backend 9 new, frontend 3 new); `tsc`, `eslint` clean. Not checked in a browser.
+
+**Frontend:** `ess/_components/profileCorrectionFields.ts` (new) holds `OTHER_SECTION`, `OTHER_FIELD`, `CORRECTION_SECTIONS` and `fieldsForSection()`. `ProfileCorrectionModal.tsx` now uses it: the Section list comes from it, "Field to change" is a `<select>` ("Select a field…" then that section's fields), changing the Section clears the field, and the field must belong to the section ("Please choose which field needs to change."). The submitted message is unchanged: `Section: <s>. Field to change: <f>. Reason: <r>`.
+
+**Backend:** `hrms/profile_correction_fields.py` holds the same map (`PROFILE_CORRECTION_FIELDS`); `hrms/services_profile_correction.py` parses the message and returns why it is unacceptable; `HRHelpRequestCreateSerializer.validate()` applies it only when `topic == 'profile_correction'`, answering 400 in the normal envelope for a malformed message, an unknown section, a field from another section, or a reason shorter than 10 characters. Other topics keep only the old 10-character message rule. Rejections are logged with the section/field names, never the reason text. The model and message format are unchanged.
+
+**Keeping them in sync:** `tests_profile_correction_validation.FrontendListsInSyncTests` parses the frontend file and fails if it differs from the server map (skipped when the frontend source is not next to the backend).
+
+**Field lists:** taken from the employee profile and onboarding data (personal, contact and address, emergency contact, bank including account number and IFSC, family and nominee). "Date of joining" sits under Personal details because there is no Employment section and it is the field most often entered wrongly. Fields outside these (PAN, Aadhaar, qualifications, work details) go through "Other (describe in the reason)".
+
+**Open:** the old free-text requests already in the queue are untouched; an older cached frontend that still sends free text will get a 400 until it reloads.
+
+
+## Fix: the ESS home / dashboard clock button ignored approved WFH days (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Tests: `hooks/useTodayAttendanceMode.test.tsx` (3 new); 77 tests pass across hooks, my-attendance and ess; `tsc`, `eslint` clean. Not checked in a browser.
+
+**Symptom:** an employee with an approved WFH request punched in from the office and got no warning. The punch row was `attendance_mode='office'`, with no distance and no inside/outside result (the branch has no geofence on).
+
+**Cause:** only the My Attendance page's `ClockWidget.tsx` worked out the WFH mode. `components/ClockInButton.tsx` (the button on the ESS home banner, the employee, HR and manager dashboards) had `const MODE = "office"` hard-coded, so a punch there never went through the WFH location check. A second, smaller cause on the dev machine: the page had loaded its WFH list while the database lacked the new `location_source` column, so it fell back to office.
+
+**Fix:** new `hooks/useTodayAttendanceMode.ts` returns `"wfh"` when today is inside one of the employee's approved requests, else `"office"`. `ClockInButton` and `ClockWidget` both use it, so every clock-in surface behaves the same.
+
+**Still open (decision for the owner):** the browser still chooses the mode and the server trusts it. An employee on an approved WFH day can still punch as `office` at the office (allowed, silently) if the page fails to load the request. Options discussed: allow silently (today), allow with a flag for HR, or refuse. Not built.
+
+
+## Admin dashboard: open HR Help tickets (profile corrections etc.) on the Pending Approvals card (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Test: `components/dashboard/PendingApprovalsWidget.test.tsx` (2 new); `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser.
+
+**Why:** a profile correction raised by an employee is an HR Help ticket (see the earlier entries), not an approval, so it never appears on the Approvals page. The admin (superuser) lands on `/dashboard` and only had the bell notification pointing at it.
+
+**Change:** `components/dashboard/PendingApprovalsWidget.tsx` (shown on `AdminDashboard.tsx`) gets an "HR Help Requests" row showing the number of open tickets (`GET /hr-help/requests/?status=open&page_size=1`, count only) that opens `/dashboard/ess?tab=hrHelp`, and the open-ticket count is added to the card's "N pending" badge. Everyone who can see this card sees every ticket (superuser or `settings.edit`), so the count is organisation-wide. "In progress" tickets are not counted (the list filter takes one status).
+
+**Not done:** HR (non-admin) dashboards are unchanged; tickets still have no Approve/Reject and resolving one does not edit the profile.
+
+
+## HR Help tickets now have their staff queue on the Approvals page (Approvals > HR Requests) (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. No migration. Tests: backend `hrms/tests_hr_help_list_scope.py` (4 new, 16 with the related HR Help tests); frontend 606 tests pass in lib, approvals, ess, my-requests and dashboard components; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser.
+
+**Why:** the owner's point: other employees' requests (profile corrections included) belong with the approvals, and the admin should not have to go into "My Workspace" (the personal self-service area every login has) to handle them.
+
+**What changed**
+- `approvals/_components/HrRequestsTab.tsx` (new) and a new **HR Requests** tab in `lib/approvalSections.ts` / `approvals/page.tsx`, shown to holders of `hr_help.respond` and to full-access users (superuser or `settings.edit`, via `isUnrestrictedUser`). It lists every employee's ticket with status filters (Open by default, In progress, Resolved, All) and the same Respond form as before (status, response, assigned person).
+- `ess/_components/HrHelpRow.tsx` (new, extracted from `HrHelpTab.tsx`, shared by both lists). `HrHelpTab.tsx` is now employee-only: the form to raise a ticket and "My HR requests".
+- Backend `HRHelpRequestListCreateView.get`: new `?mine=1`, which narrows even staff to their own tickets. The "my requests" lists (HR Help tab, My Requests page, ESS Requests and summary tabs, Policies and Assets, Growth feedback) now pass it, so an admin no longer sees everyone's tickets inside their own "My requests".
+- Links: the bell notification for a new ticket and the admin dashboard's "HR Help Requests" row now open `/dashboard/approvals?section=hr_requests`.
+
+**Not done:** there is still no Approve/Reject on a ticket, and resolving one does not change the employee's profile (the admin edits the record by hand; the joining date needs a System Admin). The Approvals "My Approvals" overview tab does not list HR Requests.
+
+
+## HR Requests moved from its own Approvals tab into the My Approvals table (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Tests: `MyApprovalsOverview.hrRequests.test.tsx` (3 new), `approvalSections.test.ts` updated; 609 tests pass in lib, approvals, ess and dashboard components; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser. Revises the entry just above.
+
+**Owner's request:** the separate "HR Requests" tab looked wrong; the requests should be in the My Approvals table with the other workflows.
+
+**Change:** the tab is gone (`lib/approvalSections.ts` no longer has an `hr_requests` section). `approvals/_components/MyApprovalsOverview.tsx` gets an **HR requests** row (Waiting and For me to act on = the open-ticket count, "Who sees it" note) for people who answer tickets (`hr_help.respond`) and full-access users. Its button opens the queue (`HrRequestsTab`, status filters + Respond form) in place below the table, and turns into Hide. A person whose only approval duty is HR Help still gets the overview. The bell notice and the admin dashboard row still link to `/dashboard/approvals?section=hr_requests`, which now opens the overview with the queue already showing.
+
+**Row count refresh (fixed later the same day):** `HrRequestsTab` takes an optional `onChanged`; saving a ticket calls it, and the overview passes the open-count refetch, so the row's number updates at once (test in `HrRequestsTab.test.tsx`). Before this, the count only changed after a reload.
+
+
+## My Approvals: separate "Profile corrections" and "Other HR requests" rows (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. No migration. Tests: backend `hrms/tests_hr_help_list_scope.py` (now 5); frontend 611 pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser. Revises the two entries above.
+
+**Owner's request:** the single "HR requests" row should say "Profile corrections".
+
+**Change:** `approvals/_components/MyApprovalsOverview.tsx` now has two rows for people who answer HR Help tickets: **Profile corrections** (open tickets with topic `profile_correction`) and **Other HR requests** (open tickets of every other topic, so payroll, leave, document and policy questions keep a row). Each row's button opens its own list in place (`HrRequestsTab` now takes `title`, `topic`, `excludeTopic`, `onChanged`) and each count refreshes after a ticket is saved. A link with `?section=hr_requests` opens both lists. Backend `HRHelpRequestListCreateView.get` accepts `topic=` and `exclude_topic=`.
+
+**Not done:** the list still shows Topic/Priority/Status columns; the Section, Field and Reason of a profile correction are only visible after pressing Respond (offered as a follow-up).
+
+
+## My Approvals: only the "Profile corrections" row (the "Other HR requests" row removed) (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. 611 frontend tests pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser. Revises the entry above.
+
+**Owner's feedback:** the second row was not wanted; profile corrections are what gets approved there.
+
+**Change:** `MyApprovalsOverview.tsx` has one row, **Profile corrections**, whose list opens in place. The admin dashboard's Pending Approvals card row is now "Profile Corrections" too and counts only `topic=profile_correction`. The server's `topic` / `exclude_topic` filters stay.
+
+**Consequence to know:** HR Help tickets on other topics (payroll, leave, document, policy questions) no longer have a staff screen: My Workspace > HR help is now employee-only and Approvals shows only profile corrections. The bell notice still fires for every new ticket and opens the profile corrections list. Decide where staff should answer the other topics.
+
+
+## Profile corrections carry the new value; HR / the System Admin applies it in one step (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. **Migration `hrms/0054_hr_help_profile_change` (run `migrate hrms` on every server).** Tests: backend 34 pass (`tests_profile_change_apply.py` new, 18 tests; with the validation, list-scope and notification tests); frontend 819 pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser.
+
+**Why:** the owner wanted real-world behaviour: the employee says what the new value is, HR or the admin opens the request and the change is made on that exact field and the request is closed as resolved, instead of HR retyping it from a free-text note. Before this, a name could not be changed at all after onboarding (the Edit Record name boxes are read-only and the server refused a `full_name` edit with 409).
+
+**How it works**
+- `hrms/profile_change_fields.py` lists the fields that support this (name, middle and display name, date of birth, place of birth, gender, marital status, nationality, parents' names, blood group, languages, joining date, mobile number, current and permanent address parts, emergency contact). Anything else (bank and statutory, family and nominees, login email, "Other") stays a plain HR Help ticket handled by hand. `GET /hr-help/change-fields/` gives the frontend each field's input kind and choices.
+- `HRHelpRequest` gets `change_field`, `change_old_value`, `change_new_value`, `change_decision` (`''`/`applied`/`rejected`) and `change_applied_at`. When a `profile_correction` ticket names a supported field, the new value is required, validated (date, 10-digit mobile and uniqueness, 6-digit PIN, choice lists, length, not equal to the current value) and the current value is stored beside it.
+- `POST /hr-help/requests/<id>/decide-change/` `{decision: approve|reject, note}` (`services_profile_change.py`): approve re-validates, writes the value to the user or profile record (the onboarding name lock does not apply to an approved correction), writes an `employee_profile_corrected` audit entry with before and after, resolves the ticket and notifies the employee (`reference_id` `profile-change`, opens My Profile). Reject needs a reason. Who may decide: holders of `hr_help.respond` and full-access users; the joining date needs `settings.edit` (System Admin). A request can be decided once.
+- Frontend: `ProfileCorrectionModal` asks for the new value with the right input (date, choice list, text) for supported fields; `HrHelpChangePanel` (inside an open row of the My Approvals Profile corrections list) shows current -> requested with **Open employee record**, **Apply requested change** and **Decline**; the employee's list shows an Updated / Declined badge.
+
+**Decision to confirm:** the owner also described "redirect HR to the field in Edit Record, they change it, then resolve". Edit Record cannot edit a name (First and Last name are read-only there), so the one-click Apply does that job for the name; "Open employee record" opens the full-record drawer for context. Deep-linking into a field of Edit Record is not built.
+
+**Not done:** no proof document upload on the request; approving does not recalculate attendance, leave or payroll after a joining-date change.
+
+
+## Older profile corrections can be applied too: HR types the new value (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. No migration. Tests: backend `tests_profile_change_legacy.py` (6 new; 32 with the related ones pass); frontend 820 pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser. Follows the entry above.
+
+**Problem:** a correction raised before the new value was asked for (for example HR-00001, "change the name from G.Durga Prasad to Gadde Durga Prasad", free text only) showed no Apply button, and the Edit Record name boxes are read-only, so nobody could change the name.
+
+**Change:** for such a ticket (`topic='profile_correction'`, no `change_field`) whose message names a supported field, the list API returns `change_suggested_key` (`services_profile_change.suggested_spec`, read from the message). `HrHelpChangePanel` then shows the right input (`ProfileChangeValueInput`, now shared with the employee form), HR types the new value, and `POST /hr-help/requests/<id>/decide-change/` accepts `new_value`; approving stores field and value on the ticket and applies it exactly like a new-style request (validation, audit entry, resolve, employee notified). Declining works the same. A ticket about an unsupported field (bank, family, Other) still cannot be applied and says so.

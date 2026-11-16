@@ -16,7 +16,7 @@ from core.responses import error, first_error, get_client_ip, success
 from ..models import (
     APPROVAL_APPROVED, APPROVAL_REJECTED,
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
-    WorkFromHomeRequest,
+    WFH_SOURCE_GPS, WFHSavedLocation, WorkFromHomeRequest,
 )
 from ..serializers import WorkFromHomeRequestCreateSerializer, WorkFromHomeRequestSerializer
 
@@ -157,6 +157,13 @@ class WorkFromHomeRequestListCreateView(APIView):
         data  = serializer.validated_data
         start = data['start_date']
         end   = data['end_date']
+        location_source = data.get('location_source', WFH_SOURCE_GPS)
+        saved_location_id = data.get('saved_location_id')
+        if saved_location_id is not None:
+            saved = WFHSavedLocation.objects.filter(id=saved_location_id, employee=request.user).first()
+            if saved is None:
+                return error('Saved location not found.')
+            location_source = saved.location_source
 
         _ACTIVE_STATUSES = (REQ_PENDING, REQ_L2_PENDING, REQ_APPROVED)
 
@@ -225,6 +232,7 @@ class WorkFromHomeRequestListCreateView(APIView):
                 location_label=data.get('location_label', ''),
                 latitude=data['latitude'],
                 longitude=data['longitude'],
+                location_source=location_source,
                 l1_approver=l1_approver,
                 l2_approver=l2_approver,
                 status=initial_status,
