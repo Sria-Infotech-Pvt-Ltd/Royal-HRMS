@@ -5862,3 +5862,12 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Heads-up:** an earlier draft of one test saved a throwaway image through the real storage; if ImageKit shows files named `letter-test-logo*.png` or `letter-test-broken*.png`, delete them.
 
 **Not done:** digital signature image, QR verification code, a configurable brand colour.
+
+
+## Employment letter: simpler classic layout (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Backend only. Tests: `accounts/tests_employment_letter.py` (14, pass). Rendered for the local test employee against the real company row: 1 page, the logo present. `npm run build` run before the push. **Still not looked at visually** (installing a PDF-to-image tool was refused by the permission system, so it was not done): the owner did not like the violet banner and gold design either.
+
+**Change (`accounts/services_employment_letter.py`):** the coloured banner, gold corners and watermark are gone. It is now a classic business letter in black and navy on white: a double-rule page border, a letterhead with the company logo on the left and name, address, contact line and CIN beside it closed by a rule, reference and date, a centred underlined title, serif body text, a simple ruled details table with a grey label column, a signature block with the signatory from the company settings and a dashed seal circle, and a one-line footer (system-generated note and reference). Company data handling is unchanged (logo fetched from ImageKit's URL, address de-duplicated, signatory and CIN from Settings > Company, missing items left out).
+
+**Open:** the owner has not said what they dislike beyond "looking bad"; a screenshot of the downloaded letter or a sample letter to copy is needed to settle the look.
