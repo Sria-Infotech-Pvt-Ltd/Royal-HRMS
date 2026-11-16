@@ -5766,3 +5766,12 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Decision to confirm:** the owner also described "redirect HR to the field in Edit Record, they change it, then resolve". Edit Record cannot edit a name (First and Last name are read-only there), so the one-click Apply does that job for the name; "Open employee record" opens the full-record drawer for context. Deep-linking into a field of Edit Record is not built.
 
 **Not done:** no proof document upload on the request; approving does not recalculate attendance, leave or payroll after a joining-date change.
+
+
+## Older profile corrections can be applied too: HR types the new value (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. No migration. Tests: backend `tests_profile_change_legacy.py` (6 new; 32 with the related ones pass); frontend 820 pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser. Follows the entry above.
+
+**Problem:** a correction raised before the new value was asked for (for example HR-00001, "change the name from G.Durga Prasad to Gadde Durga Prasad", free text only) showed no Apply button, and the Edit Record name boxes are read-only, so nobody could change the name.
+
+**Change:** for such a ticket (`topic='profile_correction'`, no `change_field`) whose message names a supported field, the list API returns `change_suggested_key` (`services_profile_change.suggested_spec`, read from the message). `HrHelpChangePanel` then shows the right input (`ProfileChangeValueInput`, now shared with the employee form), HR types the new value, and `POST /hr-help/requests/<id>/decide-change/` accepts `new_value`; approving stores field and value on the ticket and applies it exactly like a new-style request (validation, audit entry, resolve, employee notified). Declining works the same. A ticket about an unsupported field (bank, family, Other) still cannot be applied and says so.

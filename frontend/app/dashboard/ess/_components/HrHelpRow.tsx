@@ -73,7 +73,7 @@ export default function HrHelpRow({ entry, canRespond, onUpdated }: HrHelpRowPro
           <td colSpan={7} style={{ background: "var(--bg-mid)" }}>
             <div style={{ padding: 14 }}>
               <p style={{ fontSize: 13, marginBottom: 10 }}>{entry.message}</p>
-              {entry.change_field && <HrHelpChangePanel entry={entry} note={response} onDecided={() => { onUpdated(); setExpanded(false); }} />}
+              {(entry.change_field || entry.change_suggested_key) && <HrHelpChangePanel entry={entry} note={response} onDecided={() => { onUpdated(); setExpanded(false); }} />}
               {err && <div className="alert alert-error" style={{ marginBottom: 10 }}>{err}</div>}
               <div className="field-group" style={{ marginBottom: 10, width: 180 }}>
                 <label className="field-label">Status</label>

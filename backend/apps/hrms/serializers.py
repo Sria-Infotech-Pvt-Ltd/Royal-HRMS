@@ -10,7 +10,7 @@ from core.file_validation import validate_file_content as _validate_file_content
 from core.permissions import has_perm as _has_perm
 
 from .profile_change_fields import spec_for_key, spec_for_label
-from .services_profile_change import ProfileChangeError, clean_new_value, current_value
+from .services_profile_change import ProfileChangeError, clean_new_value, current_value, suggested_spec
 from .services_profile_correction import parse_profile_correction, profile_correction_problem
 from .models import (
     APPROVAL_PENDING,
@@ -1291,6 +1291,7 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
     change_label         = serializers.SerializerMethodField()
     change_needs_system_admin = serializers.SerializerMethodField()
     submitted_by_code    = serializers.SerializerMethodField()
+    change_suggested_key = serializers.SerializerMethodField()
 
     class Meta:
         model  = HRHelpRequest
@@ -1299,8 +1300,15 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
             'message', 'status', 'status_display', 'response',
             'submitted_by_name', 'assigned_to_name', 'created_at', 'updated_at', 'resolved_at',
             'change_field', 'change_label', 'change_old_value', 'change_new_value', 'change_decision', 'change_applied_at',
-            'change_needs_system_admin', 'submitted_by_code',
+            'change_needs_system_admin', 'submitted_by_code', 'change_suggested_key',
         ]
+
+    def get_change_suggested_key(self, obj: HRHelpRequest) -> str:
+        """For an older, still open profile correction without a stored value: the field it is about, so HR can type the new value."""
+        if obj.change_decision or obj.status == 'resolved':
+            return ''
+        spec = suggested_spec(obj)
+        return spec.key if spec else ''
 
     def get_submitted_by_code(self, obj: HRHelpRequest) -> str:
         return obj.submitted_by.employee_id if obj.submitted_by_id else ''

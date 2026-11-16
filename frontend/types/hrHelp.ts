@@ -28,6 +28,8 @@ export interface HrHelpRequest {
   change_applied_at:  string | null;
   /** The joining date: only a System Admin may apply it. */
   change_needs_system_admin: boolean;
+  /** An older, still open profile correction without a stored value: the field it is about, so HR can type the new value. */
+  change_suggested_key: string;
 }
 
 /** One profile field an employee can ask to change with a new value (GET /hr-help/change-fields/). */

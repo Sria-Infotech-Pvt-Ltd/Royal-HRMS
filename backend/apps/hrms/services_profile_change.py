@@ -19,7 +19,10 @@ from apps.accounts.services_contact_change import ContactChangeError, check_mobi
 from core.permissions import has_perm
 
 from .models import HR_HELP_RESOLVED, HRHelpRequest
-from .profile_change_fields import KIND_CHOICE, KIND_DATE, KIND_PHONE, KIND_PIN, TARGET_PROFILE, ChangeField, spec_for_key
+from .profile_change_fields import (
+    KIND_CHOICE, KIND_DATE, KIND_PHONE, KIND_PIN, TARGET_PROFILE, ChangeField, spec_for_key, spec_for_label,
+)
+from .services_profile_correction import parse_profile_correction
 
 logger = logging.getLogger(__name__)
 
@@ -95,10 +98,24 @@ def can_decide(user: User, spec: ChangeField) -> bool:
     return has_perm(user, 'hr_help.respond') or has_perm(user, 'settings.edit')
 
 
-def apply_change(ticket: HRHelpRequest, decided_by: User, note: str = '') -> HRHelpRequest:
-    """Approve: write the new value to the record, audit it, resolve the ticket, tell the employee."""
+def suggested_spec(ticket: HRHelpRequest) -> ChangeField | None:
+    """The field an older profile-correction ticket (raised before the new value was asked for) is about, read from its message."""
+    if ticket.topic != 'profile_correction' or ticket.change_field:
+        return None
+    section, field, _reason = parse_profile_correction(ticket.message)
+    return spec_for_label(section, field)
+
+
+def apply_change(ticket: HRHelpRequest, decided_by: User, note: str = '', new_value: str = '') -> HRHelpRequest:
+    """Approve: write the new value to the record, audit it, resolve the ticket, tell the employee.
+
+    An older ticket has no stored new value, so HR types it (`new_value`) and it is stored on the ticket with the decision."""
     spec, employee = _open_change(ticket, decided_by)
-    new_value = clean_new_value(employee, spec, ticket.change_new_value)   # re-checked: the record may have changed since the request
+    if not ticket.change_field:
+        ticket.change_field = spec.key
+        ticket.change_new_value = ''
+    new_value = clean_new_value(employee, spec, ticket.change_new_value or new_value)   # re-checked: the record may have changed since the request
+    ticket.change_new_value = new_value
     old_value = current_value(employee, spec)
     with transaction.atomic():
         target = _target(employee, spec)
@@ -126,7 +143,7 @@ def reject_change(ticket: HRHelpRequest, decided_by: User, note: str) -> HRHelpR
 
 
 def _open_change(ticket: HRHelpRequest, decided_by: User) -> tuple[ChangeField, User]:
-    spec = spec_for_key(ticket.change_field)
+    spec = spec_for_key(ticket.change_field) or suggested_spec(ticket)
     if spec is None:
         raise ProfileChangeError('This request has no value to apply. Update the record by hand and resolve the ticket.')
     if ticket.change_decision:

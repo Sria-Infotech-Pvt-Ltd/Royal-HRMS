@@ -155,7 +155,7 @@ class HRHelpDecideChangeView(APIView):
             return error('Choose approve or reject.')
         try:
             if decision == 'approve':
-                apply_change(ticket, request.user, note)
+                apply_change(ticket, request.user, note, (request.data.get('new_value') or '').strip())
             else:
                 reject_change(ticket, request.user, note)
         except ProfileChangeError as exc:

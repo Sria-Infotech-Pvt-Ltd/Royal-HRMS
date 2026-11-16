@@ -6,42 +6,18 @@
 
 import { useState } from "react";
 import RequestModal from "@/components/RequestModal";
-import DateInput from "@/components/shared/DateInput";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { ProfileChangeField } from "@/types/hrHelp";
 import { CORRECTION_SECTIONS, fieldsForSection } from "./profileCorrectionFields";
+import ProfileChangeValueInput from "./ProfileChangeValueInput";
 
 export const PROFILE_CORRECTION_TOPIC = "profile_correction";
 
 interface Props {
   onClose: () => void;
   onSubmitted: () => void;
-}
-
-interface NewValueInputProps {
-  spec: ProfileChangeField;
-  value: string;
-  onChange: (value: string) => void;
-}
-
-function NewValueInput({ spec, value, onChange }: NewValueInputProps) {
-  if (spec.kind === "date") return <DateInput value={value} onChange={onChange} className="field-input" separator="-" />;
-  if (spec.kind === "choice") {
-    return (
-      <select className="field-input field-select" value={value} onChange={event => onChange(event.target.value)} suppressHydrationWarning>
-        <option value="">Select…</option>
-        {spec.choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
-      </select>
-    );
-  }
-  return (
-    <input
-      className="field-input" value={value} maxLength={spec.max_length} onChange={event => onChange(event.target.value)}
-      inputMode={spec.kind === "phone" || spec.kind === "pin" ? "numeric" : undefined} placeholder={`New ${spec.label.toLowerCase()}`}
-    />
-  );
 }
 
 export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) {
@@ -111,7 +87,7 @@ export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) 
       {spec && (
         <div className="field-group mb-16">
           <label className="field-label">New {spec.label.toLowerCase()}</label>
-          <NewValueInput spec={spec} value={newValue} onChange={setNewValue} />
+          <ProfileChangeValueInput spec={spec} value={newValue} onChange={setNewValue} />
           <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "4px 0 0" }}>HR reviews this before your record is updated.</p>
         </div>
       )}
