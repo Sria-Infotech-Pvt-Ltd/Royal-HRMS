@@ -5828,3 +5828,20 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change:** `ess/_components/ExpensesTab.tsx`: when no expense policy has been uploaded, "View expense policy" is replaced by the text "The expense policy has not been published yet." (it used to link to `/dashboard/documents`). `dashboard/_components/EmployeeDashboard.tsx` (not imported by any page at the moment): its Documents quick link now points to `/dashboard/ess?tab=documents`, the employee's own documents tab.
 
 **Employment letter check (owner reported it still landed on the Document Center):** at HEAD the Home button is a plain download link to `/api/employees/me/employment-letter/`; calling that endpoint for the local test employee returns 200, `application/pdf`, `Content-Disposition: attachment`, no redirect; `proxy.ts` has no rule that sends it to the Document Center. The report most likely comes from a browser still running an older build (dev server not reloaded, or the live server not yet deployed). Not reproduced.
+
+
+## Employment verification letter redesigned (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Backend only (no model change, no migration). Tests: `accounts/tests_employment_letter.py` (8 new, pass, text read back with `pypdf`); `npm run build` run before the push. **The page layout was not looked at visually** (no PDF-to-image tool on the machine): checked by extracting the text, the page count (1) and that reportlab built it without a layout error. Please open the downloaded letter and say what to adjust.
+
+**Why:** the owner found the letter too plain. Also, the old letter printed "not on record" for any missing detail, and the letterhead showed "Hyderabad, Telangana, Hyderabad" (the Company address already ended with the city).
+
+**Change (`accounts/services_employment_letter.py`, same `render_employment_letter_pdf(employee)` and the same endpoint `GET /employees/me/employment-letter/`):**
+- Double-line page border (thick outer, thin inner) and a system-generated footer line on every page.
+- Letterhead: the company logo (only when `Company.logo` is uploaded and readable; a broken logo is skipped, never fatal), company name, registered office and a contact line, then a rule.
+- Reference number `EVL/<year>/<employee id>/<ddmmyy>` and the date, a centred title, and justified text.
+- A bordered details table (name, employee ID, designation, department, date of joining, employment status, work location). A detail the record does not hold is left out instead of printed as "not on record"; the designation sentence is only written when there is one.
+- Signature block: "For <company>", a signature line, "Authorised Signatory / HR Operations", and a "Company seal / stamp" box. It still says it does not require a physical signature.
+- The address is split at commas and de-duplicated, so a city repeated in the address and city fields prints once.
+
+**Not done:** no digital signature image or QR code verification, and the brand colour (violet) is fixed in code.
