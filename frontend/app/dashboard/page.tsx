@@ -7,13 +7,11 @@ import EmployeeDashboard from "./_components/EmployeeDashboard";
 function resolveDashboard(session: {
   is_superuser?:   boolean;
   can_manage_team?: boolean;
-  can_manage_branch?: boolean;
   permissions?:    string[];
 }) {
-  // A Branch Admin may hold settings.edit (is_superuser in the session), but its
-  // data is limited to its own branch — the company-wide Admin dashboard APIs
-  // refuse it. It gets the HR dashboard, which is scoped to the user's branch.
-  if (session?.is_superuser && !session?.can_manage_branch) return "admin";
+  // A Branch Admin holding settings.edit gets this same Admin dashboard; its
+  // cards are limited to the admin's own branch by the API.
+  if (session?.is_superuser)     return "admin";
   if (session?.can_manage_team)  return "manager";
   const perms = new Set(session?.permissions ?? []);
   if (perms.has("employees.view")) return "hr";

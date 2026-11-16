@@ -46,6 +46,22 @@ def _is_system_admin(user):
     return _has_perm(user, 'settings.edit')
 
 
+# Branch value that matches nothing — a Branch Admin with no assigned branch sees no one.
+_NO_BRANCH = '__no_branch_assigned__'
+
+
+def _admin_dashboard_scope(user):
+    """(allowed, branch) for the Admin dashboard cards. System Admin: whole company
+    (branch None). A Branch Admin whose role holds settings.edit keeps the same
+    dashboard, with every card limited to its own branch."""
+    from core.permissions import can_edit_settings, is_branch_restricted
+    if _is_system_admin(user):
+        return True, None
+    if is_branch_restricted(user) and can_edit_settings(user):
+        return True, (getattr(user, 'branch', '') or '').strip() or _NO_BRANCH
+    return False, None
+
+
 def _is_hr_or_admin(user):
     return _has_perm(user, 'employees.view')
 
@@ -108,47 +124,57 @@ class SystemAdminKPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _is_system_admin(request.user):
+        allowed, branch = _admin_dashboard_scope(request.user)
+        if not allowed:
             return error(_DENIED, http_status=403)
 
         from apps.accounts.models import User, SMTPSettings
         from apps.branch.models import Branch
         from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
 
+        users    = User.objects.filter(is_active=True)
+        leaves   = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING])
+        expenses = Expense.objects.filter(status='pending')
+        if branch:                                   # Branch Admin: own branch only, never cached
+            users, leaves = users.filter(branch=branch), leaves.filter(employee__branch=branch)
+            expenses = expenses.filter(employee__branch=branch)
+
         # Slow-changing aggregate — cached like HRKPIView.total_workforce below.
-        total_employees = cache.get('dashboard:sysadmin:total_employees')
+        total_employees = None if branch else cache.get('dashboard:sysadmin:total_employees')
         if total_employees is None:
-            total_employees = User.objects.filter(is_active=True).count()
-            cache.set('dashboard:sysadmin:total_employees', total_employees, 5 * 60)
+            total_employees = users.count()
+            if not branch:
+                cache.set('dashboard:sysadmin:total_employees', total_employees, 5 * 60)
 
         # Pending-action counts — deliberately NOT cached (matches HRKPIView's
         # "Real-time counts — not cached per spec": an admin acting on one of
         # these expects the number to move immediately, not after a TTL).
-        leave_pending        = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count() if _on('leave') else 0
-        expense_pending      = Expense.objects.filter(status='pending').count() if _on('expenses') else 0
-        onboarding_submitted = User.objects.filter(
-            onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
-        ).count()
+        leave_pending        = leaves.count() if _on('leave') else 0
+        expense_pending      = expenses.count() if _on('expenses') else 0
+        onboarding_submitted = users.filter(onboarding_status=User.ONBOARDING_SUBMITTED).count()
         pending_approvals = leave_pending + expense_pending + onboarding_submitted
 
         # Onboarding funnel — same category as the (already-cached) recruitment
         # funnel, not an action queue, so it's fine to cache.
-        employees_onboarding = cache.get('dashboard:sysadmin:employees_onboarding')
+        employees_onboarding = None if branch else cache.get('dashboard:sysadmin:employees_onboarding')
         if employees_onboarding is None:
-            employees_onboarding = User.objects.filter(
+            employees_onboarding = users.filter(
                 onboarding_status__in=[
                     User.ONBOARDING_PENDING,
                     User.ONBOARDING_DRAFT,
                     User.ONBOARDING_SUBMITTED,
                 ],
-                is_active=True,
             ).count()
-            cache.set('dashboard:sysadmin:employees_onboarding', employees_onboarding, _TTL_FUNNEL)
+            if not branch:
+                cache.set('dashboard:sysadmin:employees_onboarding', employees_onboarding, _TTL_FUNNEL)
 
-        active_branches = cache.get('dashboard:sysadmin:active_branches')
-        if active_branches is None:
-            active_branches = Branch.objects.filter(status=Branch.STATUS_ACTIVE).count()
-            cache.set('dashboard:sysadmin:active_branches', active_branches, _TTL_HEADCOUNT)
+        if branch:
+            active_branches = Branch.objects.filter(status=Branch.STATUS_ACTIVE, branch_name__iexact=branch).count()
+        else:
+            active_branches = cache.get('dashboard:sysadmin:active_branches')
+            if active_branches is None:
+                active_branches = Branch.objects.filter(status=Branch.STATUS_ACTIVE).count()
+                cache.set('dashboard:sysadmin:active_branches', active_branches, _TTL_HEADCOUNT)
 
         try:
             db_connection.ensure_connection()
@@ -180,7 +206,7 @@ class SystemAdminAnnouncementView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _is_system_admin(request.user):
+        if not _admin_dashboard_scope(request.user)[0]:
             return error(_DENIED, http_status=403)
 
         from apps.announcements.models import Announcement
@@ -207,17 +233,22 @@ class SystemAdminPendingApprovalsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _is_system_admin(request.user):
+        allowed, branch = _admin_dashboard_scope(request.user)
+        if not allowed:
             return error(_DENIED, http_status=403)
 
         from apps.accounts.models import User
         from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
 
-        leave_requests     = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
-        expense_claims     = Expense.objects.filter(status='pending').count()
-        onboarding_reviews = User.objects.filter(
-            onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
-        ).count()
+        leaves   = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING])
+        expenses = Expense.objects.filter(status='pending')
+        onboard  = User.objects.filter(onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True)
+        if branch:                                   # Branch Admin: own branch only
+            leaves, expenses = leaves.filter(employee__branch=branch), expenses.filter(employee__branch=branch)
+            onboard = onboard.filter(branch=branch)
+        leave_requests     = leaves.count()
+        expense_claims     = expenses.count()
+        onboarding_reviews = onboard.count()
         separation_requests = 0  # model not yet implemented
 
         leave_requests = leave_requests if _on('leave') else None
@@ -238,8 +269,14 @@ class SystemAdminDepartmentHeadcountView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _is_system_admin(request.user):
+        allowed, branch = _admin_dashboard_scope(request.user)
+        if not allowed:
             return error(_DENIED, http_status=403)
+        if branch:                                   # Branch Admin: own branch only
+            from apps.accounts.models import User
+            rows = list(User.objects.filter(is_active=True, branch=branch).exclude(department='')
+                        .values('department').annotate(count=Count('id')).order_by('-count'))
+            return success('Department headcount retrieved.', data=rows)
         return success('Department headcount retrieved.', data=_headcount_data())
 
 

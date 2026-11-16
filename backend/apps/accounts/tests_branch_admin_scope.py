@@ -97,3 +97,31 @@ class BranchAdminScopeTests(TestCase):
         sys_dept = {m['employee_id'] for m in self.client_for('sys.scope@test.com').get(
             reverse('employee-manager-list'), {'department': 'Ops'}).data['data']}
         self.assertTrue({'MA1', 'MB1'} <= sys_dept)                         # System Admin unchanged
+
+
+class BranchAdminDashboardTests(BranchAdminScopeTests):
+    """The Admin dashboard stays available to a Branch Admin, with every card
+    limited to its own branch; System Admin still sees the whole company."""
+
+    def get(self, email, path, **params):
+        resp = self.client_for(email).get(f'/api/dashboard/system-admin/{path}', params)
+        self.assertEqual(resp.status_code, 200, (path, resp.data))
+        return resp.data['data']
+
+    def test_admin_dashboard_cards_are_branch_scoped(self):
+        ba_kpis = self.get('ba.scope@test.com', 'kpis/')
+        sys_kpis = self.get('sys.scope@test.com', 'kpis/')
+        self.assertLess(ba_kpis['total_employees'], sys_kpis['total_employees'])
+        heads = {r['department']: r['count'] for r in self.get('ba.scope@test.com', 'department-headcount/')}
+        self.assertEqual(heads.get('Ops'), 2)                                 # EA1 + MA1 (Alpha only)
+        self.get('ba.scope@test.com', 'pending-approvals/')
+        life = self.get('ba.scope@test.com', 'employee-lifecycle/')
+        self.assertNotIn('EB1', str(life))
+        self.get('ba.scope@test.com', 'birthdays/today/')
+        self.get('ba.scope@test.com', 'birthdays/upcoming/')
+        self.get('ba.scope@test.com', 'audit-logs/', limit=10, offset=0)
+        self.get('ba.scope@test.com', 'announcement/')
+
+    def test_employee_without_settings_cannot_open_admin_dashboard(self):
+        resp = self.client_for('a.scope@test.com').get('/api/dashboard/system-admin/kpis/')
+        self.assertEqual(resp.status_code, 403)
