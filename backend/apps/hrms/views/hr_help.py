@@ -7,6 +7,7 @@ from core.permissions import HasCompletedOnboardingStatus
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
+from apps.accounts.services_access_guards import is_full_access_actor
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 
@@ -20,6 +21,11 @@ from ..serializers import (
 logger = logging.getLogger(__name__)
 
 
+def _can_respond(user) -> bool:
+    """HR-side access: hr_help.respond, or full access (superuser / settings.edit, i.e. the System Admin), who sees every ticket."""
+    return _has_perm(user, 'hr_help.respond') or is_full_access_actor(user)
+
+
 class HRHelpRequestListCreateView(APIView):
     """GET/POST /hr-help/requests/ — a plain employee sees and creates only
     their own requests; hr_help.respond holders see everyone's (optionally
@@ -28,7 +34,7 @@ class HRHelpRequestListCreateView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
-        can_respond = _has_perm(request.user, 'hr_help.respond')
+        can_respond = _can_respond(request.user)
         queryset = HRHelpRequest.objects.select_related('submitted_by', 'assigned_to')
         if not can_respond:
             queryset = queryset.filter(submitted_by=request.user)
@@ -79,7 +85,7 @@ class HRHelpRequestDetailView(APIView):
             help_request = HRHelpRequest.objects.select_related('submitted_by', 'assigned_to').get(pk=pk)
         except HRHelpRequest.DoesNotExist:
             return None, error('Request not found.', http_status=404)
-        can_respond = _has_perm(user, 'hr_help.respond')
+        can_respond = _can_respond(user)
         if help_request.submitted_by_id != user.id and not can_respond:
             return None, error('Permission denied.', http_status=403)
         return help_request, None
@@ -91,7 +97,7 @@ class HRHelpRequestDetailView(APIView):
         return success('HR help request retrieved.', HRHelpRequestSerializer(help_request).data)
 
     def patch(self, request, pk):
-        if not _has_perm(request.user, 'hr_help.respond'):
+        if not _can_respond(request.user):
             return error('Permission denied.', http_status=403)
         help_request, err = self._get_request(pk, request.user)
         if err:

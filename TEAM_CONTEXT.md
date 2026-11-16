@@ -5580,3 +5580,16 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 - **Face ID is off by default:** nothing asks for it (no banner, no camera on punch) until Face ID is made mandatory in Attendance Settings. Not a bug.
 - **Left out of these commits on purpose:** `backend/config/settings.py` also contains loosened login / forgot-password / reset-password / OTP rate limits from another session (do not commit those), and `EditRecordModalMock.tsx` differs only in line endings.
 - **Known failing tests, not from this work:** `tests_face_id_policy` (3 failures, hire welcome-email template and Face ID mode); an earlier baseline also listed forgot-password, leave pending reservation, lifecycle mvp and onboarding status modules as failing on a clean checkout.
+
+
+## HR Help queue now visible to the System Admin; where a profile correction request lands (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Not run against a database or checked in a browser. `tsc`, `eslint` and `manage.py check` are clean.
+
+**Where a profile correction goes (investigation, no code change):** "Request profile correction" (My Profile and ESS Profile tab, `ProfileCorrectionModal.tsx`) creates an `HRHelpRequest` with topic `profile_correction`. It is a private HR ticket: no approval chain, and the reporting manager and L1/L2 approvers do not see it. It shows in ESS > HR Help (queue for HR, "My HR requests" for the employee) and under My Requests. Nothing notifies HR when one is raised. Resolving it only records a status and note; it does not edit the profile.
+
+**Joining date is locked after onboarding:** `employees_detail.py` (~line 430) returns 409 for a `date_of_joining` change once `onboarding_status == COMPLETE`, so HR cannot fix a wrong joining year from Edit Record on a completed employee. Still open: decide on a one-off admin correction or a proper correction route.
+
+**Change:** `hrms/views/hr_help.py` gets `_can_respond(user)` = `hr_help.respond` OR `is_full_access_actor` (superuser or `settings.edit`). The list, detail and PATCH use it, so the System Admin sees and answers every ticket even when their seat lacks `hr_help.respond`. `HrHelpTab.tsx` uses the same rule (`usePermission("hr_help.respond") || isUnrestrictedUser(user)`). No test added.
+
+**Still uncommitted by this session:** the loosened login/OTP throttle rates in `backend/config/settings.py` (login 20 to 200/hour, forgot 5 to 30, reset 10 to 50, OTP 10 to 50) are in someone's working copy and were not committed or pushed.
