@@ -13,7 +13,7 @@ from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from core.permissions import has_perm
+from core.permissions import can_edit_settings, has_perm
 from core.responses import error, first_error, get_client_ip, success
 
 from apps.approvals import services
@@ -50,7 +50,7 @@ def _settings_out(cfg, user):
         'second_escalation_after_days': cfg.second_escalation_after_days,
         'escalation_head': _person(cfg.escalation_head) if cfg.escalation_head_id else None,
         'applies_to_leave': cfg.applies_to_leave, 'applies_to_attendance': cfg.applies_to_attendance,
-        'can_edit': has_perm(user, 'settings.edit'),
+        'can_edit': can_edit_settings(user),
     }
 
 
@@ -58,12 +58,12 @@ class EscalationSettingsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not has_perm(request.user, 'settings.view') and not has_perm(request.user, 'settings.edit'):
+        if not has_perm(request.user, 'settings.view') and not can_edit_settings(request.user):
             return error('Permission denied.', http_status=403)
         return success('Escalation settings.', _settings_out(ApprovalEscalationSettings.current(), request.user))
 
     def put(self, request):
-        if not has_perm(request.user, 'settings.edit'):
+        if not can_edit_settings(request.user):
             return error('Permission denied.', http_status=403)
         ser = _SettingsSerializer(data=request.data)
         if not ser.is_valid():
@@ -201,7 +201,7 @@ class EscalationHeadCandidatesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not has_perm(request.user, 'settings.edit'):
+        if not can_edit_settings(request.user):
             return error('Permission denied.', http_status=403)
         qs = User.objects.filter(is_active=True).select_related('role').order_by('full_name')[:1000]
         out = [_person(u) for u in qs

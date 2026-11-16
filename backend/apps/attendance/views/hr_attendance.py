@@ -61,11 +61,16 @@ from apps.attendance.services_hr_ops import (
     list_overtime,
 )
 from core.pagination import paginate, paginated_data
-from core.permissions import has_perm as _has_perm
+from core.permissions import has_perm as _has_perm, is_branch_restricted
 from apps.attendance.access import can_manage_attendance as _can_manage_attendance
 from apps.attendance.access import is_attendance_staff as _is_attendance_staff
 
 logger = logging.getLogger(__name__)
+
+
+# Branch value that matches no employee — a Branch Admin with no assigned branch
+# must see nobody, not (as an empty branch filter would) everybody.
+_NO_BRANCH = '__no_branch_assigned__'
 
 
 def _is_unrestricted(user) -> bool:
@@ -86,7 +91,10 @@ def _branch_scope(user, requested: str) -> str:
     """
     if _is_unrestricted(user):
         return requested
-    return getattr(user, 'branch', '') or ''
+    own = getattr(user, 'branch', '') or ''
+    if not own.strip() and is_branch_restricted(user):
+        return _NO_BRANCH                     # Branch Admin without a branch: matches nobody
+    return own
 
 
 def _manager_scope_employee_ids(user) -> list[str] | None:
@@ -128,6 +136,8 @@ def _manager_can_access_employee(user, employee) -> bool:
         return str(employee.pk) in {str(i) for i in employee_ids}
     # HR / branch admin: their branch, the same rule the list views use (_branch_scope).
     branch = (getattr(user, 'branch', '') or '').strip()
+    if not branch and is_branch_restricted(user):
+        return False                          # Branch Admin without a branch: nobody
     return not branch or (getattr(employee, 'branch', '') or '').strip() == branch
 
 

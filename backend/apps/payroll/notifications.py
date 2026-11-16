@@ -152,7 +152,10 @@ def query_recipients(payslip):
     ).exclude(pk=payslip.employee_id)
     branch = payslip.cycle.branch
     if branch is not None:
-        admins = User.objects.filter(role__role_permissions__permission__codename='settings.edit')
+        # Org-wide admins only — a Branch Admin (can_manage_branch) holding
+        # settings.edit is not org-wide and must not hear about other branches.
+        admins = (User.objects.filter(role__role_permissions__permission__codename='settings.edit')
+                  .exclude(role__can_manage_branch=True))
         qs = qs.filter(Q(branch=branch.branch_name) | Q(pk__in=admins.values('pk')))
     return qs.distinct()
 

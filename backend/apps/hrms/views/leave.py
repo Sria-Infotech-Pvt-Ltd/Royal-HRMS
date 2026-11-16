@@ -74,9 +74,10 @@ def _is_branch_admin(user) -> bool:
 
 def _branch_admin_covers(user, employee) -> bool:
     """True when user is a branch_admin whose branch matches the employee's."""
+    # A Branch Admin without an assigned branch covers nobody — never the whole company.
     branch = _user_branch(user)
     if not branch:
-        return True
+        return False
     return (getattr(employee, 'branch', '') or '').strip() == branch
 
 

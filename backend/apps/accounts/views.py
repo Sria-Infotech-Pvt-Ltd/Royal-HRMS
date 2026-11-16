@@ -153,7 +153,7 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
-from core.permissions import HasSettingsPermission, has_perm as _has_perm
+from core.permissions import HasSettingsPermission, can_edit_settings, has_perm as _has_perm, is_branch_restricted
 from core.responses import error, first_error, get_client_ip, success
 from apps.accounts.notice_period import parse_notice_period_days
 from core.template_context import (
@@ -476,7 +476,7 @@ class CanManageRoles(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and _has_perm(request.user, 'settings.edit')
+            and can_edit_settings(request.user)
         )
 
 
@@ -1595,6 +1595,8 @@ class OrgChartView(APIView):
             users_qs = User.objects.filter(is_active=True)
             if own_branch:
                 users_qs = users_qs.filter(branch__iexact=own_branch)
+            elif is_branch_restricted(user):
+                users_qs = users_qs.none()    # Branch Admin without a branch: nobody
             group = _build_org_chart_group(users_qs, own_branch)
             return success('Org chart retrieved.', data={'scope': 'branch', 'groups': [group]})
 
@@ -2867,7 +2869,7 @@ class CompanyRetrieveUpdateView(APIView):
         return success('Company info retrieved.', data=serializer.data)
 
     def put(self, request):
-        if not _has_perm(request.user, 'settings.edit'):
+        if not can_edit_settings(request.user):
             return error(
                 'You do not have permission to update company info.',
                 http_status=status.HTTP_403_FORBIDDEN,
@@ -2950,7 +2952,7 @@ class CompanyFinancialYearView(APIView):
         return success('Financial year configuration retrieved.', data)
 
     def put(self, request):
-        if not _has_perm(request.user, 'settings.edit'):
+        if not can_edit_settings(request.user):
             return error(
                 'Only system administrators can update the financial year configuration.',
                 http_status=status.HTTP_403_FORBIDDEN,
@@ -3052,6 +3054,8 @@ class EmployeeListCreateView(APIView):
 
         if role and role.can_manage_team and not widen_for_own_separation:
             qs = qs.filter(reporting_manager=request.user)
+        elif is_branch_restricted(request.user) and not (request.user.branch or '').strip():
+            qs = qs.none()                    # Branch Admin without a branch: no employees, never everyone
         elif not _has_perm(request.user, 'settings.edit') and request.user.branch:
             qs = qs.filter(branch=request.user.branch)
         if widen_for_own_separation:
@@ -3470,6 +3474,8 @@ def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
     role = requesting_user.role
     if role and role.can_manage_team:
         return employee.reporting_manager_id != requesting_user.id
+    if is_branch_restricted(requesting_user) and not (requesting_user.branch or '').strip():
+        return True                           # Branch Admin without a branch: no employees
     if not _has_perm(requesting_user, 'settings.edit') and requesting_user.branch:
         employee_branch = employee.branch
         if not employee_branch:
@@ -5649,7 +5655,7 @@ class OnboardingApprovalView(APIView):
         if target.onboarding_status != User.ONBOARDING_SUBMITTED:
             return error('This user has not submitted their onboarding form.')
 
-        if not _has_perm(request.user, 'settings.edit') and _has_perm(target, 'employees.view'):
+        if not can_edit_settings(request.user) and _has_perm(target, 'employees.view'):
             return error('HR admin can only approve employee onboarding.',
                          http_status=status.HTTP_403_FORBIDDEN)
 
@@ -6163,6 +6169,11 @@ class HRListView(APIView):
         branch = (request.query_params.get('branch') or '').strip()
         if not branch:
             return error('branch query parameter is required.')
+        # A Branch Admin only ever sees their own branch's HR contacts.
+        if is_branch_restricted(request.user):
+            own = (request.user.branch or '').strip()
+            if not own or branch.lower() != own.lower():
+                return success('HR users retrieved.', data=[])
         # Filter by permission so any role named hr/hr_admin/etc. is included.
         # Org-wide (settings.edit) roles are explicitly excluded — system_admin
         # is seeded with every permission (including onboarding.approve) so it
@@ -6203,10 +6214,20 @@ class ManagerListView(APIView):
     def get(self, request):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        # A Branch Admin only ever sees their own branch's managers (plus the COO,
+        # the company-wide executive); any ?branch= they send is replaced.
+        own_branch = None
+        if is_branch_restricted(request.user):
+            own_branch = (request.user.branch or '').strip()
+            if not own_branch:
+                return success('Managers retrieved.', data=[])
         if (request.query_params.get('manager_approvers') or '').strip().lower() in ('1', 'true', 'yes'):
             approvers = _manager_reporting_candidates(
-                request.query_params.get('branch') or '', request.query_params.get('designation') or '',
+                own_branch if own_branch is not None else (request.query_params.get('branch') or ''),
+                request.query_params.get('designation') or '',
             ).order_by('full_name')
+            if own_branch:
+                approvers = approvers.filter(Q(branch__iexact=own_branch) | Q(role__name=COO_ROLE_NAME))
             return success('Managers retrieved.', data=[
                 {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
                  'department': u.department, 'branch': u.branch,
@@ -6224,6 +6245,8 @@ class ManagerListView(APIView):
         branch     = (request.query_params.get('branch') or '').strip()
         if not department and not branch:
             return error('department or branch query parameter is required.')
+        if own_branch:
+            branch = own_branch
         managers = (
             User.objects
             .filter(role__can_manage_team=True, is_active=True)
