@@ -41,6 +41,11 @@ urlpatterns = [
     path('hr/overview/',                       views.HRDashboardOverviewView.as_view()),
     path('hr/lifecycle-register/',             views.HRLifecycleActionRegisterView.as_view()),
 
+    # ── Historical trends (headcount growth, leave volume, payroll cost) ────────
+    path('trends/headcount/',                  views.HeadcountTrendView.as_view()),
+    path('trends/leave/',                      views.LeaveTrendView.as_view()),
+    path('trends/payroll-cost/',               views.PayrollCostTrendView.as_view()),
+
     # ── Module overview landings ─────────────────────────────────────────────
     path('module/attendance-overview/',        AttendanceOverviewView.as_view()),
     path('module/leave-overview/',             LeaveOverviewView.as_view()),

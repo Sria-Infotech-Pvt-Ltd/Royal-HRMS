@@ -275,6 +275,22 @@ def generate_branch_code(city_name: str) -> str:
     return f"{prefix}-{max_num + 1:02d}"
 
 
+def branch_assigned_employee_count(branch) -> int:
+    """Employees (any status) who belong to this branch, for the delete guard.
+
+    An employee linked to the branch (branch_fk) belongs to it. One with only the legacy name text and no link belongs
+    to whichever branch that name matches. Matching on the name alone made two branches with the same name block each
+    other's deletion: the duplicate could never be removed because the other copy's employees counted against it.
+    """
+    from django.db.models import Q
+
+    from apps.accounts.models import User
+
+    return User.objects.filter(
+        Q(branch_fk=branch) | Q(branch_fk__isnull=True, branch__iexact=branch.branch_name),
+    ).count()
+
+
 def branch_employee_counts() -> dict:
     """Active employees per branch, keyed by Branch pk.
 

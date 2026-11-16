@@ -1343,11 +1343,14 @@ class EmployeeDocumentSubmissionSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     status_display    = serializers.CharField(source='get_status_display', read_only=True)
     file_url          = serializers.SerializerMethodField()
+    # Always 'submission' here; onboarding documents merged into the list are flagged 'onboarding'.
+    source            = serializers.SerializerMethodField()
+    title             = serializers.SerializerMethodField()
 
     class Meta:
         model  = EmployeeDocumentSubmission
         fields = [
-            'id', 'category', 'category_display', 'file_name', 'file_url', 'expiry_date',
+            'id', 'source', 'title', 'category', 'category_display', 'file_name', 'file_url', 'expiry_date',
             'tax_item', 'reference_number',
             'status', 'status_display', 'submitted_at', 'reviewed_at', 'created_at', 'updated_at',
         ]
@@ -1356,6 +1359,13 @@ class EmployeeDocumentSubmissionSerializer(serializers.ModelSerializer):
         # Short-lived signed URL (private storage) — null for rows submitted
         # before files were stored.
         return obj.file.url if obj.file else None
+
+    def get_source(self, obj: EmployeeDocumentSubmission) -> str:
+        return 'submission'
+
+    def get_title(self, obj: EmployeeDocumentSubmission) -> str:
+        # Self-submitted documents have no configured document type, so the title is what the employee uploaded.
+        return obj.file_name
 
 
 class EmployeeDocumentSubmissionCreateSerializer(serializers.ModelSerializer):

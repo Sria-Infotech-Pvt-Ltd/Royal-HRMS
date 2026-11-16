@@ -2,6 +2,7 @@
 // state, safe to import from anywhere.
 
 import { formatDate, formatDateTime } from "@/lib/formatDate";
+import type { AnnouncementAttachment, AnnouncementLink } from "@/lib/announcementAttachments";
 
 export type Category      = "general" | "policy" | "event" | "celebration";
 export type Visibility    = "all" | "department" | "branch";
@@ -29,6 +30,9 @@ export interface Announcement {
   reactions_count:        number;
   has_reacted:            boolean;
   can_edit:               boolean;
+  /** Images and PDFs attached to the announcement, and its external links (empty when there are none). */
+  attachments?:           AnnouncementAttachment[];
+  links?:                 AnnouncementLink[];
   created_at:             string;
   updated_at:             string;
 }

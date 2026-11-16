@@ -5361,6 +5361,38 @@ Also on 2026-11-10: the new Neon database was migrated from empty (521 migration
 - Org-chart "Assign holder" dropdown is empty for newly imported teams: `OrgStructureClient.tsx` loads employees with `status=active` (account enabled AND onboarding complete AND activated), so employees still in Onboarding are not offered. Proposed small frontend change: also offer Onboarding employees. Assigning someone already seated moves them (their old seat is closed).
 - Reporting manager after import comes from the org chart: the person holding the unit's chief seat (or the nearest ancestor's), same branch name, active. In the checked database 43 chief seats existed and none was held, so nobody resolved. Alternatives: the Excel column "Reporting Manager Employee ID", or assign by hand.
 
+
+## System Admin dashboard had no workforce analytics (2026-11-12)
+
+**Symptom:** the System Admin dashboard showed only onboarding/approval/branch-health stats — no present/absent-today, no headcount or payroll trends — even though a superuser holds every permission those numbers need. All of that already existed, just only on the separate HR dashboard.
+
+**Stage 1 (reuse only, no new backend):** `AdminDashboard.tsx` now also renders the same `useDashboardOverview()`-backed KPI row (Total Headcount, Present Today, Payroll Ready), the weekly attendance trend (`AttendanceTrend`/`AttendanceInsights`), and the full `WorkforceOperations` panel (recruitment funnel, attendance/leave/payroll/performance/reports/settings overviews, system health) the HR dashboard already had. Nothing new on the backend; pure composition of existing, already-tested widgets.
+
+**Stage 2 (new, historical trends):** `backend/apps/dashboard/views/trends.py` — three new endpoints, each `IsAuthenticated` + `employees.view` gated, cached 1h:
+- `GET /dashboard/trends/headcount/` — total active headcount at the end of each of the last 6 months, via `services_headcount.get_headcount(as_of=month_end)` (same function Employees > As Of already uses, so the two always agree).
+- `GET /dashboard/trends/leave/` — approved vs. rejected `LeaveRequest` counts per month, bucketed by `created_at` (pending/cancelled excluded).
+- `GET /dashboard/trends/payroll-cost/` — total `EmployeePayslip.net_pay` per `PayrollCycle`, excluding draft/cancelled/in-progress cycles.
+New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart cards, plain divs — no chart library, same visual language as `DeptHeadcountChart.tsx`), wired into `AdminDashboard.tsx` below `WorkforceOperations`.
+
+**Tests:** `apps/dashboard/tests_trends.py` (5 new: permission gating, headcount growth over time, leave status bucketing, draft-cycle exclusion from payroll cost) + full `apps.dashboard` suite (36 tests) OK. `tsc`/ESLint clean on both stages.
+
+**Caveat:** this Neon dev DB has very few leave requests and payroll cycles right now, so the Leave and Payroll Cost charts will look mostly empty until more real data accumulates — expected, not a bug.
+
+**Gotcha for whoever works in this tree next:** mid-session the shared working directory was found silently switched to a different local branch (`onboarding-v2`) carrying another session's large uncommitted Onboarding V2 feature (dozens of new files/migrations). It was stashed intact (not discarded) before switching back to `New-AI` — if you're picking up Onboarding V2, check `git stash list` on `onboarding-v2` rather than assuming the work was lost.
+
+
+## Signed Offer Letter required + Confirm & Activate looked like it did nothing (2026-11-12)
+
+**Symptom:** on the candidate-review "Review — <name>" modal (`OnboardingDrawer.tsx`), HR scrolled through the document checklist, clicked "Confirm & Activate", confirmed the "Approve and activate..." dialog, and the screen just sat there — looked exactly like the 2026-11-10 PAN-masking bug (see above), but that one was already fixed.
+
+**Root cause #1 (real, separate bug):** the error banner (`actionErr`) renders at the very top of the modal's scrollable body, but Confirm/Approve is a footer button only reached after scrolling down past Basic Info and the documents list. A rejected action's error was genuinely there the whole time — just off-screen above the fold. Fixed: `errorBannerRef` + a `useEffect` that `scrollIntoView({behavior:"smooth", block:"start"})`s the banner the moment `actionErr` is set.
+
+**Root cause #2 (this candidate's specific rejection) + product decision:** Signed Offer Letter was marked a required document type (`0170_fix_required_document_types`, alongside Cancelled Cheque) — reasonable in general, but blocking/confusing for candidates who can't upload a signed copy yet. Per explicit instruction, reverted to optional: `0219_signed_offer_letter_optional.py` (DocumentTypeConfig) + the Hire wizard's own copy in `DocumentsChecklistStep.tsx` (kept in sync deliberately — see 0170's own docstring on what happens when these two copies disagree). Cancelled Cheque is untouched.
+
+**Note:** `OnboardingApprovalView.post()` (the candidate-review approval endpoint) does NOT itself enforce required-document-type presence — only the Hire wizard's `HireActionCompleteView` does. Whatever actually rejected this specific candidate's approval was not confirmed by direct DB inspection (the candidate wasn't found in this session's connected Neon DB — likely a different environment than what was live-tested against). Both real bugs found by code reading were fixed regardless; if Confirm & Activate still fails for someone, check the (now visible) error banner text and report it back.
+
+**Tests:** full `apps.accounts.tests_hire_wizard` + `tests_onboarding_face_gate` (48 tests) OK after both changes. `tsc`/ESLint clean.
+
 ## Local setup fixes, ESS Home/Profile UI, Announcements tab, responsive top bar (2026-11-12)
 
 **By:** Rithwika - **Branch:** Rithwika. Everything below is in the working tree, nothing committed. None of the UI was checked in a browser; only `eslint` and `tsc` on the touched files.
@@ -5388,3 +5420,33 @@ Also on 2026-11-10: the new Neon database was migrated from empty (521 migration
 **Tests / verification**
 - `vitest` crashes in this environment ("Cannot read properties of undefined (reading 'config')") even on untouched test files such as `navConfig.test.ts`, so the updated route test was not run. The route function was checked directly in Node instead. `tsc --noEmit` reports only pre-existing `face-api.js` missing-types errors.
 
+
+## Integration of Rithwika, Improvements and 05-nov-2026 into New-AI; employee photo self-service (2026-11-12)
+
+**By:** New-AI session - **Branch:** New-AI. Merged by applying each branch's diff onto the working tree (not `git merge`, because the tree held uncommitted announcements/attachments work). Checked with `tsc`, `eslint`, `vitest` (80 files / 604 tests), `next build` and `manage.py check`. **Not run: any database-dependent backend test and any browser test.**
+
+**What came in**
+- `origin/Rithwika` (513f39d4): see the "Local setup fixes, ESS Home/Profile UI..." section above. The announcement bell route uses **Rithwika's** version: `/dashboard/ess?tab=announcements&announcement=<id>` (the local `?open=<id>` route is no longer used by the bell; `lib/announcementLink.ts` and the dashboard Updates card still use `/dashboard/announcements?open=<id>`).
+- `origin/Improvements` (3e7a8a0c): Company Code Admin on Edit with current-admin prefill (`branches/_components/branchAdminOptions.ts`), ESS attendance calendar and weekly attendance (`EssAttendanceCalendar.tsx`, `lib/attendanceCalendarGrid.ts`, `lib/weeklyAttendance.ts`), workforce widgets, hire wizard changes, `core/redis_connection.py` (local Redis fail-fast when DEBUG) and `core/logging_handlers.py` (Windows-safe log rotation).
+- `origin/05-nov-2026` (1c633337): admin password reset no longer emails a temporary password; it emails a single-use 24h link to `/reset-password/<token>` (`AdminResetCheckView`, `GET /password-reset-link/<token>/`, `_reset_link` in `accounts/utils.py`, `proxy.ts` lets that page load signed out). The email template body is rewritten by migration `0213_password_reset_by_admin_link_not_password`.
+
+**Conflicts and how they were resolved (so nobody redoes them)**
+- Branch Management: Improvements' Edit-prefill implementation was used. Kept from the local version: the vacant-seat filter (Add form only; Edit needs the current admin's seat), the "Complete the Company Code Admin details below" save message, and the empty-seats wording. The local `loadLeaderOptions` helper was removed (it raced with the Edit loader).
+- Edit-form employee list: Improvements dropped the old `status=active` filter (it hid onboarding/probation employees). Inactive accounts are still excluded client-side (`is_active !== false`); employees on notice are NOT excluded. Only the first 50 employees are loaded.
+- `settings.py`, `aira-theme.css`, `utils.py`, `endpoints.ts`, `proxy.ts`: both sides' additions kept.
+
+**Migrations (read before running `migrate`)**
+- Two incoming accounts migrations were numbered `0212`/`0213` while New-AI already had `0212_employee_id_ranges`...`0219`, giving two leaf nodes. Neither chain was edited. `0220_merge_password_reset_link_and_signed_offer_letter` joins them (no operations).
+- `0212_repair_employee_code_series_columns` re-adds `prefix`/`padding` to `hrms_employee_code_series`, which `0212_employee_id_ranges` drops (nothing uses them). `0221_drop_obsolete_employee_code_series_columns` drops them again (`DROP COLUMN IF EXISTS`). **Forward discards whatever is stored in those two columns; reverse is a no-op and does not restore them.**
+- Verified only by loading the migration graph without a database: single leaf `0221`, no pending model changes. **No migration has been applied to Neon or any database.**
+- A database that lacked those columns and applied neither chain would still fail at `0212_employee_id_ranges`'s `RemoveField` (not fixable without editing a pushed migration).
+
+**Employee profile photo (behaviour change)**
+- Every signed-in user can now upload/remove their own profile photo: the `employees.edit_own_profile` check was removed from `ProfilePhotoView` (`views_profile_photo.py`), and the camera button is always shown in `ess/_components/ProfileSummaryTab.tsx` and `profile/ProfileClient.tsx`. Editing profile *details* is still gated by `employees.edit_own_profile` (revoked from the employee role by migration 0174), so employees without it use "Request profile correction".
+- `tests_profile_photo.py`: `test_role_without_permission_is_denied` became `test_role_without_edit_own_profile_can_still_manage_own_photo` (expects 200). Not run (needs a database).
+
+**Still open**
+- Browser testing of everything above, and the database-dependent tests (`apps.branch.tests_branch_admin_flow`, `apps.accounts.tests_hire_wizard`, announcements/attachments/email tests, `tests_profile_photo`), ideally on a private test database (`TEST_DB_SUFFIX=<name>`, or a local PostgreSQL via `DATABASE_URL` + `DB_SSL_MODE=disable`). Local PostgreSQL 17 on 5432 needs a password; Docker Desktop was not running.
+- No backend test covers the new admin-reset link flow.
+- 9 existing ESLint warnings (assessments, payroll, attendance month view, email-templates): none introduced here; two are `react-hooks/exhaustive-deps`, which CLAUDE.md section 8 forbids.
+- Local setup notes from Rithwika's section still apply (Redis, `frontend/.env.local`). On this machine the backend runs on port 8000 and `.env.local` points there.

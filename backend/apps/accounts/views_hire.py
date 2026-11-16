@@ -11,7 +11,9 @@ import hashlib
 import logging
 from datetime import datetime
 
+import requests as http_req
 from django.db import transaction
+from django.http import StreamingHttpResponse
 from django.utils import timezone
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -403,8 +405,47 @@ class HireActionDocumentListCreateView(APIView):
 
 
 class HireActionDocumentDetailView(APIView):
-    """DELETE /hire-actions/<id>/documents/<doc_id>/ — remove an uploaded document."""
+    """
+    GET    /hire-actions/<id>/documents/<doc_id>/ — stream the file (signed storage proxy)
+    DELETE /hire-actions/<id>/documents/<doc_id>/ — remove an uploaded document
+
+    GET exists because HireActionDocumentSerializer.file_url points here (the
+    wizard's "View" link). The stored file sits behind authenticated storage,
+    so the browser cannot open its raw URL. Without GET the link only showed a
+    405 page. Same approach as EmployeeDocumentView's GET.
+    """
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, doc_id):
+        if not _has_perm(request.user, 'employees.create'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        doc = HireActionDocument.objects.filter(
+            pk=doc_id, hire_action_id=pk, hire_action__status=HireAction.STATUS_DRAFT,
+        ).first()
+        if not doc or not doc.file:
+            return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            remote = http_req.get(doc.file.url, stream=True, timeout=30)
+            remote.raise_for_status()
+        except Exception as exc:
+            logger.error('Hire action doc storage fetch failed doc=%s: %s', doc_id, exc)
+            return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
+
+        # Recorded only after the fetch succeeded, like EmployeeDocumentView.
+        AuditLog.objects.create(
+            user=request.user, action='document_viewed', module='accounts', object_id=str(doc.id),
+            changes={'document_type': doc.document_type, 'hire_action': str(pk), 'file_name': doc.file_name},
+            ip_address=get_client_ip(request),
+        )
+        is_pdf = doc.file_name.lower().endswith('.pdf')
+        content_type = 'application/pdf' if is_pdf else remote.headers.get('content-type', 'application/octet-stream')
+        response = StreamingHttpResponse(remote.iter_content(chunk_size=8192), content_type=content_type)
+        response['Content-Disposition'] = f'inline; filename="{doc.file_name}"'
+        if 'content-length' in remote.headers:
+            response['Content-Length'] = remote.headers['content-length']
+        response['Cache-Control'] = 'no-store'
+        return response
 
     def delete(self, request, pk, doc_id):
         if not _has_perm(request.user, 'employees.create'):
@@ -416,4 +457,7 @@ class HireActionDocumentDetailView(APIView):
         if not doc:
             return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
         doc.delete()
+        # Logged like uploads: without it a successful delete left no trace, so a later
+        # "document not found" could not be explained from the logs.
+        logger.info('Hire action document %s (%s) deleted for %s by %s', doc_id, doc.document_type, pk, request.user.email)
         return success('Document deleted.')

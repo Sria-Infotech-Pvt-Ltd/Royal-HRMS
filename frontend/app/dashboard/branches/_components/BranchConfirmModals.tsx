@@ -36,7 +36,7 @@ export function TransferConfirmModal({
     >
       <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6, marginBottom: (state.reportsCount > 0 || state.hrForCount > 0) ? "14px" : 0 }}>
         <strong>{state.employee.full_name}</strong> currently belongs to{" "}
-        <strong>{state.employee.branch || "no Company Code"}</strong>. This will move them to the new Company Code
+        <strong>{state.employee.branch || "no Company Code"}</strong>. This will move them to this Company Code
         as its Company Code Admin.
       </p>
       {(state.reportsCount > 0 || state.hrForCount > 0) && (

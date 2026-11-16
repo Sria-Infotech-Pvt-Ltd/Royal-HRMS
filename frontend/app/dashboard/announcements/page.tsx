@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
 import { useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
+import { useLinkedAnnouncement } from "@/hooks/useLinkedAnnouncement";
 import type { BirthdayEmployee } from "@/types/employeeDashboard";
 import type { OrgUnit } from "@/types/orgStructure";
 import BirthdayCelebrationCard from "@/components/dashboard/employee/BirthdayCelebrationCard";
@@ -12,6 +13,10 @@ import BirthdayCelebrationModal from "@/components/dashboard/employee/BirthdayCe
 import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
 import AnnouncementCard from "./AnnouncementCard";
+import AnnouncementMedia from "./AnnouncementMedia";
+import AttachmentFields from "./AttachmentFields";
+import { buildAnnouncementFormData, draftErrors, draftFromAnnouncement, emptyDraft, type AttachmentDraft } from "@/lib/announcementAttachments";
+import type { AxiosProgressEvent } from "axios";
 import {
   type Category, type Visibility, type FormVisibility, type Announcement, type PageMeta,
   type Branch, type FormState, type FormErrors,
@@ -21,7 +26,17 @@ import {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+// useSearchParams (reads ?open=<id>, the link from a bell notification or the dashboard card) requires a Suspense boundary around
+// it for the production build - same convention as employees/page.tsx.
 export default function AnnouncementsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AnnouncementsPageInner />
+    </Suspense>
+  );
+}
+
+function AnnouncementsPageInner() {
 
   // Read localStorage only on the client to avoid SSR/hydration mismatch.
   const [currentUser, setCurrentUser] = useState<ReturnType<typeof getStoredUser>>(null);
@@ -49,6 +64,10 @@ export default function AnnouncementsPage() {
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [saveErr,    setSaveErr]    = useState<string | null>(null);
   const [saving,     setSaving]     = useState(false);
+  // Images, PDFs and links being added to / removed from the announcement in the form, and the upload progress while saving.
+  const [attachmentDraft, setAttachmentDraft] = useState<AttachmentDraft>(emptyDraft);
+  const [showLinkErrors,  setShowLinkErrors]  = useState(false);
+  const [uploadProgress,  setUploadProgress]  = useState<number | null>(null);
 
   // ── Delete confirm ──────────────────────────────────────────────────────────
   const [deleteId,  setDeleteId]  = useState<number | null>(null);
@@ -65,6 +84,13 @@ export default function AnnouncementsPage() {
 
   // ── Detail view modal ───────────────────────────────────────────────────────
   const [viewTarget, setViewTarget] = useState<Announcement | null>(null);
+
+  // A bell notification (or the dashboard card) links here with ?open=<id>: show that announcement, or say it is not available.
+  const linked = useLinkedAnnouncement();
+  useEffect(() => {
+    if (linked.announcement) setViewTarget(linked.announcement);
+    else if (linked.unavailable) setPageErr("That announcement is no longer available, or it was not meant for you.");
+  }, [linked]);
 
   // ── Birthday celebration (Celebration tab) ─────────────────────────────────
   const { data: birthdayData } = useBirthdaysToday();
@@ -135,6 +161,8 @@ export default function AnnouncementsPage() {
   function openCreate() {
     setEditTarget(null);
     setForm({ ...EMPTY_FORM, send_email: canPost, target_branch: defaultBranchField() });
+    setAttachmentDraft(emptyDraft());
+    setShowLinkErrors(false);
     setFormErrors({});
     setSaveErr(null);
     setShowModal(true);
@@ -155,6 +183,8 @@ export default function AnnouncementsPage() {
       is_pinned:         ann.is_pinned,
       send_email:        ann.send_email,
     });
+    setAttachmentDraft(draftFromAnnouncement(ann));
+    setShowLinkErrors(false);
     setFormErrors({});
     setSaveErr(null);
     setShowModal(true);
@@ -187,7 +217,9 @@ export default function AnnouncementsPage() {
     if (form.visibility === "department" && !form.target_org_unit)
       errs.target_org_unit = "Select an org unit.";
     setFormErrors(errs);
-    return Object.keys(errs).length === 0;
+    const attachmentProblems = draftErrors(attachmentDraft);
+    setShowLinkErrors(attachmentProblems.length > 0);
+    return Object.keys(errs).length === 0 && attachmentProblems.length === 0;
   }
 
   // ─── Save ──────────────────────────────────────────────────────────────────
@@ -222,7 +254,8 @@ export default function AnnouncementsPage() {
         targetOrgUnit = null;
       }
 
-      const payload: Record<string, unknown> = {
+      // Sent as multipart/form-data: the text fields plus any new images/PDFs, the ids of attachments being removed, and the links.
+      const payload = buildAnnouncementFormData({
         title:           form.title.trim(),
         body:            form.body.trim(),
         category:        form.category,
@@ -231,12 +264,18 @@ export default function AnnouncementsPage() {
         send_email:      form.send_email,
         target_org_unit: targetOrgUnit,
         target_branch:   targetBranch,
-      };
+      }, attachmentDraft);
 
-      // Longer timeout than the client default — posting/updating an
-      // announcement (esp. with "send email" on) can take longer than the
-      // usual request.
-      const requestConfig = { timeout: 30000 };
+      // Longer timeout than the client default — posting/updating an announcement (esp. with files, or "send email" on) can take
+      // longer than the usual request.
+      const hasFiles = attachmentDraft.newImages.length + attachmentDraft.newDocuments.length > 0;
+      setUploadProgress(hasFiles ? 0 : null);
+      const requestConfig = {
+        timeout: 120000,
+        onUploadProgress: (event: AxiosProgressEvent) => {
+          if (event.total) setUploadProgress(Math.round((event.loaded * 100) / event.total));
+        },
+      };
       if (editTarget) {
         await clientApi.put(API.announcements.detail(editTarget.id), payload, requestConfig);
       } else {
@@ -254,6 +293,7 @@ export default function AnnouncementsPage() {
       setSaveErr(message);
     } finally {
       setSaving(false);
+      setUploadProgress(null);
     }
   }
 
@@ -569,6 +609,15 @@ export default function AnnouncementsPage() {
                   style={{ resize: "vertical" }}
                 />
                 {formErrors.body && <div className="field-error-msg">{formErrors.body}</div>}
+
+                {/* Small icons for images, PDFs and links; what is added shows below them */}
+                <AttachmentFields
+                  draft={attachmentDraft}
+                  onChange={setAttachmentDraft}
+                  showLinkErrors={showLinkErrors}
+                  uploadProgress={uploadProgress}
+                  disabled={saving}
+                />
               </div>
 
               {/* Checkboxes */}
@@ -726,6 +775,7 @@ export default function AnnouncementsPage() {
 
                 <div className="ann-view-title">{live.title}</div>
                 <div className="ann-view-body">{live.body}</div>
+                <AnnouncementMedia attachments={live.attachments} links={live.links} />
 
                 <div className="ann-view-stats">
                   <button

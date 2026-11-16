@@ -35,6 +35,50 @@ export interface Branch {
   location_warnings?:    string[];
 }
 
+/** The Add/Edit Company Code form's values (inputs hold strings; ids as strings for <select>). */
+export interface BranchForm {
+  id:               number;
+  branch_code:      string;
+  branch_name:      string;
+  address:          string;
+  state:            string;
+  city:             string;
+  gst_registration: string;
+  status:           string;
+  is_headquarter:   boolean;
+  is_metro:         boolean;
+  geofencing_enabled:    boolean;
+  latitude:              string;
+  longitude:             string;
+  allowed_radius_meters: string;
+}
+
+export const EMPTY_BRANCH_FORM: BranchForm = {
+  id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", gst_registration: "",
+  status: "active", is_headquarter: false, is_metro: false,
+  geofencing_enabled: false, latitude: "", longitude: "", allowed_radius_meters: "150",
+};
+
+/** Maps a Company Code from GET /branch/branches/<id>/ onto the form. */
+export function branchToForm(branch: Branch): BranchForm {
+  return {
+    id:               branch.id,
+    branch_code:      branch.branch_code,
+    branch_name:      branch.branch_name,
+    address:          branch.address,
+    state:            String(branch.state),
+    city:             String(branch.city),
+    gst_registration: branch.gst_registration ?? "",
+    status:           branch.status.toLowerCase(),
+    is_headquarter:   branch.is_headquarter,
+    is_metro:         branch.is_metro ?? false,
+    geofencing_enabled:    branch.geofencing_enabled ?? false,
+    latitude:              branch.latitude?.toString() ?? "",
+    longitude:             branch.longitude?.toString() ?? "",
+    allowed_radius_meters: branch.allowed_radius_meters?.toString() ?? "150",
+  };
+}
+
 export function geofenceBadge(branch: Branch): { label: string; cls: string } {
   if (!branch.geofencing_enabled) return { label: "Disabled", cls: "badge-neutral" };
   if (!branch.has_coordinates)    return { label: "No Coordinates", cls: "badge-warn" };
@@ -59,9 +103,22 @@ export type Envelope<T> = { status: string; message: string; data: T };
 export type Paginated<T> = { count: number; page: number; page_size: number; total_pages: number; results: T[] };
 
 /** A seat that carries branch-wide access — what a Company Code Admin is placed in. */
-export interface BranchAdminSeat { id: string; title: string; org_unit_name: string; holder_name: string | null }
+/** A position with branch-wide access. `holder` is the holder's User pk (= ApiEmployeeOption.uuid). */
+export interface BranchAdminSeat {
+  id: string; title: string; org_unit_name: string; holder_name: string | null;
+  holder?: string | null;             // holder's User pk (= ApiEmployeeOption.uuid)
+  holder_employee_id?: string | null; // holder's employee code (= ApiEmployeeOption.id)
+}
 export interface ApiEmployeeOption {
   id: string; uuid: string; employee_id: string; full_name: string; email: string; branch: string;
+  is_active?: boolean;
+}
+
+/** The employee in a Company Code who holds a branch-wide-access position today, with that position. */
+export interface CurrentBranchAdmin {
+  employee:      ApiEmployeeOption;
+  positionId:    string;
+  positionTitle: string;
 }
 
 export interface LeaderForm {

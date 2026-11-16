@@ -154,7 +154,24 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       await clientApi.delete(API.hireActions.documentDetail(hireActionId, doc.id));
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
     } catch (err: unknown) {
-      setDocError(handleApiError(err, "Failed to remove document.").message);
+      const message = handleApiError(err, "Failed to remove document.").message;
+      // The list on screen can be stale (the file was already removed, e.g. in another tab). Then
+      // every View/Delete on that row got "not found" and the row could never go away. Re-read the
+      // list from the server: if the document is already gone, the goal is met and there is no error.
+      const fresh = await reloadDocuments();
+      if (fresh && !fresh.some(d => d.id === doc.id)) return;
+      setDocError(message);
+    }
+  }
+
+  async function reloadDocuments(): Promise<HireDocument[] | null> {
+    try {
+      const res = await clientApi.get<{ data: HireDocument[] }>(API.hireActions.documents(hireActionId));
+      const list = res.data?.data ?? [];
+      setDocuments(list);
+      return list;
+    } catch {
+      return null;
     }
   }
 

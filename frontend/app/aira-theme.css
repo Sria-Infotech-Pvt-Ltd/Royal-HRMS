@@ -627,13 +627,14 @@ main>div:has(>.wf-dashboard){padding:0}
 .wf-cols{position:relative;flex:1;display:flex;gap:14px;padding-left:34px}
 .wf-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;outline:none;cursor:default}
 .wf-col-val{font-size:10.5px;font-weight:700;color:var(--muted);height:16px;line-height:16px;opacity:0;transition:opacity .12s ease-out}
-.wf-col:hover .wf-col-val,.wf-col:focus .wf-col-val,.wf-col:last-child .wf-col-val{opacity:1}
+.wf-col:hover .wf-col-val,.wf-col:focus .wf-col-val,.wf-col.today .wf-col-val{opacity:1}
 .wf-bar-wrap{flex:1;width:100%;max-width:72px;display:flex;align-items:flex-end;min-height:0}
 .wf-bar-wrap i{display:block;width:100%;border-radius:8px 8px 3px 3px;background:color-mix(in srgb,var(--brand) 38%,var(--surface));transition:background-color .12s ease-out}
 .wf-bar-wrap i.today{background:linear-gradient(180deg,var(--brand),var(--brand-2))}
 .wf-col:hover .wf-bar-wrap i,.wf-col:focus .wf-bar-wrap i{background:var(--brand)}
 .wf-col-lbl{height:24px;line-height:24px;font-size:11px;font-weight:600;color:var(--faint)}
 .wf-col-lbl.today{color:var(--brand-ink);font-weight:800}
+.wf-col.upcoming .wf-col-lbl{opacity:.55}
 
 .wf-reveal{opacity:0;transform:translateY(4px);animation:wf-reveal .24s ease-out forwards}
 @keyframes wf-reveal{to{opacity:1;transform:translateY(0)}}

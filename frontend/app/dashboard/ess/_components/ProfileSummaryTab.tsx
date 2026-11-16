@@ -11,7 +11,6 @@
 import { isFutureDate } from "@/lib/employeeLifecycle";
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
-import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import { formatDateSlash } from "@/lib/formatDate";
 import EmployeeDrawer from "@/app/dashboard/employees/_components/EmployeeDrawer";
@@ -86,7 +85,6 @@ function toDrawerEmployee(d: ProfileSummaryData, photoUrl?: string | null): Empl
 
 export default function ProfileSummaryTab() {
   const { data } = useFetch<ProfileSummaryData>(API.employees.me);
-  const canEditOwnProfile = usePermission("employees.edit_own_profile");
   const [showRecord, setShowRecord] = useState(false);
   const [showCorrection, setShowCorrection] = useState(false);
   const [correctionSubmitted, setCorrectionSubmitted] = useState(false);
@@ -101,23 +99,22 @@ export default function ProfileSummaryTab() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ position: "relative", width: 48, height: 48, flexShrink: 0 }}>
             <Avatar text={initials(firstName || "", restName.join(" "))} size={48} photoUrl={photoUrl} />
-            {canEditOwnProfile && (
-              <button
-                type="button"
-                onClick={() => setShowPhotoModal(true)}
-                suppressHydrationWarning
-                title="Change profile photo"
-                style={{
-                  position: "absolute", bottom: -2, right: -2,
-                  width: 20, height: 20, borderRadius: "50%",
-                  background: "var(--primary)", color: "#fff",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  border: "2px solid var(--surface)", cursor: "pointer",
-                }}
-               aria-label="Change profile photo">
-                <i className="ti ti-camera" style={{ fontSize: 10 }} />
-              </button>
-            )}
+            {/* Any signed-in user manages their own photo; only editing profile details is permission-gated. */}
+            <button
+              type="button"
+              onClick={() => setShowPhotoModal(true)}
+              suppressHydrationWarning
+              title="Change profile photo"
+              style={{
+                position: "absolute", bottom: -2, right: -2,
+                width: 20, height: 20, borderRadius: "50%",
+                background: "var(--primary)", color: "#fff",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                border: "2px solid var(--surface)", cursor: "pointer",
+              }}
+             aria-label="Change profile photo">
+              <i className="ti ti-camera" style={{ fontSize: 10 }} />
+            </button>
           </div>
           <div>
             <div className="page-title">My profile</div>

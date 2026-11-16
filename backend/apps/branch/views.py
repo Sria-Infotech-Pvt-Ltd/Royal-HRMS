@@ -10,11 +10,11 @@ from rest_framework.views import APIView
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
-from apps.accounts.models import AuditLog, User
+from apps.accounts.models import AuditLog
 from apps.branch.models import Branch, City, State
 from apps.branch.serializers import BranchSerializer, CitySerializer, StateSerializer
 from apps.branch.geo import coordinate_errors, location_warnings
-from apps.branch.utils import branch_employee_counts, generate_branch_code
+from apps.branch.utils import branch_assigned_employee_count, branch_employee_counts, generate_branch_code
 
 logger = logging.getLogger(__name__)
 
@@ -282,11 +282,10 @@ class BranchDetailView(APIView):
             return error('Company Code not found.', http_status=status.HTTP_404_NOT_FOUND)
         code = branch.branch_code
 
-        # User.branch is a free-text field, not a FK to Branch, so deleting a
-        # Branch row never raises ProtectedError on its account — this explicit
-        # count is the only thing that actually blocks deletion while employees
-        # are still assigned to it.
-        employee_count = User.objects.filter(branch__iexact=branch.branch_name).count()
+        # User.branch_fk is SET_NULL (and User.branch is free text), so deleting a Branch row never
+        # raises ProtectedError on an employee's account — this explicit count is the only thing that
+        # actually blocks deletion while employees are still assigned to it.
+        employee_count = branch_assigned_employee_count(branch)
         if employee_count:
             return error(
                 f'Cannot delete branch "{code}" — {employee_count} employee'

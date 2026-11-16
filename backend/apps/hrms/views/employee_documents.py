@@ -13,6 +13,8 @@ from ..serializers import (
     EmployeeDocumentSubmissionSerializer,
 )
 
+from ..services_onboarding_documents import merge_with_onboarding_documents
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,9 +29,12 @@ class EmployeeDocumentSubmissionListCreateView(APIView):
 
     def get(self, request):
         queryset = EmployeeDocumentSubmission.objects.filter(employee=request.user)
-        page_obj, paginator = paginate(queryset, request, default_page_size=20)
-        serializer = EmployeeDocumentSubmissionSerializer(page_obj.object_list, many=True)
-        return success('Document submissions retrieved.', paginated_data(paginator, page_obj, serializer.data))
+        # Documents uploaded during onboarding live in a different table; merge them in (read-only)
+        # so the employee sees everything they have ever submitted.
+        submission_rows = EmployeeDocumentSubmissionSerializer(queryset, many=True).data
+        rows = merge_with_onboarding_documents(request.user, submission_rows)
+        page_obj, paginator = paginate(rows, request, default_page_size=20)
+        return success('Document submissions retrieved.', paginated_data(paginator, page_obj, list(page_obj.object_list)))
 
     def post(self, request):
         serializer = EmployeeDocumentSubmissionCreateSerializer(data=request.data)

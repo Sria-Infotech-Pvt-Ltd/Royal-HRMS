@@ -1,6 +1,7 @@
 "use client";
 
 import { avatarColor, initials, timeAgo, CAT_BADGE, CAT_LABEL, type Announcement } from "./_data";
+import { AnnouncementMediaPreview } from "./AnnouncementMedia";
 
 const BODY_PREVIEW = 220;
 
@@ -89,6 +90,9 @@ export default function AnnouncementCard({ ann, onOpen, onEdit, onDelete, onTogg
         {ann.body.length > BODY_PREVIEW && (
           <span className="ann-read-more">Read more</span>
         )}
+
+        {/* ── Picture and attachment counts ─────────────────── */}
+        <AnnouncementMediaPreview attachments={ann.attachments} links={ann.links} />
 
         {/* ── Footer ────────────────────────────────────────── */}
         <div className="ann-card-footer">

@@ -96,6 +96,11 @@ export interface Announcement {
   is_pinned:  boolean;
   posted_by:  string | null;
   created_at: string;
+  /** How many OTHER announcements this person can see, so a pinned post cannot silently hide newer ones. */
+  more_count?: number;
+  /** A short-lived address of the announcement's first picture ("" when it has none) and how many attachments and links it has. */
+  image_url?:        string;
+  attachment_count?: number;
 }
 
 export interface BirthdayEmployee {

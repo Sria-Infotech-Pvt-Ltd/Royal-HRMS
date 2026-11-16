@@ -34,7 +34,10 @@ export default function ConfirmModal({ title, body, confirmLabel, danger, saving
   return (
     <div
       className="modal-overlay open"
-      style={{ zIndex: 1010 }}
+      // Above .modal-overlay (1200, globals.css): this dialog usually opens FROM
+      // another modal (e.g. "Remove this document?" inside the Hire wizard).
+      // At 1010 it rendered behind that modal, invisible, so Delete seemed dead.
+      style={{ zIndex: 1300 }}
       onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
       onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) onCancel(); }}
     >

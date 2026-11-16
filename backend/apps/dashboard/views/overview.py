@@ -746,14 +746,23 @@ class HRLifecycleActionRegisterView(APIView):
 # ─── Shared Announcement (all authenticated users) ───────────────────────────
 
 class SharedAnnouncementView(APIView):
+    """The dashboard announcement card: the first announcement THIS person may see (pinned first, then newest), plus how many
+    other visible ones there are. It applies the same audience rule as the Announcements page. It used to return the newest row
+    of the whole table, whoever it was for: another branch's post could be shown, and the post made for the viewer hidden behind it."""
     permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
-        from apps.announcements.models import Announcement
+        from apps.announcements.services_announcements_visibility import visible_announcements
 
-        ann = Announcement.objects.select_related('posted_by').first()
+        from apps.announcements.models import AnnouncementAttachment
+        from apps.announcements.serializers import AnnouncementAttachmentSerializer
+
+        visible = visible_announcements(request.user).order_by('-is_pinned', '-created_at', '-id')
+        ann = visible.select_related('posted_by').first()
         if ann is None:
             return success('No announcements found.', data=None)
+        attachments = list(ann.attachments.all())
+        first_image = next((a for a in attachments if a.attachment_type == AnnouncementAttachment.TYPE_IMAGE), None)
 
         return success('Latest announcement retrieved.', data={
             'id':         ann.id,
@@ -764,6 +773,11 @@ class SharedAnnouncementView(APIView):
             'is_pinned':  ann.is_pinned,
             'posted_by':  ann.posted_by.full_name if ann.posted_by else None,
             'created_at': ann.created_at.isoformat(),
+            # Lets the card say "N more" so a pinned post cannot silently hide newer ones.
+            'more_count': visible.exclude(pk=ann.pk).count(),
+            # A picture for the card (a short-lived signed address) and how many attachments/links the announcement has.
+            'image_url':        AnnouncementAttachmentSerializer(first_image).data['url'] if first_image else '',
+            'attachment_count': len(attachments) + len(ann.links or []),
         })
 
 

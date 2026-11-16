@@ -45,11 +45,21 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
 
   if (existing) {
     return (
-      <div className="flex items-center gap-2" style={{ fontSize: 12 }}>
-        <span className="badge badge-success"><i className="ti ti-circle-check" /> Uploaded</span>
-        <span style={{ color: "var(--on-variant)" }} title={existing.file_name}>
-          {existing.file_name.length > 22 ? `${existing.file_name.slice(0, 19)}…` : existing.file_name}
-        </span>
+      // Two groups that wrap as whole units: [badge + filename] and [actions].
+      // Without this, the row could neither shrink nor wrap, so in a narrow grid
+      // column (or at 125%/150% display scaling) the buttons spilled into the
+      // neighbouring column. The filename is the only part that shrinks (ellipsis).
+      <div className="flex items-center" style={{ fontSize: 12, flexWrap: "wrap", gap: 6, minWidth: 0, maxWidth: "100%" }}>
+        <div className="flex items-center gap-2" style={{ flex: "1 1 120px", minWidth: 0 }}>
+          <span className="badge badge-success" style={{ flexShrink: 0, whiteSpace: "nowrap" }}><i className="ti ti-circle-check" /> Uploaded</span>
+          <span
+            style={{ color: "var(--on-variant)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            title={existing.file_name}
+          >
+            {existing.file_name}
+          </span>
+        </div>
+        <div className="flex items-center" style={{ gap: 6, flexShrink: 0, whiteSpace: "nowrap" }}>
         {existing.file_url && (
           <a href={existing.file_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" title={`View ${label}`}>
             <i className="ti ti-eye" /> View
@@ -75,6 +85,7 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
             <i className="ti ti-trash" />
           </button>
         )}
+        </div>
         <input ref={inputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={handleFile} />
       </div>
     );

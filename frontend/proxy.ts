@@ -139,8 +139,12 @@ export function proxy(request: NextRequest) {
   const isActivatePage = pathname.startsWith("/activate");
   // The candidate's one-time onboarding link is opened signed out too; the page exchanges it for a limited session.
   const isOnboardingStartPage = pathname.startsWith("/onboarding/start/");
+  // Admin-triggered password reset is reached signed out too — the
+  // employee's existing session was invalidated when HR reset it, and
+  // this page validates its own one-time token against the backend.
+  const isAdminResetPage = pathname.startsWith("/reset-password/");
 
-  if (!isAuthenticated && !isLoginPage && !isActivatePage && !isOnboardingStartPage) {
+  if (!isAuthenticated && !isLoginPage && !isActivatePage && !isOnboardingStartPage && !isAdminResetPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

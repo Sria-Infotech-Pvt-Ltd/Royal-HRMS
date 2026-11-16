@@ -324,6 +324,26 @@ class DocumentUploadTests(HireWizardTestCase):
         self.assertEqual(del_resp.status_code, 200)
         self.assertFalse(HireActionDocument.objects.filter(pk=doc_id).exists())
 
+    def test_view_link_streams_the_file(self):
+        # file_url (the wizard's "View" link) points at the detail URL — it used to answer 405 to GET.
+        resp = self.client.post(
+            reverse('hire-action-document-list', args=[self.action.id]),
+            {'document_type': 'pan_card', 'file': _png_file('pan.png')}, format='multipart',
+        )
+        doc_id = resp.data['data']['id']
+        self.assertTrue(resp.data['data']['file_url'].endswith(f'/documents/{doc_id}/'))
+        remote = type('Remote', (), {
+            'headers': {'content-type': 'image/png'},
+            'raise_for_status': lambda self: None,
+            'iter_content': lambda self, chunk_size: iter([_VALID_PNG]),
+        })()
+        with patch.object(ImageKitStorage, 'url', return_value='https://storage.test/pan.png'), \
+                patch('apps.accounts.views_hire.http_req.get', return_value=remote):
+            view_resp = self.client.get(reverse('hire-action-document-detail', args=[self.action.id, doc_id]))
+        self.assertEqual(view_resp.status_code, 200)
+        self.assertEqual(view_resp['Content-Type'], 'image/png')
+        self.assertEqual(b''.join(view_resp.streaming_content), _VALID_PNG)
+
 
 class HireCompletionRequiredFieldTests(HireWizardTestCase):
     """Regression tests for the "fake completion gate" bug — every one of

@@ -54,6 +54,21 @@ class ManagerResolutionTests(TestCase):
         self.assertEqual(resolve_manager_with_source(loner).source, SOURCE_NONE)
         self.assertIsNone(resolve_manager(self.chief))  # the chief of their own unit is not their own manager
 
+    def test_a_units_own_chief_walks_up_to_the_parent_units_chief(self):
+        # Regression: resolve_employee_org_unit_chief used to stop at the
+        # FIRST unit with any chief placed, even when that chief was the
+        # employee being resolved for — so a unit's own head always came
+        # back with no reporting manager, even when their parent unit's
+        # head was right there to report to.
+        parent_unit = OrgUnit.objects.create(name='Zeta Division')
+        self.unit.parent = parent_unit
+        self.unit.save(update_fields=['parent'])
+        grand_chief = make_user('grandchief@test.com', employee_id='EMPRL006', branch='Kondapur', department='')
+        _seat(parent_unit, 'Head of Division', grand_chief, is_chief=True, can_manage_team=True)
+
+        resolution = resolve_manager_with_source(self.chief)
+        self.assertEqual((resolution.user, resolution.source), (grand_chief, SOURCE_ORG_CHART))
+
     def test_auto_assign_works_when_the_legacy_department_text_is_blank(self):
         # The root cause of "Auto-assign leaves nobody": it required `department`, blank for everyone hired onto a Position.
         changed = _auto_assign_managers(self.employee)

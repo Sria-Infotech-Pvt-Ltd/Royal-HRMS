@@ -20,22 +20,20 @@ _ANNOUNCEMENT_EMAIL_BATCH_SIZE = 90
 
 
 def _resolve_recipients(announcement) -> list[str]:
-    """Same recipient rules the synchronous path used before — verbatim,
-    just relocated here so the task is the one place this logic lives."""
+    """Who the announcement e-mail goes to: only Active employees, by the same rule the employee directory uses (onboarding
+    complete AND the account activated). Invited or still-onboarding people, and deactivated accounts, get nothing."""
     from apps.accounts.models import User
     from apps.announcements.models import Announcement
 
+    active_employees = User.objects.filter(is_active=True).filter(User.onboarded_q())
     if announcement.visibility == Announcement.VISIBILITY_ALL:
-        return list(User.objects.filter(is_active=True).exclude(
-            email=''
-        ).values_list('email', flat=True))
+        return list(active_employees.exclude(email='').values_list('email', flat=True))
     if announcement.visibility == Announcement.VISIBILITY_DEPARTMENT and announcement.target_org_unit_id:
         from apps.accounts.services_approval import filter_users_by_org_unit
-        users = filter_users_by_org_unit(User.objects.filter(is_active=True), announcement.target_org_unit)
+        users = filter_users_by_org_unit(active_employees, announcement.target_org_unit)
         return list(users.exclude(email='').values_list('email', flat=True))
     if announcement.visibility == Announcement.VISIBILITY_BRANCH and announcement.target_branch_id:
-        return list(User.objects.filter(
-            is_active=True,
+        return list(active_employees.filter(
             branch=announcement.target_branch.branch_name,
         ).exclude(email='').values_list('email', flat=True))
     return []
@@ -54,10 +52,9 @@ def send_announcement_email_task(self, announcement_id: int):
     rather than raised, so a retry can never re-send a batch that already
     went out to its recipients.
     """
-    from django.core.mail import EmailMultiAlternatives
-
-    from apps.accounts.utils import _company_email_wrapper, _get_company_branding, _get_smtp_connection
+    from apps.accounts.utils import _build_message, _company_email_wrapper, _get_company_branding, _get_smtp_connection
     from apps.announcements.models import Announcement
+    from apps.announcements.services_announcement_email import attach_inline_images, build_announcement_email
 
     try:
         try:
@@ -82,7 +79,11 @@ def send_announcement_email_task(self, announcement_id: int):
 
             smtp_connection, from_email, _smtp = _get_smtp_connection()
             subject = f'[Announcement] {announcement.title}'
-            body    = _company_email_wrapper(announcement.body, *_get_company_branding())
+            # The announcement text is escaped (paragraphs and line breaks kept), with its pictures embedded, PDF links and external
+            # links, then put in the branded frame. It is sent as a real HTML message with a plain-text fallback by the shared
+            # builder; passing the HTML as the message's plain body once made mail clients show the markup as text.
+            content   = build_announcement_email(announcement)
+            html_body = _company_email_wrapper(content.body_html, *_get_company_branding())
         except RuntimeError as exc:
             # No active SMTP config — matches the previous synchronous
             # behaviour: log and give up, since retrying immediately won't
@@ -99,14 +100,15 @@ def send_announcement_email_task(self, announcement_id: int):
                 batch     = recipients[i:i + _ANNOUNCEMENT_EMAIL_BATCH_SIZE]
                 batch_num = i // _ANNOUNCEMENT_EMAIL_BATCH_SIZE + 1
                 try:
-                    EmailMultiAlternatives(
-                        subject=subject,
-                        body=body,
-                        from_email=from_email,
+                    message = _build_message(
+                        subject, html_body, from_email,
                         to=[from_email],   # required "to" for RFC compliance
-                        bcc=batch,
                         connection=smtp_connection,
-                    ).send()
+                    )
+                    message.body = content.text                      # plain-text version with the real addresses of links
+                    attach_inline_images(message, content.images)    # fresh parts for every message
+                    message.bcc = batch
+                    message.send()
                     sent_batches += 1
                 except Exception as exc:
                     failed_batches += 1

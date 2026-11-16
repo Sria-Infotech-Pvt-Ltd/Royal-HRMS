@@ -24,7 +24,7 @@ const DOC_ITEMS: DocItem[] = [
   { key: "experience_letter", label: "Experience Letter", required: false, category: "Education & Experience" },
   { key: "cancelled_cheque", label: "Cancelled Cheque",   required: true,  category: "Financial" },
   { key: "latest_payslips",  label: "Latest Payslips",    required: false, category: "Financial" },
-  { key: "signed_offer_letter", label: "Signed Offer Letter", required: true, category: "Onboarding" },
+  { key: "signed_offer_letter", label: "Signed Offer Letter", required: false, category: "Onboarding" },
   { key: "address_proof",    label: "Address Proof",      required: false, category: "Onboarding" },
 ];
 

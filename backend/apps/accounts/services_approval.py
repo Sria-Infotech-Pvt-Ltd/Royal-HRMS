@@ -105,24 +105,27 @@ def resolve_employee_org_unit_chief(employee: 'User', *, chain: 'list | None' = 
     today = timezone.localdate()
     # `chain` and `chief_cache` are optional and only passed by the employee directory, which resolves a whole page of people:
     # the unit chain comes from the placement it already loaded, and each unit's chief is looked up once per page, not per row.
+    # The cache stores each unit's actual chief (a plain org-unit fact, valid for whoever asks) — the "is this the employee
+    # asking?" self-check happens on every call, outside the cache, so a unit's own chief still correctly walks up to find
+    # THEIR OWN approver in the parent unit instead of being treated as a dead end.
     for unit_id in (chain if chain is not None else resolve_employee_org_unit_chain(employee)):
         if chief_cache is not None and unit_id in chief_cache:
-            if chief_cache[unit_id] is not None:
-                return chief_cache[unit_id]
-            continue
-        chief_placement = (
-            Placement.objects.filter(
-                position__org_unit_id=unit_id, position__is_chief=True,
-                effective_from__lte=today,
+            candidate = chief_cache[unit_id]
+        else:
+            chief_placement = (
+                Placement.objects.filter(
+                    position__org_unit_id=unit_id, position__is_chief=True,
+                    effective_from__lte=today,
+                )
+                .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+                .select_related('employee')
+                .first()
             )
-            .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
-            .select_related('employee')
-            .first()
-        )
-        if chief_cache is not None:
-            chief_cache[unit_id] = chief_placement.employee if chief_placement else None
-        if chief_placement:
-            return chief_placement.employee
+            candidate = chief_placement.employee if chief_placement else None
+            if chief_cache is not None:
+                chief_cache[unit_id] = candidate
+        if candidate is not None and candidate.pk != employee.pk:
+            return candidate
     return None
 
 

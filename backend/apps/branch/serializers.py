@@ -104,6 +104,16 @@ class BranchSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'Company Code name may only contain letters, numbers, spaces, & - and . characters.'
             )
+        # Employees are matched to a branch by its NAME in many places, so two branches sharing a name make every
+        # one of those matches ambiguous (and showed up as "duplicate branches"). An unchanged name on an existing
+        # branch is let through so a branch that is already one of a duplicate pair can still be edited or fixed.
+        if self.instance is None or self.instance.branch_name.strip().lower() != value.lower():
+            clash = Branch.objects.filter(branch_name__iexact=value).first()
+            if clash is not None:
+                raise serializers.ValidationError(
+                    f'A Company Code named "{clash.branch_name}" already exists ({clash.branch_code}). '
+                    'To change it, edit that Company Code instead of adding a new one.'
+                )
         return value
 
     def validate(self, data):

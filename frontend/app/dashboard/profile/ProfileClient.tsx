@@ -110,23 +110,22 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       <div className="card mb-16" style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 20 }}>
         <div style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
           <Avatar text={ini} size={72} photoUrl={photoUrl} />
-          {canEditOwnProfile && (
-            <button
-              type="button"
-              onClick={() => setShowPhotoModal(true)}
-              suppressHydrationWarning
-              title="Change profile photo"
-              style={{
-                position: "absolute", bottom: -2, right: -2,
-                width: 26, height: 26, borderRadius: "50%",
-                background: "var(--primary)", color: "#fff",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                border: "2px solid #fff", cursor: "pointer",
-              }}
-             aria-label="Change profile photo">
-              <i className="ti ti-camera" style={{ fontSize: 12 }} />
-            </button>
-          )}
+          {/* Any signed-in user manages their own photo; only editing profile details is permission-gated. */}
+          <button
+            type="button"
+            onClick={() => setShowPhotoModal(true)}
+            suppressHydrationWarning
+            title="Change profile photo"
+            style={{
+              position: "absolute", bottom: -2, right: -2,
+              width: 26, height: 26, borderRadius: "50%",
+              background: "var(--primary)", color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: "2px solid #fff", cursor: "pointer",
+            }}
+           aria-label="Change profile photo">
+            <i className="ti ti-camera" style={{ fontSize: 12 }} />
+          </button>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: "var(--on-bg)" }}>
