@@ -5649,3 +5649,16 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Tests:** `hrms/tests_wfh_location_source.py` (7), `attendance/tests_wfh_clock_in_radius.py` (4); `geocode.test.ts` (4), `WfhAddressSearch.test.tsx` (3); `WfhRequestModal.test.tsx` expectation updated for the two new fields. Existing WFH, geofencing, face-verification and query-efficiency tests still pass. `tsc`, `eslint` and `makemigrations --check` clean.
 
 **Open:** the approval screens (Approvals, WFH detail modal) do not yet show "Looked up from address"; the accuracy of a geocoded point is only as good as OpenStreetMap's data, which is why the radius is larger.
+
+
+## Fix: WFH punch-in always failed because the web clock sent no location (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Test: `hooks/useClockWidget.test.tsx` (3 pass); `tsc` and `eslint` clean. Not checked on a real device.
+
+**Symptom:** an employee with an approved WFH request could not punch in on the server.
+
+**Cause:** `prepareLocation` in `hooks/useClockWidget.ts` returned immediately for every mode except `office`, so a `wfh` punch (the clock widget picks `wfh` by itself when today is inside an approved request) went to the server with null latitude/longitude. `_validate_wfh` (`attendance/services_geofencing.py`) requires coordinates and refuses with "Your location is required to clock in at this branch...". Both `ClockWidget.tsx` and `components/ClockInButton.tsx` use this hook.
+
+**Fix:** `LOCATION_CHECKED_MODES = ["office", "wfh"]`: both modes now capture the device location and run the read-only `geofence-check` before the punch. Other modes are unchanged. The permission-denied toast names the mode.
+
+**Reminder:** the server must run `migrate hrms` and `migrate notifications` after deploying the WFH location_source and HR Help notification work, or WFH requests and punches fail with a missing-column 500 (seen locally).

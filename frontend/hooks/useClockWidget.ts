@@ -15,6 +15,10 @@ import type { TodaySession, AttendanceMode, PunchLocation } from "@/types/attend
 // `data` carries the lockout payload ({ blocked, retry_after_seconds }) on a face-verification lockout 403.
 type NormalisedError = { message?: string; data?: unknown };
 
+// Modes the server checks a location for: an office punch against the branch, a WFH punch against the approved request's saved
+// point. A WFH punch sent without coordinates is refused ("Your location is required..."), so both must capture one.
+const LOCATION_CHECKED_MODES: ReadonlyArray<AttendanceMode> = ["office", "wfh"];
+
 function parseBrowser(): string {
   if (typeof navigator === "undefined") return "Unknown";
   const ua = navigator.userAgent;
@@ -105,11 +109,12 @@ export function useClockWidget() {
   // Mirrors the order the voice flow enforces in conversation_clock_in_face.
   // start_voice_clock_punch (geofence check, then facial proof): callers
   // must call this first and only proceed to the face step (or straight to
-  // punch()) once `ok` comes back true. Modes other than "office" don't
-  // carry a geofence, so they pass through with no location captured.
+  // punch()) once `ok` comes back true. Office and WFH punches carry a
+  // location check; the other modes have no geofence and pass through with
+  // no location captured.
   const prepareLocation = useCallback(
     async (attendanceMode: AttendanceMode): Promise<{ ok: boolean; location: PunchLocation | null }> => {
-      if (attendanceMode !== "office") return { ok: true, location: null };
+      if (!LOCATION_CHECKED_MODES.includes(attendanceMode)) return { ok: true, location: null };
 
       if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
         showToast("Your browser does not support location access.", "error");
@@ -127,7 +132,7 @@ export function useClockWidget() {
         const isPermissionDenied = (geoErr as GeolocationPositionError).code === 1;
         showToast(
           isPermissionDenied
-            ? "Location access is required for office punch in/out. Please allow location in your browser settings."
+            ? `Location access is required for ${attendanceMode === "wfh" ? "work-from-home" : "office"} punch in/out. Please allow location in your browser settings.`
             : "Unable to determine your location. Please check your device's location settings and try again.",
           "error"
         );
