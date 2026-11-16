@@ -12,10 +12,10 @@
 // "View expense policy" looks for a real Document Center policy whose title
 // mentions "expense" (category=policy, same endpoint PoliciesAssetsTab
 // already reads) and links straight to it; if none has been uploaded yet it
-// falls back to a plain link into the shared Document Center
-// (/dashboard/documents) rather than the ESS "Documents" tab — that tab is
-// now MyDocumentsTab, a personal document-verification screen with no
-// "policy" category, so it can no longer stand in for browsing policies.
+// says so when none has been uploaded yet. It never falls back to the
+// company Document Center (/dashboard/documents), which is not an employee's
+// own area, nor to the ESS "Documents" tab (MyDocumentsTab, a personal
+// document-verification screen with no "policy" category).
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
@@ -174,9 +174,9 @@ export default function ExpensesTab() {
                 <i className="ti ti-file-text" /> View expense policy
               </a>
             ) : (
-              <a href="/dashboard/documents" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }}>
-                <i className="ti ti-file-text" /> View expense policy
-              </a>
+              <p style={{ margin: 0, fontSize: 12, color: "var(--on-variant)" }}>
+                <i className="ti ti-file-text" /> The expense policy has not been published yet.
+              </p>
             )}
           </div>
         </div>

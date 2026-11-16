@@ -5819,3 +5819,12 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change:** `ess/_components/HomePayslipsPanel.tsx`: the **Form 16** button now downloads `GET /payroll/my-payslips/form16/<fy>/pdf/` (the same endpoint as the Tax tab) for the previous financial year; `HomeTab.tsx` passes `form16FyStartYear` (the previous FY's start year, or `null` when that year has no payslip, which hides the button) in place of the old `showForm16` flag. Employment letter was already a download. The panel now has no link to `/dashboard/documents`.
 
 **Still pointing employees at the Document Center (not changed, owner to decide):** the "View expense policy" fallback in `ess/_components/ExpensesTab.tsx` (only when no expense policy has been uploaded), and the "Documents" quick link in `dashboard/_components/EmployeeDashboard.tsx`.
+
+
+## Employee screens no longer link to the Document Center (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. 243 dashboard tests pass; `tsc`, `eslint` clean; `npm run build` run before the push. No new test; not checked in a browser. Follows the entry above.
+
+**Change:** `ess/_components/ExpensesTab.tsx`: when no expense policy has been uploaded, "View expense policy" is replaced by the text "The expense policy has not been published yet." (it used to link to `/dashboard/documents`). `dashboard/_components/EmployeeDashboard.tsx` (not imported by any page at the moment): its Documents quick link now points to `/dashboard/ess?tab=documents`, the employee's own documents tab.
+
+**Employment letter check (owner reported it still landed on the Document Center):** at HEAD the Home button is a plain download link to `/api/employees/me/employment-letter/`; calling that endpoint for the local test employee returns 200, `application/pdf`, `Content-Disposition: attachment`, no redirect; `proxy.ts` has no rule that sends it to the Document Center. The report most likely comes from a browser still running an older build (dev server not reloaded, or the live server not yet deployed). Not reproduced.
