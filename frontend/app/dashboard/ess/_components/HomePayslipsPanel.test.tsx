@@ -1,39 +1,26 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
+import { API } from "@/lib/api/endpoints";
+import { API_BASE } from "@/lib/config";
 import HomePayslipsPanel from "./HomePayslipsPanel";
 
-const showToast = vi.fn();
-vi.mock("@/components/ToastProvider", () => ({ useToast: () => ({ showToast }) }));
-vi.mock("../../my-requests/_components/EmployeeRequestModal", () => ({
-  default: ({ onClose, onSubmitted }: { onClose: () => void; onSubmitted: () => void }) => (
-    <div role="dialog" aria-label="employment-letter-request">
-      <button onClick={onSubmitted}>submit</button>
-      <button onClick={onClose}>close</button>
-    </div>
-  ),
-}));
-
-afterEach(() => { cleanup(); showToast.mockReset(); });
+afterEach(() => cleanup());
 
 const panel = <HomePayslipsPanel payslips={[]} showForm16={true} onViewAll={vi.fn()} />;
 
 describe("HomePayslipsPanel: Employment letter", () => {
-  it("opens the request form instead of going to the Document Center", () => {
+  it("downloads the employment letter PDF, the same one the Employment tab offers", () => {
     render(panel);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    const letter = screen.getByRole("button", { name: /Employment letter/ });
-    expect(letter.getAttribute("href")).toBeNull();
-    fireEvent.click(letter);
-    expect(screen.getByRole("dialog", { name: "employment-letter-request" })).toBeTruthy();
+    const letter = screen.getByRole("link", { name: /Employment letter/ });
+    expect(letter.getAttribute("href")).toBe(`${API_BASE}${API.employees.myEmploymentLetterPdf}`);
+    expect(letter.getAttribute("target")).toBeNull();
   });
 
-  it("closes the form and confirms once the request is sent", () => {
+  it("does not open a request form or the Document Center for the letter", () => {
     render(panel);
-    fireEvent.click(screen.getByRole("button", { name: /Employment letter/ }));
-    fireEvent.click(screen.getByRole("button", { name: "submit" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(showToast).toHaveBeenCalledWith("Your employment letter request was sent to HR.", "success");
+    expect(screen.getByRole("link", { name: /Employment letter/ }).getAttribute("href")).not.toContain("/dashboard/documents");
   });
 
   it("keeps Form 16 as a link to the Document Center", () => {

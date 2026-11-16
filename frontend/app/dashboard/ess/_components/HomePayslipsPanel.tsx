@@ -3,18 +3,14 @@
 // Right-column "Payslips & documents" panel. Payslip rows come from the same
 // /payroll/my-payslips/ fetch HomeTab.tsx already makes for the stat tile —
 // this just renders the most recent few plus a download link. "Form 16" and
-// "Employment letter" are company-issued documents with no dedicated
-// endpoint/document-type in this repo. Form 16 links to the shared Document
-// Center (/dashboard/documents) rather than a fabricated direct-download URL;
-// it intentionally does NOT route into the ESS "Documents" tab — that tab is
-// MyDocumentsTab, a personal "submit my own document for verification" screen.
-// The employment letter is something HR issues on request, so its button opens
-// the "Employment letter" request form (an HR Help document request) instead
-// of an empty Document Center.
+// "Employment letter" are company-issued documents. The employment letter is a real PDF generated on demand for the signed-in
+// employee (GET /employees/me/employment-letter/ - the same download the Employment tab offers), so its button
+// downloads it. Form 16 has no such endpoint, so it links to the shared Document Center (/dashboard/documents) rather than a
+// fabricated URL; it intentionally does NOT route into the ESS "Documents" tab - that tab is MyDocumentsTab, a personal
+// "submit my own document for verification" screen.
 
-import { useState } from "react";
-import { useToast } from "@/components/ToastProvider";
-import EmployeeRequestModal from "../../my-requests/_components/EmployeeRequestModal";
+import { API } from "@/lib/api/endpoints";
+import { API_BASE } from "@/lib/config";
 
 interface HomePayslipRow {
   cycle:       string;
@@ -33,8 +29,6 @@ interface Props {
 }
 
 export default function HomePayslipsPanel({ payslips, showForm16, onViewAll }: Props) {
-  const { showToast } = useToast();
-  const [isLetterRequestOpen, setIsLetterRequestOpen] = useState(false);
   return (
     <div className="card">
       <div className="card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
@@ -78,16 +72,11 @@ export default function HomePayslipsPanel({ payslips, showForm16, onViewAll }: P
             <i className="ti ti-file-invoice" /> Form 16
           </a>
         )}
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsLetterRequestOpen(true)} suppressHydrationWarning>
-          <i className="ti ti-mail" /> Employment letter
-        </button>
+        {/* Content-Disposition: attachment makes the browser download the PDF, so no target="_blank" is needed. */}
+        <a href={`${API_BASE}${API.employees.myEmploymentLetterPdf}`} className="btn btn-ghost btn-sm">
+          <i className="ti ti-download" /> Employment letter
+        </a>
       </div>
-      {isLetterRequestOpen && (
-        <EmployeeRequestModal
-          onClose={() => setIsLetterRequestOpen(false)}
-          onSubmitted={() => { setIsLetterRequestOpen(false); showToast("Your employment letter request was sent to HR.", "success"); }}
-        />
-      )}
     </div>
   );
 }

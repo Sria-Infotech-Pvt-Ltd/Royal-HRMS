@@ -5799,3 +5799,12 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change:** `ess/_components/HomePayslipsPanel.tsx`: the Employment letter button now opens `EmployeeRequestModal` (Employment letter is its first and default type) and shows a toast when the request is sent; the request then appears under Requests and in HR's HR Help list (`topic=document_request`, i.e. under the Approvals "Other" topics, which have no staff screen since the Profile corrections row replaced the HR Help queue: see the earlier entry). Form 16 still links to the Document Center.
 
 **Open:** HR still has no screen for non-profile HR Help tickets such as this one; decide where staff should answer them.
+
+
+## Correction: the ESS Home "Employment letter" button downloads the real PDF (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Test: `ess/_components/HomePayslipsPanel.test.tsx` (3, rewritten); ESS tests pass; `tsc`, `eslint` clean; `npm run build` run before the push. The PDF renderer was run for the local test employee (a valid PDF came back); the click itself was not checked in a browser. **Replaces the previous entry, which was wrong.**
+
+**What was wrong with the previous entry:** it said no employment-letter endpoint exists and made the Home button open the HR Help request form. That came from a stale code comment. The endpoint exists: `GET /employees/me/employment-letter/` (`accounts/views/my_profile.py::MyEmploymentLetterPdfView`, `accounts/services_employment_letter.py`, reportlab, built from the employee record and the Company letterhead), and `EmploymentTab.tsx` already offers it as a download.
+
+**Final change:** `ess/_components/HomePayslipsPanel.tsx`: "Employment letter" is a download link to that endpoint (same `API_BASE` + `API.employees.myEmploymentLetterPdf` as the Employment tab); no request form, no toast. Form 16 still links to the Document Center. The earlier note about HR having no screen for document-request tickets still stands for other HR Help topics, but this button no longer creates one.
