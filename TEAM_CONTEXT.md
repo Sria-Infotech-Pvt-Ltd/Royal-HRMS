@@ -5613,3 +5613,18 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change (`accounts/views/employees_detail.py`, `_update_fields`):** the lock now lets through anyone with `settings.edit` (or a superuser), the same gate the manual employee_id correction uses. HR editors with only `employees.edit` still get 409, now with the message "Only a System Admin can correct it." Resending the unchanged date is never refused. The existing checks are untouched: a new date may not fall before the last working day of a previous employment, and the change is audit-logged (`changes.date_of_joining`, plus an `employee_joining_date_changed` entry when the employee has separations).
 
 **Not done / watch:** nothing recalculates already-processed attendance, leave accrual or payroll for the corrected period; check the attendance calendar and leave balance of the employee after the change. Plain HR users cannot make this correction, so the HR Help ticket needs a System Admin to action it.
+
+
+## Bell notification to HR when an HR Help ticket (e.g. profile correction) is raised (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Tests: `notifications/tests_hr_help_notification.py` (3) and `notificationRoutes.test.ts` (16) pass locally. `makemigrations --check` clean. Not checked in a browser.
+
+**Before:** an employee's HR Help ticket (including "Request profile correction", topic `profile_correction`) appeared in the ESS > HR Help queue but nobody was told it existed.
+
+**Now:** `notifications/signals.py` `_on_hr_help_request_created` (post_save on `hrms.HRHelpRequest`, `created` only, sent on commit) notifies every active user who holds `hr_help.respond` or `settings.edit`, plus superusers, excluding the submitter. These are the same people who see the queue (see the HR Help entry above). Title "New HR Help request: <topic>", `notification_type='hr_help_request'`, `module='system'`, `reference_id='hr-help'`; live push over the websocket as for other notices. A failure is logged and never blocks the ticket. The employee is not notified about their own ticket, and updating a ticket does not notify again.
+
+**Frontend:** `lib/notificationRoutes.ts` opens `/dashboard/ess?tab=hrHelp` for `system` + `hr-help`.
+
+**Migration:** `notifications/0013_hr_help_notification_type.py` (choices only).
+
+**Not done:** the notice is not gated by a per-user notification setting (no matching category), and no email is sent. Resolving a ticket still does not edit the profile and does not notify the employee.

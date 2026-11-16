@@ -31,6 +31,9 @@ describe("notificationRoute", () => {
     expect(notificationRoute({ module: "confirmation", reference_id: "abc" })).toBe("/dashboard/ess?tab=employment")
     expect(notificationRoute({ module: "promotion", reference_id: "abc" })).toBe("/dashboard/ess?tab=employment")
   })
+  it("opens the HR Help queue for a new HR Help ticket notice", () => {
+    expect(notificationRoute({ module: "system", reference_id: "hr-help" })).toBe("/dashboard/ess?tab=hrHelp")
+  })
   it("falls back for a module the app does not know", () => {
     expect(notificationRoute({ module: "brand_new" as never, reference_id: "" })).toBe("/dashboard")
   })
