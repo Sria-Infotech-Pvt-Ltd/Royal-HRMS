@@ -41,7 +41,7 @@ export function notificationRoute(notification: Pick<Notification, "module" | "r
   if (notification.module === "system") {
     const reference = notification.reference_id ?? "";
     if (reference === OWN_PROFILE_REFERENCE) return "/dashboard"; // the employee's own welcome notice opens the dashboard
-    if (reference === HR_HELP_REFERENCE) return "/dashboard/ess?tab=hrHelp"; // a new HR Help ticket opens the HR queue
+    if (reference === HR_HELP_REFERENCE) return "/dashboard/approvals?section=hr_requests"; // a new HR Help ticket opens the staff queue on the Approvals page
     if (reference.startsWith(EMPLOYEE_REFERENCE_PREFIX)) {
       const employeeId = reference.slice(EMPLOYEE_REFERENCE_PREFIX.length).trim();
       if (employeeId) return `/dashboard/employees/${encodeURIComponent(employeeId)}`;

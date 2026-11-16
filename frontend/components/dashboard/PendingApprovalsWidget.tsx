@@ -16,7 +16,7 @@ interface ApprovalRow {
 // HR Help tickets (profile corrections, payroll queries, ...) are not approvals, but they wait for the same people, so they get a row here.
 const HR_HELP_KEY = "hr_help_requests";
 const HR_HELP_ROW: ApprovalRow = {
-  key: HR_HELP_KEY, icon: "ti-help-circle", bg: "rgba(0,106,159,0.12)", color: "var(--info)", label: "HR Help Requests", href: "/dashboard/ess?tab=hrHelp",
+  key: HR_HELP_KEY, icon: "ti-help-circle", bg: "rgba(0,106,159,0.12)", color: "var(--info)", label: "HR Help Requests", href: "/dashboard/approvals?section=hr_requests",
 };
 
 const ROWS: ApprovalRow[] = [

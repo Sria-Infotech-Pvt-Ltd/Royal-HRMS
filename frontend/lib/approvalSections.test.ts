@@ -37,6 +37,15 @@ describe("approvalSectionsFor", () => {
     expect(keys({ canApprove: true, canApproveAttendance: true, canApproveTimesheets: true, canSeePersonnel: true, canApproveFace: true }))
       .toEqual(["overview", "approvals", "attendance", "timesheets", "personnel", "face_registration"]);
   });
+
+  it("gives the HR Requests tab to people who answer HR Help tickets, last, and only them", () => {
+    expect(keys({ ...NONE, canRespondHrHelp: true })).toEqual(["overview", "hr_requests"]);
+    expect(keys({ ...NONE, canApprove: true, canApproveFace: true })).not.toContain("hr_requests");
+    const everything = { canApprove: true, canApproveAttendance: true, canApproveTimesheets: true, canSeePersonnel: true, canApproveFace: true, canRespondHrHelp: true };
+    expect(keys(everything).at(-1)).toBe("hr_requests");
+    expect(approvalSectionsFor({ ...NONE, canRespondHrHelp: true }).find(section => section.key === "hr_requests"))
+      .toEqual({ key: "hr_requests", label: "HR Requests", icon: "ti-headset" });
+  });
 });
 
 describe("sectionFromLink", () => {

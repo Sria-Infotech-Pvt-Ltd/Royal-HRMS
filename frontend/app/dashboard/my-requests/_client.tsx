@@ -65,7 +65,7 @@ export default function MyRequestsClient({ initialTab }: Props) {
   const { data: wfhRaw,        loading: wfhLoading,        error: wfhError } =
     useFetch<PaginatedResponse<WorkFromHomeRequest>>(`${API.workFromHome.requests}?page_size=100`);
   const { data: hrHelpRaw,     loading: hrHelpLoading,     error: hrHelpError,     refetch: refetchHrHelp } =
-    useFetch<PaginatedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=100`);
+    useFetch<PaginatedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=100&mine=1`);
 
   const allItems: MyRequestItem[] = useMemo(() => [
     ...(leaveRaw?.results ?? []).map(leaveToMyItem),

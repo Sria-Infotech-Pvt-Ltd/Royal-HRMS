@@ -1,34 +1,15 @@
 "use client";
 
-// HR Help — self-service support requests. Every employee can submit a
-// request and see their own; hr_help.respond holders (system_admin/hr_admin/
-// branch_admin) additionally get a queue of every request with a status/
-// response action, reusing the same list endpoint (GET /hr-help/requests/
-// scopes itself server-side — see HRHelpRequestListCreateView.get).
+// HR Help — self-service support requests: submit a request and follow your own. The staff queue (every employee's requests,
+// with the status / response actions) lives on the Approvals page, under HR Requests — see approvals/_components/HrRequestsTab.tsx.
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
-import { usePermission } from "@/hooks/usePermission";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { isUnrestrictedUser } from "@/lib/auth";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import type { HrHelpRequest } from "@/types/hrHelp";
+import HrHelpRow from "./HrHelpRow";
 
-interface ApiHrHelpRequest {
-  id: string;
-  request_ref: string;
-  topic: string;
-  topic_display: string;
-  priority: string;
-  priority_display: string;
-  message: string;
-  status: "open" | "in_progress" | "resolved";
-  status_display: string;
-  response: string;
-  submitted_by_name: string;
-  assigned_to_name: string;
-  created_at: string;
-}
 interface PagedResponse<T> { results: T[]; count: number }
 
 const TOPICS = [
@@ -44,18 +25,9 @@ const PRIORITIES = [
   { value: "normal", label: "Normal" },
   { value: "high", label: "High" },
 ];
-const STATUS_BADGE: Record<string, string> = {
-  open: "badge-warn", in_progress: "badge-info", resolved: "badge-success",
-};
-
-const fmtDateTime = (d: string) =>
-  new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-
 export default function HrHelpTab() {
-  const currentUser = useCurrentUser();
-  // System Admin (superuser or settings.edit) sees every ticket, matching the server.
-  const canRespond = usePermission("hr_help.respond") || isUnrestrictedUser(currentUser);
-  const { data: page, loading, error, refetch } = useFetch<PagedResponse<ApiHrHelpRequest>>(`${API.hrHelp.list}?page_size=100`);
+  // mine=1: only this person's own tickets, even for staff who can see everyone's (that queue is on the Approvals page).
+  const { data: page, loading, error, refetch } = useFetch<PagedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=100&mine=1`);
   const requests = page?.results ?? [];
 
   const [topic, setTopic] = useState("payroll_query");
@@ -130,7 +102,7 @@ export default function HrHelpTab() {
 
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-list-details" /> {canRespond ? "HR request queue" : "My HR requests"}</div>
+          <div className="card-title"><i className="ti ti-list-details" /> My HR requests</div>
         </div>
         {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
         {loading ? (
@@ -150,17 +122,15 @@ export default function HrHelpTab() {
               <thead>
                 <tr>
                   <th>Ref</th>
-                  {canRespond && <th>From</th>}
                   <th>Topic</th>
                   <th>Priority</th>
                   <th>Status</th>
                   <th>Submitted</th>
-                  {canRespond && <th>Action</th>}
                 </tr>
               </thead>
               <tbody>
                 {requests.map(r => (
-                  <HrHelpRow key={r.id} entry={r} canRespond={canRespond} onUpdated={refetch} />
+                  <HrHelpRow key={r.id} entry={r} canRespond={false} onUpdated={refetch} />
                 ))}
               </tbody>
             </table>
@@ -197,79 +167,5 @@ function SupportStatusCard({ openCount }: { openCount: number }) {
         </p>
       </div>
     </div>
-  );
-}
-
-function HrHelpRow({ entry, canRespond, onUpdated }: { entry: ApiHrHelpRequest; canRespond: boolean; onUpdated: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const [status, setStatus] = useState(entry.status);
-  const [response, setResponse] = useState(entry.response);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function save() {
-    setErr(null);
-    if (status === "resolved" && !response.trim()) {
-      setErr("Enter a response explaining the resolution before marking this request resolved.");
-      return;
-    }
-    setSaving(true);
-    try {
-      await clientApi.patch(API.hrHelp.detail(entry.id), { status, response });
-      onUpdated();
-      setExpanded(false);
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErr(msg ?? "Failed to update request.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <>
-      <tr>
-        <td style={{ fontWeight: 600 }}>{entry.request_ref}</td>
-        {canRespond && <td>{entry.submitted_by_name}</td>}
-        <td>{entry.topic_display}</td>
-        <td>{entry.priority_display}</td>
-        <td><span className={`badge ${STATUS_BADGE[entry.status]}`}>{entry.status_display}</span></td>
-        <td style={{ color: "var(--on-variant)" }}>{fmtDateTime(entry.created_at)}</td>
-        {canRespond && (
-          <td>
-            <button className="btn btn-ghost btn-sm" onClick={() => setExpanded(v => !v)}>
-              {expanded ? "Close" : "Respond"}
-            </button>
-          </td>
-        )}
-      </tr>
-      {expanded && canRespond && (
-        <tr>
-          <td colSpan={7} style={{ background: "var(--bg-mid)" }}>
-            <div style={{ padding: 14 }}>
-              <p style={{ fontSize: 13, marginBottom: 10 }}>{entry.message}</p>
-              {err && <div className="alert alert-error" style={{ marginBottom: 10 }}>{err}</div>}
-              <div className="field-group" style={{ marginBottom: 10, width: 180 }}>
-                <label className="field-label">Status</label>
-                <select className="field-input field-select" value={status} onChange={e => setStatus(e.target.value as ApiHrHelpRequest["status"])}>
-                  <option value="open">Open</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="resolved">Resolved</option>
-                </select>
-              </div>
-              <div className="field-group" style={{ marginBottom: 10, maxWidth: 560 }}>
-                <label className="field-label">
-                  Response {status === "resolved" && <span style={{ color: "var(--error)" }}>*</span>}
-                </label>
-                <textarea className="field-input" rows={2} value={response} onChange={e => setResponse(e.target.value)} />
-              </div>
-              <button className="btn btn-filled btn-sm" onClick={save} disabled={saving}>
-                {saving ? "Saving…" : "Save"}
-              </button>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
   );
 }

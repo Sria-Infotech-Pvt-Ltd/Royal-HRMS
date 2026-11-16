@@ -10,6 +10,8 @@ import FaceRegistrationApprovalsTab from "./_components/FaceRegistrationApproval
 import PersonnelActionsTab from "./_components/PersonnelActionsTab";
 import TimesheetApprovalsTab from "./_components/TimesheetApprovalsTab";
 import MyApprovalsOverview from "./_components/MyApprovalsOverview";
+import HrRequestsTab from "./_components/HrRequestsTab";
+import { isUnrestrictedUser } from "@/lib/auth";
 import { approvalSectionsFor, sectionFromLink, type ApprovalSectionKey } from "@/lib/approvalSections";
 
 type Section = ApprovalSectionKey;
@@ -23,6 +25,9 @@ export default function ApprovalsPage() {
   // a manager following the requests they raised. The server decides who may act on what.
   const canSeePersonnel = useAnyPermission("employees.approve", "payroll.edit", "employees.raise_action");
   const hasPayrollView  = usePermission("payroll.view");
+  // The HR Help queue: people who answer tickets, and full-access users (superuser / settings.edit) who see everything.
+  const holdsHrHelpRespond = usePermission("hr_help.respond");
+  const canRespondHrHelp = holdsHrHelpRespond || isUnrestrictedUser(user);
   // Managers, superusers, and anyone with payroll.view (payroll admins and HR
   // alike) get this tab — it's the only place attendance-cycle sign-off lives
   // now that Leave Management no longer has its own "Attendance Approvals" tab.
@@ -37,8 +42,8 @@ export default function ApprovalsPage() {
   const canApproveTimesheets = user?.can_manage_team === true || user?.is_superuser === true || holdsTimesheetApprove;
 
   const sections = useMemo(
-    () => approvalSectionsFor({ canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace }),
-    [canApprove, canApproveAttendance, canApproveTimesheets, canApproveFace, canSeePersonnel],
+    () => approvalSectionsFor({ canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace, canRespondHrHelp }),
+    [canApprove, canApproveAttendance, canApproveTimesheets, canApproveFace, canSeePersonnel, canRespondHrHelp],
   );
 
   useEffect(() => {
@@ -81,6 +86,7 @@ export default function ApprovalsPage() {
       {section === "attendance"        && canApproveAttendance && <div className="settings-card"><AttendanceApprovalTab /></div>}
       {section === "personnel"         && canSeePersonnel      && <PersonnelActionsTab />}
       {section === "face_registration" && canApproveFace        && <div className="settings-card"><FaceRegistrationApprovalsTab /></div>}
+      {section === "hr_requests"       && canRespondHrHelp      && <HrRequestsTab />}
     </div>
   );
 }

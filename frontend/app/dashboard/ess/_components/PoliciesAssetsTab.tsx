@@ -58,7 +58,7 @@ export default function PoliciesAssetsTab() {
   const { data: policyPage, loading: policiesLoading, error: policiesError } =
     useFetch<PagedResponse<ApiDocument>>(`${DOCUMENTS_BASE}?category=policy&page_size=10`);
   const { data: requestPage, loading: requestsLoading, error: requestsError, refetch: refetchRequests } =
-    useFetch<PagedResponse<ApiHrHelpRequestLite>>(`${API.hrHelp.list}?page_size=50`);
+    useFetch<PagedResponse<ApiHrHelpRequestLite>>(`${API.hrHelp.list}?page_size=50&mine=1`);
 
   const assetList = assets ?? [];
   const policyList = policyPage?.results ?? [];

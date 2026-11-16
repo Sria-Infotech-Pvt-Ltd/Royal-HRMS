@@ -41,7 +41,7 @@ export default function EssRequestsTab({ isReadOnly = false }: { isReadOnly?: bo
   const expenses = useFetch<PaginatedResponse<Expense>>(`${API.expenses.list}?page_size=100`);
   const corrections = useFetch<PaginatedResponse<MyCorrectionRequest>>(`${API.attendance.myCorrections}?page_size=100`);
   const wfh = useFetch<PaginatedResponse<WorkFromHomeRequest>>(`${API.workFromHome.requests}?page_size=100`);
-  const hrHelp = useFetch<PaginatedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=100`);
+  const hrHelp = useFetch<PaginatedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=100&mine=1`);
 
   const items = useMemo(() => [
     ...(leave.data?.results ?? []).map(leaveToMyItem),

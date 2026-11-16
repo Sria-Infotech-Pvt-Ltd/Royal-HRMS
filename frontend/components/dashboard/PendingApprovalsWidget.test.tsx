@@ -21,7 +21,7 @@ describe("PendingApprovalsWidget", () => {
   it("shows open HR Help tickets as a row that opens the HR Help queue, and counts them in the total", () => {
     render(<PendingApprovalsWidget />);
     const row = screen.getByText("HR Help Requests").closest("a");
-    expect(row?.getAttribute("href")).toBe("/dashboard/ess?tab=hrHelp");
+    expect(row?.getAttribute("href")).toBe("/dashboard/approvals?section=hr_requests");
     expect(row?.textContent).toContain("4");
     expect(screen.getByText("7 pending")).toBeTruthy();
   });

@@ -25,7 +25,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 export default function GrowthFeedbackRequestsCard() {
-  const { data, loading } = useFetch<PaginatedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=50`);
+  const { data, loading } = useFetch<PaginatedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=50&mine=1`);
   const requests = (data?.results ?? []).filter(r => r.topic === "feedback_request");
 
   return (

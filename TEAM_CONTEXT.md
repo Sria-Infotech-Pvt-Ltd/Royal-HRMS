@@ -5701,3 +5701,18 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change:** `components/dashboard/PendingApprovalsWidget.tsx` (shown on `AdminDashboard.tsx`) gets an "HR Help Requests" row showing the number of open tickets (`GET /hr-help/requests/?status=open&page_size=1`, count only) that opens `/dashboard/ess?tab=hrHelp`, and the open-ticket count is added to the card's "N pending" badge. Everyone who can see this card sees every ticket (superuser or `settings.edit`), so the count is organisation-wide. "In progress" tickets are not counted (the list filter takes one status).
 
 **Not done:** HR (non-admin) dashboards are unchanged; tickets still have no Approve/Reject and resolving one does not edit the profile.
+
+
+## HR Help tickets now have their staff queue on the Approvals page (Approvals > HR Requests) (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. No migration. Tests: backend `hrms/tests_hr_help_list_scope.py` (4 new, 16 with the related HR Help tests); frontend 606 tests pass in lib, approvals, ess, my-requests and dashboard components; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a browser.
+
+**Why:** the owner's point: other employees' requests (profile corrections included) belong with the approvals, and the admin should not have to go into "My Workspace" (the personal self-service area every login has) to handle them.
+
+**What changed**
+- `approvals/_components/HrRequestsTab.tsx` (new) and a new **HR Requests** tab in `lib/approvalSections.ts` / `approvals/page.tsx`, shown to holders of `hr_help.respond` and to full-access users (superuser or `settings.edit`, via `isUnrestrictedUser`). It lists every employee's ticket with status filters (Open by default, In progress, Resolved, All) and the same Respond form as before (status, response, assigned person).
+- `ess/_components/HrHelpRow.tsx` (new, extracted from `HrHelpTab.tsx`, shared by both lists). `HrHelpTab.tsx` is now employee-only: the form to raise a ticket and "My HR requests".
+- Backend `HRHelpRequestListCreateView.get`: new `?mine=1`, which narrows even staff to their own tickets. The "my requests" lists (HR Help tab, My Requests page, ESS Requests and summary tabs, Policies and Assets, Growth feedback) now pass it, so an admin no longer sees everyone's tickets inside their own "My requests".
+- Links: the bell notification for a new ticket and the admin dashboard's "HR Help Requests" row now open `/dashboard/approvals?section=hr_requests`.
+
+**Not done:** there is still no Approve/Reject on a ticket, and resolving one does not change the employee's profile (the admin edits the record by hand; the joining date needs a System Admin). The Approvals "My Approvals" overview tab does not list HR Requests.

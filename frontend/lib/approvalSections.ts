@@ -1,7 +1,7 @@
 // Which tabs the Approvals page shows. Pure, so every combination of permissions can be tested without a browser.
 // Each tab is gated by what its own workflow's API requires; the server still enforces all of it.
 
-export type ApprovalSectionKey = "overview" | "approvals" | "attendance" | "timesheets" | "personnel" | "face_registration";
+export type ApprovalSectionKey = "overview" | "approvals" | "attendance" | "timesheets" | "personnel" | "face_registration" | "hr_requests";
 
 export interface ApprovalAccess {
   /** leave / expense / WFH / separation / regularization approvals (Team Approvals). */
@@ -13,6 +13,8 @@ export interface ApprovalAccess {
   canSeePersonnel: boolean;
   /** facial_recognition.approve — Face ID registrations. */
   canApproveFace: boolean;
+  /** hr_help.respond, or full access (superuser / settings.edit): the queue of every employee's HR Help ticket, profile corrections included. */
+  canRespondHrHelp?: boolean;
 }
 
 export interface ApprovalSection {
@@ -33,6 +35,7 @@ export function approvalSectionsFor(access: ApprovalAccess): ApprovalSection[] {
     ...(access.canApproveTimesheets ? [{ key: "timesheets" as const, label: "Timesheets", icon: "ti-clock-check" }] : []),
     ...(access.canSeePersonnel ? [{ key: "personnel" as const, label: "Personnel Actions", icon: "ti-bolt" }] : []),
     ...(access.canApproveFace ? [{ key: "face_registration" as const, label: "Face Registration", icon: "ti-face-id" }] : []),
+    ...(access.canRespondHrHelp ? [{ key: "hr_requests" as const, label: "HR Requests", icon: "ti-headset" }] : []),
   ];
   // The overview is the front door to the others: only worth showing when there is something to open.
   return sections.length > 0 ? [{ key: "overview", label: "My Approvals", icon: "ti-inbox" }, ...sections] : sections;

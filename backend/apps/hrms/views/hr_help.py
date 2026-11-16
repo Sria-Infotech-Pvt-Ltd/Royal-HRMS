@@ -36,7 +36,9 @@ class HRHelpRequestListCreateView(APIView):
     def get(self, request):
         can_respond = _can_respond(request.user)
         queryset = HRHelpRequest.objects.select_related('submitted_by', 'assigned_to')
-        if not can_respond:
+        # mine=1 asks for the caller's own tickets even when they could see everyone's (the "My requests" lists), so staff
+        # keep the organisation-wide queue on the Approvals page and their own tickets in My Workspace.
+        if not can_respond or request.query_params.get('mine') == '1':
             queryset = queryset.filter(submitted_by=request.user)
 
         status_param = request.query_params.get('status')
