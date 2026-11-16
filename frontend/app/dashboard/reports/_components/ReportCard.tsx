@@ -12,6 +12,8 @@ interface ReportCardProps {
   limits: ReportCatalog["limits"];
 }
 
+const BUTTON_STYLE = { width: "100%", justifyContent: "center", whiteSpace: "nowrap" } as const;
+
 /** One report: its filters, a preview of the first rows, a download, and an email to chosen colleagues. */
 export default function ReportCard({ report, limits }: ReportCardProps) {
   const { showToast } = useToast();
@@ -35,39 +37,43 @@ export default function ReportCard({ report, limits }: ReportCardProps) {
   }
 
   return (
-    <section className="card" style={{ padding: 18, display: "grid", gap: 12 }}>
-      <div>
-        <h2 style={{ margin: 0, fontSize: 16 }}>{report.title}</h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--on-variant)" }}>{report.description}</p>
+    <section className="card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Takes the leftover height, so cards of different content heights in one row all end with their buttons on the same line. */}
+      <div style={{ flex: 1, display: "grid", gap: 12, alignContent: "start" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 16 }}>{report.title}</h2>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--on-variant)" }}>{report.description}</p>
+        </div>
+
+        {report.filters.length > 0 && (
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {report.filters.map(filter => (
+              <label key={filter.key} style={{ display: "grid", gap: 4, fontSize: 12 }}>
+                {filter.label}
+                {filter.kind === "date" ? (
+                  <input type="date" className="field-input" value={filters[filter.key] ?? ""}
+                    onChange={event => setFilters({ ...filters, [filter.key]: event.target.value })} />
+                ) : (
+                  <select className="field-input field-select" value={filters[filter.key] ?? ""}
+                    onChange={event => setFilters({ ...filters, [filter.key]: event.target.value })}>
+                    {filter.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                )}
+              </label>
+            ))}
+          </div>
+        )}
       </div>
 
-      {report.filters.length > 0 && (
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          {report.filters.map(filter => (
-            <label key={filter.key} style={{ display: "grid", gap: 4, fontSize: 12 }}>
-              {filter.label}
-              {filter.kind === "date" ? (
-                <input type="date" className="field-input" value={filters[filter.key] ?? ""}
-                  onChange={event => setFilters({ ...filters, [filter.key]: event.target.value })} />
-              ) : (
-                <select className="field-input field-select" value={filters[filter.key] ?? ""}
-                  onChange={event => setFilters({ ...filters, [filter.key]: event.target.value })}>
-                  {filter.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              )}
-            </label>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" className="btn btn-filled btn-sm" onClick={handleDownload} disabled={actions.isBusy}>
+      {/* Equal-width columns: every button is the same size in every card, wrapping together on narrow cards. */}
+      <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(128px, 1fr))" }}>
+        <button type="button" className="btn btn-filled btn-sm" style={BUTTON_STYLE} onClick={handleDownload} disabled={actions.isBusy}>
           <i className="ti ti-download" /> Download CSV
         </button>
-        <button type="button" className="btn btn-outline btn-sm" onClick={() => { actions.clearError(); setIsSending(true); }}>
+        <button type="button" className="btn btn-outline btn-sm" style={BUTTON_STYLE} onClick={() => { actions.clearError(); setIsSending(true); }}>
           <i className="ti ti-mail-forward" /> Email report
         </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsPreviewing(!isPreviewing)}>
+        <button type="button" className="btn btn-ghost btn-sm" style={BUTTON_STYLE} onClick={() => setIsPreviewing(!isPreviewing)}>
           <i className="ti ti-eye" /> {isPreviewing ? "Hide preview" : "Preview"}
         </button>
       </div>

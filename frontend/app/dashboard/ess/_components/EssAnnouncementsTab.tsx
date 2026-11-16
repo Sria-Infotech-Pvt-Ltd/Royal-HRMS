@@ -108,7 +108,11 @@ export default function EssAnnouncementsTab({ openAnnouncementId = null }: Props
       )}
 
       {results.length > 0 && (
-        <div className="ann-cards-list">
+        // Several narrower cards per row on wide screens, one per row on phones, instead of one card stretched edge to edge.
+        <div
+          className="ann-cards-list"
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 360px), 1fr))", alignItems: "start" }}
+        >
           {results.map(announcement => (
             <AnnouncementCard
               key={announcement.id}

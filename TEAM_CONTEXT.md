@@ -5871,3 +5871,25 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Change (`accounts/services_employment_letter.py`):** the coloured banner, gold corners and watermark are gone. It is now a classic business letter in black and navy on white: a double-rule page border, a letterhead with the company logo on the left and name, address, contact line and CIN beside it closed by a rule, reference and date, a centred underlined title, serif body text, a simple ruled details table with a grey label column, a signature block with the signatory from the company settings and a dashed seal circle, and a one-line footer (system-generated note and reference). Company data handling is unchanged (logo fetched from ImageKit's URL, address de-duplicated, signatory and CIN from Settings > Company, missing items left out).
 
 **Open:** the owner has not said what they dislike beyond "looking bad"; a screenshot of the downloaded letter or a sample letter to copy is needed to settle the look.
+
+## Home Work Status, Announcements grid, Reports buttons, merges (2026-11-16)
+
+**By:** Rithwika - **Branch:** Rithwika. Follows the "Local setup fixes, ESS Home/Profile UI, Announcements tab, responsive top bar (2026-11-12)" section above. `eslint` and `tsc --noEmit` clean on the touched files; none of the UI was checked in a browser.
+
+**Employee workspace (ESS)**
+- Home tab (`ess/_components/HomeTab.tsx`): the Employment tab's `components/work-status/WorkStatusPanel` (current assignments plus history) now shows on Home, in place of the small "My projects" card. `ess/_components/HomeProjectsPanel.tsx` is deleted (nothing else used it). Difference from the old card: the panel always shows, with "Not currently assigned to a project" when empty, and hides itself only on a 403/404 from the server.
+- Announcements tab (`ess/_components/EssAnnouncementsTab.tsx`): the cards were one full-width column. They now sit in a responsive grid (`repeat(auto-fill, minmax(min(100%, 360px), 1fr))`, `alignItems: start`): several per row on wide screens, one on phones. Only this tab; the management page `/dashboard/announcements` keeps its single column.
+
+**Reports page**
+- `reports/_components/ReportCard.tsx`: the three buttons (Download CSV, Email report, Preview) are the same size on every card (equal-width grid, `repeat(auto-fit, minmax(128px, 1fr))`, labels centred, no wrapping). The card is now a flex column whose top part (title, description, filters) takes the leftover height, so the button row sits at the bottom and lines up across cards of different heights.
+
+**Work-from-home address search and Profile-correction dropdowns**
+- Both were first built locally and then found to be already on `New-AI` (same file names, more complete: WFH `location_source` plus larger clock-in radius on the backend; Profile correction Field dropdown with server-side validation and the HR "apply" flow). The local copies were stashed (`stash@{0}`, "local WFH address search + profile correction dropdown (superseded by New-AI)") and the `New-AI` versions are the ones in use. Drop the stash when no longer needed.
+
+**Git**
+- Merge conflicts from the first `New-AI` pull were resolved in `TEAM_CONTEXT.md` and `backend/config/settings.py` (upstream version taken for settings; port 8001 origins are already there). A later conflict on `HomeProjectsPanel.tsx` (deleted here, edited upstream) was resolved by keeping it deleted, since Home now renders `WorkStatusPanel`. Merge commits: `54e70442`, `b0024647`, `091e9ce2`. Nothing from this branch has been pushed.
+- `face-api.js` was reinstalled (its `.d.ts` files were missing, which caused TS7006 in `hooks/useFaceLivenessCapture.ts` at `npm run build`); `frontend/package-lock.json` changed as a result. A stray root `package-lock.json` (from an `npm install` in the wrong folder) should be deleted, not committed.
+
+**Still to do by hand:** install Memurai from an Administrator shell (see the 2026-11-12 section), confirm the Tabler font reinstall, then `git push -u origin Rithwika`.
+
+**Integration note (New-AI, 2026-11-16):** applied from this Rithwika section: the Announcements grid (`EssAnnouncementsTab.tsx`) and the equal-size Reports buttons (`ReportCard.tsx`). **Not applied, awaiting a product decision:** the Home change that replaces the "Work status" card (`HomeProjectsPanel.tsx`, edited on New-AI by commit 241b12e5) with the full `WorkStatusPanel` and deletes `HomeProjectsPanel.tsx`. The two lockfile changes were also not applied (`frontend/package-lock.json` only drops an optional vitest `yaml` entry after a reinstall; the root `package-lock.json` is the stray file the section above says to delete). The rest of the section (WFH address search, Profile-correction dropdowns, merges) was already on New-AI.
