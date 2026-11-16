@@ -125,3 +125,21 @@ class BranchAdminDashboardTests(BranchAdminScopeTests):
     def test_employee_without_settings_cannot_open_admin_dashboard(self):
         resp = self.client_for('a.scope@test.com').get('/api/dashboard/system-admin/kpis/')
         self.assertEqual(resp.status_code, 403)
+
+
+class BranchAdminActionQueueTests(BranchAdminScopeTests):
+    """Action Queue on a Branch Admin's dashboard counts its own branch only."""
+
+    def queue(self, email):
+        cache.clear()
+        resp = self.client_for(email).get('/api/dashboard/hr/action-queue/')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        return resp.data['data']
+
+    def test_action_queue_counts_own_branch_only(self):
+        from apps.accounts.models import User
+        User.objects.filter(pk=self.emp_b.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)   # Beta
+        self.assertEqual(self.queue('ba.scope@test.com')['onboarding_reviews'], 0)
+        User.objects.filter(pk=self.emp_a.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)   # Alpha
+        self.assertEqual(self.queue('ba.scope@test.com')['onboarding_reviews'], 1)
+        self.assertEqual(self.queue('ba.blank@test.com')['onboarding_reviews'], 0)                 # no branch: nothing

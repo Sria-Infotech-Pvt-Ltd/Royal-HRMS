@@ -81,6 +81,9 @@ def _hr_dashboard_branch(user):
         return None
     if getattr(user, 'is_superuser', False):
         return None
+    from core.permissions import is_branch_restricted
+    if is_branch_restricted(user) and not (user.branch or '').strip():
+        return _NO_BRANCH                     # Branch Admin without a branch: nothing, never company-wide
     return user.branch or None
 
 
