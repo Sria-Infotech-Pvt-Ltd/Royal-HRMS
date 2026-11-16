@@ -5592,4 +5592,4 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 
 **Change:** `hrms/views/hr_help.py` gets `_can_respond(user)` = `hr_help.respond` OR `is_full_access_actor` (superuser or `settings.edit`). The list, detail and PATCH use it, so the System Admin sees and answers every ticket even when their seat lacks `hr_help.respond`. `HrHelpTab.tsx` uses the same rule (`usePermission("hr_help.respond") || isUnrestrictedUser(user)`). No test added.
 
-**Still uncommitted by this session:** the loosened login/OTP throttle rates in `backend/config/settings.py` (login 20 to 200/hour, forgot 5 to 30, reset 10 to 50, OTP 10 to 50) are in someone's working copy and were not committed or pushed.
+**Throttle rates (committed and pushed as b0de8b20, 2026-11-16):** `backend/config/settings.py` login 20 to 200/hour, forgot_password 5 to 30, reset_password 10 to 50, otp_verify 10 to 50. This weakens brute-force protection; restore the old values before a production deploy if that is not intended.
