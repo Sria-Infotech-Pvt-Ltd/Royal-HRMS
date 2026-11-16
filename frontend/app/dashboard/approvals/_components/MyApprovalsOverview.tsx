@@ -113,7 +113,7 @@ export default function MyApprovalsOverview({
           </tbody>
         </table>
       </div>
-      {canRespondHrHelp && isHrRequestsOpen && <div style={{ padding: "0 16px 16px" }}><HrRequestsTab /></div>}
+      {canRespondHrHelp && isHrRequestsOpen && <div style={{ padding: "0 16px 16px" }}><HrRequestsTab onChanged={openTickets.refetch} /></div>}
       <p style={{ fontSize: 11, color: "var(--on-variant)", padding: "8px 16px 14px", margin: 0 }}>
         Counts show only what the server lets you see. Onboarding approvals are in Review &amp; Onboarding, and bank-change
         requests are in the employee record; they are not part of this list.

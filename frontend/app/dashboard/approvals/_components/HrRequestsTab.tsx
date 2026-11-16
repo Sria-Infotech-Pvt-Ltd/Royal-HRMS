@@ -20,11 +20,20 @@ const FILTERS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "All" },
 ];
 
-export default function HrRequestsTab() {
+interface HrRequestsTabProps {
+  /** Called after a ticket was changed, so a count shown elsewhere (the My Approvals row) can refresh. */
+  onChanged?: () => void;
+}
+
+export default function HrRequestsTab({ onChanged }: HrRequestsTabProps) {
   const [filter, setFilter] = useState<StatusFilter>("open");
   const query = `${API.hrHelp.list}?page_size=100${filter === "all" ? "" : `&status=${filter}`}`;
   const { data, loading, error, refetch } = useFetch<PagedResponse<HrHelpRequest>>(query);
   const requests = data?.results ?? [];
+  function handleUpdated() {
+    refetch();
+    onChanged?.();
+  }
   const filterLabel = FILTERS.find(option => option.value === filter)?.label.toLowerCase() ?? "";
 
   return (
@@ -62,7 +71,7 @@ export default function HrRequestsTab() {
               <tr><th>Ref</th><th>From</th><th>Topic</th><th>Priority</th><th>Status</th><th>Submitted</th><th>Action</th></tr>
             </thead>
             <tbody>
-              {requests.map(entry => <HrHelpRow key={entry.id} entry={entry} canRespond onUpdated={refetch} />)}
+              {requests.map(entry => <HrHelpRow key={entry.id} entry={entry} canRespond onUpdated={handleUpdated} />)}
             </tbody>
           </table>
         </div>

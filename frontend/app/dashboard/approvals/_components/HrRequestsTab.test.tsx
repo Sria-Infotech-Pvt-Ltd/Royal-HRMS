@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { API } from "@/lib/api/endpoints";
 import HrRequestsTab from "./HrRequestsTab";
 
@@ -14,9 +14,10 @@ const ticket = {
 vi.mock("@/hooks/useFetch", () => ({
   useFetch: (url: string) => { urls.push(url); return { data: { results: [ticket], count: 1 }, loading: false, error: null, refetch: vi.fn() }; },
 }));
-vi.mock("@/lib/clientApi", () => ({ default: { patch: vi.fn() } }));
+const patch = vi.fn();
+vi.mock("@/lib/clientApi", () => ({ default: { patch: (...args: unknown[]) => patch(...args) } }));
 
-afterEach(() => { cleanup(); urls.length = 0; });
+afterEach(() => { cleanup(); urls.length = 0; patch.mockReset(); });
 
 describe("HrRequestsTab", () => {
   it("lists every employee's open ticket with who raised it and a Respond action", () => {
@@ -34,5 +35,16 @@ describe("HrRequestsTab", () => {
     expect(urls.at(-1)).toBe(`${API.hrHelp.list}?page_size=100&status=resolved`);
     fireEvent.click(screen.getByRole("button", { name: "All" }));
     expect(urls.at(-1)).toBe(`${API.hrHelp.list}?page_size=100`);
+  });
+
+  it("tells the page after a ticket is changed, so the My Approvals count can refresh", async () => {
+    patch.mockResolvedValue({ data: {} });
+    const onChanged = vi.fn();
+    render(<HrRequestsTab onChanged={onChanged} />);
+    fireEvent.click(screen.getByRole("button", { name: "Respond" }));
+    fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "in_progress" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith(API.hrHelp.detail("t1"), { status: "in_progress", response: "" });
   });
 });
