@@ -5450,3 +5450,146 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 - No backend test covers the new admin-reset link flow.
 - 9 existing ESLint warnings (assessments, payroll, attendance month view, email-templates): none introduced here; two are `react-hooks/exhaustive-deps`, which CLAUDE.md section 8 forbids.
 - Local setup notes from Rithwika's section still apply (Redis, `frontend/.env.local`). On this machine the backend runs on port 8000 and `.env.local` points there.
+
+## Nav dropdown path labels removed; ESS attendance calendar hover card (2026-11-13)
+
+**By:** New-AI session - **Branch:** New-AI. Uncommitted. Frontend only, no backend or migration change. Checked with `vitest` on `EssAttendanceCalendar.test.tsx` (10 tests pass) and `tsc` (no errors in the touched file). **Not checked in a browser.**
+
+**Top-bar dropdowns:** each row showed the page's route (e.g. `/dashboard/interview-list`) under its name. It looked like a leaked API path but was just `item.path` rendered in a `nm-path` span. Removed from `components/dashboard/NavMenuItems.tsx`, which is shared by the section dropdowns, the profile menu and the narrow-screen menu, so all of them lose it. The `.nm-path` CSS rule is now unused and can be deleted.
+
+**ESS Attendance calendar (`ess/_components/EssAttendanceCalendar.tsx`, `app/ess-theme.css`):** hovering (or keyboard-focusing) a date now opens a hover card (`DayTip`) with the date, status (holiday name when there is one), Punched in, Punched out and Hours; "No punches recorded" when the day has none. It replaces the browser `title` tooltip, which was slow and easy to miss. The data was already in each day's `DayRecord` (`clockIn`, `clockOut`, `hours`), so no API change. The card is `position: fixed`, positioned from the cell's bounding rect, because `.ess-cal-grid` has `overflow: hidden` and would clip an absolute one. It flips above the cell near the bottom of the viewport and stays inside the screen edges (the height is an estimate, `TIP_HEIGHT_ESTIMATE`). Cells got `tabIndex={0}`. The `aria-label` keeps the old title text, which `EssAttendanceCalendar.test.tsx` asserts on.
+
+**Open / suspected data issue:** in a screenshot, 11 Nov showed **Incomplete** on the calendar while Recent punches listed "In 14:16 - Out 15:13" for the same day. The calendar reads `rec.clock_in_display` / `clock_out_display` from the `AttendanceRecord` (`services_attendance.py` ~line 1094); Recent punches reads the raw punches (~line 894). If the two disagree, the hover card for that day will show no times. Not investigated yet.
+
+
+## Company Code (branch) can now be changed from Edit Record; branch_fk now follows a move (2026-11-13)
+
+**By:** New-AI session - **Branch:** New-AI. **Uncommitted.** Not checked in a browser (the local session kept expiring; see "Still open").
+
+**The problem:** an admin could not change an employee's Company Code. The backend already accepted `branch` on `PUT/PATCH /employees/<id>/`, but the Edit Record > Employment step (`EditRecordEmploymentStep.tsx`, the reference-layout rebuild) had no branch control. `EditRecordModal.tsx` loaded the current branch and sent it back unchanged on save. The older hire-time `EmploymentStep.tsx` still has a branch select, which is why this looked like a regression. "Perform Action > Org assignment" has no branch field either ("Location transfer" is only a reason label).
+
+**What changed**
+- `frontend/app/dashboard/employees/_components/EditRecordEmploymentStep.tsx`: new **Company Code** select at the top of Work Setup, above Work location. Labels are `Name (CODE)`; the value is the branch **name** (the backend stores the name string). The employee's current branch is always an option, even if it is no longer active. There is no blank option once a branch is set, because saving a blank would clear the Company Code (`branch: employment.branch || null` in `EditRecordModal.tsx`). Work location stays read-only and follows the branch on save.
+- `frontend/hooks/useEmploymentLookups.ts`: also loads branches from `API.employees.branches` with `{ page_size: 50, status: "active" }`. The endpoint caps `page_size` at 50 and does not filter by status unless asked. It is a separate request, so a failure (e.g. 403) leaves only this dropdown empty.
+- `backend/apps/accounts/views/employees_detail.py` (`_update_fields`): **a real bug found by the new tests.** Changing `branch` updated the name string but left `branch_fk` on the OLD branch, because the `link_user_to_branch` signal (`signals.py`) only fills `branch_fk` when it is empty. `branch_fk` is what employee counts, headcount (`services_headcount`), attendance device push, face approval and the holiday calendar read, so a moved employee would still be counted under, and scoped to, the old branch. Now a branch change also re-points `branch_fk` (case-insensitive name match); a name matching no branch clears it instead of keeping the stale link. Resubmitting the same branch touches nothing.
+
+**Permissions: deliberately unchanged.** No admin-only rule was added. Anyone who can open Edit Record can use the dropdown, as before. The backend still needs `employees.edit` (403 otherwise) and `_employee_out_of_branch_scope` still applies (404 for an employee outside a scoped user's branch). The dropdown is fed by `GET /branch/branches/`, which needs `branches.view` and shows users without `settings.edit` **only their own branch**, so a branch-scoped HR user sees one option and cannot pick another through the UI. (The API itself would still accept another branch name from them; that is existing behaviour and was left alone.)
+
+**Tests added (new files only)**
+- `backend/apps/accounts/tests_employee_branch_change.py` (15 tests): authorized change persists branch and `branch_fk`; work location follows; a hand-entered work location is kept; the Edit Record payload shape leaves unrelated fields alone; same-branch resubmit is a no-op; unknown name leaves no stale link; no `employees.edit` -> 403; anonymous refused; scoped HR gets 404 for another branch; scoped HR may still edit their own branch's employee (existing rule); branch-list endpoint (active filter, scoping, 403 without `branches.view`).
+- `frontend/app/dashboard/employees/_components/EditRecordEmploymentStep.test.tsx` (7 tests): lookup success (labels, request params), current branch preselected, change emits the new branch with the rest of the draft untouched, empty list, lookup failure, unlisted current branch kept, no blank option once set. Checked that a deliberately broken `onChange` makes the change test fail.
+- Not covered: a test that mounts the whole `EditRecordModal` and inspects the PUT body (it is a 1,500-line component with a dozen unrelated calls). The `branch` line in its payload was checked by reading, and the backend test sends the same payload shape.
+
+**Results (all against a private test database, `--keepdb`)**
+- Before the `branch_fk` fix: 11 of 15 new backend tests passed, 4 failed (all stale `branch_fk`). After: 15 of 15 pass.
+- Regression modules, run one at a time, all passing: `tests_work_location` 5, `tests_employee_detail_patch_partial_update` 3, `tests_employee_detail_self_view` 4, `tests_employee_detail_statutory_fields` 10, `tests_employee_edit_draft` 15, `tests_employee_scope` 11, `tests_employee_scope_endpoints` 20, `tests_assignment_guards` 23, `tests_assignment_guards_edit_door` 6, `tests_headcount` 10, `tests_personnel_actions` 18.
+- **1 failure, not from this change:** `tests_assignment_guards_actions` 13 of 14 pass; `test_every_function_that_calls_assign_position_calls_a_guard_or_is_a_listed_exemption` fails on `accounts/services_employee_import_commit.py::_create_one` (calls `assign_position()` with no `assignment_refusal()` and no listed exemption). That file is untouched here; it was not re-run on a clean tree to prove it pre-dates this work.
+- `apps.branch`: 35 of 35 pass (includes `tests_branch_admin_flow`, `tests_location`, `tests_duplicate_names`).
+- Frontend: `vitest run` 81 files / 611 tests pass; `tsc --noEmit` clean; `eslint` clean on the three touched frontend files.
+
+**Test infrastructure notes**
+- The first test runs created a private test database **`test_neondb_branchchange`** on the shared Neon server (via `TEST_DB_SUFFIX=branchchange`) and left it in place with `--keepdb`. It is safe to reuse for these tests and safe to drop when nobody needs it. The shared `test_neondb` was not touched, and `--noinput` was never used.
+- This machine's connection to Neon dropped several times during long runs ("server closed the connection", then DNS failures for the host), which turned whole suites into setup errors. Those runs were discarded, not counted. Running one module at a time with a retry works.
+
+**Still open**
+- Browser check of Edit Record > Employment > Company Code: change the branch, save, reopen, confirm Company Code and Work location both changed, and the old and new branches' employee counts moved. The dev server returned 401s for `/api/employees/...` because the browser session had expired.
+- Decision needed: the API accepts any branch name string and does not check that it matches a real branch (it only avoids a stale `branch_fk`). The UI cannot send an invalid one, but a direct API call can. Validating it would be a behaviour change, so it was not done.
+- Unrelated bug seen in the dev-server log: `POST /api/branch/branches/check-location/` returns 500 when `city` is `"__other__"` (`branch/views.py` ~line 512 passes the raw value to `City.objects.filter(pk=...)`). Not touched.
+- `tests_assignment_guards_actions` failure above needs an owner.
+
+## ESS attendance calendar: status colours on the whole cell (2026-11-14)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. `vitest` on `EssAttendanceCalendar.test.tsx` (10 pass) and `tsc` clean for the file. **Not checked in a browser.**
+
+**Complaint:** the ESS Attendance calendar "showed no colours" for Present/Absent. The colours were defined (`.ess-status-dot.*` in `ess-theme.css`), but they only appeared as an 8px dot next to a black label, so they were easy to miss.
+
+**Changes (`ess/_components/EssAttendanceCalendar.tsx`, `app/ess-theme.css`):**
+- Working-day cells with a status of present, late, absent, half-day, leave or incomplete get a class `st-<status>` (set `TINTED`) and a ~12% tint of that status colour as the cell background. The status label text also takes the colour (`.ess-cal-status.<status>`). Weekly off / holiday / not joined keep the muted grey tint (`non-working`); days with no record stay plain.
+- Hover/focus now draws an inset brand-colour outline instead of changing the background, so it no longer hides the status tint.
+- `dayClass()` now maps the backend label "Not Employed" (`STATUS_DISPLAY_MAP`) to `not-joined`; before, only "Not Joined" matched and those days fell back to the generic grey.
+
+**Reverses an earlier test decision:** `EssAttendanceCalendar.test.tsx` used to assert that working days are NOT filled with a background colour. That test was rewritten (present/absent cells get `st-*`, week-offs stay `non-working`, blank days plain), on the user's explicit request after the dot-only version was not visible enough.
+
+**Not changed:** the separate My Attendance calendar (`my-attendance/_components/AttendanceCalendar.tsx`) already tints cells from the backend's `_STATUS_COLOR` (absent = `#ef4444`). If colours are missing there, that is a different problem. Earlier suspected data issue still open: 11 Nov showed Incomplete while Recent punches listed In 14:16 / Out 15:13 (calendar reads `clock_in_display`/`clock_out_display` from the record, Recent punches reads raw punches).
+
+
+## ESS calendar, notification routing, L1/L2 profile cards, DOB as DD-MM-YYYY (2026-11-14)
+
+**By:** New-AI session - **Branch:** New-AI. Not checked in a browser.
+
+**Changes**
+- **Attendance calendar (`EssAttendanceCalendar.tsx`):** days before joining or after the last working day ("Not Employed" / "Not joined") are left blank instead of labelled; the legend entry was removed. Test updated.
+- **Notification routing (`lib/notificationRoutes.ts`):** confirmation and promotion notices open the Employment tab (`/dashboard/ess?tab=employment`), not My Profile. The own-profile welcome notice (`reference_id` "profile") opens `/dashboard`. Tests in `notificationRoutes.test.ts`.
+- **Hire-time documents (commit 2929b2c3):** documents an HR admin checks during the hire wizard are saved as verified (`views_hire_complete._copy_hire_action_documents`), so My Documents no longer shows them Pending. Six existing documents were corrected on Neon.
+- **ESS "Record at a glance" (`ProfileSummaryTab.tsx`):** 2 rows x 4 cards: Employee ID, Date of birth, Date of joining, Work location, Mobile, Work email, L1 Approver, L2 Approver (HR). L1/L2 come from `useMyApprovals` (`API.employees.myApprovals`) and show "Not assigned" when no approver exists. Reporting Manager and Employment Status cards were removed.
+- **DOB format DD-MM-YYYY** (display, typing and import; API and DB stay yyyy-mm-dd): My Profile, ESS profile card, onboarding drawer, hire Review step and Directory full record use `formatDate`. DOB inputs (hire wizard, onboarding family step, Edit Record employee and family member) use `DateInput separator="-"`. Import (`services_employee_import._dob_date`, legacy `EmployeeBulkImportRowSerializer`) accepts DD-MM-YYYY, DD/MM/YYYY and yyyy-mm-dd; template hint, example and sample row use DD-MM-YYYY. Test: `test_date_of_birth_is_read_as_dd_mm_yyyy`.
+
+**Checks:** bulk-import suites 47 + 16 pass on Neon; vitest 101 pass (employees, profile, candidate-review, ess); `tsc` and `eslint` clean on touched files.
+
+**Open**
+- Other dates (Directory list, joining dates elsewhere) still use `formatDateSlash`; only DOB was switched.
+- `edit-record-demo` (`EditRecordModalMock.tsx`) uses a native date input, so its format follows the browser locale.
+- Employee 10000001's profile lost father's name, gender, PAN, Aadhaar and bank fields after hire (still in `HireAction.draft_data`); only DOB was restored. Cause unknown.
+- `backend/config/settings.py` has loosened throttle rates and CRLF churn from another session; not committed here.
+
+
+
+## Weekly timesheets with project hours and manager approval (2026-11-14) — LIVING SECTION
+
+**By:** New-AI session - **Branch:** New-AI. The "Timesheet" button on the ESS Attendance tab used to be a tick box (`WeeklyTimesheetSubmission`: "I reviewed my hours", no hours, no approver, nothing reads it). It is now a real module. **Automated tests pass; nothing has been looked at in a browser, and the dev database cannot run a full cycle yet (see "UAT blockers").**
+
+**What it does:** an employee fills a Monday-Sunday sheet, one card per assigned project plus one "Internal / Non-project work" card, hours per day (quarter-hour steps, 0-24) with an optional note per day and a Billable toggle per card. Save draft, Submit. The assigned approver approves or sends back (reason required). A returned sheet is editable and can be resubmitted. An approved sheet is locked; HR can reopen it with a reason. Every step is kept in an append-only history with a snapshot.
+
+**Where it lives (all in `apps/attendance`, no new Django app)**
+- Models `models_timesheet.py`: `Timesheet` (unique employee+week, CHECK week starts on Monday), `TimesheetLine` (project id/code/name are COPIED because Project Budgeting can later close or remove an assignment; one Internal line per sheet), `TimesheetEntry` (CHECK hours 0-24, unique line+date), `TimesheetEvent` (append-only: `save()` refuses an update). Migrations: `attendance/0048_timesheets`, `0049_seed_timesheet_email_templates`; `accounts/0223_timesheet_workflow_type`, `0224_seed_timesheet_approval_rule`; `notifications/0012_timesheet_notification_choices`. **`accounts/0223` depends on `0222_cancelled_cheque_optional`: they must go to a server together.**
+- Services `services_timesheet*.py`: `_week` (view, prefill, day status via the attendance calendar helpers), `_validation` (structure vs business rules), `services_timesheet` (save draft, submit), `_approval` (approver resolution), `_access` (who may see/decide/unlock, plus the queue), `_decisions` (approve, send back, unlock; row lock + transaction), `_history` (event + `AuditLog`), `_notify`, `_reminders`, `_lists`, `_common`.
+- API `views/timesheets.py`, base `/api/attendance/timesheets/`: `my/?week=` (week view) or `my/` (history), `PUT my/<monday>/`, `POST my/<monday>/submit/`, `team/?status=&week=`, `<id>/`, `POST <id>/approve|return|unlock/`. The old `my-weekly-timesheet/` endpoint still works: GET also reports `submitted` when the real sheet is submitted/approved and adds `timesheet_status`; POST still writes the old tick row. Old table and rows were not touched or migrated.
+- Frontend: `lib/timesheet.ts`, `types/timesheet.ts`, hooks `useTimesheetWeek` / `useTimesheetQueue` / `useTimesheetDecision`, `components/timesheet/*` (project cards, day strip), `app/dashboard/ess/_components/EssTimesheetTab.tsx` (opens INSIDE My Workspace, Attendance stays highlighted; `ess/_client.tsx` handles `?tab=timesheet&week=`), `app/dashboard/timesheet/page.tsx` (only redirects to the workspace), Approvals > Timesheets (`approvals/_components/TimesheetApprovalsTab.tsx`, `TimesheetDetailDrawer.tsx`, reuses `RejectReasonModal` with its own wording; `?section=timesheets` opens the tab).
+
+**Rules (initial defaults, change in `services_timesheet_common.py`)**: over 12 h a day = warning, over 24 h = refused; the 40 h weekly target is shown, never enforced; due Friday, a late submit is allowed and flagged; hours on holiday / weekly-off / leave days = warning only; no hours before joining, after the last working day, outside the project assignment dates, or on a day that has not happened; the week must be a Monday and not in the future. No write-back to Project Budgeting or payroll.
+
+**Approval:** `resolve_approval_chain(employee, 'timesheet')` (rule seeded: L1 reporting manager, L2 HR partner), then the standard fallback (`resolve_approver_route`: reporting approver, branch HR, company admin). The approver is fixed at submit time. A person may decide when they are not the owner and are the assigned approver, or hold `timesheet.approve` and the employee is in their scope (`core.access.employee_in_scope`), or are a superuser. Nobody decides their own sheet. If nobody can be found the submit is refused ("No approver could be found") and nothing is saved as submitted. Approve/return/unlock/submit take a lock (`select_for_update`) so simultaneous clicks produce one decision and one conflict.
+
+**Permissions (code-defined in `permissions_registry.py`, created by `manage.py sync_permissions`, NOT granted to any seat yet):** `timesheet.approve` (HR fallback approver within scope), `timesheet.unlock` (reopen an approved sheet), `timesheet.report` (the four reports). The Approvals menu/route accepts `timesheet.approve`; the Reports menu/route accepts `timesheet.report`. `proxy.ts` and `navConfig.ts` keep separate copies of these lists; `navConfig.test.ts` fails if they drift.
+
+**Notifications and reminders:** in-app + email (`timesheet_submitted` to the approver; `timesheet_returned` and `timesheet_approved` to the employee; HR reopen uses `timesheet_returned`), respecting each person's notification settings, queued after commit, never able to undo a decision. Reminders are in-app only: Fri 15:00 IST to employees whose sheet is not submitted/approved, Mon 09:30 IST to approvers with waiting sheets; one per person per week/day (the reminder's own Notification row is the record). Beat entries `timesheet-employee-reminder` / `timesheet-approver-reminder` in `config/settings.py`; they only fire where Celery beat runs. Bell links: `lib/notificationRoutes.ts` (`reference_id` is `<week>:<sheet id>`).
+
+**Reports (`apps/dashboard/services_reports_timesheet.py`, in the existing catalog, CSV):** employee-wise, project-wise hours, billable vs non-billable, weekly summary. Need `timesheet.report`; rows limited to the sheets the person may see (never drafts, never their own). Excel not built.
+
+**Tests:** backend 156 timesheet tests (models 15, save 20, submit 25, workflow 24, API 20, notifications and reminders 28, reports 19, concurrency 5) plus the report catalog and onboarding-gate tests: 204 passed on the last run. Frontend `vitest` 918 passed, `tsc` and `eslint` clean. Concurrency tests (`tests_timesheet_concurrency.py`) are OPT-IN because they flush the database: `RUN_DB_FLUSHING_TESTS=1 TEST_DB_SUFFIX=tsc python manage.py test apps.attendance.tests_timesheet_concurrency --noinput` on a throwaway DB (no `--keepdb`). With the row locks removed on purpose all 5 fail. Calling a Celery task through `.apply()` in a test closes the test's DB connection (the project's `task_postrun` hook): call `task.run()` instead.
+
+**UAT blockers (the dev database, 2026-11-14):** nobody can approve the test employee's sheet (no manager, HR partner or reporting approver; the only other user is a seatless superuser, which the fallback does not count); the test employee joined 2026-11-14 so no weekday of that week is valid; 0 project assignments; no seat holds the three permissions. Two active employees only. Setup needs: a reporting manager or HR partner, assignments (sync from Project Budgeting or seed), grants for the three permissions, and extra test accounts.
+
+**Known gaps / risks**
+- An assigned approver who holds none of the permissions listed for `/dashboard/approvals` (`leave.approve`, `expenses.approve`, `payroll.edit`, `employees.approve`, `employees.raise_action`, `facial_recognition.approve`, `timesheet.approve`) is redirected away from Approvals. Grant `timesheet.approve` to approver roles.
+- The lock on an approved sheet is enforced by the application, not the database.
+- No test for hours on a weekly-off day; the global "view as employee" header is not exercised with timesheets (the test client bypasses that authentication class); the audit screen's new Timesheet filter option has no test.
+- If an employee's reporting manager changes after they submit, the old assigned approver still decides that sheet (HR with `timesheet.approve` in scope can too).
+- Not looked at in a browser, including the project-card layout and the workspace tab.
+
+## Other work from the same sessions, committed together (2026-11-14)
+
+**By:** New-AI session - **Branch:** New-AI. Each item has automated tests; none has been checked in a browser.
+- **Company Code filter (`views/employees_list.py`, `tests_employee_branch_change.py`):** the Employee directory's Locations filter and branch filter now match through `branch_fk` (the real, current Company Code name) as well as the text copy, so a renamed branch no longer shows its old name or returns nobody. `StaleBranchTextTests`.
+- **Hire documents and uploads:** Cancelled Cheque and Signed Offer Letter are optional (data migration `accounts/0222_cancelled_cheque_optional`; required items show a red `*`); a file upload uses a 120 s timeout instead of 15 s (`UPLOAD_TIMEOUT_MS` in `lib/clientApi.ts`) because a slow connection made uploads fail; an uploaded row shows the View and Replace actions as icons (`components/DocUploadButton.tsx`). **Pushing this branch runs migration 0222 on the server.**
+- **Resend the invitation email:** an employee still "Awaiting activation" now has a clickable status pill in the Employees list that opens the onboarding history, where "Resend Onboarding Email" lives (`employees/_data.ts` `canResendOnboardingEmail`, `EmployeeTableRow.tsx`). Needs `employees.reset_password`. The activation link needs `Company.portal_url`; it was empty on the local database, which is why the first invitation mail was never sent.
+- **Work From Home in ESS:** WFH request entry points in the Attendance and Requests tabs reusing `RequestWfhForm`, with a detail/cancel dialog (`WfhRequestModal`, `WfhRequestDetailModal`, `AttendanceRequestsCard`, `NewRequestChooser`, `attendanceRequestRows.ts`). No backend change. Hidden while viewing another employee's workspace.
+- **Reliability (Phase 2):** Project Budgeting assignments are pulled in the background (`queue_employee_assignments_sync`, Celery `pull_employee_assignments`, soft 40 s / hard 60 s, no retry, runs inline when there is no Redis); Work Status and the dashboard answer with `sync_pending` and the screen refetches once (`useDelayedRefetchOnce`). Local DEBUG-only database options (`core/db_settings.py`: no connection reuse, connect timeout, keepalives, health checks); production/UAT unchanged. Token refresh is single-flight across tabs, only a 401 from the refresh call ends the session, and the notification poll uses `refreshAccessTokenQuietly`. Tests: `tests_project_sync_queue` 28, `tests_project_assignments` 59, `tests_token_refresh_resilience` 10, `tests_db_settings` 9, `clientApiRefresh` 22, `clientApiUpload` 7.
+- **Local PostgreSQL instead of Neon for dev/test:** `hrms_dev` on localhost, test databases via `TEST_DB_SUFFIX` with `--keepdb`. The password is in `.env` only and must not be written anywhere else.
+- **Punch limit:** `tests_punch_daily_cap.py` documents that "one In and one Out a day" is a Multiple-punch policy with `max_punch_count = 2` (the cap counts In and Out separately). Single punch forces the cap to 1 and, as written, would refuse the Punch Out; undecided whether that is intended (the model says auto-checkout handles the Out).
+- **Face ID is off by default:** nothing asks for it (no banner, no camera on punch) until Face ID is made mandatory in Attendance Settings. Not a bug.
+- **Left out of these commits on purpose:** `backend/config/settings.py` also contains loosened login / forgot-password / reset-password / OTP rate limits from another session (do not commit those), and `EditRecordModalMock.tsx` differs only in line endings.
+- **Known failing tests, not from this work:** `tests_face_id_policy` (3 failures, hire welcome-email template and Face ID mode); an earlier baseline also listed forgot-password, leave pending reservation, lifecycle mvp and onboarding status modules as failing on a clean checkout.
+
+
+## HR Help queue now visible to the System Admin; where a profile correction request lands (2026-11-16)
+
+**By:** New-AI session - **Branch:** New-AI. Not run against a database or checked in a browser. `tsc`, `eslint` and `manage.py check` are clean.
+
+**Where a profile correction goes (investigation, no code change):** "Request profile correction" (My Profile and ESS Profile tab, `ProfileCorrectionModal.tsx`) creates an `HRHelpRequest` with topic `profile_correction`. It is a private HR ticket: no approval chain, and the reporting manager and L1/L2 approvers do not see it. It shows in ESS > HR Help (queue for HR, "My HR requests" for the employee) and under My Requests. Nothing notifies HR when one is raised. Resolving it only records a status and note; it does not edit the profile.
+
+**Joining date is locked after onboarding:** `employees_detail.py` (~line 430) returns 409 for a `date_of_joining` change once `onboarding_status == COMPLETE`, so HR cannot fix a wrong joining year from Edit Record on a completed employee. Still open: decide on a one-off admin correction or a proper correction route.
+
+**Change:** `hrms/views/hr_help.py` gets `_can_respond(user)` = `hr_help.respond` OR `is_full_access_actor` (superuser or `settings.edit`). The list, detail and PATCH use it, so the System Admin sees and answers every ticket even when their seat lacks `hr_help.respond`. `HrHelpTab.tsx` uses the same rule (`usePermission("hr_help.respond") || isUnrestrictedUser(user)`). No test added.
+
+**Throttle rates (committed and pushed as b0de8b20, 2026-11-16):** `backend/config/settings.py` login 20 to 200/hour, forgot_password 5 to 30, reset_password 10 to 50, otp_verify 10 to 50. This weakens brute-force protection; restore the old values before a production deploy if that is not intended.

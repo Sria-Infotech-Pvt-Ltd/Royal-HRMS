@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { directoryStatusLabel, fullName, initials, personAvatarTint, reportingManagerDisplay, type DirectoryStatusLabel, type Employee } from "../_data";
+import { canResendOnboardingEmail, directoryStatusLabel, fullName, initials, personAvatarTint, reportingManagerDisplay, type DirectoryStatusLabel, type Employee } from "../_data";
 import type { StatusPillTone } from "@/components/employees/StatusPill";
 import Avatar from "./Avatar";
 import EmployeeRowActionsMenu, { type RowAction } from "./EmployeeRowActionsMenu";
@@ -105,18 +105,23 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
         {e.location || <span style={{ color: "var(--faint)" }}>—</span>}
       </div>
       <div>
-        {rowStatus === "Onboarding" && canManageOnboarding && e.uuid ? (
-          <button
-            type="button" onClick={() => setIsHistoryOpen(true)} aria-label={`Onboarding history for ${fullName(e)}`}
-            style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }}
-          >
-            <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
-          </button>
+        {canResendOnboardingEmail(rowStatus) && canManageOnboarding && e.uuid ? (
+          // Its own click area: a click on the pill, or anywhere inside the dialog it opens (React hands portal clicks up to
+          // the row), must not also open the employee's detail panel, which the whole row does on click.
+          <div onClick={ev => ev.stopPropagation()}>
+            <button
+              type="button" onClick={() => setIsHistoryOpen(true)} aria-label={`Onboarding history for ${fullName(e)}`}
+              title="Onboarding history, and resend the invitation email"
+              style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }}
+            >
+              <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
+            </button>
+            {isHistoryOpen && (
+              <OnboardingHistoryModal employeeUuid={e.uuid} employeeName={fullName(e)} onClose={() => setIsHistoryOpen(false)} onChanged={onActionApplied} />
+            )}
+          </div>
         ) : (
           <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
-        )}
-        {isHistoryOpen && e.uuid && (
-          <OnboardingHistoryModal employeeUuid={e.uuid} employeeName={fullName(e)} onClose={() => setIsHistoryOpen(false)} onChanged={onActionApplied} />
         )}
         {lifecycle && (
           <div className="text-[11px]" style={{ color: LIFECYCLE_TONE[lifecycle.tone], marginTop: 2 }}>{lifecycle.text}</div>

@@ -5,7 +5,7 @@ from core.pagination import paginate, paginated_data
 from core.permissions import HasCompletedOnboarding
 from core.responses import success
 from apps.hrms.models import ProjectAssignment
-from apps.hrms.services_project_sync import sync_employee_assignments_if_unknown
+from apps.hrms.services_project_sync import queue_employee_assignments_sync
 
 # "removed" rows are kept in the budgeting tool's history but mean the person is no longer on it.
 HIDDEN_ASSIGNMENT_STATUSES = ('removed',)
@@ -36,7 +36,8 @@ class EmployeeProjectAssignmentsView(APIView):
 
     def get(self, request):
         employee_code = request.user.employee_id
-        sync_employee_assignments_if_unknown(employee_code)
+        # Queue ONE background pull when nothing is stored; the list below is whatever is stored right now.
+        sync_pending = queue_employee_assignments_sync(employee_code)
 
         assignments = (
             ProjectAssignment.objects
@@ -46,4 +47,6 @@ class EmployeeProjectAssignmentsView(APIView):
         )
         page_obj, paginator = paginate(assignments, request, default_page_size=5)
         results = [_assignment_dict(a) for a in page_obj]
-        return success('Projects retrieved.', paginated_data(paginator, page_obj, results))
+        data = paginated_data(paginator, page_obj, results)
+        data['sync_pending'] = sync_pending
+        return success('Projects retrieved.', data)

@@ -28,6 +28,10 @@ NOTIFICATION_TYPE_CHOICES = [
     ('salary_updated',         'Salary Updated'),
     ('project_sync_alert',     'Project Sync Alert'),
     ('face_registration_status', 'Face ID Registration Status'),
+    ('timesheet_submitted',      'Timesheet Submitted'),
+    ('timesheet_returned',       'Timesheet Sent Back'),
+    ('timesheet_approved',       'Timesheet Approved'),
+    ('timesheet_reminder',       'Timesheet Reminder'),
 ]
 
 MODULE_CHOICES = [
@@ -47,6 +51,7 @@ MODULE_CHOICES = [
     ('payroll',        'Payroll'),
     ('system',         'System'),
     ('facial_recognition', 'Facial Recognition'),
+    ('timesheet',      'Timesheet'),
 ]
 
 

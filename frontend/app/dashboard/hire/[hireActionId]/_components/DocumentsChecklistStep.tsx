@@ -22,7 +22,7 @@ const DOC_ITEMS: DocItem[] = [
   { key: "twelfth_certificate", label: "12th Certificate", required: true, category: "Education & Experience" },
   { key: "degree_certificate", label: "Degree Certificate", required: true, category: "Education & Experience" },
   { key: "experience_letter", label: "Experience Letter", required: false, category: "Education & Experience" },
-  { key: "cancelled_cheque", label: "Cancelled Cheque",   required: true,  category: "Financial" },
+  { key: "cancelled_cheque", label: "Cancelled Cheque",   required: false, category: "Financial" },
   { key: "latest_payslips",  label: "Latest Payslips",    required: false, category: "Financial" },
   { key: "signed_offer_letter", label: "Signed Offer Letter", required: false, category: "Onboarding" },
   { key: "address_proof",    label: "Address Proof",      required: false, category: "Onboarding" },
@@ -90,12 +90,15 @@ export default function DocumentsChecklistStep({ documents, uploading, error, on
               <div key={d.key} className="flex items-center justify-between px-3.5 py-3 rounded-lg border border-[var(--outline-v)]">
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-semibold">{d.label}</span>
-                  <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded" style={{
-                    background: d.required ? "var(--error-c)" : "var(--bg-mid)",
-                    color: d.required ? "var(--error)" : "var(--on-variant)",
-                  }}>
-                    {d.required ? "Required" : "Optional"}
-                  </span>
+                  {/* A required document is marked with the app's standard red asterisk (as on every form field), not a
+                      "Required" pill; an optional one says so. */}
+                  {d.required ? (
+                    <span className="req text-[13px] font-bold" title="Required" aria-label="required">*</span>
+                  ) : (
+                    <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded" style={{ background: "var(--bg-mid)", color: "var(--on-variant)" }}>
+                      Optional
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <DocUploadButton

@@ -50,7 +50,16 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => void }) {
+interface RequestWfhFormProps {
+  /** The success screen's main button: "View My Requests" on the page, "Done" in a dialog. */
+  onSubmitted: () => void;
+  /** Fires as soon as the request is saved, so a host can refresh its lists even if the user just closes the dialog. */
+  onCreated?: (request: WorkFromHomeRequest) => void;
+  /** "modal" drops the page-height success layout and relabels the main button "Done". */
+  variant?: "page" | "modal";
+}
+
+export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page" }: RequestWfhFormProps) {
   const { showToast } = useToast();
   const [startDate,   setStartDate]   = useState("");
   const [endDate,      setEndDate]     = useState("");
@@ -61,6 +70,7 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
   const [locationError, setLocationError] = useState("");
   const [errors,       setErrors]      = useState<Record<string, string>>({});
   const [submitting,   setSubmitting]  = useState(false);
+  const [submitError,  setSubmitError]  = useState("");
   const [submitted,    setSubmitted]   = useState<WorkFromHomeRequest | null>(null);
 
   const { data: savedLocations, refetch: refetchSaved } =
@@ -176,6 +186,7 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
   async function handleSubmit() {
     if (!validate() || !coords) return;
     setSubmitting(true);
+    setSubmitError("");
     try {
       const res = await clientApi.post(API.workFromHome.requests, {
         start_date: startDate,
@@ -185,10 +196,13 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
         latitude: coords.latitude,
         longitude: coords.longitude,
       });
-      setSubmitted(res.data.data as WorkFromHomeRequest);
+      const created = res.data.data as WorkFromHomeRequest;   // the API's response envelope carries the saved request
+      setSubmitted(created);
+      onCreated?.(created);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       showToast(msg || "Failed to submit request. Please try again.", "error");
+      setSubmitError(msg || "Failed to submit request. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -203,7 +217,7 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
 
   if (submitted) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center p-6">
+      <div className={variant === "modal" ? "flex items-center justify-center py-2" : "min-h-[60vh] flex items-center justify-center p-6"}>
         <div className="bg-[var(--surface)] rounded-3xl border border-[var(--outline-v)] shadow-lg p-10 text-center w-full max-w-md">
           <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
             <i className="ti ti-circle-check text-4xl text-green-600" />
@@ -223,7 +237,7 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
             <button onClick={onSubmitted}
               className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white"
               style={{ background: "var(--primary)" }}>
-              View My Requests
+              {variant === "modal" ? "Done" : "View My Requests"}
             </button>
           </div>
         </div>
@@ -330,6 +344,17 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
             {locationError && <Err msg={locationError} />}
             <Err msg={errors.coords} />
           </div>
+
+          {/* In a dialog the toast alone is easy to miss, so the refusal also stays on screen, with where the person's
+              existing requests are. The standalone page keeps its toast only. */}
+          {variant === "modal" && submitError && (
+            <div role="alert" className="text-xs rounded-xl px-3.5 py-2.5 border border-red-300 bg-red-50 text-red-700">
+              <div className="font-semibold flex items-center gap-1"><i className="ti ti-alert-circle" /> {submitError}</div>
+              <div className="mt-1 text-[var(--on-variant)]">
+                Your existing requests are listed under <b>Attendance requests</b> (Attendance tab) and in the <b>Requests</b> tab. Open one to see its status or cancel it while it is still pending.
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end pt-2">
             <button

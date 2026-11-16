@@ -599,7 +599,7 @@ class EmployeeBulkImportSampleView(APIView):
             'John', 'Doe', 'john.doe@company.com', '9876543210',
             position.org_unit.name, position.title,
             branch.branch_code or branch.branch_name, 'Permanent',
-            date.today().isoformat(), 'Male', '1995-06-20', 'B+', '123 Main Street',
+            date.today().isoformat(), 'Male', '20-06-1995', 'B+', '123 Main Street',
         ]]
 
     def get(self, request):

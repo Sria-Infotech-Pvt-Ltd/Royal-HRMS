@@ -485,3 +485,16 @@ def reconcile_project_assignments(self):
     except ProjectSyncError as exc:
         logger.error('reconcile_project_assignments failed: %s', exc)
         raise self.retry(exc=exc)
+
+
+# Time limits are enforced by prefork workers (Linux/production). The `solo` pool used on Windows ignores them, so the pull
+# also carries its own wall-clock budget (services_project_sync.FALLBACK_PULL_BUDGET_SECONDS) and per-request timeouts.
+# max_retries=0: a failed pull is retried by the next dashboard visit after the cooldown and by the scheduled reconcile.
+@shared_task(max_retries=0, soft_time_limit=40, time_limit=60, ignore_result=True)
+def pull_employee_assignments(employee_code: str) -> None:
+    """Fallback pull of ONE employee's Project Budgeting assignments, queued by the Work Status / dashboard views so they
+    never wait on the external service. Never raises; a failure is logged in ProjectSyncLog. See
+    services_project_sync.run_employee_assignments_pull."""
+    from apps.hrms.services_project_sync import run_employee_assignments_pull
+
+    run_employee_assignments_pull(employee_code)

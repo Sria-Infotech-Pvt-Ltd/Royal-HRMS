@@ -35,6 +35,7 @@ _MODULE_DEFAULT_CATEGORY = {
     'permission':     'attendance',
     'expense':        'expense',
     'separation':     'separation',
+    'timesheet':      'attendance',
 }
 
 

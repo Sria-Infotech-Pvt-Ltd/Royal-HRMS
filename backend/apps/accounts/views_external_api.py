@@ -24,6 +24,7 @@ from core.pagination import paginate, paginated_data
 from core.responses import error, get_client_ip, success
 from apps.accounts.authentication_external import ExternalAPIKeyAuthentication
 from apps.accounts.models import AuditLog, User
+from apps.accounts.services_placement import org_unit_name_for, org_unit_names_for
 from apps.accounts.throttles import ExternalAPIKeyThrottle
 from apps.hrms.models import SEP_APPROVED, SeparationRequest
 
@@ -55,7 +56,9 @@ def _split_name(full_name: str) -> tuple[str, str]:
     return parts[0], ' '.join(parts[1:])
 
 
-def _basic_employee_dict(user: User) -> dict:
+def _basic_employee_dict(user: User, department: str | None = None) -> dict:
+    # `department` is the org unit of the seat the person holds (see org_unit_names_for); the legacy User.department
+    # text is blank for everyone hired onto a Position, so it is only the fallback.
     first_name, last_name = _split_name(user.full_name)
     is_active = user.is_active
     return {
@@ -65,7 +68,7 @@ def _basic_employee_dict(user: User) -> dict:
         'last_name':                       last_name,
         'email':                           user.email,
         'phone':                           user.phone,
-        'department':                      user.department,
+        'department':                      user.department if department is None else department,
         'designation':                     user.designation,
         # Kept for existing integrations: used to be the role's display name, now the seat's title.
         'role':                            user.designation or '',
@@ -122,7 +125,8 @@ class ExternalEmployeeBasicListView(APIView):
             users = users.filter(updated_at__gte=updated_since)
 
         page_obj, paginator = paginate(users, request)
-        results = [_basic_employee_dict(u) for u in page_obj]
+        unit_names = org_unit_names_for([u.pk for u in page_obj])
+        results = [_basic_employee_dict(u, unit_names.get(u.pk) or u.department) for u in page_obj]
 
         # Every fetch is logged — there's no real User to attach (this
         # isn't a logged-in person), so `user=None`; the calling system's
@@ -160,4 +164,4 @@ class ExternalEmployeeDetailView(APIView):
             ip_address=get_client_ip(request),
         )
 
-        return success('Employee retrieved.', _basic_employee_dict(user))
+        return success('Employee retrieved.', _basic_employee_dict(user, org_unit_name_for(user)))

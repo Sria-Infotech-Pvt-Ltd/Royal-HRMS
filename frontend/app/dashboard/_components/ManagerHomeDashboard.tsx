@@ -17,13 +17,20 @@ import { useAnyPermission, usePermission } from "@/hooks/usePermission";
 import { pendingFor, teamApprovalRows, totalTeamPending } from "@/lib/managerHome";
 import type { SessionPayload } from "@/lib/session";
 
+const APPROVALS_ROUTE_PERMISSIONS = [
+  "leave.approve", "expenses.approve", "payroll.edit", "employees.approve", "employees.raise_action", "facial_recognition.approve",
+];
+
 export default function ManagerHomeDashboard({ session }: { session: SessionPayload }) {
   const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
   const data = useManagerHomeData(now);
 
-  const canApprove = useAnyPermission("leave.approve", "expenses.approve", "attendance.create", "separation.approve", "wfh.approve");
+  // Exactly what the /dashboard/approvals route guard (proxy.ts) accepts — linking there without one of these just
+  // bounces the manager back to their workspace. Read from the server-provided session, not the client-side hook, so the
+  // server HTML and the first client render agree (the hook is empty during SSR and caused a hydration mismatch).
+  const canOpenApprovals = !!session.is_superuser || APPROVALS_ROUTE_PERMISSIONS.some(permission => session.permissions.includes(permission));
   const canSeeAttendance = usePermission("attendance.view");
   const canSeeTeam = usePermission("employees.view");
   const canSeeReports = useAnyPermission(
@@ -42,7 +49,7 @@ export default function ManagerHomeDashboard({ session }: { session: SessionPayl
     { key: "correction", label: "Attendance Regularization", icon: "ti-clock-edit", value: pendingFor(data.team, "attendance_correction") },
   ];
   const actions: HrQuickAction[] = [
-    canApprove && { key: "approve", label: "Approve Requests", icon: "ti-circle-check", onClick: go("/dashboard/approvals") },
+    canOpenApprovals && { key: "approve", label: "Approve Requests", icon: "ti-circle-check", onClick: go("/dashboard/approvals") },
     canSeeAttendance && { key: "attendance", label: "Team Attendance", icon: "ti-calendar-check", onClick: go("/dashboard/attendance") },
     canSeeReports && { key: "reports", label: "Team Reports", icon: "ti-chart-bar", onClick: go("/dashboard/reports") },
     canSeeTeam && { key: "team", label: "View Team", icon: "ti-users", onClick: go("/dashboard/employees") },
@@ -55,7 +62,7 @@ export default function ManagerHomeDashboard({ session }: { session: SessionPayl
       {data.error && <p role="alert" style={{ color: "var(--error)", margin: 0 }}>{data.error}</p>}
       <div className={styles.grid3}>
         <TeamOverviewCard breakdown={data.breakdown} isLoading={data.isLoading} onOpenTeam={canSeeTeam ? go("/dashboard/employees") : null} />
-        <PendingTeamApprovalsCard rows={rows} isLoading={data.isLoading} onOpen={go("/dashboard/approvals")} />
+        <PendingTeamApprovalsCard rows={rows} isLoading={data.isLoading} onOpen={canOpenApprovals ? go("/dashboard/approvals") : null} />
         <HrQuickActionsCard actions={actions} />
         <RecentTeamActivityCard activity={data.activity} now={now} isLoading={data.isLoading} />
         <TeamRequestsMonthCard counts={data.waitingThisMonth} kinds={data.team.map(count => count.kind)} />

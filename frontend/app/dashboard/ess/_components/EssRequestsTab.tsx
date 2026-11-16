@@ -19,6 +19,9 @@ import ExpenseDetailModal from "../../expenses/_components/ExpenseDetailModal";
 import MyCorrectionDetailModal from "../../my-requests/_components/MyCorrectionDetailModal";
 import HrHelpDetailModal from "../../my-requests/_components/HrHelpDetailModal";
 import EmployeeRequestModal from "../../my-requests/_components/EmployeeRequestModal";
+import WfhRequestModal from "../../work-from-home/_components/WfhRequestModal";
+import WfhRequestDetailModal from "../../work-from-home/_components/WfhRequestDetailModal";
+import NewRequestChooser, { type NewRequestKind } from "./NewRequestChooser";
 import {
   MyCorrectionRequest, MyRequestItem, PaginatedResponse, STATUS_LABEL,
   correctionToMyItem, expenseToMyItem, hrHelpToMyItem, leaveToMyItem, toSortableTime, wfhToMyItem,
@@ -26,10 +29,13 @@ import {
 
 const MAX_ROWS = 50;
 
-export default function EssRequestsTab() {
+/** `isReadOnly`: an admin viewing someone else's workspace. "New request" then goes straight to the HR help dialog, as it
+ *  always did, because a WFH request made from there would be filed on the admin's own account (see EssAttendanceTab). */
+export default function EssRequestsTab({ isReadOnly = false }: { isReadOnly?: boolean }) {
   const { showToast } = useToast();
   const [detail, setDetail] = useState<MyRequestItem | null>(null);
-  const [showNew, setShowNew] = useState(false);
+  // "New request" first asks what kind (chooser), then opens that request's own dialog.
+  const [newRequest, setNewRequest] = useState<"choose" | NewRequestKind | null>(null);
 
   const leave = useFetch<PaginatedResponse<LeaveRequest>>(`${API.leave.requests}?page_size=100`);
   const expenses = useFetch<PaginatedResponse<Expense>>(`${API.expenses.list}?page_size=100`);
@@ -68,7 +74,7 @@ export default function EssRequestsTab() {
           <h2>My requests</h2>
           <p>Track every employee submission and approval step. Select any request to open its full details.</p>
         </div>
-        <button className="rvbtn pri" type="button" onClick={() => setShowNew(true)}>New request</button>
+        <button className="rvbtn pri" type="button" onClick={() => setNewRequest(isReadOnly ? "hr_help" : "choose")}>New request</button>
       </div>
 
       {loadError && <div className="alert alert-error">{loadError}</div>}
@@ -107,12 +113,19 @@ export default function EssRequestsTab() {
       {detail?.kind === "expense" && <ExpenseDetailModal initialData={detail.raw as Expense} onClose={() => setDetail(null)} />}
       {detail?.kind === "attendance_correction" && <MyCorrectionDetailModal request={detail.raw as MyCorrectionRequest} onClose={() => setDetail(null)} />}
       {detail?.kind === "hr_help" && <HrHelpDetailModal request={detail.raw as HrHelpRequest} onClose={() => setDetail(null)} />}
-      {showNew && (
+      {/* `kind` says which request type `raw` holds, as for the other rows above. */}
+      {detail?.kind === "wfh" && (
+        <WfhRequestDetailModal request={detail.raw as WorkFromHomeRequest} onClose={() => setDetail(null)} onChanged={() => wfh.refetch()} readOnly={isReadOnly} />
+      )}
+      {newRequest === "choose" && <NewRequestChooser onClose={() => setNewRequest(null)} onChoose={setNewRequest} />}
+      {newRequest === "hr_help" && (
         <EmployeeRequestModal
-          onClose={() => setShowNew(false)}
-          onSubmitted={() => { setShowNew(false); showToast("Your request was submitted.", "success"); hrHelp.refetch(); }}
+          onClose={() => setNewRequest(null)}
+          onSubmitted={() => { setNewRequest(null); showToast("Your request was submitted.", "success"); hrHelp.refetch(); }}
         />
       )}
+      {/* The WFH form shows its own "Request Submitted" screen, so no extra toast; the list is refetched (replaced, not appended) as soon as it saves. */}
+      {newRequest === "wfh" && <WfhRequestModal onClose={() => setNewRequest(null)} onCreated={() => wfh.refetch()} />}
     </section>
   );
 }

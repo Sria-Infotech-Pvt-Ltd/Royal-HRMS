@@ -64,6 +64,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import EditRecordUnsavedChangesDialog from "./EditRecordUnsavedChangesDialog";
 import Modal from "@/components/Modal";
+import DateInput from "@/components/shared/DateInput";
 import PhoneInput from "@/components/PhoneInput";
 import CountrySelect from "@/components/CountrySelect";
 import LanguagesSelect from "@/components/LanguagesSelect";
@@ -1036,7 +1037,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                   <div className="grid grid-cols-3 gap-3 mb-3">
                     <div>
                       <label className="block text-[12.5px] font-semibold mb-1.5">Date of birth <span style={{ color: "var(--error)" }}>*</span></label>
-                      <input type="date" value={personal.dateOfBirth} onChange={e => setPersonal(p => ({ ...p, dateOfBirth: e.target.value }))} className="field-input" />
+                      <DateInput value={personal.dateOfBirth} onChange={iso => setPersonal(p => ({ ...p, dateOfBirth: iso }))} className="field-input" separator="-" />
                       {personalAge !== null && (
                         <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>
                           Age {personalAge}
@@ -1254,7 +1255,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                             {FAMILY_RELATIONSHIPS.map(r => <option key={r} value={r}>{FAMILY_RELATIONSHIP_LABELS[r]}</option>)}
                           </select>
                         </div>
-                        <div className="f"><label>Date of birth</label><input className="finput" type="date" value={entry.date_of_birth} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, date_of_birth: e.target.value } : x))} /></div>
+                        <div className="f"><label>Date of birth</label><DateInput separator="-" className="finput" value={entry.date_of_birth} onChange={iso => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, date_of_birth: iso } : x))} /></div>
                         <div className="f">
                           <label>Gender</label>
                           <select className="finput field-select" value={entry.gender} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, gender: e.target.value } : x))}>

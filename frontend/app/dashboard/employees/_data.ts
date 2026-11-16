@@ -304,7 +304,7 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
       { name: "Degree Certificate", documentType: "degree_certificate", required: false },
       { name: "Experience Letter",  documentType: "experience_letter",  required: false },
       { name: "Passport Photo",     documentType: "passport_photo",     required: true  },
-      { name: "Cancelled Cheque",   documentType: "cancelled_cheque",   required: true  },
+      { name: "Cancelled Cheque",   documentType: "cancelled_cheque",   required: false },
     ],
   },
 
@@ -637,4 +637,11 @@ export function directoryStatusLabel(e: Pick<Employee, "status" | "lastWorkingDa
   if (e.status === "onboarding") return e.awaitingActivation ? "Awaiting activation" : "Onboarding";
   if (e.lastWorkingDay) return "Notice Period";
   return "Active";
+}
+
+/** Whose onboarding history (with "Resend Onboarding Email") the status pill opens. Both statuses are people who still have to
+    set their password through an emailed link; the server accepts a resend for exactly these (a pending activation). The
+    "Awaiting activation" ones, whose hire is complete but whose invitation may have failed, are the ones that most need it. */
+export function canResendOnboardingEmail(label: DirectoryStatusLabel): boolean {
+  return label === "Onboarding" || label === "Awaiting activation";
 }

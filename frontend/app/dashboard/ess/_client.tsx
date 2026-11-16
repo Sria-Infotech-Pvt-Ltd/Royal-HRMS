@@ -28,8 +28,10 @@ import MyDocumentsTab from "./_components/MyDocumentsTab";
 import EmploymentTab from "./_components/EmploymentTab";
 import EssRequestsTab from "./_components/EssRequestsTab";
 import EssAnnouncementsTab from "./_components/EssAnnouncementsTab";
+import EssTimesheetTab from "./_components/EssTimesheetTab";
+import { currentMonday, isIsoDate, mondayOf } from "@/lib/timesheet";
 
-type TabId = "home" | "profile" | "attendance" | "leave" | "payslips" | "tax" | "expenses" | "documents" | "growth" | "appraisals" | "assets" | "employment" | "requests" | "announcements" | "hrHelp";
+type TabId = "home" | "profile" | "attendance" | "leave" | "payslips" | "tax" | "expenses" | "documents" | "growth" | "appraisals" | "assets" | "employment" | "requests" | "announcements" | "hrHelp" | "timesheet";
 
 // Labels exactly as the reference's tab bar spells them.
 const TABS: { id: TabId; label: string }[] = [
@@ -50,7 +52,8 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "hrHelp",      label: "HR help" },
 ];
 
-const TAB_IDS = new Set<string>(TABS.map(t => t.id));
+// "timesheet" is a view inside the Attendance tab (no tab button of its own), but it can still be opened by a link (?tab=timesheet&week=...).
+const TAB_IDS = new Set<string>([...TABS.map(t => t.id), "timesheet"]);
 
 export default function EssShellClient({ session: _session, viewAsEmployee }: { session: SessionPayload; viewAsEmployee?: string }) {
   const [tab, setTab] = useState<TabId>("home");
@@ -71,11 +74,19 @@ export default function EssShellClient({ session: _session, viewAsEmployee }: { 
   // params, so a link followed while already on this page switches tabs too.
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
+  const requestedWeek = searchParams.get("week");
+  const [timesheetWeek, setTimesheetWeek] = useState(() => currentMonday());
   const requestedAnnouncement = Number(searchParams.get("announcement"));
   const linkedAnnouncementId = Number.isInteger(requestedAnnouncement) && requestedAnnouncement > 0 ? requestedAnnouncement : null;
   useEffect(() => {
     if (requestedTab && TAB_IDS.has(requestedTab)) setTab(requestedTab as TabId);
-  }, [requestedTab, linkedAnnouncementId]);
+    if (requestedTab === "timesheet" && isIsoDate(requestedWeek)) setTimesheetWeek(mondayOf(requestedWeek));
+  }, [requestedTab, linkedAnnouncementId, requestedWeek]);
+
+  function openTimesheet(week: string) {
+    setTimesheetWeek(week);
+    setTab("timesheet");
+  }
 
   return (
     <div className="ess-shell">
@@ -87,7 +98,7 @@ export default function EssShellClient({ session: _session, viewAsEmployee }: { 
             <button
               key={t.id}
               type="button"
-              className={`ess-tab${tab === t.id ? " on" : ""}`}
+              className={`ess-tab${tab === t.id || (t.id === "attendance" && tab === "timesheet") ? " on" : ""}`}
               onClick={() => setTab(t.id)}
               suppressHydrationWarning
             >
@@ -99,7 +110,8 @@ export default function EssShellClient({ session: _session, viewAsEmployee }: { 
 
       {tab === "home"       && <HomeTab onNavigate={setTab} status={status} isReadOnly={!!viewAsEmployee} />}
       {tab === "profile"    && <ProfileSummaryTab />}
-      {tab === "attendance" && <EssAttendanceTab />}
+      {tab === "attendance" && <EssAttendanceTab isReadOnly={!!viewAsEmployee} onViewAllRequests={() => setTab("requests")} onOpenTimesheet={openTimesheet} />}
+      {tab === "timesheet"  && <EssTimesheetTab week={timesheetWeek} isReadOnly={!!viewAsEmployee} onGoToWeek={setTimesheetWeek} onBack={() => setTab("attendance")} />}
       {tab === "leave"      && <LeavePageClient />}
       {tab === "payslips"   && <EssPayslipsTab onNavigateToTax={() => setTab("tax")} />}
       {tab === "tax"        && <TaxTab onNavigateToDocuments={() => setTab("documents")} />}
@@ -109,7 +121,7 @@ export default function EssShellClient({ session: _session, viewAsEmployee }: { 
       {tab === "appraisals" && <AppraisalsTab />}
       {tab === "assets"     && <PoliciesAssetsTab />}
       {tab === "employment" && <EmploymentTab onNavigateToDocuments={() => setTab("documents")} />}
-      {tab === "requests"   && <EssRequestsTab />}
+      {tab === "requests"   && <EssRequestsTab isReadOnly={!!viewAsEmployee} />}
       {tab === "announcements" && <EssAnnouncementsTab openAnnouncementId={linkedAnnouncementId} />}
       {tab === "hrHelp"     && <HrHelpTab />}
 

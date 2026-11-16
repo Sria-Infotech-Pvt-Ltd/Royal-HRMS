@@ -277,7 +277,7 @@ class EmployeeListCreateView(APIView):
                 Q(placements__effective_to__isnull=True, placements__position__org_unit__name=dept)
             ).distinct()
         if branch_param:
-            qs = qs.filter(branch=branch_param)
+            qs = qs.filter(_branch_filter_q(branch_param))
         if status_param:
             # Mirrors the same "Notice Period" definition used everywhere
             # else (EmployeeStatsView, _employee_dict) — an approved,
@@ -620,6 +620,29 @@ class EmployeeListCreateView(APIView):
         )
 
 
+def _branch_filter_q(branch_name: str) -> Q:
+    """Employees of a Company Code: linked to it (branch_fk) OR carrying its name as text.
+
+    User.branch is a deprecated text copy of the name and can be stale (a renamed branch whose employees were never
+    updated), so matching on the text alone makes the real name return nobody. The link is the source of truth.
+    """
+    return Q(branch_fk__branch_name__iexact=branch_name) | Q(branch=branch_name)
+
+
+def _directory_branch_names(base_qs, include_all_active: bool) -> list[str]:
+    """Names for the Employee directory's Locations filter: real Company Code names, never a stale copy.
+
+    An employee linked to a branch contributes the branch's CURRENT name (not the text on the employee); one with no
+    link contributes their text. An org-wide user also gets every active branch, including ones with no employees yet.
+    """
+    pairs = base_qs.exclude(branch='', branch_fk__isnull=True).values_list('branch_fk__branch_name', 'branch').distinct()
+    names = {linked_name or text for linked_name, text in pairs}
+    if include_all_active:
+        from apps.branch.models import Branch
+        names |= set(Branch.objects.filter(status=Branch.STATUS_ACTIVE).values_list('branch_name', flat=True))
+    return sorted(name for name in names if name)
+
+
 class EmployeeStatsView(APIView):
     """
     Dashboard counts for the Employees page header cards.
@@ -647,9 +670,8 @@ class EmployeeStatsView(APIView):
         # branch_names/department_names always come from base_qs (ignores the
         # branch filter below) so the branch dropdown never shrinks to just
         # the currently-selected branch once one is picked.
-        branch_names = list(
-            base_qs.exclude(branch='').values_list('branch', flat=True).distinct().order_by('branch')
-        )
+        # An org-wide user (settings.edit) filters by ANY Company Code; scoped users keep seeing only their own.
+        branch_names = _directory_branch_names(base_qs, include_all_active=_has_perm(request.user, 'settings.edit'))
         # The legacy `department` string is blank for anyone hired onto a
         # real Position (assign_position() only back-fills it when the
         # Position's OrgUnit chain has an is_department_level ancestor,
@@ -670,7 +692,7 @@ class EmployeeStatsView(APIView):
         qs = base_qs
         branch_filter = request.query_params.get('branch', '').strip()
         if branch_filter and branch_filter != 'all':
-            qs = qs.filter(branch=branch_filter)
+            qs = qs.filter(_branch_filter_q(branch_filter))
 
         # Org Unit / department filter — same matching EmployeeListCreateView.get()
         # uses (real OrgUnit via Placement, OR the legacy `department` string)

@@ -14,7 +14,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.accounts.factories import make_role, make_user
+from apps.accounts.factories import ACCESS_UNIT_NAME, make_role, make_user
 from apps.accounts.models import AuditLog, ExternalAPIKey
 
 
@@ -83,6 +83,28 @@ class ExternalEmployeeListDataTests(TestCase):
         # No bank/PAN/Aadhaar-shaped keys ever, under any name.
         for forbidden in ('account_number', 'ifsc_code', 'bank_name', 'pan_number', 'pan_masked', 'aadhaar_number', 'aadhaar_masked'):
             self.assertNotIn(forbidden, row)
+
+    def _make_seated_employee(self):
+        # make_user only places someone in a seat when the role carries access; a team-manager seat is the lightest way.
+        seated = make_user(
+            'seated@test.com', role=make_role('external_api_seated_role', can_manage_team=True), employee_id='EMP00003',
+        )
+        self.assertEqual(seated.department, '')  # blank text, like everyone hired onto a Position
+        return seated
+
+    def test_department_is_the_org_unit_of_the_seat_held(self):
+        # User.department is blank for people hired onto a Position; the org unit is the department (as on every screen).
+        self._make_seated_employee()
+        rows = {r['employee_id']: r for r in self._get().data['data']['results']}
+        self.assertEqual(rows['EMP00003']['department'], ACCESS_UNIT_NAME)
+        self.assertEqual(rows['EMP00002']['department'], '')  # no seat and no legacy text: stays blank
+
+    def test_detail_department_is_the_org_unit_of_the_seat_held(self):
+        self._make_seated_employee()
+        resp = self.client.get(
+            reverse('external-employee-detail', args=['EMP00003']), HTTP_X_API_KEY='eak_testkey123',
+        )
+        self.assertEqual(resp.data['data']['department'], ACCESS_UNIT_NAME)
 
     def test_inactive_employees_excluded(self):
         self.employee.is_active = False

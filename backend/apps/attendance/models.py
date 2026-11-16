@@ -2087,3 +2087,4 @@ class WeeklyTimesheetSubmission(models.Model):
 from apps.attendance.models_shift import Shift  # noqa: E402,F401
 from apps.attendance.models_device import AttendanceDevice, DevicePunchLog  # noqa: E402,F401
 from apps.attendance.models_geofence import Geofence  # noqa: E402,F401
+from apps.attendance.models_timesheet import Timesheet, TimesheetEntry, TimesheetEvent, TimesheetLine  # noqa: E402,F401

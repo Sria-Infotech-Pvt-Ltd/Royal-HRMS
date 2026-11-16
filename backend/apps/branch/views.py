@@ -14,7 +14,9 @@ from apps.accounts.models import AuditLog
 from apps.branch.models import Branch, City, State
 from apps.branch.serializers import BranchSerializer, CitySerializer, StateSerializer
 from apps.branch.geo import coordinate_errors, location_warnings
-from apps.branch.utils import branch_assigned_employee_count, branch_employee_counts, generate_branch_code
+from apps.branch.utils import (
+    branch_assigned_employee_count, branch_employee_counts, generate_branch_code, sync_employee_branch_names,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -222,11 +224,15 @@ class BranchDetailView(APIView):
         if _branch_out_of_scope(request.user, branch):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         old_hr_id = branch.hr_id
+        old_name = branch.branch_name
         serializer = BranchSerializer(branch, data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
         try:
-            updated = serializer.save()
+            with transaction.atomic():
+                updated = serializer.save()
+                if updated.branch_name != old_name:
+                    sync_employee_branch_names(updated)
         except IntegrityError:
             return error(
                 'A branch with this name or code already exists.',
@@ -251,11 +257,15 @@ class BranchDetailView(APIView):
         if _branch_out_of_scope(request.user, branch):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         old_hr_id = branch.hr_id
+        old_name = branch.branch_name
         serializer = BranchSerializer(branch, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
         try:
-            updated = serializer.save()
+            with transaction.atomic():
+                updated = serializer.save()
+                if updated.branch_name != old_name:
+                    sync_employee_branch_names(updated)
         except IntegrityError:
             return error(
                 'A branch with this name or code already exists.',

@@ -111,7 +111,11 @@ DATABASES = {'default': env.db('DATABASE_URL')}
 if DATABASES['default'].get('ENGINE') != 'django.db.backends.postgresql':
     from django.core.exceptions import ImproperlyConfigured
     raise ImproperlyConfigured('DATABASE_URL must be a postgresql:// URL (this app supports PostgreSQL only).')
-DATABASES['default']['CONN_MAX_AGE'] = env.int('DB_CONN_MAX_AGE', default=60)
+from core.db_settings import apply_local_debug_options, default_conn_max_age, health_checks_enabled  # noqa: E402
+
+# Production/UAT (DEBUG=False): 60 s, exactly as before. Local DEBUG: 0 (see core/db_settings.py for why). DB_CONN_MAX_AGE
+# in the environment overrides either.
+DATABASES['default']['CONN_MAX_AGE'] = env.int('DB_CONN_MAX_AGE', default=default_conn_max_age(DEBUG))
 # Several people/sessions share one Neon server, and the shared `test_neondb` is often mid-migration for someone else.
 # TEST_DB_SUFFIX=<name> runs the tests on a private `test_neondb_<name>` database instead (use with --keepdb to reuse it).
 if env('TEST_DB_SUFFIX', default=''):
@@ -126,6 +130,10 @@ if env('TEST_DB_SUFFIX', default=''):
 if DATABASES['default'].get('ENGINE') == 'django.db.backends.postgresql':
     DATABASES['default'].setdefault('OPTIONS', {})
     DATABASES['default']['OPTIONS'].setdefault('sslmode', env('DB_SSL_MODE', default='require'))
+    # Local DEBUG only (a no-op when DEBUG is False): bound a stalled connect and detect dead sockets. See core/db_settings.py.
+    apply_local_debug_options(DATABASES['default']['OPTIONS'], debug=DEBUG)
+    if health_checks_enabled(DEBUG, DATABASES['default']['CONN_MAX_AGE']):
+        DATABASES['default']['CONN_HEALTH_CHECKS'] = True
 
 AUTH_USER_MODEL = 'accounts.User'
 
@@ -327,6 +335,16 @@ PROJECT_BUDGET_API_KEY      = env('PROJECT_BUDGET_API_KEY', default='')
 PROJECT_ASSIGNMENT_AUTO_CLOSE_OPEN_ENDED = env.bool('PROJECT_ASSIGNMENT_AUTO_CLOSE_OPEN_ENDED', default=True)
 
 CELERY_BEAT_SCHEDULE = {
+    # Fridays 15:00 IST - reminds employees whose timesheet for this week is still not submitted (once per person per week).
+    'timesheet-employee-reminder': {
+        'task':     'apps.attendance.tasks.send_timesheet_employee_reminders',
+        'schedule': crontab(day_of_week='fri', hour=15, minute=0),
+    },
+    # Mondays 09:30 IST - tells each approver how many submitted timesheets are waiting for them (once per approver per day).
+    'timesheet-approver-reminder': {
+        'task':     'apps.attendance.tasks.send_timesheet_approver_reminders',
+        'schedule': crontab(day_of_week='mon', hour=9, minute=30),
+    },
     # Every 30 minutes — safety net for missed Project Budgeting pushes: pulls all employee assignments and re-applies
     # them. Does nothing unless PROJECT_BUDGET_API_BASE_URL / PROJECT_BUDGET_API_KEY are set.
     'reconcile-project-assignments': {
@@ -445,10 +463,10 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon':                 '300/hour',
         'user':                 '3000/hour',
-        'login':                '20/hour',
-        'forgot_password':      '5/hour',
-        'reset_password':       '10/hour',
-        'otp_verify':           '10/hour',
+        'login':                '200/hour',
+        'forgot_password':      '30/hour',
+        'reset_password':       '50/hour',
+        'otp_verify':           '50/hour',
         'resend_invite':        '5/hour',
         # Paid voice paths (each call bills a provider), limited per signed-in user. Tunable per environment through
         # these env vars without a code change - see apps/voice_commands/throttles.py.
@@ -683,4 +701,4 @@ LOGGING = {
         'level': 'WARNING',
     },
 }
- 
+ 

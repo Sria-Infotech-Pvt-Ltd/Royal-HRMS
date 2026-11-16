@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildNav, groupNav, isSection, profileMenuItems, withHomeLinks, withTeamLink, workspaceNav, type BarEntry } from "./navConfig";
 
@@ -182,9 +184,32 @@ describe("Reports navigation", () => {
   it("shows Reports only to someone who can run at least one report", () => {
     expect(hasReports(EMPLOYEE_PERMISSIONS)).toBe(false);
     expect(hasReports(["employees.view"])).toBe(false);
-    for (const permission of ["employees.export", "attendance.view", "leave.approve", "wfh.approve", "separation.approve", "facial_recognition.approve", "recruitment.view", "reports.view"]) {
+    for (const permission of ["employees.export", "attendance.view", "leave.approve", "wfh.approve", "separation.approve", "facial_recognition.approve", "recruitment.view", "reports.view", "timesheet.report"]) {
       expect(hasReports([...EMPLOYEE_PERMISSIONS, permission]), permission).toBe(true);
     }
+  });
+
+  it("shows Reports to someone whose only reporting permission is timesheet.report", () => {
+    expect(hasReports([...EMPLOYEE_PERMISSIONS, "timesheet.report"])).toBe(true);
+  });
+
+  it.each([["reports", "reports.view"], ["approvals", "leave.approve"]])(
+    "lets the %s menu item and its route guard in proxy.ts accept exactly the same permissions, so a link is never shown that the guard refuses",
+    (id, grantingPermission) => {
+      const item = buildNav([grantingPermission]).find(entry => !isSection(entry) && entry.id === id);
+      const menuRule = item && !isSection(item) && Array.isArray(item.permission) ? [...item.permission].sort() : [];
+      const source = readFileSync(join(process.cwd(), "proxy.ts"), "utf-8");
+      const guard = new RegExp(String.raw`"/dashboard/${id}":\s*\[([^\]]*)\]`).exec(source)?.[1] ?? "";
+      const routeRule = [...guard.matchAll(/"([^"]+)"/g)].map(match => match[1]).sort();
+      expect(menuRule.length).toBeGreaterThan(0);
+      expect(routeRule).toEqual(menuRule);
+    },
+  );
+
+  it("shows Approvals to someone whose only approval permission is timesheet.approve", () => {
+    const hasApprovals = (permissions: string[]) => buildNav(permissions).some(entry => !isSection(entry) && entry.id === "approvals");
+    expect(hasApprovals([...EMPLOYEE_PERMISSIONS, "timesheet.approve"])).toBe(true);
+    expect(hasApprovals(EMPLOYEE_PERMISSIONS)).toBe(false);
   });
 
   it("puts Reports in the workspace top bar for HR and managers, never for an employee", () => {

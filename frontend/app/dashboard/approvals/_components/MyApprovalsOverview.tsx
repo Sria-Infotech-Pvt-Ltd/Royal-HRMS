@@ -6,12 +6,14 @@
 // rules (see KIND_SCOPE_NOTES), which is why each line says how it is scoped.
 import { useState } from "react";
 import { useApprovalOverview } from "@/hooks/useApprovalOverview";
+import { useTimesheetPending } from "@/hooks/useTimesheetQueue";
 import { KIND_LABELS, KIND_SCOPE_NOTES } from "@/lib/approvalOverview";
 import type { ApprovalSectionKey } from "@/lib/approvalSections";
 
 interface MyApprovalsOverviewProps {
   canApprove: boolean;
   canApproveAttendance: boolean;
+  canApproveTimesheets: boolean;
   canSeePersonnel: boolean;
   canApproveFace: boolean;
   onOpen: (section: ApprovalSectionKey) => void;
@@ -26,9 +28,10 @@ interface Row {
   section: ApprovalSectionKey;
 }
 
-export default function MyApprovalsOverview({ canApprove, canApproveAttendance, canSeePersonnel, canApproveFace, onOpen }: MyApprovalsOverviewProps) {
+export default function MyApprovalsOverview({ canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace, onOpen }: MyApprovalsOverviewProps) {
   const [isMineOnly, setIsMineOnly] = useState(false);
   const overview = useApprovalOverview({ includeTeam: canApprove, includeFace: canApproveFace });
+  const timesheetsWaiting = useTimesheetPending(canApproveTimesheets);
 
   const rows: Row[] = [
     ...(canApprove ? overview.team.map(count => ({
@@ -43,6 +46,11 @@ export default function MyApprovalsOverview({ canApprove, canApproveAttendance, 
     ...(canApproveAttendance ? [{
       key: "attendance", label: "Attendance approval", scope: "Cycle sign-off for your team or payroll scope. Open the tab to see what is due.",
       pending: null, mine: null, section: "attendance" as const,
+    }] : []),
+    // The timesheet queue is exactly the sheets this person may decide, so what is waiting is also what is theirs to act on.
+    ...(canApproveTimesheets ? [{
+      key: "timesheets", label: "Timesheets", scope: "Weekly timesheets from your direct reports, or assigned to you as approver; HR within their scope.",
+      pending: timesheetsWaiting, mine: timesheetsWaiting, section: "timesheets" as const,
     }] : []),
     ...(canSeePersonnel ? [{
       key: "personnel", label: "Personnel actions", scope: "Promotions, transfers and similar actions at your stage of the chain. Open the tab to see what is due.",

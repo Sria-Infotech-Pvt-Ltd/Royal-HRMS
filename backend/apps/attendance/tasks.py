@@ -156,3 +156,34 @@ def reprocess_attendance_task(self, target_date_iso, branch, department, perform
     except Exception as exc:
         logger.error('reprocess_attendance_task failed: %s', exc, exc_info=True)
         raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def send_timesheet_employee_reminders(self):
+    """
+    Friday reminder to every employee whose timesheet for the current week is still not submitted.
+
+    Idempotent: a person is reminded at most once per week (the reminder's own Notification row, keyed by the week,
+    is the record), so a retry after a partial failure, or two workers running at once, never reminds anyone twice.
+    """
+    from apps.attendance.services_timesheet_reminders import send_employee_reminders
+
+    try:
+        return send_employee_reminders()
+    except Exception as exc:
+        logger.error('send_timesheet_employee_reminders failed: %s', exc, exc_info=True)
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def send_timesheet_approver_reminders(self):
+    """
+    Monday reminder to every approver who has submitted timesheets waiting. At most one per approver per day.
+    """
+    from apps.attendance.services_timesheet_reminders import send_approver_reminders
+
+    try:
+        return send_approver_reminders()
+    except Exception as exc:
+        logger.error('send_timesheet_approver_reminders failed: %s', exc, exc_info=True)
+        raise self.retry(exc=exc)

@@ -5,9 +5,11 @@ are reported to admins instead of silently dropped, and the pulls (per-employee 
 from __future__ import annotations
 
 import logging
+import time
 from collections import defaultdict
 
 import requests
+from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.core.cache import cache
 
@@ -26,10 +28,22 @@ PULL_ACTOR = 'dashboard_fallback_pull'
 
 PROJECT_ASSIGNMENTS_PATH = '/api/v1/project-assignments/'
 RESOURCE_ASSIGNMENTS_PATH = '/api/v1/resource-assignments/'
-PULL_TIMEOUT_SECONDS = 10
+# Per HTTP request to Project Budgeting: (connect, read). A host that cannot be reached at all (wrong network, firewall) is
+# given up on after the 3 s connect timeout instead of 10 s; a host that answers slowly still gets 10 s to send its page.
+PULL_CONNECT_TIMEOUT_SECONDS = 3
+PULL_READ_TIMEOUT_SECONDS = 10
 PULL_PAGE_SIZE = 100
 PULL_MAX_PAGES = 200
+# Total wall-clock budget for the one-employee fallback pull, checked before every page. Celery's own time limits are not
+# enforced by the `solo` worker pool used on Windows, so this is what actually bounds the task there.
+FALLBACK_PULL_BUDGET_SECONDS = 30
 FALLBACK_COOLDOWN_SECONDS = 10 * 60
+# How long a queued fallback pull may still be reported as running (see queue_employee_assignments_sync): task hard limit
+# (60 s) + margin. If the worker never picks the job up, the page stops reporting sync_pending after this.
+FALLBACK_RUNNING_SECONDS = 90
+# If the task could not even be queued (broker down), retry on a later request after this short pause, not after the full
+# cooldown, so an employee is not locked out of the fallback for ten minutes by a hiccup in the queue.
+ENQUEUE_FAILURE_RETRY_SECONDS = 30
 UNMATCHED_ALERT_COOLDOWN_SECONDS = 24 * 60 * 60
 
 NOTIFICATION_TYPE_PROJECT_SYNC_ALERT = 'project_sync_alert'
@@ -92,18 +106,24 @@ def _credentials() -> tuple[str, str] | None:
     return (base_url.rstrip('/'), api_key) if base_url and api_key else None
 
 
-def _get_all_pages(path: str, params: dict) -> list[dict]:
-    """Every row from a paginated Project Budgeting list, or ProjectSyncError (callers must not act on partial data)."""
+def _get_all_pages(path: str, params: dict, *, budget_seconds: float | None = None) -> list[dict]:
+    """Every row from a paginated Project Budgeting list, or ProjectSyncError (callers must not act on partial data).
+
+    `budget_seconds` caps the whole pull (not one request): once it is spent the pull stops with ProjectSyncError before
+    asking for another page. None (the scheduled reconcile) means no overall cap, only the per-request timeouts."""
     credentials = _credentials()
     if credentials is None:
         raise ProjectSyncError('PROJECT_BUDGET_API_BASE_URL / PROJECT_BUDGET_API_KEY are not configured.')
     base_url, api_key = credentials
+    deadline = None if budget_seconds is None else time.monotonic() + budget_seconds
     rows: list[dict] = []
     for page in range(1, PULL_MAX_PAGES + 1):
+        if deadline is not None and time.monotonic() >= deadline:
+            raise ProjectSyncError(f'Pull of {path} ran out of its {budget_seconds:g}s time budget before page {page}.')
         try:
             response = requests.get(
                 f'{base_url}{path}', params={**params, 'page': page, 'page_size': PULL_PAGE_SIZE},
-                headers={'X-API-Key': api_key}, timeout=PULL_TIMEOUT_SECONDS,
+                headers={'X-API-Key': api_key}, timeout=(PULL_CONNECT_TIMEOUT_SECONDS, PULL_READ_TIMEOUT_SECONDS),
             )
             response.raise_for_status()
             data = response.json()['data']
@@ -123,26 +143,109 @@ def _validated_rows(raw_rows: list[dict]) -> list[dict]:
     return serializer.validated_data
 
 
-def sync_employee_assignments_if_unknown(employee_code: str) -> None:
-    """Dashboard fallback: when we hold no rows for an employee, try one pull. Rate-limited per employee so someone who
-    genuinely has no projects doesn't hit Project Budgeting on every dashboard load. Never raises."""
+def _state_key(employee_code: str) -> str:
+    """One cache key per employee does both jobs, so there is no gap between "claimed" and "marked running":
+    its existence is the cooldown, and its VALUE is the time until which a queued pull may still be running
+    (0 = finished, failed, or never queued). The key name is the one the earlier synchronous version used (value True);
+    a leftover True reads as "not pending", so a deploy over the old version is safe."""
+    return f'project_assignments_pull:{employee_code}'
+
+
+def _is_pending(state) -> bool:
+    return isinstance(state, (int, float)) and not isinstance(state, bool) and state > time.time()
+
+
+def _tasks_run_eagerly() -> bool:
+    """True when Celery runs tasks inline in the calling process (CELERY_TASK_ALWAYS_EAGER, which settings.py turns on when
+    no REDIS_URL is configured). Read from the live Celery app, which is what actually decides it."""
+    from celery import current_app
+    return bool(current_app.conf.task_always_eager)
+
+
+def queue_employee_assignments_sync(employee_code: str) -> bool:
+    """Dashboard fallback: when we hold no rows for an employee, ask for ONE pull from Project Budgeting in the background.
+
+    Never waits for Project Budgeting and never raises, so a slow or unreachable service cannot hold up the employee's
+    dashboard. Returns `sync_pending`: True only while a queued pull is still expected to finish, so the caller can
+    refresh once afterwards. It is False when there is nothing to do, when a pull has already been tried within the
+    cooldown, when queueing failed, and when tasks run eagerly (see below).
+
+    Exactly one request per employee per cooldown window gets to queue the task: `cache.add` is atomic (Redis SET NX), so
+    the dashboard and Work Status loading at the same moment cannot queue it twice. The pull itself only ever runs for an
+    employee with NO stored rows, and never overwrites rows that have arrived since (see run_employee_assignments_pull).
+    """
     if not employee_code or _credentials() is None:
-        return
+        return False
     if ProjectAssignment.objects.filter(employee_code=employee_code).exists():
-        return
-    if not cache.add(f'project_assignments_pull:{employee_code}', True, FALLBACK_COOLDOWN_SECONDS):
-        return
+        return False
+    # The atomic gate. The value says "a pull may be running until <this time>" from the very first instant it exists.
+    if not cache.add(_state_key(employee_code), time.time() + FALLBACK_RUNNING_SECONDS, FALLBACK_COOLDOWN_SECONDS):
+        # Someone queued (or ran) a pull within the cooldown. It is "pending" only while that task may still be running.
+        return _is_pending(cache.get(_state_key(employee_code)))
+
+    if _tasks_run_eagerly():
+        # NOT asynchronous: with no broker configured Celery would execute the task right here, inside this request, so the
+        # pull is simply run inline. It is still bounded (3 s connect / 10 s read per page, 30 s total) and cannot raise,
+        # but the request does wait for it. The result is already stored by the time the caller reads the assignments, so
+        # nothing is pending.
+        # It calls the function directly instead of task.apply(): config/celery.py runs close_old_connections() before and
+        # after every task, eager ones included, and that would close THIS request's database connection in the middle of
+        # the request (with CONN_MAX_AGE=0 it always does, and inside a transaction it breaks the rest of the request).
+        try:
+            run_employee_assignments_pull(employee_code)
+        except Exception:  # noqa: BLE001 — the dashboard must still load.
+            logger.exception('Eager fallback pull crashed for %s', employee_code)
+        return False
+
+    from apps.hrms.tasks import pull_employee_assignments
+
     try:
-        rows = _validated_rows(_get_all_pages(PROJECT_ASSIGNMENTS_PATH, {'employee_id': employee_code, 'status': 'all'}))
-        sync_employee_snapshot(employee_code, rows, source=SOURCE_PULL, triggered_by=PULL_ACTOR)
-    except ProjectSyncError as exc:
-        logger.warning('Fallback pull failed for %s: %s', employee_code, exc)
+        # retry=False: fail at once if the broker is unreachable instead of retrying inside the request.
+        pull_employee_assignments.apply_async(args=[employee_code], retry=False)
+    except Exception:  # noqa: BLE001 — a queue problem must never break the dashboard.
+        logger.warning('Could not queue the project-assignments pull for %s', employee_code, exc_info=True)
+        # Nothing is running, and shorten the cooldown instead of leaving the employee behind a ten-minute one for
+        # something that never ran.
+        cache.set(_state_key(employee_code), 0, ENQUEUE_FAILURE_RETRY_SECONDS)
+        return False
+    return True
+
+
+def _log_failed_pull(employee_code: str, message: str) -> None:
+    try:
         ProjectSyncLog.objects.create(
             source=SOURCE_PULL, triggered_by=PULL_ACTOR, employee_code=employee_code,
-            status=ProjectSyncLog.STATUS_FAILED, message=str(exc)[:1000],
+            status=ProjectSyncLog.STATUS_FAILED, message=message[:1000],
         )
-    except Exception:  # noqa: BLE001 — sync_employee_snapshot already logged it; the dashboard must still load.
+    except Exception:  # noqa: BLE001 — failing to write the log row must not mask the original problem.
+        logger.exception('Could not record the failed fallback pull for %s', employee_code)
+
+
+def run_employee_assignments_pull(employee_code: str) -> None:
+    """Body of the queued fallback task (apps.hrms.tasks.pull_employee_assignments). Never raises.
+
+    * If rows exist by now (a Project Budgeting push or the scheduled reconcile got there first) it does nothing, so it
+      can never overwrite them with an older pull.
+    * A failed or slow pull (service unreachable, timeout, out of budget, invalid rows) changes nothing that is stored: the
+      list is fetched and validated completely BEFORE anything is written. The failure is logged in ProjectSyncLog.
+    * There is no Celery retry: the next dashboard visit after the cooldown and the 30-minute scheduled reconcile are the
+      bounded retries, and neither can pile up.
+    * It always marks the state "not running" so the page stops reporting sync_pending (the cooldown restarts from the
+      moment the attempt finished)."""
+    try:
+        if ProjectAssignment.objects.filter(employee_code=employee_code).exists():
+            return
+        rows = _validated_rows(_get_all_pages(
+            PROJECT_ASSIGNMENTS_PATH, {'employee_id': employee_code, 'status': 'all'}, budget_seconds=FALLBACK_PULL_BUDGET_SECONDS,
+        ))
+        sync_employee_snapshot(employee_code, rows, source=SOURCE_PULL, triggered_by=PULL_ACTOR)
+    except (ProjectSyncError, SoftTimeLimitExceeded) as exc:
+        logger.warning('Fallback pull failed for %s: %s', employee_code, exc)
+        _log_failed_pull(employee_code, f'{type(exc).__name__}: {exc}' if isinstance(exc, SoftTimeLimitExceeded) else str(exc))
+    except Exception:  # noqa: BLE001 — sync_employee_snapshot already logged it.
         logger.exception('Fallback pull crashed for %s', employee_code)
+    finally:
+        cache.set(_state_key(employee_code), 0, FALLBACK_COOLDOWN_SECONDS)
 
 
 def reconcile_all_employees() -> dict:

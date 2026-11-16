@@ -29,7 +29,7 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/payroll": "payroll.view",
   "/dashboard/leave": "leave.view",
   "/dashboard/expenses": "expenses.view",
-  "/dashboard/approvals": ["leave.approve", "expenses.approve", "payroll.edit", "employees.approve", "employees.raise_action", "facial_recognition.approve"],
+  "/dashboard/approvals": ["leave.approve", "expenses.approve", "payroll.edit", "employees.approve", "employees.raise_action", "facial_recognition.approve", "timesheet.approve"],
   // /dashboard/separation intentionally absent — every employee can create
   // and view their own separation request, not just Manager/HR (same
   // self-service reasoning as my-payslip/my-attendance above). The page
@@ -38,7 +38,7 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/documents": "documents.view",
   // Anyone who can run at least one report. Each report still needs its own permission on the server, so this only
   // decides who may open the screen; a person with none of them sees an empty list.
-  "/dashboard/reports": ["reports.view", "employees.export", "attendance.view", "leave.approve", "wfh.approve", "separation.approve", "facial_recognition.approve", "recruitment.view"],
+  "/dashboard/reports": ["reports.view", "employees.export", "attendance.view", "leave.approve", "wfh.approve", "separation.approve", "facial_recognition.approve", "recruitment.view", "timesheet.report"],
   "/dashboard/audit": "audit.view",
   "/dashboard/performance": ["performance.manage_cycles", "performance.review_team"],
   "/dashboard/settings": "settings.view",

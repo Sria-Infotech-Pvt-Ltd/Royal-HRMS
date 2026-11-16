@@ -183,18 +183,25 @@ _PROFILE_FIELDS = (
 )
 
 
-def _copy_hire_action_documents(user, action):
+def _copy_hire_action_documents(user, action, reviewer=None):
     """Every file uploaded during the wizard (PAN/Aadhaar on the Statutory
     step, any item on the Documents step) becomes a real EmployeeDocument now
     that a real employee exists — same storage backend/path pattern as
     action.photo -> user.profile_photo above, just for a whole set of files
     instead of one. The HireActionDocument rows are deleted afterward since
     the real EmployeeDocument row is what matters from this point on; the
-    file itself is not re-uploaded, just re-pointed."""
+    file itself is not re-uploaded, just re-pointed.
+
+    HR attached these files themselves while completing the hire, so they are
+    recorded as verified by that HR user. Left at the model default (pending),
+    the employee's own Documents tab showed every one of them as "Pending"
+    even though HR had already supplied and checked them."""
     for doc in action.documents.all():
         new_doc = EmployeeDocument(
             user=user, document_type=doc.document_type,
             file_name=doc.file_name, file_size=doc.file_size,
+            verification_status=EmployeeDocument.VERIFICATION_VERIFIED,
+            verified_by=reviewer, verified_at=timezone.now() if reviewer else None,
         )
         new_doc.file.name = doc.file.name
         new_doc.save()
@@ -406,7 +413,7 @@ class HireActionCompleteView(APIView):
 
             _assign_salary_and_tax(user, draft, request.user)
             _apply_wizard_records(user, draft)
-            _copy_hire_action_documents(user, action)
+            _copy_hire_action_documents(user, action, reviewer=request.user)
 
             # Assessments are opt-in per hire (assigned manually, e.g. from
             # the Assessments admin page), not auto-assigned here — this used

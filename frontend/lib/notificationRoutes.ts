@@ -9,22 +9,37 @@ export const MODULE_ROUTES: Record<NotificationModule, string> = {
   announcement:   "/dashboard/ess?tab=announcements",
   holiday:        "/dashboard/attendance",
   permission:     "/dashboard/leave",
-  promotion:      "/dashboard/profile",
-  confirmation:   "/dashboard/profile",
+  // Employment changes open the employee workspace's Employment tab (status, confirmation, role), not the My Profile page.
+  promotion:      "/dashboard/ess?tab=employment",
+  confirmation:   "/dashboard/ess?tab=employment",
   payroll:        "/dashboard/payroll",
   system:         "/dashboard",
+  // Fallback only: a timesheet notice opens its own place (see timesheetRoute below).
+  timesheet:      "/dashboard/ess?tab=timesheet",
 };
 
 /** System notifications that concern one employee carry a `reference_id` saying where to go. */
 const OWN_PROFILE_REFERENCE = "profile";
 const EMPLOYEE_REFERENCE_PREFIX = "employee:";
 
+const TIMESHEET_WEEK = /(\d{4}-\d{2}-\d{2})/;
+
+/** Timesheet notices: what an approver must act on opens Approvals > Timesheets; what happened to your own sheet opens that week
+ *  in My Workspace. The week comes from the reference ("<week>:<sheet id>", or "employee-week:<week>" for the Friday reminder). */
+function timesheetRoute({ notification_type: type, reference_id: reference }: Pick<Notification, "reference_id"> & Partial<Pick<Notification, "notification_type">>): string {
+  const ref = reference ?? "";
+  if (type === "timesheet_submitted" || ref.startsWith("approver-day:")) return "/dashboard/approvals?section=timesheets";
+  const week = TIMESHEET_WEEK.exec(ref)?.[1];
+  return week ? `/dashboard/ess?tab=timesheet&week=${week}` : MODULE_ROUTES.timesheet;
+}
+
 /** The page a notification should open. Joining-day notices link to the employee (or to your own profile when it is you);
     every other module keeps its fixed page, and an unknown module falls back to the dashboard. */
-export function notificationRoute(notification: Pick<Notification, "module" | "reference_id">): string {
+export function notificationRoute(notification: Pick<Notification, "module" | "reference_id"> & Partial<Pick<Notification, "notification_type">>): string {
+  if (notification.module === "timesheet") return timesheetRoute(notification);
   if (notification.module === "system") {
     const reference = notification.reference_id ?? "";
-    if (reference === OWN_PROFILE_REFERENCE) return "/dashboard/profile";
+    if (reference === OWN_PROFILE_REFERENCE) return "/dashboard"; // the employee's own welcome notice opens the dashboard
     if (reference.startsWith(EMPLOYEE_REFERENCE_PREFIX)) {
       const employeeId = reference.slice(EMPLOYEE_REFERENCE_PREFIX.length).trim();
       if (employeeId) return `/dashboard/employees/${encodeURIComponent(employeeId)}`;

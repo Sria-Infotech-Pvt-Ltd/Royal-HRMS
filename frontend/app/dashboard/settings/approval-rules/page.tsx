@@ -18,6 +18,7 @@ const WORKFLOW_ICONS: Record<string, string> = {
   leave:                 "ti-beach",
   expense:               "ti-wallet",
   attendance_correction: "ti-clock-edit",
+  timesheet:             "ti-clock-check",
 };
 
 interface EditState {

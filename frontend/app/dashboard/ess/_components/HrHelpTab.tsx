@@ -9,6 +9,8 @@
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { isUnrestrictedUser } from "@/lib/auth";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 
@@ -50,7 +52,9 @@ const fmtDateTime = (d: string) =>
   new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 export default function HrHelpTab() {
-  const canRespond = usePermission("hr_help.respond");
+  const currentUser = useCurrentUser();
+  // System Admin (superuser or settings.edit) sees every ticket, matching the server.
+  const canRespond = usePermission("hr_help.respond") || isUnrestrictedUser(currentUser);
   const { data: page, loading, error, refetch } = useFetch<PagedResponse<ApiHrHelpRequest>>(`${API.hrHelp.list}?page_size=100`);
   const requests = page?.results ?? [];
 

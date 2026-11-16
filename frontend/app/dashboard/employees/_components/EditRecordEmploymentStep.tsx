@@ -8,8 +8,7 @@
 import { useMemo } from "react";
 import DateInput from "@/components/shared/DateInput";
 import type { EmploymentDraft } from "../../hire/[hireActionId]/_components/EmploymentStep";
-import { useEmploymentLookups } from "@/hooks/useEmploymentLookups";
-import { EMPLOYMENT_TYPES } from "@/lib/employmentType";
+import { useEmploymentLookups } from "@/hooks/useEmploymentLookups";import { EMPLOYMENT_TYPES } from "@/lib/employmentType";
 
 const WORK_MODES: [string, string][] = [["office", "Office"], ["hybrid", "Hybrid"], ["remote", "Remote"]];
 const ATTENDANCE_SCHEMES: [string, string][] = [["standard", "Standard – Office"], ["flexible", "Flexible"], ["shift_based", "Shift-based"]];
@@ -112,6 +111,14 @@ export default function EditRecordEmploymentStep({ value, onChange, positionTitl
       <div className="divider" />
       <div className="sechead">WORK SETUP</div>
       <div className="g3">
+        <div className="f"><label>Company Code</label>
+          <select className="finput" value={value.branch} onChange={e => set("branch", e.target.value)}>
+            {/* No blank choice once a branch is set: saving a blank would clear the employee's Company Code. */}
+            {!value.branch && <option value="">Select</option>}
+            {value.branch && !lookups.branches.some(b => b.branch_name === value.branch) && <option value={value.branch}>{value.branch}</option>}
+            {lookups.branches.map(b => <option key={b.id} value={b.branch_name}>{b.branch_code ? `${b.branch_name} (${b.branch_code})` : b.branch_name}</option>)}
+          </select>
+          <div className="hint">On save, the work location below follows the new Company Code unless it was entered by hand.</div></div>
         <div className="f"><label>Work location <Tag text="FROM COMPANY CODE" /></label>
           <input className="finput auto" disabled value={value.work_location} placeholder="Set from the Company Code address" />
           <div className="hint">Follows the Company Code; a value entered earlier is kept until the Company Code changes.</div></div>

@@ -257,6 +257,12 @@ class EmployeeDetailView(APIView):
                         changes['work_location'] = {'from': employee.work_location, 'to': moved_to}
                         employee.work_location = moved_to
                         update_fields.append('work_location')
+                    # branch_fk is what employee counts, headcount, attendance devices and the holiday calendar read. The
+                    # post_save signal only fills it when empty, so without this a move would leave the employee linked to
+                    # the OLD branch. A name matching no branch clears the link rather than keeping the stale one.
+                    from apps.branch.models import Branch
+                    employee.branch_fk = Branch.objects.filter(branch_name__iexact=val).first() if val else None
+                    update_fields.append('branch_fk')
                 setattr(employee, field, val)
                 update_fields.append(field)
 
