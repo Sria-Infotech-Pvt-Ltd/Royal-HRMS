@@ -6068,3 +6068,23 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 - Also in this commit: attendance recalculation / import changes and the WFH tag on calendars from the same sessions.
 
 **Run on the server:** `migrate attendance` (0052, 0053).
+
+## Calendar legend and tags, workspace banner, Settings spacing, calendar API fields, email-log details (2026-11-17)
+
+Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend guard" (f8cd31de), plus the UI fixes made after it.
+
+**Calendar API dropped the new fields (why the WFH tag never showed).** `CalendarSerializer` / `DayRecordSerializer` (`attendance/serializers_my_attendance.py`) only lets listed fields through. `_build_day` returned `work_mode`, `short_minutes` and `short_display`, but the serializer did not list them, so they never reached the page. The first check only read the service output, not the API. Fixed by listing the three fields; `tests_calendar_work_mode.CalendarApiResponseTests` now goes through the serializer. Lesson: test the layer the page actually calls.
+
+**ESS calendar (`ess/_components/EssAttendanceCalendar.tsx`).**
+- The inline legend lists only the colours that occur in the month shown (`usedInMonth`); a new `<details>` "What do these mean?" lists every colour and both tags with a plain meaning. Incomplete = punched in but never punched out; raise a correction.
+- The WFH / Short chips are `<span>`s (they were `<i>`, which browsers italicise). `.ess-calendar-legend .ess-cal-wfh/.ess-cal-short` restate their colour because the legend styles every span inside it. A day's tags sit in one `.ess-cal-tags` block; in narrow containers only the icon shows.
+
+**Workspace shell (`ess/_client.tsx`, `ess-theme.css`).** Only the tab bar is sticky now (`.ess-sticky` holds just the nav, `top:0`). The purple `HomeBanner` and the admin `ViewAsStrip` scroll away; before, the whole block was fixed and covered the top of the page content. Test in `_client.test.tsx`.
+
+**Settings page spacing (`globals.css`).** `.stats + .settings-cats { margin-top: 18px }`: the category band touched the four KPI cards because the page's plain wrapper has no flex gap. Test: `settings/settingsLayout.test.ts`. The Performance pages (`PerformanceOverviewClient`, `ManagerAppraisalWorkspace`) use the same plain-wrapper pattern under their four cards and were NOT checked in a browser; they may touch too.
+
+**Email Logs.** New invitation emails are logged with the live link replaced by "[one-time link not stored]" (`hide_link_in_log` in `accounts/utils.py`) and `has_sensitive_context=True`; the email that is SENT keeps the link. `reset_link` is now in `_SENSITIVE_CONTEXT_KEYS`, so admin password-reset emails are redacted in the log and flagged. `EmailLogSerializer.resend_blocked_reason` lets the Email Logs page hide Resend for these rows ("Re-issue from the employee"). Old log rows keep their stored links (already expired) and are covered by the template-name guard; they were not scrubbed. No migration.
+
+**Incomplete status.** Set by `detect_and_mark_unpunches(target_date=today)` (Celery beat, every 5 minutes) after shift end + the missing-punch grace. It only looks at the current day, so a day it missed (job not running after shift end) stays Late with 0 hours and is never swept later. Not changed; a sweep of the previous day would close the gap.
+
+**Verified:** 130 database-free backend tests, 998 frontend tests, `tsc`, `eslint`, `npm run build`; the real calendar endpoint returns `work_mode` and the shortfall fields for the affected employee on the local database. **Not verified:** any of the pages in a browser, and the database-dependent tests. **Not changed:** the HR attendance screens do not show the WFH / Short tags; the full-day dropdown in Attendance Config offers only 7 / 8 / 9 hours (no custom value such as 7h 40m).
