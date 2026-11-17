@@ -114,6 +114,7 @@ from apps.accounts.serializers import (
     SMTPTestSerializer,
     VerifyOTPSerializer,
 )
+from apps.accounts.services_onboarding_queue import QUEUE_MEMBERSHIP, apply_queue_filters, order_queue, queue_counts
 from apps.accounts.services_placement import assign_position, sync_from_position
 from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle, ResetPasswordRateThrottle
 from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
@@ -130,7 +131,7 @@ class OnboardingApprovalView(APIView):
     """
     Unified HR onboarding management endpoint.
 
-    /onboarding/approvals/           GET → approvals queue (submitted, awaiting action)
+    /onboarding/approvals/           GET → approvals list (waiting for review, sent back, approved)
                                          ?view=pipeline → full pipeline (pending+draft+submitted)
     /onboarding/approvals/<user_id>/ GET  → specific employee's full onboarding details
                                      POST → approve or reject
@@ -553,11 +554,10 @@ class OnboardingApprovalView(APIView):
 
         qs = (
             User.objects
-            .filter(onboarding_status__in=[User.ONBOARDING_SUBMITTED, User.ONBOARDING_REJECTED])
+            .filter(QUEUE_MEMBERSHIP)
             .select_related('profile')
             .prefetch_related('employee_documents')
             .prefetch_related('custom_field_files')
-            .order_by('date_joined')
         )
         if not _has_perm(request.user, 'settings.edit'):
             qs = qs.exclude(users_with_permission('settings.edit'))
@@ -576,13 +576,19 @@ class OnboardingApprovalView(APIView):
                     Q(branch='', candidate_portal__branch__branch_name=request.user.branch)
                 ).distinct()
 
+        # Totals describe the whole queue this person may see, so the cards stay right on every page and under any filter.
+        counts = queue_counts(qs)
+        qs = order_queue(apply_queue_filters(
+            qs, request.query_params.get('status', ''), request.query_params.get('search', ''),
+        ))
+
         page_obj, paginator = paginate(qs, request, default_page_size=20)
         user_ids = [u.pk for u in page_obj.object_list]
         candidates_by_user = {
             c.portal_user_id: c
             for c in Candidate.objects.select_related('branch').filter(portal_user_id__in=user_ids)
         }
-        return success('Onboarding approvals retrieved.', data=paginated_data(
+        data = paginated_data(
             paginator, page_obj,
             OnboardingApprovalSerializer(
                 page_obj.object_list, many=True,
@@ -592,7 +598,9 @@ class OnboardingApprovalView(APIView):
                     'use_direct_url': True,
                 },
             ).data,
-        ))
+        )
+        data['counts'] = counts
+        return success('Onboarding approvals retrieved.', data=data)
 
     def _get_user_detail(self, request, user_id):
         from apps.accounts.serializers import OnboardingApprovalSerializer
