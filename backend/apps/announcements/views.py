@@ -16,6 +16,7 @@ from core.responses import error, first_error, get_client_ip, success
 
 from apps.accounts.models import AuditLog
 from apps.announcements.models import Announcement, AnnouncementReaction
+from apps.announcements.services_list_options import apply_list_options
 from apps.announcements.serializers import AnnouncementSerializer, AnnouncementWriteSerializer
 from apps.announcements.services_announcements_visibility import visible_announcements
 from apps.announcements.services_attachment_changes import apply_changes, precheck
@@ -113,6 +114,8 @@ class AnnouncementListCreateView(APIView):
         if category := request.query_params.get('category'):
             if category in dict(Announcement.CATEGORY_CHOICES):
                 qs = qs.filter(category=category)
+        # Optional: ?search=<text in title or body>, ?pinned=1, ?sort=newest|oldest|reactions|views (pinned posts always stay on top).
+        qs = apply_list_options(qs, request.query_params)
 
         # ── Stats (computed on the un-paginated, un-category-filtered set) ───
         base_qs     = _visible_qs(request)
@@ -139,6 +142,7 @@ class AnnouncementListCreateView(APIView):
 
         return success('Announcements fetched.', {
             'count':           total_count,
+            'filtered_count':  paginator.count,   # how many match the category / search / pinned options (count above is the whole feed)
             'page':            page_obj.number,
             'page_size':       page_size,
             'total_pages':     paginator.num_pages,

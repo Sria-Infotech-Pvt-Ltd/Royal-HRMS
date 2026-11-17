@@ -3,8 +3,10 @@
 
 import { formatDate, formatDateTime } from "@/lib/formatDate";
 import type { AnnouncementAttachment, AnnouncementLink } from "@/lib/announcementAttachments";
+import type { Category } from "@/lib/announcementCategories";
 
-export type Category      = "general" | "policy" | "event" | "celebration";
+// The types, their labels, pills and badge colours live in one shared file; re-exported so existing imports from here still work.
+export { CATEGORIES, FILTERS, CAT_BADGE, CAT_LABEL, type Category } from "@/lib/announcementCategories";
 export type Visibility    = "all" | "department" | "branch";
 // The Branch field is now its own always-present field in the form, separate
 // from Visibility — so the form only ever chooses between these two; "branch"
@@ -39,6 +41,8 @@ export interface Announcement {
 
 export interface PageMeta {
   count:           number;
+  /** How many posts match the category / search / pinned options (count is the whole feed). Absent from older servers. */
+  filtered_count?: number;
   page:            number;
   page_size:       number;
   total_pages:     number;
@@ -65,24 +69,9 @@ export type FormErrors = Partial<Record<keyof FormState, string>>;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const CATEGORIES: { value: Category; label: string }[] = [
-  { value: "general",     label: "General"     },
-  { value: "policy",      label: "Policy"      },
-  { value: "event",       label: "Event"       },
-  { value: "celebration", label: "Celebration" },
-];
-
 export const VISIBILITY_OPTIONS: { value: FormVisibility; label: string }[] = [
   { value: "all",        label: "All Employees" },
   { value: "department", label: "By Department" },
-];
-
-export const FILTERS = [
-  { value: "",            label: "All Posts"   },
-  { value: "general",     label: "General"     },
-  { value: "policy",      label: "Policy"      },
-  { value: "event",       label: "Event"       },
-  { value: "celebration", label: "Celebration" },
 ];
 
 export const EMPTY_FORM: FormState = {
@@ -112,20 +101,6 @@ export function timeAgo(iso: string): string {
 export function fullDateTime(iso: string): string {
   return formatDateTime(iso);
 }
-
-export const CAT_BADGE: Record<Category, string> = {
-  general:     "badge-info",
-  policy:      "badge-warn",
-  event:       "badge-success",
-  celebration: "badge-primary",
-};
-
-export const CAT_LABEL: Record<Category, string> = {
-  general:     "General",
-  policy:      "Policy",
-  event:       "Event",
-  celebration: "Celebration",
-};
 
 const AVATAR_COLORS = [
   { bg: "rgba(124,58,237,0.15)",  color: "#7c3aed" },

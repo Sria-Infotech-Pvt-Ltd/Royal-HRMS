@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSharedAnnouncement, useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
 import { formatDate } from "@/lib/formatDate";
 import { announcementLinkHref } from "@/lib/announcementLink";
+import { categoryLabel } from "@/lib/announcementCategories";
 
 function fmtDate(iso: string): string {
   return formatDate(iso);
@@ -65,7 +66,7 @@ export default function EmpUpdatesCard() {
               )}
               {announcement.category && announcement.category !== "general" && (
                 <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 10, background: "rgba(124,58,237,0.12)", color: "var(--primary)" }}>
-                  {announcement.category.charAt(0).toUpperCase() + announcement.category.slice(1)}
+                  {categoryLabel(announcement.category)}
                 </span>
               )}
             </div>

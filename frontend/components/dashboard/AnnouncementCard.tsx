@@ -3,6 +3,7 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { formatDate as formatDisplayDate } from "@/lib/formatDate";
+import { categoryLabel } from "@/lib/announcementCategories";
 import type { AnnouncementData } from "@/types/dashboard";
 
 function formatDate(raw: string | undefined): string {
@@ -58,7 +59,7 @@ export default function AnnouncementCard() {
               background: "rgba(124,58,237,0.10)", color: "var(--primary)",
               letterSpacing: "0.05em", textTransform: "uppercase",
             }}>
-              {announcement.category}
+              {categoryLabel(announcement.category)}
             </span>
           )}
           {announcement.image_url && (

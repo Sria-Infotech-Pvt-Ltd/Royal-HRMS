@@ -1,7 +1,9 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
 import { useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
@@ -14,13 +16,19 @@ import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
 import AnnouncementCard from "./AnnouncementCard";
 import AnnouncementMedia from "./AnnouncementMedia";
+import AnnouncementsHeader from "./AnnouncementsHeader";
+import AnnouncementStats from "./AnnouncementStats";
+import AnnouncementToolbar from "./AnnouncementToolbar";
+import AnnouncementEmptyState from "./AnnouncementEmptyState";
+import AnnouncementSkeleton from "./AnnouncementSkeleton";
+import { buildListParams, hasActiveFilters, DEFAULT_SORT, type ListFilters, type SortKey } from "./_filters";
 import AttachmentFields from "./AttachmentFields";
 import { buildAnnouncementFormData, draftErrors, draftFromAnnouncement, emptyDraft, type AttachmentDraft } from "@/lib/announcementAttachments";
 import type { AxiosProgressEvent } from "axios";
 import {
   type Category, type Visibility, type FormVisibility, type Announcement, type PageMeta,
   type Branch, type FormState, type FormErrors,
-  CATEGORIES, VISIBILITY_OPTIONS, FILTERS, EMPTY_FORM,
+  CATEGORIES, VISIBILITY_OPTIONS, EMPTY_FORM,
   initials, fullDateTime, CAT_BADGE, CAT_LABEL, avatarColor, viewKey,
 } from "./_data";
 
@@ -54,8 +62,15 @@ function AnnouncementsPageInner() {
   const [pageErr, setPageErr] = useState<string | null>(null);
 
   // ── Filters / pagination ────────────────────────────────────────────────────
-  const [category, setCategory] = useState("");
-  const [page,     setPage]     = useState(1);
+  const [category,   setCategory]   = useState("");
+  const [searchText, setSearchText] = useState("");      // what is typed; the list follows a moment later (debounced)
+  const [sort,       setSort]       = useState<SortKey>(DEFAULT_SORT);
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [page,       setPage]       = useState(1);
+  const search = useDebouncedValue(searchText.trim(), 300);
+  const filters: ListFilters = useMemo(() => ({ category, search, pinnedOnly, sort }), [category, search, pinnedOnly, sort]);
+  const filtersActive = hasActiveFilters(filters) || searchText.trim() !== "";
+  const router = useRouter();
 
   // ── Modal ───────────────────────────────────────────────────────────────────
   const [showModal,  setShowModal]  = useState(false);
@@ -101,13 +116,11 @@ function AnnouncementsPageInner() {
 
   // ─── Fetch announcements ───────────────────────────────────────────────────
 
-  const fetchAnnouncements = useCallback(async (pg: number, cat: string) => {
+  const fetchAnnouncements = useCallback(async (pg: number, current: ListFilters) => {
     setLoading(true);
     setPageErr(null);
     try {
-      const params: Record<string, string> = { page: String(pg), page_size: "10" };
-      if (cat) params.category = cat;
-      const res = await clientApi.get(API.announcements.list, { params });
+      const res = await clientApi.get(API.announcements.list, { params: buildListParams(current, pg) });
       setMeta(res.data?.data ?? null);
     } catch (e: unknown) {
       setPageErr((e as { message?: string }).message ?? "Failed to load announcements.");
@@ -117,8 +130,8 @@ function AnnouncementsPageInner() {
   }, []);
 
   useEffect(() => {
-    fetchAnnouncements(page, category);
-  }, [page, category, fetchAnnouncements]);
+    fetchAnnouncements(page, filters);
+  }, [page, filters, fetchAnnouncements]);
 
   // Fetch org units + branches from the backend for the modal dropdowns.
   // OrgUnit has no branch field (it's one shared, branch-agnostic tree for
@@ -284,7 +297,7 @@ function AnnouncementsPageInner() {
 
       closeModal();
       setPage(1);
-      fetchAnnouncements(1, category);
+      fetchAnnouncements(1, filters);
     } catch (e: unknown) {
       const err = e as { message?: string; code?: string };
       const message = err.code === "ECONNABORTED"
@@ -310,7 +323,7 @@ function AnnouncementsPageInner() {
       const remaining = (meta?.results.length ?? 1) - 1;
       const newPage   = remaining === 0 && page > 1 ? page - 1 : page;
       setPage(newPage);
-      fetchAnnouncements(newPage, category);
+      fetchAnnouncements(newPage, filters);
     } catch (e: unknown) {
       setDeleteErr((e as { message?: string }).message ?? "Delete failed.");
     } finally {
@@ -340,65 +353,42 @@ function AnnouncementsPageInner() {
       await clientApi.post(API.announcements.react(ann.id));
     } catch {
       // Rollback on error
-      fetchAnnouncements(page, category);
+      fetchAnnouncements(page, filters);
     }
   }
 
   // ─── Stats from API meta ───────────────────────────────────────────────────
 
-  const stats = [
-    { label: "Total Posts",     value: meta?.count           ?? 0, icon: "ti-speakerphone", cls: "si-primary" },
-    { label: "Pinned",          value: meta?.pinned_count    ?? 0, icon: "ti-pin",          cls: "si-warn"    },
-    { label: "Total Reactions", value: meta?.total_reactions ?? 0, icon: "ti-heart",        cls: "si-success" },
-    { label: "Total Views",     value: meta?.total_views     ?? 0, icon: "ti-eye",          cls: "si-info"    },
-  ];
+  const goBack = () => {
+    if (window.history.length > 1) router.back();
+    else router.push("/dashboard");
+  };
+  const changeSearch     = (text: string)       => { setSearchText(text);     setPage(1); };
+  const changeCategory   = (value: string)      => { setCategory(value);      setPage(1); };
+  const changeSort       = (value: SortKey)     => { setSort(value);          setPage(1); };
+  const changePinnedOnly = (value: boolean)     => { setPinnedOnly(value);    setPage(1); };
+  const clearFilters     = () => { setCategory(""); setSearchText(""); setSort(DEFAULT_SORT); setPinnedOnly(false); setPage(1); };
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <>
       {/* ── Page header ──────────────────────────────────────────────────── */}
-      <div className="page-header">
-        <div>
-          <div className="page-title">Announcements</div>
-          <div className="page-sub">Company-wide news, policy updates, and celebrations</div>
-        </div>
-        {canPost && (
-          <div className="page-actions">
-            <button className="btn btn-filled" onClick={openCreate}>
-              <i className="ti ti-plus" /> Post Announcement
-            </button>
-          </div>
-        )}
-      </div>
+      <AnnouncementsHeader onBack={goBack} />
 
-      {/* ── Stat cards ───────────────────────────────────────────────────── */}
-      <div className="stats-grid">
-        {stats.map(s => (
-          <div className="stat-card" key={s.label}>
-            <div className={`stat-icon ${s.cls}`}><i className={`ti ${s.icon}`} /></div>
-            <div className="stat-label">{s.label}</div>
-            <div className="stat-value">{s.value.toLocaleString()}</div>
-          </div>
-        ))}
-      </div>
+      <AnnouncementStats
+        posts={meta?.count ?? 0} pinned={meta?.pinned_count ?? 0}
+        reactions={meta?.total_reactions ?? 0} views={meta?.total_views ?? 0}
+      />
 
-      {/* ── Category filter tabs ─────────────────────────────────────────── */}
-      <div className="ann-filter-bar">
-        {FILTERS.map(f => (
-          <button
-            key={f.value}
-            onClick={() => { setCategory(f.value); setPage(1); }}
-            className={`btn ${category === f.value ? "btn-filled" : "btn-ghost"}`}
-            suppressHydrationWarning
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <AnnouncementToolbar
+        searchText={searchText} category={category} sort={sort} pinnedOnly={pinnedOnly} hasFilters={filtersActive}
+        shown={meta ? meta.results.length : null} matching={meta ? (meta.filtered_count ?? meta.count) : null}
+        onSearchText={changeSearch} onCategory={changeCategory} onSort={changeSort} onPinnedOnly={changePinnedOnly} onClear={clearFilters}
+      />
 
       {/* ── Celebration: today's birthdays ───────────────────────────────── */}
-      {(category === "" || category === "celebration") && todaysBirthdays.map(emp => (
+      {(category === "" || category === "celebration") && !filtersActive && todaysBirthdays.map(emp => (
         <BirthdayCelebrationCard
           key={emp.employee_id}
           employee={emp}
@@ -414,27 +404,15 @@ function AnnouncementsPageInner() {
       )}
 
       {/* ── Loading ──────────────────────────────────────────────────────── */}
-      {loading && (
-        <div style={{ display: "flex", justifyContent: "center", padding: 60, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2" style={{ fontSize: 28, animation: "spin 1s linear infinite" }} />
-        </div>
-      )}
+      {loading && !meta && <AnnouncementSkeleton />}
 
-      {/* ── Empty state ──────────────────────────────────────────────────── */}
       {!loading && meta && meta.results.length === 0 && (
-        <div className="empty-state">
-          <i className="ti ti-speakerphone" />
-          <h3>No announcements yet</h3>
-          <p>{category ? "No posts in this category." : "Be the first to post an announcement."}</p>
-          {canPost && (
-            <button className="btn btn-filled" onClick={openCreate}>Post Announcement</button>
-          )}
-        </div>
+        <AnnouncementEmptyState hasFilters={filtersActive} canPost={canPost} onCreate={openCreate} onClear={clearFilters} />
       )}
 
       {/* ── Announcement cards ───────────────────────────────────────────── */}
-      {!loading && meta && meta.results.length > 0 && (
-        <div className="ann-cards-list">
+      {meta && meta.results.length > 0 && (
+        <div className={`ann-cards-list${loading ? " is-loading" : ""}`} aria-busy={loading}>
           {meta.results.map(ann => (
             <AnnouncementCard
               key={ann.id}

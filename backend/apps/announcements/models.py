@@ -9,15 +9,22 @@ from core.storage import AuthenticatedImageKitStorage, announcement_attachment_u
 
 
 class Announcement(models.Model):
+    # The stored value never changes once published (existing announcements keep it); only the label people read can be renamed.
     CATEGORY_GENERAL     = 'general'
     CATEGORY_POLICY      = 'policy'
     CATEGORY_EVENT       = 'event'
     CATEGORY_CELEBRATION = 'celebration'
+    CATEGORY_HOLIDAY     = 'holiday'
+    CATEGORY_PAYROLL     = 'payroll'
+    CATEGORY_URGENT      = 'urgent'
     CATEGORY_CHOICES = [
-        (CATEGORY_GENERAL,     'General'),
+        (CATEGORY_GENERAL,     'Company News'),
         (CATEGORY_POLICY,      'Policy'),
-        (CATEGORY_EVENT,       'Event'),
+        (CATEGORY_EVENT,       'Events'),
         (CATEGORY_CELEBRATION, 'Celebration'),
+        (CATEGORY_HOLIDAY,     'Holiday & Closures'),
+        (CATEGORY_PAYROLL,     'Payroll & Benefits'),
+        (CATEGORY_URGENT,      'Urgent'),
     ]
 
     VISIBILITY_ALL        = 'all'
