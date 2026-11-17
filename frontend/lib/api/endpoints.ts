@@ -215,6 +215,7 @@ export const API = {
     sections: "/onboarding/sections/",
     documentTypeConfig: "/onboarding/document-type-config/",
     pincodeLookup: (pincode: string) => `/onboarding/pincode-lookup/${pincode}/`,
+    pincodesInDistrict: (state: string, district: string) => `/onboarding/pincodes/?state=${encodeURIComponent(state)}&district=${encodeURIComponent(district)}`,
     ifscLookup: (ifsc: string) => `/onboarding/ifsc-lookup/${ifsc}/`,
     documents: "/onboarding/documents/",
     documentDetail: (docId: string) => `/onboarding/documents/${docId}/`,

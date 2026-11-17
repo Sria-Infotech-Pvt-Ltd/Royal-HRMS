@@ -37,7 +37,7 @@ export interface LifecycleNote {
 
 function formatShortDate(iso: string): string {
   const [year, month, day] = iso.split("-");
-  return year && month && day ? `${day}/${month}/${year}` : iso;
+  return year && month && day ? `${day}-${month}-${year}` : iso;
 }
 
 /** The small line shown under a directory status pill when the employment stage needs saying (null = nothing extra to show). */

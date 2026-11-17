@@ -133,8 +133,8 @@ export const INDIA_STATES: StateEntry[] = [
       'Betul', 'Bhind', 'Bhopal', 'Burhanpur', 'Chhatarpur', 'Chhindwara',
       'Damoh', 'Datia', 'Dewas', 'Dhar', 'Dindori', 'Guna', 'Gwalior',
       'Harda', 'Hoshangabad', 'Indore', 'Jabalpur', 'Jhabua', 'Katni',
-      'Khandwa', 'Khargone', 'Mandla', 'Mandsaur', 'Morena', 'Narsinghpur',
-      'Neemuch', 'Niwari', 'Panna', 'Raisen', 'Rajgarh', 'Ratlam', 'Rewa',
+      'Khandwa', 'Khargone', 'Maihar', 'Mandla', 'Mandsaur', 'Mauganj', 'Morena', 'Narsinghpur',
+      'Neemuch', 'Niwari', 'Pandhurna', 'Panna', 'Raisen', 'Rajgarh', 'Ratlam', 'Rewa',
       'Sagar', 'Satna', 'Sehore', 'Seoni', 'Shahdol', 'Shajapur', 'Sheopur',
       'Shivpuri', 'Sidhi', 'Singrauli', 'Tikamgarh', 'Ujjain', 'Umaria', 'Vidisha',
     ],
@@ -202,12 +202,12 @@ export const INDIA_STATES: StateEntry[] = [
   {
     name: 'Assam',
     districts: [
-      'Baksa', 'Barpeta', 'Biswanath', 'Bongaigaon', 'Cachar', 'Charaideo',
+      'Bajali', 'Baksa', 'Barpeta', 'Biswanath', 'Bongaigaon', 'Cachar', 'Charaideo',
       'Chirang', 'Darrang', 'Dhemaji', 'Dhubri', 'Dibrugarh', 'Dima Hasao',
       'Goalpara', 'Golaghat', 'Hailakandi', 'Hojai', 'Jorhat', 'Kamrup',
       'Kamrup Metropolitan', 'Karbi Anglong', 'Karimganj', 'Kokrajhar',
       'Lakhimpur', 'Majuli', 'Morigaon', 'Nagaon', 'Nalbari',
-      'Sivasagar', 'Sonitpur', 'South Salmara-Mankachar', 'Tinsukia', 'Udalguri',
+      'Sivasagar', 'Sonitpur', 'South Salmara-Mankachar', 'Tamulpur', 'Tinsukia', 'Udalguri',
       'West Karbi Anglong',
     ],
   },
@@ -340,8 +340,59 @@ export const INDIA_STATES: StateEntry[] = [
   },
 ];
 
-export const INDIA_STATE_NAMES: string[] = INDIA_STATES.map(s => s.name);
+// Names are listed A to Z in every dropdown, whatever order the data above is written in (which follows no rule: Telangana comes first).
+// A collator, not a plain sort, so "Medchal–Malkajgiri" and names with other punctuation fall in their natural place.
+const COLLATOR = new Intl.Collator("en", { sensitivity: "base" });
+const byName = (first: string, second: string) => COLLATOR.compare(first, second);
 
+/** Every state and union territory, A to Z. */
+export const INDIA_STATE_NAMES: string[] = INDIA_STATES.map(s => s.name).sort(byName);
+
+const clean = (text: string) => text.trim().replace(/\s+/g, " ").toLowerCase();
+
+/** The listed spelling of a state or district name, matched ignoring case and extra spaces ("TELANGANA" gives "Telangana"), or null. */
+export function canonicalName(options: string[], name: string): string | null {
+  const wanted = clean(name);
+  return wanted ? options.find(option => clean(option) === wanted) ?? null : null;
+}
+
+/** A state's districts, A to Z. The state is matched ignoring case, because a PIN-code lookup answers in capitals. */
 export function districtsForState(stateName: string): string[] {
-  return INDIA_STATES.find(s => s.name === stateName)?.districts ?? [];
+  const state = INDIA_STATES.find(entry => clean(entry.name) === clean(stateName));
+  return state ? [...state.districts].sort(byName) : [];
+}
+
+/** How alike two names are, 0 to 1: the share left after the single-letter edits between them, where swapping two neighbouring letters
+ *  ("Jangoan" for Jangaon) counts as one edit. Case and punctuation are ignored. */
+function similarity(first: string, second: string): number {
+  const a = clean(first).replace(/ /g, "");
+  const b = clean(second).replace(/ /g, "");
+  if (!a || !b) return 0;
+  const rows: number[][] = [];
+  for (let i = 0; i <= a.length; i++) {
+    rows[i] = [i];
+    for (let j = 1; j <= b.length; j++) {
+      if (i === 0) { rows[i][j] = j; continue; }
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      rows[i][j] = Math.min(rows[i - 1][j] + 1, rows[i][j - 1] + 1, rows[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) rows[i][j] = Math.min(rows[i][j], rows[i - 2][j - 2] + 1);
+    }
+  }
+  return 1 - rows[a.length][b.length] / Math.max(a.length, b.length);
+}
+
+/**
+ * The listed name that is the same place written another way. A PIN-code lookup spells some districts differently from this list
+ * ("Jangoan" for Jangaon, "Jagitial" for Jagtial), so after an exact match, a close spelling (80% alike or better) counts. Null if none.
+ */
+export function closestName(options: string[], name: string): string | null {
+  const exact = canonicalName(options, name);
+  if (exact) return exact;
+  let best: string | null = null;
+  let bestScore = 0;
+  for (const option of options) {
+    const score = similarity(option, name);
+    if (score > bestScore) { best = option; bestScore = score; }
+  }
+  return bestScore >= 0.8 ? best : null;
 }

@@ -49,7 +49,8 @@ export default function FamilyMemberCard({ entry, isOpen, isNominee, roleNote, o
             {isOpen ? "Done" : "Edit"}
           </button>
         )}
-        <button type="button" className="rvbtn ghost" aria-label={`Remove ${name || "this family member"}`} onClick={onRemove}>
+        <button type="button" className="rvbtn ghost" aria-label={`Remove ${name || "this family member"}`} title="Remove" onClick={onRemove}
+          style={{ color: "var(--crit, #dc2626)" }}>
           <i className="ti ti-trash" aria-hidden="true" />
         </button>
       </div>
@@ -88,10 +89,14 @@ export default function FamilyMemberCard({ entry, isOpen, isNominee, roleNote, o
               {BLOOD_GROUPS.map(group => <option key={group} value={group}>{group}</option>)}
             </select>
           </div>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, alignSelf: "end", fontSize: 13.5, paddingBottom: 8 }}>
-            <input type="checkbox" checked={entry.is_dependent} onChange={event => onChange("is_dependent", event.target.checked)} />
-            Dependent on the employee
-          </label>
+          {/* A full-width row of its own, not a loose checkbox beside Blood group: the same Yes / No control the address uses. */}
+          <div className="togline compact" style={{ gridColumn: "1 / -1" }}>
+            <span id={field("dependent")}>Dependent on the employee</span>
+            <div className="seg" role="group" aria-labelledby={field("dependent")}>
+              <button type="button" aria-pressed={entry.is_dependent} onClick={() => onChange("is_dependent", true)}>Yes</button>
+              <button type="button" aria-pressed={!entry.is_dependent} onClick={() => onChange("is_dependent", false)}>No</button>
+            </div>
+          </div>
         </div>
       )}
     </section>

@@ -47,8 +47,25 @@ describe("Family & nomination: family members", () => {
     render(<Parent />);
     expect(screen.getByText(/No family members yet/)).toBeTruthy();
     for (const name of ["Father", "Mother", "Spouse", "Child", "Someone else"]) expect(screen.getByRole("button", { name: new RegExp(name) })).toBeTruthy();
-    expect((within(lane("EPF + EPS")).getByRole("button", { name: /Add nominee/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(lane("EPF + EPS")).getByRole("button", { name: /Add nominee/ }).getAttribute("aria-disabled")).toBe("true");
     expect(screen.getAllByText("No nominee yet")).toHaveLength(3);
+  });
+
+  it("pressing Add nominee with nobody to nominate explains why and adds a family card to type into, instead of doing nothing", () => {
+    render(<Parent />);
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(within(lane("EPF + EPS")).getByRole("button", { name: /Add nominee/ }));
+    expect(screen.getByRole("alert").textContent).toMatch(/nobody in it yet/);
+    expect(screen.getByLabelText(/Family member/)).toBeTruthy();                       // the new, empty card
+    expect(screen.getAllByText("No nominee yet")).toHaveLength(3);                     // and no nominee was created
+  });
+
+  it("the explanation goes away once a family member has a name", () => {
+    render(<Parent />);
+    fireEvent.click(within(lane("EPF + EPS")).getByRole("button", { name: /Add nominee/ }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Asha Rao" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(within(lane("EPF + EPS")).getByRole("button", { name: /Add nominee/ }).getAttribute("aria-disabled")).toBe("false");
   });
 
   it("quick-add Father adds an open card with Father and Male already chosen (the callers' add buttons take no arguments)", () => {

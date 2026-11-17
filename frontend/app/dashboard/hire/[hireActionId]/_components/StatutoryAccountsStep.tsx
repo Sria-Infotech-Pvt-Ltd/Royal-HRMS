@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
+import FieldError from "@/components/shared/FieldError";
 import CountrySelect from "@/components/CountrySelect";
 import DateInput from "@/components/shared/DateInput";
 import { useIfscLookup } from "@/hooks/useIfscLookup";
@@ -38,15 +39,21 @@ interface Props {
   value: StatutoryDraft;
   onChange: (v: StatutoryDraft) => void;
   documents: HireDocument[];
-  uploading: string | null;
-  docError: string;
-  onUploadDoc: (documentType: string, file: File) => void;
-  onDeleteDoc: (doc: HireDocument) => void;
+  uploading?: string | null;
+  docError?: string;
+  /** Pass both to upload the PAN / Aadhaar / passport files from this step (Edit full record does). Leave them out and this step shows
+   *  only the numbers: the Hire wizard uploads every document once, on its Documents step, so nothing is asked for twice. */
+  onUploadDoc?: (documentType: string, file: File) => void;
+  onDeleteDoc?: (doc: HireDocument) => void;
+  /** Messages for fields that failed the step's checks, by field key (the Hire wizard). */
+  errors?: Record<string, string>;
   /** Edit full record only: the stored UAN, masked. The field itself stays write-only. */
   savedUanMasked?: string;
 }
 
-export default function StatutoryAccountsStep({ value, onChange, documents, uploading, docError, onUploadDoc, onDeleteDoc, savedUanMasked }: Props) {
+export default function StatutoryAccountsStep({ value, onChange, documents, uploading = null, docError = "", onUploadDoc, onDeleteDoc, errors = {}, savedUanMasked }: Props) {
+  /** Marks a field's wrapper so the wizard can find it, and so it shows red while it has a message. */
+  const mark = (field: string) => ({ className: "f hw-field", "data-hw-field": field, "data-hw-invalid": errors[field] ? ("true" as const) : undefined });
   // The newest form values. A change is merged into THESE, never into the `value` this render happened to receive: the IFSC lookup
   // answers seconds later (it calls an outside service), and a merge into the older `value` put the IFSC back to what it was
   // before its last character and wiped every field typed while the lookup was running (account holder, account number, PAN,
@@ -62,6 +69,16 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
     update({ [key]: v } as Partial<StatutoryDraft>);  // the computed key is exactly one StatutoryDraft key, so this is a valid patch
   }
   const docFor = (key: string) => documents.find(d => d.document_type === key);
+  // The upload button, only on a screen that uploads from this step. Elsewhere nothing is shown.
+  function renderDocSlot(documentType: string, label: string) {
+    if (!onUploadDoc || !onDeleteDoc) return null;
+    return (
+      <div style={{ marginTop: 6 }}>
+        <DocUploadButton documentType={documentType} label={label} existing={docFor(documentType)}
+          uploading={uploading === documentType} onUpload={onUploadDoc} onDelete={onDeleteDoc} />
+      </div>
+    );
+  }
 
   const { lookup: lookupIfsc } = useIfscLookup();
   const latestIfscRef = useRef("");
@@ -111,51 +128,44 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
 
       <div className="sechead">GOVERNMENT IDS</div>
       <div className="g3">
-        <div className="f">
+        <div {...mark("pan_number")}>
           <label>PAN <span className="req">*</span></label>
           <input value={value.pan_number} onChange={e => set("pan_number", e.target.value.toUpperCase())} placeholder="ABCDE1234F" maxLength={10} className="finput" />
-          <div style={{ marginTop: 6 }}>
-            <DocUploadButton documentType="pan_card" label="PAN card" existing={docFor("pan_card")}
-              uploading={uploading === "pan_card"} onUpload={onUploadDoc} onDelete={onDeleteDoc} />
-          </div>
+          <FieldError message={errors.pan_number} />
+          {renderDocSlot("pan_card", "PAN card")}
         </div>
-        <div className="f">
+        <div {...mark("aadhaar_number")}>
           <label>Aadhaar <span className="req">*</span></label>
           <input value={value.aadhaar_number} onChange={e => set("aadhaar_number", e.target.value.replace(/\D/g, ""))} placeholder="123456789012" maxLength={12} className="finput" />
-          <div style={{ marginTop: 6 }}>
-            <DocUploadButton documentType="aadhaar_card" label="Aadhaar card" existing={docFor("aadhaar_card")}
-              uploading={uploading === "aadhaar_card"} onUpload={onUploadDoc} onDelete={onDeleteDoc} />
-          </div>
+          <FieldError message={errors.aadhaar_number} />
+          {renderDocSlot("aadhaar_card", "Aadhaar card")}
         </div>
         <div className="f">
-          <label>Name as per Aadhaar <span className="tag">OPTIONAL</span></label>
+          <label>Name as per Aadhaar</label>
           <input value={value.name_as_per_aadhar} onChange={e => set("name_as_per_aadhar", e.target.value)} placeholder="As printed on the Aadhaar card" className="finput" />
         </div>
         <div className="f">
-          <label>Passport <span className="tag">OPTIONAL</span></label>
+          <label>Passport</label>
           <input value={value.passport_number} onChange={e => set("passport_number", e.target.value)} placeholder="Optional" className="finput" />
-          <div style={{ marginTop: 6 }}>
-            <DocUploadButton documentType="passport_photo" label="passport" existing={docFor("passport_photo")}
-              uploading={uploading === "passport_photo"} onUpload={onUploadDoc} onDelete={onDeleteDoc} />
-          </div>
+          {renderDocSlot("passport_photo", "passport")}
         </div>
         <div className="f">
-          <label>Passport issue date <span className="tag">OPTIONAL</span></label>
+          <label>Passport issue date</label>
           <DateInput value={value.passport_issue_date} onChange={iso => set("passport_issue_date", iso)} disabled={!value.passport_number} className="finput" />
         </div>
         <div className="f">
-          <label>Passport expiry <span className="tag">OPTIONAL</span></label>
+          <label>Passport expiry</label>
           <DateInput value={value.passport_expiry} onChange={iso => set("passport_expiry", iso)} disabled={!value.passport_number} className="finput" />
           {value.passport_issue_date && value.passport_expiry && value.passport_expiry <= value.passport_issue_date && (
             <div className="hint" style={{ color: "var(--error)" }}>Expiry must be after the issue date.</div>
           )}
         </div>
         <div className="f">
-          <label>Place of issue <span className="tag">OPTIONAL</span></label>
+          <label>Place of issue</label>
           <input value={value.passport_place_of_issue} onChange={e => set("passport_place_of_issue", e.target.value)} placeholder="e.g. Hyderabad" disabled={!value.passport_number} className="finput" />
         </div>
         <div className="f">
-          <label>Country of issue <span className="tag">OPTIONAL</span></label>
+          <label>Country of issue</label>
           <CountrySelect value={value.passport_country_of_issue} onChange={v => set("passport_country_of_issue", v)}
             mode="name" placeholder="Select country" />
         </div>
@@ -169,7 +179,7 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
       </div>
       <div className="g3">
         <div className="f">
-          <label>UAN <span className="tag">OPTIONAL</span></label>
+          <label>UAN</label>
           <input value={value.uan_number} onChange={e => set("uan_number", e.target.value.replace(/\D/g, ""))} placeholder="12 digits, if available" maxLength={12} className="finput" />
           {value.uan_number && value.uan_number.length !== 12 ? (
             <div className="hint" style={{ color: "var(--error)" }}>UAN must be 12 digits</div>
@@ -192,7 +202,7 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
       {value.esi_covered === "true" && (
         <div className="g3">
           <div className="f">
-            <label>ESI number <span className="tag">OPTIONAL</span></label>
+            <label>ESI number</label>
             <input value={value.esi_number} onChange={e => set("esi_number", e.target.value.replace(/\D/g, ""))} placeholder="10 digits, if available" maxLength={10} className="finput" />
           </div>
         </div>
@@ -201,24 +211,27 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
       <div className="divider" />
       <div className="sechead">BANK ACCOUNT</div>
       <div className="g3">
-        <div className="f">
+        <div {...mark("account_holder_name")}>
           <label>Account holder name <span className="req">*</span></label>
           <input value={value.account_holder_name} onChange={e => set("account_holder_name", e.target.value)} placeholder="Should match the PAN name" className="finput" />
+          <FieldError message={errors.account_holder_name} />
         </div>
-        <div className="f">
+        <div {...mark("account_number")}>
           <label>Account number <span className="req">*</span></label>
           <input value={value.account_number} onChange={e => set("account_number", e.target.value.replace(/\D/g, ""))} className="finput" />
+          <FieldError message={errors.account_number} />
         </div>
         <div className="f">
-          <label>Account type <span className="tag">OPTIONAL</span></label>
+          <label>Account type</label>
           <select value={value.account_type} onChange={e => set("account_type", e.target.value)} className="finput">
             <option value="savings">Savings</option>
             <option value="current">Current</option>
           </select>
         </div>
-        <div className="f">
+        <div {...mark("ifsc_code")}>
           <label>IFSC code <span className="req">*</span></label>
           <input value={value.ifsc_code} onChange={e => setIfsc(e.target.value)} placeholder="HDFC0001234" maxLength={11} className="finput" />
+          <FieldError message={errors.ifsc_code} />
           {ifscStatus === "checking" && <div className="hint">Looking up bank…</div>}
           {ifscStatus === "found" && <div className="hint" style={{ color: "var(--success, #16a34a)" }}>Bank and branch found — filled in below.</div>}
           {ifscStatus === "not_found" && (
@@ -236,11 +249,11 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
           )}
         </div>
         <div className="f">
-          <label>Bank name <span className="tag">OPTIONAL</span></label>
+          <label>Bank name</label>
           <input value={value.bank_name} onChange={e => set("bank_name", e.target.value)} placeholder="e.g. HDFC Bank" className="finput" />
         </div>
         <div className="f">
-          <label>Branch / address <span className="tag">OPTIONAL</span></label>
+          <label>Branch / address</label>
           <input value={value.bank_branch_address} onChange={e => set("bank_branch_address", e.target.value)} placeholder="Auto-filled from IFSC, or enter manually" className="finput" />
         </div>
       </div>

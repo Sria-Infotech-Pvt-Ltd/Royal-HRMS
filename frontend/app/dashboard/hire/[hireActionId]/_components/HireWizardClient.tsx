@@ -15,6 +15,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { formatDate } from "@/lib/formatDate";
+import { validateHireStep, type HireSnapshot } from "@/lib/hireValidation";
 import { useApiErrors } from "@/hooks/useApiErrors";
 import { useHireDraftActions } from "@/hooks/useHireDraftActions";
 import { parseApiError } from "@/lib/apiError";
@@ -36,11 +38,12 @@ import AddressFields, { EMPTY_ADDRESS_EXTRAS, type AddressExtras } from "./Addre
 import ScanFillModal, { type ScanSuggestions } from "./ScanFillModal";
 import EmployeePhotoUpload from "./EmployeePhotoUpload";
 import HireWizardSidebar from "./HireWizardSidebar";
+import StepIssuesPanel from "./StepIssuesPanel";
 import EmploymentStep, { EMPTY_EMPLOYMENT, type EmploymentDraft } from "./EmploymentStep";
 import ApprovalAssignmentFields from "@/components/approvals/ApprovalAssignmentFields";
 import BasicPayStep, { EMPTY_BASIC_PAY, type BasicPayDraft } from "./BasicPayStep";
 import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "./StatutoryAccountsStep";
-import DocumentsChecklistStep, { REQUIRED_DOC_KEYS, REQUIRED_DOC_LABELS, EMPTY_VERIFICATION, type VerificationDraft, type HireDocument } from "./DocumentsChecklistStep";
+import DocumentsChecklistStep, { certificateTypeForLevel, REQUIRED_DOC_KEYS, REQUIRED_DOC_LABELS, EMPTY_VERIFICATION, type VerificationDraft, type HireDocument } from "./DocumentsChecklistStep";
 import ReviewStep from "./ReviewStep";
 import DateInput from "@/components/shared/DateInput";
 import HireCompletionPanel from "./HireCompletionPanel";
@@ -56,8 +59,6 @@ import {
   emptyEmergencyContact,
   type HireActionData,
   STEPS,
-  NAME_RE, EMAIL_RE, PAN_RE, IFSC_RE, MS_PER_YEAR, MIN_HIRE_AGE_YEARS, MAX_PLAUSIBLE_AGE_YEARS,
-  MIN_NATIONAL_PHONE_DIGITS, MAX_NATIONAL_PHONE_DIGITS,
 } from "./_wizardData";
 
 const APPROVER_FIELDS = ["reporting_manager_id", "l1_approver_id", "hr_id"] as const;
@@ -75,6 +76,11 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [tab, setTab] = useState(0);
   const [highestSaved, setHighestSaved] = useState(-1);
   const [stepErr, setStepErr] = useState("");
+  // Turned on the first time Next is pressed with problems on the step. From then on the list of problems follows what is typed, so a
+  // problem disappears the moment it is fixed.
+  const [showIssues, setShowIssues] = useState(false);
+  // Why a Suggest button did nothing (it had nothing to suggest from yet), shown under that field instead of failing silently.
+  const [suggestHint, setSuggestHint] = useState<{ field: "display_name" | "place_of_birth"; text: string } | null>(null);
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "warning" | "error">("idle");
   // Why the last autosave did not fully succeed (which field, or that the server could not be reached).
   const [autosaveMessage, setAutosaveMessage] = useState("");
@@ -319,9 +325,25 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     }).finally(() => setLoading(false));
   }, [hireActionId]); // eslint-disable-line react-hooks/exhaustive-deps -- repairTempIds is redefined every render; only load once per hireActionId, same as the rest of this effect
 
-  // Father's/mother's name in step 1 are read-only ("FROM FAMILY") — they
-  // mirror whatever Father/Mother entries exist in step 4's family list,
-  // the same source of truth EPF Form 2 needs, rather than being typed twice.
+  // Father's / mother's name are typed here on step 1, and they are the Father / Mother entries of the Family step too (the same
+  // source EPF Form 2 reads), so typing one place fills the other. A change made on the Family step flows back here through the
+  // effect below.
+  function setParentName(kind: "father" | "mother", name: string) {
+    if (kind === "father") setForm(f => ({ ...f, father_name: name }));
+    else setIdentityExtras(x => ({ ...x, mother_name: name }));
+    setFamilyEntries(list => {
+      const existing = list.find(entry => entry.relationship === kind);
+      if (existing) {
+        // Clearing the name drops an entry that holds nothing else, so the Family step is not left with a nameless row.
+        const holdsOtherDetails = !!(existing.date_of_birth || existing.blood_group || existing.is_dependent);
+        if (!name.trim() && !holdsOtherDetails) return list.filter(entry => entry.id !== existing.id);
+        return list.map(entry => (entry.id === existing.id ? { ...entry, name } : entry));
+      }
+      if (!name.trim()) return list;
+      return [...list, { id: nextTempId(), name, relationship: kind, date_of_birth: "", gender: kind === "father" ? "male" : "female", blood_group: "", is_dependent: false }];
+    });
+  }
+
   useEffect(() => {
     const father = familyEntries.find(f => f.relationship === "father");
     const mother = familyEntries.find(f => f.relationship === "mother");
@@ -394,109 +416,30 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     if (picked.aadhaar_number) setStatutory(s => ({ ...s, aadhaar_number: picked.aadhaar_number! }));
   }
 
-  function validateCurrentStep(): string | null {
-    switch (tab) {
-      case 0: {
-        // Matches the 7 fields step 1's own sidebar badge (STEPS[0].required)
-        // already advertises as required: First name, Last name, Date of
-        // birth, Gender, Nationality, Personal email, Mobile number.
-        if (!firstName.trim()) return "First name is required.";
-        if (!NAME_RE.test(firstName.trim())) return "First name can only contain letters, spaces, hyphens and apostrophes.";
-        if (!lastName.trim()) return "Last name is required.";
-        if (!NAME_RE.test(lastName.trim())) return "Last name can only contain letters, spaces, hyphens and apostrophes.";
-        if (middleName.trim() && !NAME_RE.test(middleName.trim())) return "Middle name can only contain letters, spaces, hyphens and apostrophes.";
+  function validationSnapshot(): HireSnapshot {
+    return {
+      firstName, middleName, lastName, dateOfBirth: form.date_of_birth, gender: form.gender, nationality, email, phone,
+      alternateMobile: identityExtras.alternate_mobile, employment, statutory, familyEntries, nomineeEntries, educationEntries,
+      documentTypes: documents.map(d => d.document_type),
+      requiredDocuments: REQUIRED_DOC_KEYS.map(key => ({ key, label: REQUIRED_DOC_LABELS[key] ?? key })),
+      phoneDigits: nationalDigitCount, isPlausiblePhone: isPlausibleNationalNumber, now: new Date(),
+    };
+  }
 
-        if (!form.date_of_birth) return "Date of birth is required.";
-        const dob = new Date(form.date_of_birth);
-        if (Number.isNaN(dob.getTime())) return "Date of birth is not a valid date.";
-        if (dob > new Date()) return "Date of birth cannot be in the future.";
-        const ageYears = (Date.now() - dob.getTime()) / MS_PER_YEAR;
-        if (ageYears < MIN_HIRE_AGE_YEARS) return `Employee must be at least ${MIN_HIRE_AGE_YEARS} years old.`;
-        if (ageYears > MAX_PLAUSIBLE_AGE_YEARS) return "That date of birth doesn't look right — please check it.";
+  // Everything wrong on this step, once the person has tried to leave it. Recomputed every render, so it never goes stale.
+  const issues = showIssues ? validateHireStep(tab, validationSnapshot()) : [];
+  const issueMessages: Record<string, string> = Object.fromEntries(issues.map(issue => [issue.field, issue.message]));
+  /** Marks a field's wrapper so the message can find it, and so it shows red while it is wrong. */
+  const fieldProps = (field: string) => ({ className: "hw-field", "data-hw-field": field, "data-hw-invalid": issueMessages[field] ? ("true" as const) : undefined });
 
-        if (!form.gender) return "Gender is required.";
-        if (!nationality.trim()) return "Nationality is required.";
-
-        if (!email.trim()) return "Personal email is required.";
-        if (!EMAIL_RE.test(email.trim())) return "Enter a valid email address.";
-
-        if (!phone.trim()) return "Mobile number is required.";
-        {
-          const digits = nationalDigitCount(phone);
-          if (digits < MIN_NATIONAL_PHONE_DIGITS || digits > MAX_NATIONAL_PHONE_DIGITS) return "Enter a valid mobile number.";
-          if (!isPlausibleNationalNumber(phone)) return "Enter a valid Indian mobile number — it must start with 6-9.";
-        }
-        if (identityExtras.alternate_mobile.trim()) {
-          const altDigits = nationalDigitCount(identityExtras.alternate_mobile);
-          if (altDigits < MIN_NATIONAL_PHONE_DIGITS || altDigits > MAX_NATIONAL_PHONE_DIGITS) {
-            return "Enter a valid alternate mobile number, or leave it blank.";
-          }
-          if (!isPlausibleNationalNumber(identityExtras.alternate_mobile)) {
-            return "Enter a valid alternate Indian mobile number — it must start with 6-9.";
-          }
-        }
-        return null;
-      }
-      case 1:
-        if (!employment.employment_type) return "Select an employment type.";
-        if (!employment.branch) return "Select a company code.";
-        if (employment.work_email.trim() && !EMAIL_RE.test(employment.work_email.trim())) {
-          return "Enter a valid work email address.";
-        }
-        if (employment.annual_ctc.trim() && Number(employment.annual_ctc) <= 0) {
-          return "Annual fixed CTC must be greater than zero, or left blank.";
-        }
-        return null;
-      case 4: {
-        // Family member DOB — QA report #35: a father with DOB 2030-01-01
-        // (in the future) was accepted with no validation at all.
-        const badDob = familyEntries.find(f => {
-          if (!f.date_of_birth) return false;
-          const d = new Date(f.date_of_birth);
-          return Number.isNaN(d.getTime()) || d > new Date();
-        });
-        if (badDob) return `${badDob.name || "A family member"}'s date of birth cannot be in the future.`;
-
-        const totals: Record<string, number> = {};
-        for (const n of nomineeEntries) {
-          const scheme = n.scheme || "epf_eps";
-          totals[scheme] = (totals[scheme] ?? 0) + (Number(n.share_percentage) || 0);
-        }
-        const over = Object.entries(totals).find(([, total]) => total > 100);
-        if (over) return `Nominee shares for ${over[0]} add up to ${over[1]}% — they can't exceed 100%.`;
-        return null;
-      }
-      case 3: {
-        // Matches the 5 fields this step's own sidebar badge already
-        // advertises as required: PAN, Aadhaar, Account holder name,
-        // Account number, IFSC code.
-        if (!statutory.pan_number.trim()) return "PAN is required.";
-        if (!PAN_RE.test(statutory.pan_number.trim())) return "Enter a valid PAN (format: ABCDE1234F).";
-        if (!statutory.aadhaar_number.trim()) return "Aadhaar is required.";
-        if (statutory.aadhaar_number.trim().length !== 12) return "Aadhaar must be exactly 12 digits.";
-        if (!statutory.account_holder_name.trim()) return "Account holder name is required.";
-        if (!NAME_RE.test(statutory.account_holder_name.trim())) return "Account holder name can only contain letters, spaces, hyphens and apostrophes.";
-        if (!statutory.account_number.trim()) return "Account number is required.";
-        if (statutory.account_number.trim().length < 6) return "Enter a valid account number.";
-        if (!statutory.ifsc_code.trim()) return "IFSC code is required.";
-        if (!IFSC_RE.test(statutory.ifsc_code.trim())) return "Enter a valid IFSC code (format: HDFC0001234).";
-        if (statutory.uan_number.trim() && statutory.uan_number.trim().length !== 12) return "UAN must be 12 digits";
-        if (statutory.passport_issue_date && statutory.passport_expiry && statutory.passport_expiry <= statutory.passport_issue_date) {
-          return "Passport expiry must be after the issue date.";
-        }
-        return null;
-      }
-      case 6: {
-        const uploadedTypes = new Set(documents.map(d => d.document_type));
-        const missing = REQUIRED_DOC_KEYS.filter(k => !uploadedTypes.has(k));
-        if (missing.length > 0) {
-          return `Upload the required documents before continuing: ${missing.map(k => REQUIRED_DOC_LABELS[k] ?? k).join(", ")}.`;
-        }
-        return null;
-      }
-      default:
-        return null;
-    }
+  /** Scrolls a field into view and puts the cursor in it. */
+  function focusField(field: string) {
+    const key = field === "nominees" ? "family" : field;
+    const holder = wizBodyRef.current?.querySelector<HTMLElement>(`[data-hw-field="${key}"]`);
+    if (!holder) { errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    holder.scrollIntoView({ behavior: "smooth", block: "center" });
+    const control = holder.querySelector<HTMLElement>("input:not([type=hidden]), select, textarea, button");
+    window.setTimeout(() => control?.focus({ preventScroll: true }), 250);
   }
 
   // Every field currently held in this wizard's local state — used
@@ -611,6 +554,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     // error from Statutory (step 3) still visible after jumping to Family
     // (step 4) or Assets (step 7).
     setStepErr("");
+    setShowIssues(false);
     try {
       await patchAction(buildFullDraftPayload());
     } catch {
@@ -623,8 +567,15 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
   async function handleNext() {
     if (isNavigating) return;  // a second click while the step is saving must not save (or advance) twice
-    const err = validateCurrentStep();
-    if (err) { setStepErr(err); return; }
+    const found = validateHireStep(tab, validationSnapshot());
+    if (found.length > 0) {
+      setShowIssues(true);
+      setStepErr("");
+      // After the panel has drawn, take the person to the first field that needs attention.
+      window.setTimeout(() => focusField(found[0].field), 50);
+      return;
+    }
+    setShowIssues(false);
     setStepErr("");
     setIsNavigating(true);
     try {
@@ -752,18 +703,19 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     <>
     <Modal
       title={
-        <div>
-          <div className="text-[18px] font-bold">
-            Hire an <span style={{ color: "var(--primary)", fontStyle: "italic" }}>employee</span>
-          </div>
-          <div className="text-[12px] mt-0.5" style={{ color: "var(--on-variant)", fontWeight: 400 }}>
-            Hire · {action.reason_display} · effective {action.effective_from} · {action.position_title}. Employee number is reserved once employment type is set.
+        <div className="hw-head">
+          <div className="hw-title">Hire an <em>employee</em></div>
+          <div className="hw-meta">
+            <span className="hw-chip is-brand"><i className="ti ti-user-plus" /> Hire</span>
+            {action.reason_display && <span className="hw-chip">{action.reason_display}</span>}
+            <span className="hw-chip"><i className="ti ti-calendar" /> Effective {formatDate(action.effective_from)}</span>
+            {action.position_title && <span className="hw-chip"><i className="ti ti-briefcase" /> {action.position_title}</span>}
           </div>
         </div>
       }
       onClose={onClose}
       size="lg"
-      maxWidth={1100}
+      maxWidth={1360}
       scrollBody
       // The sidebar (step list) and the step content each scroll
       // independently within this bounded modal — see .wiz/.wiz-nav/.wiz-body
@@ -772,32 +724,33 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       // the step list along with the content instead of leaving it in place.
       bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
       footer={tab < 8 ? (
-        <div className="flex items-center gap-4 w-full">
-          <div className="flex-1">
-            <div className="h-1.5 rounded-full" style={{ background: "var(--outline-v)" }}>
-              <div className="h-1.5 rounded-full" style={{ width: `${progressPct}%`, background: "var(--primary)" }} />
-            </div>
-            <div className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{progressPct}% complete</div>
+        <div className="hw-foot">
+          <div className="hw-progress">
+            <div className="hw-progress-top"><strong>{progressPct}% complete</strong><span>Step {tab + 1} of {STEPS.length}</span></div>
+            <div className="hw-progress-bar" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${progressPct}%` }} /></div>
           </div>
-          <button onClick={draftActions.openDiscard} className="btn btn-ghost" style={{ color: "var(--error)" }}>Discard</button>
-          <button onClick={draftActions.saveAndExit} disabled={draftActions.isSaving} className="btn btn-ghost">Save &amp; exit</button>
-          <button onClick={draftActions.saveDraft} disabled={draftActions.isSaving} className="btn btn-ghost">Save draft</button>
-          <button onClick={() => setShowScanFill(true)} className="btn btn-ghost">Scan &amp; fill</button>
-          {tab > 0 && <button onClick={() => goToStep(Math.max(0, tab - 1))} className="btn btn-ghost">Back</button>}
-          <button onClick={handleNext} disabled={isNavigating} className="btn btn-filled">
-            {isNavigating ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Next →"}
-          </button>
+          <div className="hw-actions">
+            <button type="button" onClick={draftActions.openDiscard} className="hw-link is-danger"><i className="ti ti-trash" /> Discard</button>
+            <button type="button" onClick={draftActions.saveAndExit} disabled={draftActions.isSaving} className="hw-link"><i className="ti ti-door-exit" /> Save &amp; exit</button>
+            <button type="button" onClick={draftActions.saveDraft} disabled={draftActions.isSaving} className="hw-link"><i className="ti ti-device-floppy" /> Save draft</button>
+            <button type="button" onClick={() => setShowScanFill(true)} className="hw-link"><i className="ti ti-scan" /> Scan &amp; fill</button>
+            <span className="hw-sep" aria-hidden="true" />
+            {tab > 0 && <button type="button" onClick={() => goToStep(Math.max(0, tab - 1))} className="btn btn-ghost hw-btn"><i className="ti ti-arrow-left" /> Back</button>}
+            <button type="button" onClick={handleNext} disabled={isNavigating} className="btn btn-filled hw-btn">
+              {isNavigating ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <>Next <i className="ti ti-arrow-right" /></>}
+            </button>
+          </div>
         </div>
       ) : (
         <button onClick={onClose} className="btn btn-ghost">Close</button>
       )}
     >
-      <div className="wiz">
-        <HireWizardSidebar steps={STEPS} currentStep={tab} highestSaved={highestSaved}
+      <div className="wiz hire-wiz">
+        <HireWizardSidebar steps={STEPS} currentStep={tab} highestSaved={highestSaved} progressPct={progressPct}
           onStepClick={goToStep} missingByStep={missingByStep} />
 
         <div className="wiz-main">
-          <div className="stephead" style={{ padding: "20px 24px 0" }}>
+          <div className="stephead">
             <div>
               <h3>{STEPS[tab].label.split(" ").slice(0, -1).join(" ")} <em className="hl">{STEPS[tab].label.split(" ").slice(-1)}</em></h3>
               <p>{STEPS[tab].sub}</p>
@@ -822,49 +775,60 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
           </div>
 
         <div className="wiz-body" ref={wizBodyRef}>
-          {stepErr && (
-            <div ref={errorRef} className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg border border-[var(--error-c)] mb-4"
-              style={{ background: "var(--error-c)", color: "var(--error)" }}>
-              <i className="ti ti-alert-circle text-[14px] mt-0.5 flex-shrink-0" />
-              <span className="text-[13px]">{stepErr}</span>
-            </div>
-          )}
+          <StepIssuesPanel
+            ref={errorRef}
+            issues={issues}
+            serverMessage={stepErr}
+            autosaveProblem={autosaveStatus === "error" || autosaveStatus === "warning" ? (autosaveMessage || "Autosave did not complete.") : ""}
+            onRetryAutosave={retryAutosave}
+            onGoToField={focusField}
+          />
 
           {tab === 0 && (
             <div className="mstep on">
               <EmployeePhotoUpload hireActionId={hireActionId} photoUrl={photoUrl} onPhotoChange={setPhotoUrl} />
 
-              <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Identity</div>
+              <div className="hw-section">Identity</div>
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Salutation <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Salutation</label>
                   <select value={salutation} onChange={e => setSalutation(e.target.value)} className="field-input field-select">
                     <option value="">Select</option>
                     {["Mr.", "Ms.", "Mrs.", "Dr."].map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                <div>
+                <div {...fieldProps("first_name")}>
                   <label className="block text-[12.5px] font-semibold mb-1.5">First name <span style={{ color: "var(--error)" }}>*</span></label>
                   <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="e.g. Rahul" className="field-input" />
+                  <FieldError message={issueMessages.first_name} />
                 </div>
-                <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Middle name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                <div {...fieldProps("middle_name")}>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Middle name</label>
                   <input value={middleName} onChange={e => setMiddleName(e.target.value)} placeholder="e.g. Kumar" className="field-input" />
+                  <FieldError message={issueMessages.middle_name} />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 mb-5">
-                <div>
+                <div {...fieldProps("last_name")}>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Last name <span style={{ color: "var(--error)" }}>*</span></label>
                   <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="e.g. Sharma" className="field-input" />
+                  <FieldError message={issueMessages.last_name} />
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Display name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>auto</span></label>
                   <div className="flex gap-2">
                     <input value={displayName} onChange={e => { displayNameTouchedRef.current = true; setDisplayName(e.target.value); }} placeholder="Generated from name" className="field-input" />
-                    <button type="button" onClick={() => { displayNameTouchedRef.current = false; setDisplayName([salutation, firstName, middleName, lastName].filter(Boolean).join(" ")); }}
-                      className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}>+ Suggest</button>
+                    <button type="button" className="hw-suggest" onClick={() => {
+                      const suggestion = [salutation, firstName, middleName, lastName].filter(Boolean).join(" ");
+                      if (!firstName.trim() && !lastName.trim()) { setSuggestHint({ field: "display_name", text: "Type the first and last name first. Suggest builds the display name from them." }); return; }
+                      displayNameTouchedRef.current = false;
+                      setSuggestHint(null);
+                      setDisplayName(suggestion);
+                    }}><i className="ti ti-wand" /> Suggest</button>
                   </div>
-                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Shown across the app and in approvals.</p>
+                  {suggestHint?.field === "display_name"
+                    ? <p className="hint bad" role="status" style={{ marginTop: 4 }}>{suggestHint.text}</p>
+                    : <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Shown across the app and in approvals.</p>}
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Employee number <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>auto</span></label>
@@ -875,21 +839,23 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 </div>
               </div>
 
-              <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Basic details</div>
+              <div className="hw-section">Basic details</div>
               <div className="grid grid-cols-3 gap-3 mb-3">
-                <div>
+                <div {...fieldProps("date_of_birth")}>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Date of birth <span style={{ color: "var(--error)" }}>*</span></label>
                   <DateInput value={form.date_of_birth} onChange={iso => setForm(f => ({ ...f, date_of_birth: iso }))} className="field-input" separator="-" />
+                  <FieldError message={issueMessages.date_of_birth} />
                 </div>
-                <div>
+                <div {...fieldProps("gender")}>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Gender <span style={{ color: "var(--error)" }}>*</span></label>
                   <select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))} className="field-input field-select">
                     <option value="">Select</option>
                     <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
                   </select>
+                  <FieldError message={issueMessages.gender} />
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Blood group <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Blood group</label>
                   <select value={form.blood_group} onChange={e => setForm(f => ({ ...f, blood_group: e.target.value }))} className="field-input field-select">
                     <option value="">Select</option>
                     {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(b => <option key={b} value={b}>{b}</option>)}
@@ -903,41 +869,44 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                     {MARITAL_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
-                <div>
+                <div {...fieldProps("nationality")}>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Nationality <span style={{ color: "var(--error)" }}>*</span></label>
                   <CountrySelect value={nationality} onChange={setNationality} mode="demonym" />
+                  <FieldError message={issueMessages.nationality} />
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Place of birth <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Place of birth</label>
                   <div className="flex gap-2">
                     <input value={placeOfBirth} onChange={e => setPlaceOfBirth(e.target.value)} placeholder="City / town" className="field-input" />
-                    <button type="button" onClick={() => setPlaceOfBirth(form.current_village || form.current_district)}
-                      className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}>+ Suggest</button>
+                    <button type="button" className="hw-suggest" onClick={() => {
+                      const place = form.current_village || form.current_district;
+                      if (!place) { setSuggestHint({ field: "place_of_birth", text: "Fill in the city or district of the current address (further down) first. Suggest uses it." }); return; }
+                      setSuggestHint(null);
+                      setPlaceOfBirth(place);
+                    }}><i className="ti ti-wand" /> Suggest</button>
                   </div>
+                  {suggestHint?.field === "place_of_birth" && <p className="hint bad" role="status" style={{ marginTop: 4 }}>{suggestHint.text}</p>}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Father&apos;s name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>from family</span></label>
-                  <div className="field-input" style={{ background: "var(--bg-low)", color: form.father_name ? "var(--on-bg)" : "var(--on-variant)" }}>
-                    {form.father_name || "Set in step 4"}
-                  </div>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Father&apos;s name</label>
+                  <input value={form.father_name} onChange={e => setParentName("father", e.target.value)} placeholder="e.g. Suresh Sharma" className="field-input" />
+                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Also added to Family &amp; nomination.</p>
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Mother&apos;s name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>from family</span></label>
-                  <div className="field-input" style={{ background: "var(--bg-low)", color: identityExtras.mother_name ? "var(--on-bg)" : "var(--on-variant)" }}>
-                    {identityExtras.mother_name || "Set in step 4"}
-                  </div>
-                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Required on EPF Form 2.</p>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Mother&apos;s name</label>
+                  <input value={identityExtras.mother_name} onChange={e => setParentName("mother", e.target.value)} placeholder="e.g. Sunita Sharma" className="field-input" />
+                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Required on EPF Form 2. Also added to Family &amp; nomination.</p>
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Languages known <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Languages known</label>
                   <LanguagesSelect value={identityExtras.languages_known}
                     onChange={v => setIdentityExtras(x => ({ ...x, languages_known: v }))} />
                 </div>
               </div>
 
-              <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Statutory declarations</div>
+              <div className="hw-section">Statutory declarations</div>
               <div className="grid grid-cols-2 gap-3 mb-5">
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5" style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -961,13 +930,13 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 </div>
               </div>
 
-              <div className="text-[11px] font-bold uppercase tracking-wide mb-1" style={{ color: "var(--on-variant)" }}>Voluntary self-declaration</div>
+              <div className="hw-section">Voluntary self-declaration</div>
               <p className="text-[11.5px] mb-2" style={{ color: "var(--on-variant)" }}>
                 Not required of a private employer. Collect only where a government, PSU or aided establishment must report it, or a state incentive scheme requires it. Self-declared, and hidden from reporting managers.
               </p>
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Category / community <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Category / community</label>
                   <select value={identityExtras.category} onChange={e => setIdentityExtras(x => ({ ...x, category: e.target.value }))} className="field-input field-select">
                     <option value="prefer_not_to_say">Prefer not to say</option>
                     <option value="general">General</option>
@@ -979,23 +948,24 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 </div>
               </div>
 
-              <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Contact</div>
+              <div className="hw-section">Contact</div>
               <div className="grid grid-cols-3 gap-3 mb-5">
-                <div>
+                <div {...fieldProps("email")}>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Personal email <span style={{ color: "var(--error)" }}>*</span></label>
                   <input type="email" value={email} onChange={e => { setEmail(e.target.value); setContactErrors(c => ({ ...c, email: undefined })); }} placeholder="name@example.com" className="field-input" />
-                  <FieldError message={contactErrors.email} />
+                  <FieldError message={contactErrors.email ?? issueMessages.email} />
                 </div>
-                <div>
+                <div {...fieldProps("phone")}>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Mobile number <span style={{ color: "var(--error)" }}>*</span></label>
                   <PhoneInput value={phone} onChange={value => { setPhone(value); setContactErrors(c => ({ ...c, phone: undefined })); }} placeholder="90000 00000" />
-                  <FieldError message={contactErrors.phone} />
+                  <FieldError message={contactErrors.phone ?? issueMessages.phone} />
                 </div>
-                <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Alternate mobile <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                <div {...fieldProps("alternate_mobile")}>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Alternate mobile</label>
                   <PhoneInput value={identityExtras.alternate_mobile}
                     onChange={v => setIdentityExtras(x => ({ ...x, alternate_mobile: v }))}
                     placeholder="Optional" />
+                  <FieldError message={issueMessages.alternate_mobile} />
                 </div>
               </div>
 
@@ -1039,7 +1009,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
           {tab === 1 && (
             <EmploymentStep
-              value={employment} onChange={setEmployment} onSetEmploymentType={setEmploymentType}
+              value={employment} onChange={setEmployment} onSetEmploymentType={setEmploymentType} errors={issueMessages}
               reservedEmployeeId={action.reserved_employee_id}
               positionTitle={action.position_title} orgUnitName={action.org_unit_name} grade={action.grade}
               costCenter=""
@@ -1060,13 +1030,13 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
           {tab === 3 && (
             <StatutoryAccountsStep
-              value={statutory} onChange={setStatutory}
-              documents={documents} uploading={docUploading} docError={docError}
-              onUploadDoc={uploadDocument} onDeleteDoc={deleteDocument}
+              value={statutory} onChange={setStatutory} errors={issueMessages}
+              documents={documents}
             />
           )}
 
           {tab === 4 && (
+            <div {...fieldProps("family")}>
             <FamilyNominationStep
               familyEntries={familyEntries} nomineeEntries={nomineeEntries}
               onAddFamily={() => setFamilyEntries(p => [...p, { id: nextTempId(), name: "", relationship: "child", date_of_birth: "", gender: "", blood_group: "", is_dependent: false }])}
@@ -1077,6 +1047,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               onRemoveNominee={id => setNomineeEntries(p => p.filter(e => e.id !== id))}
               error={null}
             />
+            </div>
           )}
 
           {tab === 5 && (
@@ -1084,15 +1055,18 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               {docError && (
                 <div ref={educationErrorRef} className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{docError}</div></div>
               )}
+              <div {...fieldProps("education")}>
+              <FieldError message={issueMessages.education} />
               <EducationChecklist
                 entries={educationEntries} fieldConfig={eduExpFieldConfig.education}
                 onAdd={() => setEducationEntries(p => [...p, { id: nextTempId(), level: "", custom_level_label: "", institution: "", specialization: "", percentage: "", start_date: "", end_date: "", is_highest: false }])}
                 onFieldChange={(id, field, value) => setEducationEntries(p => p.map(e => e.id === id ? { ...e, [field]: value } : e))}
                 onRemove={id => setEducationEntries(p => p.filter(e => e.id !== id))}
                 onSetHighest={id => setEducationEntries(p => p.map(e => ({ ...e, is_highest: e.id === id })))}
-                documents={documents} uploading={docUploading} onUploadDoc={uploadDocument} onDeleteDoc={deleteDocument}
+                documents={documents} uploading={docUploading} onUploadDoc={uploadDocument} onDeleteDoc={deleteDocument} certificateTypeFor={certificateTypeForLevel}
                 error={null}
               />
+              </div>
               <ExperienceList
                 totalExperienceYears={null} entries={experienceEntries} fieldConfig={eduExpFieldConfig.experience}
                 onAdd={() => setExperienceEntries(p => [...p, { id: nextTempId(), employer_name: "", designation: "", employment_type: "full_time", start_date: "", end_date: "", is_current: false, responsibilities: "", reason_for_leaving: "" }])}
@@ -1106,12 +1080,12 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               <div className="sechead">SKILLS &amp; CERTIFICATIONS</div>
               <div className="g3">
                 <div className="f">
-                  <label>Core skills <span className="tag">OPTIONAL</span></label>
+                  <label>Core skills</label>
                   <input value={coreSkills} onChange={e => setCoreSkills(e.target.value)} placeholder="e.g. React, payroll operations, team leadership" className="finput" />
                   <div className="hint">Use comma-separated skills; keep this relevant to the role.</div>
                 </div>
                 <div className="f">
-                  <label>Certifications <span className="tag">OPTIONAL</span></label>
+                  <label>Certifications</label>
                   <input value={certifications} onChange={e => setCertifications(e.target.value)} placeholder="Certification and year" className="finput" />
                 </div>
               </div>
@@ -1123,6 +1097,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               documents={documents}
               uploading={docUploading}
               error={docError}
+              missing={issueMessages}
               onUpload={uploadDocument}
               onDelete={deleteDocument}
               verification={verification} onVerificationChange={setVerification}

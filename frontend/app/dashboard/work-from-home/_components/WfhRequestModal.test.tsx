@@ -29,7 +29,7 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 async function fillDates(start = "20/11/2026", end = "22/11/2026") {
-  const [startBox, endBox] = screen.getAllByPlaceholderText("DD/MM/YYYY");
+  const [startBox, endBox] = screen.getAllByPlaceholderText("DD-MM-YYYY");
   fireEvent.change(startBox, { target: { value: start } });
   fireEvent.change(endBox, { target: { value: end } });
   await screen.findByText("Latitude");   // the saved location has been applied

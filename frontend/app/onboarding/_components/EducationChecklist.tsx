@@ -26,6 +26,9 @@ import DateInput from "@/components/shared/DateInput";
 // removal — the wizard page decides whether that also means "delete this
 // on the server" when it reconciles. Mirrors ExperienceList.tsx exactly.
 
+// Every type a qualification's certificate can be filed under.
+const CERTIFICATE_TYPES = new Set(["degree_certificate", "tenth_certificate", "twelfth_certificate"]);
+
 const EDUCATION_LEVELS: { value: string; label: string }[] = [
   { value: "ssc",          label: "SSC / 10th" },
   { value: "intermediate", label: "Intermediate / 12th" },
@@ -100,6 +103,10 @@ interface Props {
   documents?: HireDocument[];
   uploading?: string | null;
   onUploadDoc?: (documentType: string, file: File, entryRef?: string) => void;
+  /** The document type to file an entry's certificate under, given its level. Defaults to "degree_certificate" for every level;
+   *  the Hire wizard passes one that files an SSC certificate as the 10th certificate and an Intermediate one as the 12th, so the
+   *  Documents step recognises it and does not ask for it again. */
+  certificateTypeFor?: (level: string) => string;
   onDeleteDoc?: (doc: HireDocument) => void;
 }
 
@@ -107,7 +114,7 @@ const Req = () => <span style={{ color: "var(--error)", marginLeft: 2 }}>*</span
 
 export default function EducationChecklist({
   entries, fieldConfig, onAdd, onFieldChange, onRemove, error,
-  onSetHighest, documents, uploading, onUploadDoc, onDeleteDoc,
+  onSetHighest, documents, uploading, onUploadDoc, onDeleteDoc, certificateTypeFor,
 }: Props) {
   // Local-only UI state: which entries currently have "Other" picked in
   // the Specialization dropdown (so the free-text box under it stays open
@@ -152,6 +159,7 @@ export default function EducationChecklist({
 
       {entries.map(entry => {
         const key = entry.id;
+        const certificateType = certificateTypeFor ? certificateTypeFor(entry.level) : "degree_certificate";
         return (
           <div key={key} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -254,11 +262,11 @@ export default function EducationChecklist({
             {onUploadDoc && (
               <div style={{ marginTop: 4 }}>
                 <DocUploadButton
-                  documentType="degree_certificate"
+                  documentType={certificateType}
                   label="certificate"
                   entryRef={entry.id}
-                  existing={documents?.find(d => d.document_type === "degree_certificate" && d.entry_ref === entry.id)}
-                  uploading={uploading === `degree_certificate:${entry.id}`}
+                  existing={documents?.find(d => d.entry_ref === entry.id && CERTIFICATE_TYPES.has(d.document_type))}
+                  uploading={uploading === `${certificateType}:${entry.id}`}
                   onUpload={onUploadDoc}
                   onDelete={onDeleteDoc}
                 />

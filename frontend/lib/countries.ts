@@ -10,10 +10,8 @@
 //
 // `name` is the country's name (for "Country of Origin"-style fields);
 // `demonym` is the adjective form (for "Nationality"-style fields, e.g.
-// "Indian" rather than "India"). India is listed first to match this app's
-// existing convention (PhoneInput, LanguagesSelect) of defaulting to the
-// most common case for this deployment rather than strict alphabetical
-// order.
+// "Indian" rather than "India"). The data here is not in A-to-Z order (India is first); CountrySelect sorts what it shows, so every
+// drop-down reads A to Z by the name or nationality it displays.
 export interface CountryEntry {
   name: string;
   demonym: string;

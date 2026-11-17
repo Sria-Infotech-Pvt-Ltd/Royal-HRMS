@@ -68,6 +68,9 @@ export default function FamilyNominationStep({
   }, [nomineeEntries, onNomineeFieldChange]);
 
   const people = namedMembers(familyEntries);
+  // Set when someone presses Add nominee with nobody to nominate yet: the note below turns into a clear instruction.
+  const [wasBlocked, setWasBlocked] = useState(false);
+  const familySection = useRef<HTMLDivElement | null>(null);
   const nominatedIds = new Set(nomineeEntries.map(nominee => nominee.family_member).filter(Boolean));
   const selectable = familyEntries.filter(entry => entry.name.trim() !== "" || nominatedIds.has(entry.id));
   const duplicates = duplicateRoleIds(familyEntries);
@@ -76,6 +79,12 @@ export default function FamilyNominationStep({
   function quickAdd(relationship?: string) {
     pendingFamily.current = relationship ? presetFor(relationship) : null;
     onAddFamily();
+  }
+  /** Add nominee pressed with no named family member: say why, make sure there is a card to type into, and go up to the family list. */
+  function nomineeBlocked() {
+    setWasBlocked(true);
+    if (familyEntries.length === 0) quickAdd();
+    familySection.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function addNominee(scheme: string) {
     pendingScheme.current = scheme;
@@ -110,7 +119,7 @@ export default function FamilyNominationStep({
         })}
       </div>
 
-      <div>
+      <div ref={familySection}>
         <h4 style={{ fontSize: "0.95rem", margin: "0 0 4px" }}>Family members</h4>
         <p style={{ color: "var(--on-variant)", fontSize: ".85rem", margin: "0 0 12px" }}>
           Add the people who depend on the employee or who may be nominated below. A person is added once and can be picked as a nominee.
@@ -143,13 +152,17 @@ export default function FamilyNominationStep({
         <p style={{ color: "var(--on-variant)", fontSize: ".85rem", margin: "0 0 12px" }}>
           Each scheme&apos;s shares should add up to 100% across its nominees. Pick nominees from the family list above.
         </p>
-        {people.length === 0 && <p style={{ color: "var(--warn)", fontSize: ".85rem", margin: "0 0 12px" }}>Add a family member with a name above before adding a nominee.</p>}
+        {people.length === 0 && (
+          wasBlocked
+            ? <div role="alert" className="alert alert-error" style={{ margin: "0 0 12px" }}><i className="ti ti-alert-circle" /><div>A nominee is picked from the family list, and there is nobody in it yet. Add a family member with a name above, then add the nominee.</div></div>
+            : <p style={{ color: "var(--warn)", fontSize: ".85rem", margin: "0 0 12px" }}>Add a family member with a name above before adding a nominee.</p>
+        )}
         <div style={{ display: "grid", gap: 10 }}>
           {SCHEMES.map(scheme => (
             <NominationLane
               key={scheme.value} scheme={scheme} nominees={sharesIn(nomineeEntries, scheme.value)} allNominees={nomineeEntries}
               total={schemeTotal(nomineeEntries, scheme.value)} members={selectable} canAdd={people.length > 0}
-              onAdd={() => addNominee(scheme.value)} onField={onNomineeFieldChange} onRemove={onRemoveNominee}
+              onAdd={() => addNominee(scheme.value)} onBlocked={nomineeBlocked} onField={onNomineeFieldChange} onRemove={onRemoveNominee}
             />
           ))}
         </div>

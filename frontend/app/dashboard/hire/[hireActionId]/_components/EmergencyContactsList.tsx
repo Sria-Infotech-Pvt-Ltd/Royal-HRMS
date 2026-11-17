@@ -71,15 +71,15 @@ export default function EmergencyContactsList({ entries, onAdd, onFieldChange, o
             </div>
             <div className="g3">
               <div className="f">
-                <label>Alternate phone <span className="tag">OPTIONAL</span></label>
+                <label>Alternate phone</label>
                 <PhoneInput value={c.alternate_phone} onChange={v => onFieldChange(c.id, "alternate_phone", v)} placeholder="Optional" inputClassName="finput" />
               </div>
               <div className="f">
-                <label>Email <span className="tag">OPTIONAL</span></label>
+                <label>Email</label>
                 <input type="email" value={c.email} onChange={e => onFieldChange(c.id, "email", e.target.value)} placeholder="Optional" className="finput" />
               </div>
               <div className="f">
-                <label>Address <span className="tag">OPTIONAL</span></label>
+                <label>Address</label>
                 <input value={c.address} onChange={e => onFieldChange(c.id, "address", e.target.value)} placeholder="Optional" className="finput" />
               </div>
             </div>

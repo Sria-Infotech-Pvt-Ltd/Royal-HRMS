@@ -90,7 +90,7 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
 
       {breakdown && (
         <>
-          <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Earnings</div>
+          <div className="hw-section">Earnings</div>
           <table className="w-full text-[13px] mb-5" style={{ borderCollapse: "collapse" }}>
             <tbody>
               <Row label="Basic Pay" value={breakdown.basic} />
@@ -101,7 +101,7 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
             </tbody>
           </table>
 
-          <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Employer contributions</div>
+          <div className="hw-section">Employer contributions</div>
           <table className="w-full text-[13px] mb-5" style={{ borderCollapse: "collapse" }}>
             <tbody>
               <Row label="Employer PF (EPF)" value={breakdown.employer_pf} />
@@ -111,7 +111,7 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
             </tbody>
           </table>
 
-          <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Statutory deductions</div>
+          <div className="hw-section">Statutory deductions</div>
           <table className="w-full text-[13px] mb-5" style={{ borderCollapse: "collapse" }}>
             <tbody>
               <Row label="Employee PF" value={breakdown.employee_pf} />
@@ -136,7 +136,7 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
         </>
       )}
 
-      <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Employee declarations</div>
+      <div className="hw-section">Employee declarations</div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-[12.5px] font-semibold mb-1.5">Tax regime</label>

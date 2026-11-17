@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRIES } from "@/lib/countries";
 
+const COLLATOR = new Intl.Collator("en", { sensitivity: "base" });
+
 interface CountrySelectProps {
   value: string;
   onChange: (value: string) => void;
@@ -43,7 +45,9 @@ export default function CountrySelect({ value, onChange, mode, placeholder, inpu
   // the single "Congolese" entry behaves exactly as it always has.
   const options = useMemo(() => {
     const raw = COUNTRIES.map(c => (mode === "demonym" ? c.demonym : c.name));
-    return Array.from(new Set(raw));
+    // A to Z by what is shown. The source list is ordered by country name with India first, which is not the order of the
+    // nationalities ("Emirati" belongs under E, not under United Arab Emirates).
+    return Array.from(new Set(raw)).sort(COLLATOR.compare);
   }, [mode]);
   const filtered = options.filter(o => o.toLowerCase().includes(search.trim().toLowerCase()));
   const isKnownValue = value === "" || options.includes(value);

@@ -1,5 +1,6 @@
 "use client";
 
+import FieldError from "@/components/shared/FieldError";
 import { EMPLOYMENT_TYPES } from "@/lib/employmentType";
 import { useEffect, useState, type ReactNode } from "react";
 import clientApi from "@/lib/clientApi";
@@ -76,12 +77,15 @@ interface Props {
   costCenter: string;
   /** Hire wizard only: the Reporting & approvals fields, which replace the plain reporting-manager box. */
   approverSection?: ReactNode;
+  /** Messages for fields that failed the step's checks, by field key (the Hire wizard). */
+  errors?: Record<string, string>;
 }
 
 export default function EmploymentStep({
   value, onChange, onSetEmploymentType, reservedEmployeeId,
-  positionTitle, orgUnitName, grade, costCenter, approverSection,
-}: Props) {
+  positionTitle, orgUnitName, grade, costCenter, approverSection, errors = {} }: Props) {
+  /** Marks a field's wrapper so the wizard can find it, and so it shows red while it has a message. */
+  const mark = (field: string) => ({ className: "f hw-field", "data-hw-field": field, "data-hw-invalid": errors[field] ? ("true" as const) : undefined });
   const [branches, setBranches] = useState<{ id: number; branch_name: string }[]>([]);
   const [people, setPeople] = useState<{ id: string; full_name: string; employee_id: string }[]>([]);
   const [weeklyPolicies, setWeeklyPolicies] = useState<{ id: string; name: string }[]>([]);
@@ -149,12 +153,13 @@ export default function EmploymentStep({
     <div className="mstep on">
       <div className="sechead">JOB DETAILS</div>
       <div className="g3">
-        <div className="f">
+        <div {...mark("work_email")}>
           <label>Work email <span className="tag">ASSIGN WHEN READY</span></label>
           <input type="email" value={value.work_email} onChange={e => set("work_email", e.target.value)} placeholder="name@company.example" className="finput" />
+          <FieldError message={errors.work_email} />
           <div className="hint">Separate from the personal email used for preboarding.</div>
         </div>
-        <div className="f">
+        <div {...mark("employment_type")}>
           <label>Employment type <span className="req">*</span></label>
           <select value={value.employment_type}
             onChange={e => onSetEmploymentType(e.target.value)}
@@ -163,6 +168,7 @@ export default function EmploymentStep({
             {value.employment_type && !EMP_TYPES.includes(value.employment_type) && <option value={value.employment_type}>{value.employment_type}</option>}
             {EMP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
+          <FieldError message={errors.employment_type} />
           {reservedEmployeeId && (
             <div className="hint">
               Employee number reserved: {reservedEmployeeId}. Changing this reserves a new number for the new type.
@@ -212,7 +218,7 @@ export default function EmploymentStep({
           </div>
         )}
         <div className="f">
-          <label>Dotted-line manager <span className="tag">OPTIONAL</span></label>
+          <label>Dotted-line manager</label>
           <SearchableSelect value={value.dotted_line_manager_id} onChange={v => set("dotted_line_manager_id", v)}
             placeholder="None" options={people.map(p => ({ value: p.id, label: p.full_name }))} />
         </div>
@@ -233,10 +239,11 @@ export default function EmploymentStep({
       <div className="divider" />
       <div className="sechead">WORK SETUP</div>
       <div className="g3">
-        <div className="f">
+        <div {...mark("branch")}>
           <label>Company code <span className="req">*</span></label>
           <SearchableSelect value={value.branch} onChange={v => set("branch", v)}
             placeholder="Select" options={branches.map(b => ({ value: b.branch_name, label: b.branch_name }))} />
+          <FieldError message={errors.branch} />
           <div className="hint">The work location is taken from the Company Code&apos;s address.</div>
         </div>
         <div className="f">
@@ -287,9 +294,10 @@ export default function EmploymentStep({
           <SearchableSelect value={value.salary_structure} onChange={v => set("salary_structure", v)}
             placeholder="None yet" options={structures.map(s => ({ value: s.id, label: s.name }))} />
         </div>
-        <div className="f">
+        <div {...mark("annual_ctc")}>
           <label>Annual fixed CTC (₹) <span className="tag">HR</span></label>
           <input type="number" value={value.annual_ctc} onChange={e => set("annual_ctc", e.target.value)} placeholder="e.g. 800000" className="finput" />
+          <FieldError message={errors.annual_ctc} />
         </div>
       </div>
     </div>

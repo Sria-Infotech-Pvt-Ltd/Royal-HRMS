@@ -26,7 +26,7 @@ describe("filterQueryParams", () => {
 })
 
 describe("lifecycleNote", () => {
-  it("shows the joining date for Pre-Joining", () => expect(lifecycleNote("pre_joining", "2026-11-09")).toEqual({ text: "Joins 09/11/2026", tone: "info" }))
+  it("shows the joining date for Pre-Joining", () => expect(lifecycleNote("pre_joining", "2026-11-09")).toEqual({ text: "Joins 09-11-2026", tone: "info" }))
   it("flags a missing joining date for HR", () => expect(lifecycleNote("unknown", "")).toMatchObject({ tone: "warn" }))
   it("flags termination", () => expect(lifecycleNote("terminated", "2020-01-01")?.tone).toBe("crit"))
   it("says nothing extra for Active, unless the account is locked", () => {

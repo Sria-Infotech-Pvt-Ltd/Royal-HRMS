@@ -36,11 +36,12 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   return `${formatDate(date)}, ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-/** dd/mm/yyyy — the Employee Directory reference's date style (the rest of the app keeps dd-mm-yyyy). */
+/**
+ * Kept for the screens that already call it. The whole app writes dates as DD-MM-YYYY, so this is the same as formatDate (it used
+ * to give dd/mm/yyyy for the Employee Directory, which left two date styles side by side).
+ */
 export function formatDateSlash(value: string | Date | null | undefined): string {
-  const date = toValidDate(value)
-  if (!date) return ""
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`
+  return formatDate(value)
 }
 
 /** HH:mm, 24-hour. */

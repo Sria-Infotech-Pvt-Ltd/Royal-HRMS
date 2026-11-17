@@ -73,6 +73,10 @@ export const IDENTITY_STATUTORY_BUILTIN_KEYS = new Set([
   // question this step's own "Specially abled"/"International worker"
   // selects already ask (QA report #42).
   "is_disabled", "is_international_worker",
+  // The same again for the four identity questions this step asks itself (Nationality, Place of birth, Languages known and
+  // Mother's name, which comes from the Family step). The configured copies were shown in a second card, wrote into `form`,
+  // and were overwritten by this step's own values when the draft was built, so what HR typed there was thrown away.
+  "nationality", "place_of_birth", "mother_name", "languages_known",
 ]);
 
 export function emptyEmergencyContact(id: string, isPrimary: boolean): EmergencyContactEntry {

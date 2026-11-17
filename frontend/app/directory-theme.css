@@ -59,3 +59,6 @@
   .emp-fit>.panel .toolbar{padding:8px 14px}
   .emp-fit>.panel .tbl-h,.emp-fit>.panel .tr{padding-block:8px}
 }
+
+.rvbtn.is-blocked{opacity:.65}
+.rvbtn.pri.is-blocked:hover{background:var(--brand)}

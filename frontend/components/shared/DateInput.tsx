@@ -1,10 +1,10 @@
 "use client";
 
-// A date field that is always typed as DD/MM/YYYY, whatever the browser's locale.
+// A date field that is always typed as DD-MM-YYYY, whatever the browser's locale.
 //
 // A native <input type="date"> follows the browser's regional format, so on an en-US browser the first box is the
 // MONTH: typing "30" for the 30th is read as month 03 and the "0" spills into the day box. This field types the day
-// first (the order used everywhere else in the app), inserts the slashes itself, and still offers the browser's
+// first (the order used everywhere else in the app), inserts the dashes itself, and still offers the browser's
 // calendar through the icon. The value it exchanges with the page is the same ISO "YYYY-MM-DD" string a native date
 // input uses, so it can replace one without touching the surrounding state ("" while the date is incomplete/invalid).
 
@@ -24,10 +24,7 @@ interface Props {
   /** ISO bounds — dates outside them are treated as invalid. */
   min?: string;
   max?: string;
-  /** Displayed/typed separator — "/" everywhere by default (the app-wide
-   * convention). Only override to "-" where a screen's surrounding text
-   * already reads DD-MM-YYYY and a mix of the two in one place would be
-   * the actual bug (e.g. the Hire modal's summary panel). */
+  /** Displayed/typed separator. "-" everywhere (DD-MM-YYYY is the app-wide format); "/" only if a screen must show slashes. */
   separator?: "/" | "-";
 }
 
@@ -70,7 +67,7 @@ function textToIso(text: string, sep: string): string {
   return `${match[3]}-${match[2]}-${match[1]}`;
 }
 
-/** Keeps digits only and re-inserts the separator, so typing "30031995" or "30/03/1995" both give 30/03/1995. */
+/** Keeps digits only and re-inserts the separator, so typing "30031995" or "30/03/1995" both give 30-03-1995. */
 function formatDigits(raw: string, sep: string): string {
   const digits = raw.replace(/\D/g, "").slice(0, 8);
   let formatted = digits.slice(0, 2);
@@ -79,7 +76,7 @@ function formatDigits(raw: string, sep: string): string {
   return formatted;
 }
 
-export default function DateInput({ value, onChange, id, className, style, disabled = false, readOnly = false, required = false, title, min, max, separator = "/" }: Props) {
+export default function DateInput({ value, onChange, id, className, style, disabled = false, readOnly = false, required = false, title, min, max, separator = "-" }: Props) {
   const { wrapper: wrapperStyle, input: inputStyle } = splitStyle(style);
   const isLocked = disabled || readOnly;
   const [text, setText] = useState(() => isoToText(value, separator));

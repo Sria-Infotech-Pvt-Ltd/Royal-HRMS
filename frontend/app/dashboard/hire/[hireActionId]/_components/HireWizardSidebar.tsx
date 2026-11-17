@@ -20,6 +20,8 @@ interface Props {
   currentStep: number;
   highestSaved: number;
   onStepClick: (index: number) => void;
+  /** Overall progress of the hire, shown at the top of the rail. */
+  progressPct?: number;
   missingByStep: Record<number, string[]>; // step index -> field labels still missing
 }
 
@@ -34,11 +36,17 @@ interface Props {
 // deliberately does NOT mirror that anymore, since HR filling this out
 // needs to be able to jump ahead — e.g. to Documents or Review — without
 // being forced through every step in order first).
-export default function HireWizardSidebar({ steps, currentStep, highestSaved, onStepClick, missingByStep }: Props) {
+export default function HireWizardSidebar({ steps, currentStep, highestSaved, onStepClick, missingByStep, progressPct }: Props) {
   const totalMissing = Object.values(missingByStep).reduce((n, arr) => n + arr.length, 0);
 
   return (
     <div className="wiz-nav">
+      {progressPct !== undefined && (
+        <div className="hw-rail-progress">
+          <div><strong>{progressPct}%</strong> of the hire is ready</div>
+          <div className="hw-progress-bar"><span style={{ width: `${progressPct}%` }} /></div>
+        </div>
+      )}
       {steps.map((step, i) => {
         // For any step HireWizardClient actually tracks required fields for
         // (missingByStep[i] exists), the green check is re-derived from
@@ -76,9 +84,7 @@ export default function HireWizardSidebar({ steps, currentStep, highestSaved, on
                   {step.label}
                   {step.tag && <span className={`tag ${step.tag.tone}`}>{step.tag.label}</span>}
                   {!!requiredBadge && requiredBadge > 0 && (
-                    <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--onbrand)", background: "var(--crit)", borderRadius: 99, padding: "1px 5px" }}>
-                      {requiredBadge}
-                    </span>
+                    <span className="step-req" title={`${requiredBadge} required field${requiredBadge === 1 ? "" : "s"} left`}>{requiredBadge}</span>
                   )}
                 </div>
                 <div className="t2">{step.sub}</div>
@@ -89,19 +95,13 @@ export default function HireWizardSidebar({ steps, currentStep, highestSaved, on
       })}
 
       {totalMissing > 0 && (
-        <div style={{ marginTop: 16, padding: "10px 12px", borderRadius: "var(--r-field)", background: "var(--brand-tint)" }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--brand-ink)", marginBottom: 6 }}>
-            {totalMissing} field{totalMissing === 1 ? "" : "s"} still required
-          </div>
-          {Object.entries(missingByStep).filter(([, f]) => f.length > 0).slice(0, 2).map(([stepIdx, fields]) => (
-            <div key={stepIdx} style={{ marginBottom: 6 }}>
-              <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--muted)" }}>
-                {steps[Number(stepIdx)]?.label}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--ink)" }}>
-                {fields.slice(0, 3).join(", ")}{fields.length > 3 ? ` +${fields.length - 3} more` : ""}
-              </div>
-            </div>
+        <div className="hw-missing">
+          <div className="hw-missing-title"><i className="ti ti-alert-circle" /> {totalMissing} field{totalMissing === 1 ? "" : "s"} still required</div>
+          {Object.entries(missingByStep).filter(([, fields]) => fields.length > 0).map(([stepIdx, fields]) => (
+            <button key={stepIdx} type="button" className="hw-missing-row" onClick={() => onStepClick(Number(stepIdx))}>
+              <span>{steps[Number(stepIdx)]?.label}</span>
+              <small>{fields.slice(0, 3).join(", ")}{fields.length > 3 ? ` +${fields.length - 3} more` : ""}</small>
+            </button>
           ))}
         </div>
       )}

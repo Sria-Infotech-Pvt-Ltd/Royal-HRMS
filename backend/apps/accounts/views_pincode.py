@@ -14,6 +14,7 @@ reorganizations — same pincode above correctly returns "Jogulamba Gadwal".
 """
 from __future__ import annotations
 
+import difflib
 import logging
 import re
 
@@ -123,3 +124,59 @@ class PincodeLookupView(APIView):
         state = STATE_LOOKUP.get(raw_state.upper(), _smart_title(raw_state))
         locality = _locality_from_office_name(match.get('Name', ''))
         return success('OK', {'locality': locality, 'district': district, 'state': state})
+
+
+# ── All PIN codes in one district (the address form's PIN code drop-down) ─────────────────────────────────────────────
+def _normalise(text: str) -> str:
+    """Lower-case letters and digits only, one space between words, so "Medchal–Malkajgiri" and "MEDCHAL MALKAJGIRI" are the same."""
+    return re.sub(r'[^a-z0-9]+', ' ', (text or '').lower()).strip()
+
+
+def _closest(wanted: str, candidates: list):
+    """The candidate that is the same name written another way: exactly, or after normalising, or by a close spelling (the PIN
+    dataset writes some districts differently, e.g. "Jangoan" for Jangaon, "Jagitial" for Jagtial)."""
+    key = _normalise(wanted)
+    if not key:
+        return None
+    by_key = {_normalise(candidate): candidate for candidate in candidates}
+    if key in by_key:
+        return by_key[key]
+    close = difflib.get_close_matches(key, list(by_key), n=1, cutoff=0.8)
+    return by_key[close[0]] if close else None
+
+
+def pincodes_for_district(state: str, district: str) -> list:
+    """[{'pincode', 'area'}] for every PIN code in that district of that state, lowest first. Empty when the state or district is not
+    known to the PIN dataset. Never raises."""
+    try:
+        state_name = _closest(state, indiapins.states())
+        if not state_name:
+            return []
+        district_name = _closest(district, indiapins.districts_in_state(state_name))
+        if not district_name:
+            return []
+        in_state = set(indiapins.pincodes_in_state(state_name))
+        pincodes = sorted(code for code in indiapins.pincodes_in_district(district_name) if code in in_state)
+        rows = []
+        for code in pincodes:
+            try:
+                area = _locality_from_office_name(indiapins.matching(code)[0].get('Name', ''))
+            except (ValueError, IndexError):
+                area = ''
+            rows.append({'pincode': code, 'area': area})
+        return rows
+    except Exception as exc:
+        logger.warning('PIN codes for district failed state=%s district=%s: %s', state, district, exc)
+        return []
+
+
+class PincodesInDistrictView(APIView):
+    """GET /onboarding/pincodes/?state=<state>&district=<district> — {pincodes: [{pincode, area}]}, empty if not known."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        state = (request.query_params.get('state') or '').strip()[:100]
+        district = (request.query_params.get('district') or '').strip()[:100]
+        if not state or not district:
+            return error('Both state and district are required.', http_status=status.HTTP_400_BAD_REQUEST)
+        return success('OK', {'pincodes': pincodes_for_district(state, district)})

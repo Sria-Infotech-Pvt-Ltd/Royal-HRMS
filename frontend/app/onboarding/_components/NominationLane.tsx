@@ -17,6 +17,8 @@ interface Props {
   members: FamilyEntry[];
   canAdd: boolean;
   onAdd: () => void;
+  /** Called instead of onAdd when there is nobody to nominate yet, so the button can explain and help rather than sit dead. */
+  onBlocked?: () => void;
   onField: (id: string, field: keyof NomineeEntry, value: string) => void;
   onRemove: (id: string) => void;
 }
@@ -37,7 +39,7 @@ function memberLabel(member: FamilyEntry): string {
   return member.relationship ? `${name} (${RELATIONSHIP_LABELS[member.relationship] ?? member.relationship})` : name;
 }
 
-export default function NominationLane({ scheme, nominees, allNominees, total, members, canAdd, onAdd, onField, onRemove }: Props) {
+export default function NominationLane({ scheme, nominees, allNominees, total, members, canAdd, onAdd, onBlocked, onField, onRemove }: Props) {
   const state = schemeState(total, nominees.length);
   const shares = equalShares(nominees.length);
   return (
@@ -70,7 +72,8 @@ export default function NominationLane({ scheme, nominees, allNominees, total, m
               {rest > 0 && Number(nominee.share_percentage) !== rest && (
                 <button type="button" className="rvbtn" onClick={() => onField(nominee.id, "share_percentage", String(rest))}>Fill the rest ({rest}%)</button>
               )}
-              <button type="button" className="rvbtn ghost" aria-label={`Remove ${scheme.label} nominee ${picked?.name.trim() || ""}`.trim()} onClick={() => onRemove(nominee.id)}>
+              <button type="button" className="rvbtn ghost" aria-label={`Remove ${scheme.label} nominee ${picked?.name.trim() || ""}`.trim()} onClick={() => onRemove(nominee.id)}
+                style={{ color: "var(--crit, #dc2626)" }} title="Remove">
                 <i className="ti ti-trash" aria-hidden="true" />
               </button>
             </div>
@@ -84,7 +87,7 @@ export default function NominationLane({ scheme, nominees, allNominees, total, m
       })}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" className="rvbtn" disabled={!canAdd} title={canAdd ? undefined : "Add a family member with a name first"} onClick={onAdd}>
+        <button type="button" className={`rvbtn pri${canAdd ? "" : " is-blocked"}`} aria-disabled={!canAdd} title={canAdd ? undefined : "Needs a family member with a name first"} onClick={canAdd ? onAdd : onBlocked}>
           <i className="ti ti-plus" aria-hidden="true" /> Add nominee
         </button>
         {nominees.length > 1 && (

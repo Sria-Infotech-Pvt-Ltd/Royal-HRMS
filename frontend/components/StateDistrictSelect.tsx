@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { INDIA_STATE_NAMES, districtsForState } from "@/lib/indiaStatesDistricts";
+import { INDIA_STATE_NAMES, canonicalName, districtsForState } from "@/lib/indiaStatesDistricts";
 
 interface BaseProps {
   value: string;
@@ -35,7 +35,9 @@ function SearchableSelect({ value, onChange, options, placeholder, inputClassNam
   // different state) is kept as-is and shown selected rather than silently
   // cleared — same "don't break what's already saved" rule CountrySelect
   // itself follows.
-  const isKnownValue = value === "" || options.includes(value);
+  // A saved value that differs only in capitals or spacing (a PIN-code lookup answers in capitals) is the listed one, not unknown.
+  const listedValue = canonicalName(options, value);
+  const isKnownValue = value === "" || listedValue !== null;
 
   function select(option: string) {
     onChange(option);
@@ -53,7 +55,7 @@ function SearchableSelect({ value, onChange, options, placeholder, inputClassNam
         style={{ width: "100%", textAlign: "left", cursor: disabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, opacity: disabled ? 0.6 : 1 }}
       >
         <span style={{ color: value ? "inherit" : "var(--on-variant, #7c8aa3)" }}>
-          {value || placeholder || "Select"}
+          {listedValue ?? (value || placeholder || "Select")}
         </span>
         <i className="ti ti-chevron-down" style={{ fontSize: 14, color: "var(--on-variant)", flexShrink: 0 }} />
       </button>
@@ -90,7 +92,7 @@ function SearchableSelect({ value, onChange, options, placeholder, inputClassNam
                 onClick={() => select(o)}
                 style={{
                   padding: "6px 12px", cursor: "pointer", fontSize: 12.5,
-                  background: o === value ? "rgba(124,58,237,0.08)" : "transparent",
+                  background: o === listedValue ? "rgba(124,58,237,0.08)" : "transparent",
                 }}
               >
                 {o}
