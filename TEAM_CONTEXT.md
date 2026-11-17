@@ -5953,3 +5953,32 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Ran on the local dev database:** nothing to change (1 record, already correct). It has not been run on the live server: run the preview there first, check the moves (expected: Late -> Present for late arrivals that completed the full hours, and overtime minutes up where the threshold moved from 9 to 8.5), then `--apply`. Days inside Paid or Closed payroll cycles are skipped, so already-paid LOP is not rewritten.
 
 **Dev note:** the local server briefly returned 500 on `/api/attendance/settings/` ("column ...forgive_late_when_full_hours does not exist") because `migrate attendance` had not yet been applied to the database that server was using; the Django used by the server is the one in `backend/H` (5.1.15).
+
+## HR attendance import now follows the Punch Rules (2026-11-17)
+
+**Problem:** `services_hr_ops.py` (CSV import, both `_run_import_bulk` and `_upsert_attendance_record`) hardcoded `minutes >= 240` => Present else Absent. It ignored the saved full-day / half-day minimum and the break, never produced Half Day or Late, and set no overtime / late / early-exit values, so an imported day disagreed with the same hours punched live. Recorded as a finding in the previous section; fixed here.
+
+**Change:**
+- `AttendanceProcessorService._calculate` (live punches) now hands its totals to one shared `_result_from_totals` (break deduction, late, early exit, status, overtime, note). Live behaviour is unchanged. New public `AttendanceProcessorService.evaluate_times(punch_in, punch_out, cfg)` runs that same function for a day known only by its IN/OUT times.
+- Both import paths call `evaluate_times` with the saved attendance settings (loaded once per import). They now also store `overtime_minutes`, `is_late`, `is_early_exit` and `note`; on an update the note is replaced only if it is empty or one the calculation wrote, so a person's note is kept. The bulk update field list includes the four new fields.
+- A row with no usable OUT time (missing, or not after the IN) is still Absent with 0 minutes, as before. Approved-leave rows are still created as On leave; existing On leave records are still skipped.
+
+**Behaviour changes to be aware of:**
+- An imported day of 4 hours or more is no longer automatically Present: it follows the saved minimums and break (for example 09:00-13:00 with a 1 h lunch is now Half Day). An imported late arrival can now be Late (or Present when the "forgive late when full hours are worked" setting is on).
+- Imported days now carry overtime, late and early-exit values like live days, so they are counted by payroll late-mark and overtime rules where before they counted as zero. Check this against payroll before a large import.
+- Days imported BEFORE this change keep their old status. `recalculate_attendance_status` does not fix them: it only considers days with real IN/OUT punch rows, and imported days have none.
+
+**Files:** `apps/attendance/services_attendance.py`, `apps/attendance/services_hr_ops.py`, new `apps/attendance/tests_import_status_rules.py` (12 tests, `SimpleTestCase`, no database, including a check that an imported day equals a punched day with the same times).
+
+**Verified:** database-free backend tests pass (36), `manage.py check` clean. **Not verified:** a real CSV import (needs a database); the existing `tests_hr_entry_lifecycle.py` import test only checks employment-date rules and was not run.
+
+
+## Live worked-time timer no longer drifts in a hidden tab (2026-11-17)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only (no backend change). Tests: `hooks/useElapsedSeconds.test.tsx` (6 new, fake timers and a moved system clock); 90 hooks, ESS and my-attendance tests pass; `tsc`, `eslint` clean; `npm run build` run before the push. Not checked in a real browser with a backgrounded tab.
+
+**Symptom:** the running timer for a punched-in employee sometimes showed the wrong time. Not a WebSocket problem: neither timer uses WebSockets (only notifications do, in `useNotifications.ts`).
+
+**Cause:** both timers (`useClockWidget`, used by the My Attendance clock and the Home clock button, and `useWorkedToday`, the Home "Worked today" card) added 1 to a counter on every `setInterval` tick after loading the server's figures once. Browsers slow or pause timers in hidden or minimised tabs and while the computer sleeps, so missed ticks were lost for good; the figure was re-read from the server only on page load or after a punch. The server's figure itself (`/attendance/today`, from the real punch time) was right.
+
+**Fix:** `hooks/useElapsedSeconds.ts`. `useElapsedSeconds(token, isRunning)` returns the real seconds since the server figures last arrived (measured with the clock, recomputed every second and straight away when the tab becomes visible, focused or restored), and both timers now show the server's seconds plus that. `useRefetchWhileActive` re-reads the server's figure when the tab becomes visible again and every 5 minutes while punched in, so a stale figure or a punch made elsewhere is corrected without a reload.

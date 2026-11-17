@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useElapsedSeconds, useRefetchWhileActive } from "@/hooks/useElapsedSeconds";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
@@ -51,7 +52,8 @@ export function useClockWidget() {
   // server's instruction unless the audited fallback currently allows an office punch without one.
   const { isMandatory, requiresFaceToPunch, fallbackActive, message: faceMessage } = useFaceVerificationStatus();
   const { faceVerificationRequired, faceRegistrationMissing } = faceGateFor({ isMandatory, requiresFaceToPunch, fallbackActive });
-  const [session, setSession] = useState<TodaySession | null>(null);
+  // The server's figures as last received (page load, a punch, or a refresh); `session` below adds the real time passed since.
+  const [serverSession, setSession] = useState<TodaySession | null>(null);
   const [isPunching, setIsPunching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   // Face-verification lockout (too many failed attempts): epoch ms the lock ends, plus a 1 s ticker
@@ -90,19 +92,19 @@ export function useClockWidget() {
     return () => window.removeEventListener("attendance:updated", handleAttendanceUpdate);
   }, [refetch]);
 
-  const isClockedIn = session?.is_clocked_in ?? false;
-
-  useEffect(() => {
-    if (!isClockedIn) return;
-    const id = setInterval(() => {
-      setSession(prev =>
-        prev
-          ? { ...prev, session_seconds: prev.session_seconds + 1, total_seconds: prev.total_seconds + 1 }
-          : prev
-      );
-    }, 1000);
-    return () => clearInterval(id);
-  }, [isClockedIn]);
+  const isClockedIn = serverSession?.is_clocked_in ?? false;
+  // The timer shows the server's seconds plus the real time passed since they arrived, not a count of ticks: a hidden tab's timer is
+  // slowed by the browser and a counter would fall behind. Back on the tab, or every few minutes, the server's figure is re-read.
+  const elapsedSinceSync = useElapsedSeconds(serverSession, isClockedIn);
+  useRefetchWhileActive(refetch, isClockedIn);
+  const session = useMemo<TodaySession | null>(() => {
+    if (!serverSession || !isClockedIn || elapsedSinceSync === 0) return serverSession;
+    return {
+      ...serverSession,
+      session_seconds: serverSession.session_seconds + elapsedSinceSync,
+      total_seconds: serverSession.total_seconds + elapsedSinceSync,
+    };
+  }, [serverSession, isClockedIn, elapsedSinceSync]);
 
   // Fetches GPS and validates it against the employee's geofence via a
   // read-only backend check — BEFORE any face verification modal opens.
