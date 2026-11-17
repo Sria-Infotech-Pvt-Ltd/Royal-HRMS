@@ -155,3 +155,14 @@ class FaceRegistrationEmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model  = User
         fields = ['uuid', 'employee_id', 'full_name', 'email', 'branch', 'department', 'designation']
+
+
+class FaceRosterEmployeeSerializer(FaceRegistrationEmployeeSerializer):
+    """The picker row plus that person's Face ID state (approved / pending / rejected / none), read from the list's annotation."""
+    face_status = serializers.SerializerMethodField()
+
+    class Meta(FaceRegistrationEmployeeSerializer.Meta):
+        fields = FaceRegistrationEmployeeSerializer.Meta.fields + ['face_status']
+
+    def get_face_status(self, obj) -> str:
+        return getattr(obj, '_face_state', 'none')

@@ -73,9 +73,25 @@ export interface FaceRegistrationEmployee {
   branch:      string;
   department:  string;
   designation: string;
+  /** Their Face ID state: approved (usable), pending, rejected, or none (nothing registered). */
+  face_status: FaceRegistrationStatus | "none";
 }
 
+/** How many active employees are in each Face ID state, and how many have not completed registration. */
+export interface FaceRosterCounts {
+  total:      number;
+  approved:   number;
+  pending:    number;
+  rejected:   number;
+  none:       number;
+  incomplete: number;
+}
+
+/** What the employee list can be narrowed to; "" shows everyone, "incomplete" shows everyone without a usable Face ID. */
+export type FaceRosterFilter = "" | "incomplete" | FaceRegistrationStatus | "none";
+
 export interface PaginatedFaceRegistrationEmployees {
+  counts?:     Partial<FaceRosterCounts>;
   results:     FaceRegistrationEmployee[];
   count:       number;
   page:        number;

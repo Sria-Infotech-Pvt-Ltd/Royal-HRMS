@@ -8,7 +8,9 @@ import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { useFaceLivenessCapture, type LivenessCapturePhase, type CaptureQualityMeta } from "@/hooks/useFaceLivenessCapture";
+import { readRosterCounts } from "@/lib/faceRegistrationStatus";
 import type {
+  FaceRosterFilter,
   FaceRegistrationEmployee,
   FaceRegistrationRequest,
   PaginatedFaceRegistrationEmployees,
@@ -20,13 +22,16 @@ import type {
 const REGISTRATION_FRAMES_TO_CAPTURE = 4;
 const REGISTRATION_NORMALIZE_LIGHTING = true;
 
-/** Org-wide employee picker — re-fetches as `search` changes. */
-export function useFaceRegistrationEmployeePicker(search: string) {
-  const { data, loading, error } = useFetch<PaginatedFaceRegistrationEmployees>(
-    API.attendance.faceRegistration.employees(search)
+/** Org-wide employee picker, one page at a time, with each person's Face ID state and overall counts — re-fetches as `search`, `page` or the filter changes. */
+export function useFaceRegistrationEmployeePicker(search: string, page = 1, faceFilter: FaceRosterFilter = "") {
+  const { data, loading, error, refetch } = useFetch<PaginatedFaceRegistrationEmployees>(
+    API.attendance.faceRegistration.employees(search, page, faceFilter)
   );
   const employees: FaceRegistrationEmployee[] = data?.results ?? [];
-  return { employees, loading, error };
+  return {
+    employees, loading, error, refetch, counts: readRosterCounts(data?.counts),
+    total: data?.count ?? 0, totalPages: data?.total_pages ?? 1, pageSize: data?.page_size ?? employees.length, page: data?.page ?? page,
+  };
 }
 
 /** A specific employee's current face-registration status (none/pending/approved/rejected). */

@@ -8,7 +8,8 @@ under the 300-line convention) — reuses that file's _has_perm/_resolve_branch
 helpers rather than duplicating them.
 
 Endpoints:
-  GET  /api/attendance/face-registration/employees/                — Org-wide employee picker
+  GET  /api/attendance/face-registration/employees/                — Org-wide employee picker, with each person's Face ID state
+                                                                       (?face_status=incomplete|approved|pending|rejected|none) and overall counts
   GET  /api/attendance/face-registration/employees/<uuid>/status/  — Any employee's latest status
   POST /api/attendance/face-registration/register/                 — Register/update, auto-approved
 """
@@ -36,11 +37,12 @@ from apps.attendance.models import (
     FaceRegistrationRequest,
 )
 from apps.attendance.serializers_face_registration import (
-    FaceRegistrationEmployeeSerializer,
     FaceRegistrationHRRegisterSerializer,
     FaceRegistrationReadSerializer,
+    FaceRosterEmployeeSerializer,
 )
 from apps.attendance.services_face_matching import activate_registration, is_face_verification_mandatory
+from apps.attendance.services_face_roster import annotate_face_state, apply_face_filter, face_counts
 from apps.attendance.views.face_registration import (
     _FEATURE_DISABLED_MESSAGE,
     _has_perm,
@@ -77,12 +79,17 @@ class FaceRegistrationEmployeePickerView(APIView):
                 Q(employee_id__icontains=search)
             )
 
-        page_obj, paginator = paginate(queryset, request)
-        serializer = FaceRegistrationEmployeeSerializer(page_obj.object_list, many=True)
-        return success(
-            f'{paginator.count} employee(s) found.',
-            paginated_data(paginator, page_obj, serializer.data),
-        )
+        # Each person's Face ID state, plus totals over everyone (not narrowed by the search or the filter), so the page can show
+        # how far registration has got and who has not completed it.
+        annotated = annotate_face_state(queryset)
+        counts = face_counts(annotate_face_state(User.objects.filter(is_active=True)))
+        annotated = apply_face_filter(annotated, request.query_params.get('face_status', ''))
+
+        page_obj, paginator = paginate(annotated, request)
+        serializer = FaceRosterEmployeeSerializer(page_obj.object_list, many=True)
+        data = paginated_data(paginator, page_obj, serializer.data)
+        data['counts'] = counts
+        return success(f'{paginator.count} employee(s) found.', data)
 
 
 class FaceRegistrationEmployeeStatusView(APIView):

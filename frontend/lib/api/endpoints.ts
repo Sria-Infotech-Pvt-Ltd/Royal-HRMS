@@ -446,8 +446,14 @@ export const API = {
 
       // HR-initiated registration (register/update on someone's behalf, in person)
       register: "/attendance/face-registration/register/",
-      employees: (search?: string) =>
-        `/attendance/face-registration/employees/${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+      employees: (search?: string, page = 1, faceStatus = "") => {
+        const query = new URLSearchParams();
+        if (search) query.set("search", search);
+        if (faceStatus) query.set("face_status", faceStatus);
+        if (page > 1) query.set("page", String(page));
+        const text = query.toString();
+        return `/attendance/face-registration/employees/${text ? `?${text}` : ""}`;
+      },
       employeeStatus: (employeeUuid: string) => `/attendance/face-registration/employees/${employeeUuid}/status/`,
     },
 
