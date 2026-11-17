@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useProjectSyncStatus } from "@/hooks/useWorkStatus";
 import type { ProjectSyncStatus } from "@/types/workStatus";
 import { fmtDateTime } from "./workStatusFormat";
-import { changeSummary, groupLogs, whatHappened } from "./projectSyncFormat";
+import { changeSummary, groupLogs, plainMessage, whatHappened } from "./projectSyncFormat";
 
 const RESULT_LABEL: Record<string, { text: string; badge: string }> = {
   success:   { text: "Synced",    badge: "badge badge-success" },
@@ -34,7 +34,7 @@ function StatusBanner({ data }: { data: ProjectSyncStatus }) {
         <i className="ti ti-plug-connected-x" />
         <div>
           <b>Project Budgeting is not syncing right now.</b>
-          <div style={{ marginTop: 2 }}>{latest.message || "The last sync failed."}</div>
+          <div style={{ marginTop: 2 }}>{plainMessage(latest.message) || "The last sync failed."}</div>
           <div style={{ marginTop: 2, opacity: 0.8 }}>
             Last successful sync: {data.last_synced_at ? fmtDateTime(data.last_synced_at) : "never"}. Updates already stored are not affected.
           </div>
@@ -121,7 +121,7 @@ export default function ProjectSyncStatusCard() {
                     </td>
                     <td style={{ color: "var(--on-variant)", maxWidth: 440 }} title={latest.message || undefined}>
                       <div style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                        {latest.message || changeSummary(latest)}
+                        {plainMessage(latest.message) || changeSummary(latest)}
                       </div>
                     </td>
                   </tr>

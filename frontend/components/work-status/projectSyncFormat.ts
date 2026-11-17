@@ -9,7 +9,7 @@ export interface SyncLogGroup {
 }
 
 // A server that is down fails the same way every few minutes, which would bury everything else in the log. Consecutive
-// identical failures (same source, employee and message) are folded into one row with a count. Rows arrive newest first.
+// identical failures (same source, employee and plain message) are folded into one row with a count. Rows arrive newest first.
 export function groupLogs(rows: ProjectSyncLogRow[]): SyncLogGroup[] {
   const groups: SyncLogGroup[] = [];
   for (const row of rows) {
@@ -20,7 +20,7 @@ export function groupLogs(rows: ProjectSyncLogRow[]): SyncLogGroup[] {
       last.latest.status === "failed" &&
       last.latest.source === row.source &&
       last.latest.employee_id === row.employee_id &&
-      last.latest.message === row.message;
+      plainMessage(last.latest.message) === plainMessage(row.message);
     if (repeatsLast) {
       last.first = row;
       last.count += 1;
@@ -29,6 +29,17 @@ export function groupLogs(rows: ProjectSyncLogRow[]): SyncLogGroup[] {
     }
   }
   return groups;
+}
+
+// Rows written before the backend started storing plain sentences hold the raw connection error (class names, memory
+// addresses, the whole URL). Show those as the same sentence the backend now writes; anything else is shown as stored.
+export function plainMessage(message: string): string {
+  if (!message) return "";
+  if (/ConnectTimeout|timed out/i.test(message)) return "Project Budgeting did not answer (connection timed out). Is it running and reachable?";
+  if (/NewConnectionError|ConnectionRefused|Connection refused|Failed to establish/i.test(message)) return "Could not connect to Project Budgeting. Is it running and reachable?";
+  if (/ReadTimeout|Read timed out/i.test(message)) return "Project Budgeting took too long to reply.";
+  if (/HTTPConnectionPool|HTTPSConnectionPool|MaxRetryError/.test(message)) return "Could not reach Project Budgeting.";
+  return message;
 }
 
 export function whatHappened(row: ProjectSyncLogRow): string {
