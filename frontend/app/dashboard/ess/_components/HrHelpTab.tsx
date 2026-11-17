@@ -92,13 +92,13 @@ export default function HrHelpTab() {
           <div style={{ padding: "20px 24px" }}>
             {submitErr && <div className="alert alert-error" style={{ marginBottom: 16 }}>{submitErr}</div>}
             <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
-              <div className="field-group" style={{ width: 220 }}>
+              <div className="field-group" style={{ flex: "0 1 220px", minWidth: 0 }}>
                 <label className="field-label">Topic</label>
                 <select className="field-input field-select" value={topic} onChange={e => setTopic(e.target.value)}>
                   {TOPICS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
-              <div className="field-group" style={{ width: 160 }}>
+              <div className="field-group" style={{ flex: "0 1 160px", minWidth: 0 }}>
                 <label className="field-label">Priority</label>
                 <select className="field-input field-select" value={priority} onChange={e => setPriority(e.target.value)}>
                   {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
@@ -169,7 +169,7 @@ export default function HrHelpTab() {
 
 function SupportStatusCard({ openCount }: { openCount: number }) {
   return (
-    <div className="card" style={{ flex: "1 1 240px", minWidth: 240 }}>
+    <div className="card" style={{ flex: "1 1 240px", minWidth: "min(240px, 100%)" }}>
       <div className="card-header">
         <div className="card-title"><i className="ti ti-shield-check" /> Support status</div>
       </div>

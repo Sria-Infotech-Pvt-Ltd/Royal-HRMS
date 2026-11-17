@@ -57,11 +57,11 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <LeaveBalanceStats />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "stretch" }}>
+        <div className="leave-pair">
           <LeaveDashboard />
           <UpcomingHolidaysCard />
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "stretch" }}>
+        <div className="leave-pair">
           <TeamCoverageCard />
           <LeavePolicyGuidanceCard />
         </div>

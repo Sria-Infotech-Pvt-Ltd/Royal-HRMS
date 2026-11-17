@@ -98,7 +98,7 @@ export default function TaxDeclarationModal({ current, onClose, onSaved }: Props
       {(error || schemaError) && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error ?? schemaError}</div>}
 
       <h4 style={{ margin: "0 0 8px", fontSize: 14 }}>Tax regime</h4>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: 12, marginBottom: 20 }}>
         {REGIME_OPTIONS.map(option => {
           const isSelected = form.regime === option.value;
           return (

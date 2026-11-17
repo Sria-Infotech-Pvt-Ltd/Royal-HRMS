@@ -21,7 +21,7 @@ export default function HomeStatTiles({ tiles }: Props) {
   // reference spec calls these "4 equal columns" of cards, same size/style
   // as Quick actions/Today/My requests, with the page's own 12px card gap.
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
+    <div className="ess-stat-tiles">
       {tiles.map((t, i) => (
         <div key={i} className="card" style={{ padding: "14px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--on-variant)", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>

@@ -31,7 +31,7 @@ export default function TaxRentFields({ schema, form, onChange }: Props) {
         receipts or rent agreement. Leave the rent blank if you don&apos;t pay rent.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: 12 }}>
         <div className="field-group">
           <label className="field-label" htmlFor="tax-rent-monthly">Monthly rent (₹)</label>
           <input id="tax-rent-monthly" className="field-input" type="number" min={0} placeholder="₹ 0" value={rent.monthlyRent} onChange={event => setRent({ monthlyRent: event.target.value })} />
@@ -50,7 +50,7 @@ export default function TaxRentFields({ schema, form, onChange }: Props) {
       </div>
 
       {monthlyRent > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, marginTop: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: 12, marginTop: 12 }}>
           <div className="field-group">
             <label className="field-label" htmlFor="tax-landlord-name">Landlord&apos;s name</label>
             <input id="tax-landlord-name" className="field-input" value={rent.landlordName} onChange={event => setRent({ landlordName: event.target.value })} />

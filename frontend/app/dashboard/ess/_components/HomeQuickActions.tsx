@@ -8,31 +8,29 @@ interface Props {
 }
 
 // Reference spec: one 3-column grid (column-gap 8px, row-gap 14px), every
-// tile exactly 90px tall, "light border, 8px radius, 10px/8px padding...
+// tile at least 90px tall, "light border, 8px radius, 10px/8px padding...
 // hover = violet border + light violet bg... 26px rounded-square icon chip
 // (bg #F3EEFE, violet icon)". No divider between the two source lists
 // (primary/secondary) — the reference treats all 9 as one sequential grid.
 // Colors use the app's theme tokens (color-mix against --primary) rather
 // than the spec's literal hex so this still works in dark mode too.
+// The grid itself lives in ess-theme.css (.ess-quick-grid): it drops to 2
+// columns when the card is narrow (phones, or beside Today on a tablet).
 export default function HomeQuickActions({ primary, secondary }: Props) {
   const tiles = [...primary, ...secondary];
   return (
-    <div className="card">
+    <div className="card ess-quick">
       <div className="card-header" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
         <div className="card-title"><i className="ti ti-bolt" /> Quick actions</div>
         <p style={{ margin: 0, fontSize: 11, color: "var(--on-variant)" }}>Complete common employee tasks without contacting HR.</p>
       </div>
-      <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", columnGap: 8, rowGap: 14 }}>
+      <div className="ess-quick-grid">
         {tiles.map((a, i) => (
           <button
             key={i}
+            type="button"
             onClick={a.onClick}
             className="ess-quick-tile"
-            style={{
-              display: "flex", flexDirection: "column", gap: 10, height: 90,
-              textAlign: "left", padding: "10px 8px", border: "1px solid var(--outline-v)",
-              borderRadius: 8, background: "transparent", cursor: "pointer",
-            }}
           >
             <span style={{
               width: 26, height: 26, borderRadius: 6, flexShrink: 0,

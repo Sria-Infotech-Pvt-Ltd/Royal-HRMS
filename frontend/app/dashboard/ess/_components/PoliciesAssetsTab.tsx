@@ -284,7 +284,7 @@ function PolicyQuickReferenceGrid() {
       <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
         A short summary only — the published policy document above is the authority if the two differ.
       </p>
-      <div style={{ padding: "4px 24px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <div className="ess-pair" style={{ padding: "4px 24px 24px", gap: 14 }}>
         {QUICK_REFERENCE.map(tile => (
           <div key={tile.label} style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tile.label}</div>

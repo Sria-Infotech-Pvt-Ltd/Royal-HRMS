@@ -157,7 +157,7 @@ export default function DashboardShell({
             (16px 24px 40px) instead of the standard page gutter.
             The Employee Directory is a "fit" page (as in the reference): the wrapper fills <main>
             so the page header, KPIs and banner stay put and only the table body scrolls. */}
-        <div className={`${pathname.startsWith("/dashboard/ess") ? "px-6 pt-4 pb-10" : isFitPage ? "px-4 py-3 md:px-5 md:pt-2 md:pb-2.5" : "px-6 py-4 md:px-10 md:py-6"}${isFitPage ? " flex-1 min-h-0 flex flex-col w-full max-w-[1400px] mx-auto" : ""}`}>
+        <div className={`${pathname.startsWith("/dashboard/ess") ? "px-4 sm:px-6 pt-4 pb-16 sm:pb-10" : isFitPage ? "px-4 py-3 md:px-5 md:pt-2 md:pb-2.5" : "px-6 py-4 md:px-10 md:py-6"}${isFitPage ? " flex-1 min-h-0 flex flex-col w-full max-w-[1400px] mx-auto" : ""}`}>
           {/* Face ID: warm the models in the background, and nudge anyone who still needs to register. */}
           <FaceModelPreloader />
           <FaceRegistrationBanner />

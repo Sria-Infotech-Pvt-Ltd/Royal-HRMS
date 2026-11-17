@@ -237,7 +237,7 @@ export default function AppraisalsTab() {
         <div className="alert alert-info mb-16">Your appraisal outcome has been published. Review it below and acknowledge it.</div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, alignItems: "start" }}>
+      <div className="ess-split-wide">
         <div style={{ minWidth: 0 }}>
           <div className="card mb-16">
             <div className="card-header">
