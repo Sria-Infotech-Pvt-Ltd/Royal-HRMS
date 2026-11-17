@@ -36,7 +36,8 @@ class ProjectAssignmentsWebhookView(APIView):
             employee_code = str(request.data.get('employee_id', ''))[:20] if hasattr(request.data, 'get') else ''
             ProjectSyncLog.objects.create(
                 source=SOURCE_WEBHOOK, triggered_by=client_name, employee_code=employee_code,
-                status=ProjectSyncLog.STATUS_FAILED, message=f'Rejected malformed push: {message}'[:1000],
+                status=ProjectSyncLog.STATUS_FAILED,
+                message='Project Budgeting sent an update that was incomplete or not valid, so it was not saved.',
             )
             return error(message)
         payload = serializer.validated_data

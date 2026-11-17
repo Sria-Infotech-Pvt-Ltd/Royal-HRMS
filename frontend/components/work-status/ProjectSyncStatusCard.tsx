@@ -9,7 +9,7 @@ import { changeSummary, groupLogs, plainMessage, whatHappened } from "./projectS
 const RESULT_LABEL: Record<string, { text: string; badge: string }> = {
   success:   { text: "Synced",    badge: "badge badge-success" },
   failed:    { text: "Failed",    badge: "badge badge-error" },
-  unmatched: { text: "No match",  badge: "badge badge-warn" },
+  unmatched: { text: "Employee not found", badge: "badge badge-warn" },
 };
 
 interface Tile { label: string; value: string; note: string; isProblem?: boolean }
@@ -17,9 +17,9 @@ interface Tile { label: string; value: string; note: string; isProblem?: boolean
 function tilesFor(data: ProjectSyncStatus): Tile[] {
   return [
     { label: "Last synced", value: data.last_synced_at ? fmtDateTime(data.last_synced_at) : "Never", note: "last successful update" },
-    { label: "Failures (24h)", value: String(data.failed_last_24h), note: "syncs that did not complete", isProblem: data.failed_last_24h > 0 },
-    { label: "Open assignments", value: String(data.open_assignments), note: "currently active projects" },
-    { label: "Scheduled catch-up", value: data.is_pull_configured ? "On" : "Off", note: data.is_pull_configured ? "checks Project Budgeting every 30 min" : "push only" },
+    { label: "Failed attempts", value: String(data.failed_last_24h), note: "in the last 24 hours", isProblem: data.failed_last_24h > 0 },
+    { label: "Active assignments", value: String(data.open_assignments), note: "employees currently on a project" },
+    { label: "Regular check", value: data.is_pull_configured ? "On" : "Off", note: data.is_pull_configured ? "AIRA asks Project Budgeting every 30 minutes" : "only updates sent by Project Budgeting" },
   ];
 }
 
@@ -33,10 +33,10 @@ function StatusBanner({ data }: { data: ProjectSyncStatus }) {
       <div className="alert alert-error" style={{ marginBottom: 16 }}>
         <i className="ti ti-plug-connected-x" />
         <div>
-          <b>Project Budgeting is not syncing right now.</b>
+          <b>Project details are not updating right now.</b>
           <div style={{ marginTop: 2 }}>{plainMessage(latest.message) || "The last sync failed."}</div>
           <div style={{ marginTop: 2, opacity: 0.8 }}>
-            Last successful sync: {data.last_synced_at ? fmtDateTime(data.last_synced_at) : "never"}. Updates already stored are not affected.
+            Last successful update: {data.last_synced_at ? fmtDateTime(data.last_synced_at) : "none yet"}. Project details already in AIRA are safe and unchanged.
           </div>
         </div>
       </div>
@@ -45,7 +45,7 @@ function StatusBanner({ data }: { data: ProjectSyncStatus }) {
   return (
     <div className="alert alert-success" style={{ marginBottom: 16 }}>
       <i className="ti ti-circle-check" />
-      <div><b>Syncing normally.</b> Last update {fmtDateTime(latest.at)}.</div>
+      <div><b>Working normally.</b> Last update {fmtDateTime(latest.at)}.</div>
     </div>
   );
 }
@@ -110,14 +110,14 @@ export default function ProjectSyncStatusCard() {
                   <tr key={`${latest.at}-${latest.employee_id}-${latest.source}`}>
                     <td style={{ whiteSpace: "nowrap" }}>
                       {fmtDateTime(latest.at)}
-                      {count > 1 && <div style={{ fontSize: 11, color: "var(--on-variant)" }}>since {fmtDateTime(first.at)}</div>}
+                      {count > 1 && <div style={{ fontSize: 11, color: "var(--on-variant)" }}>from {fmtDateTime(first.at)}</div>}
                     </td>
                     <td>{whatHappened(latest)}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <span className={(RESULT_LABEL[latest.status] ?? RESULT_LABEL.success).badge} style={{ fontSize: 10 }}>
                         {(RESULT_LABEL[latest.status] ?? RESULT_LABEL.success).text}
                       </span>
-                      {count > 1 && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--on-variant)" }}>× {count}</span>}
+                      {count > 1 && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--on-variant)" }}>{count} times</span>}
                     </td>
                     <td style={{ color: "var(--on-variant)", maxWidth: 440 }} title={latest.message || undefined}>
                       <div style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>

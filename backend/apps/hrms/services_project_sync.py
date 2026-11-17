@@ -83,7 +83,7 @@ def sync_employee_snapshot(employee_code: str, rows: list[dict], *, source: str,
         logger.exception('Project assignments sync failed for %s', employee_code)
         ProjectSyncLog.objects.create(
             source=source, triggered_by=triggered_by, employee_code=employee_code,
-            status=ProjectSyncLog.STATUS_FAILED, message=f'{type(exc).__name__}: {exc}'[:1000],
+            status=ProjectSyncLog.STATUS_FAILED, message=MSG_NOT_SAVED,
         )
         raise
 
@@ -106,21 +106,32 @@ def _credentials() -> tuple[str, str] | None:
     return (base_url.rstrip('/'), api_key) if base_url and api_key else None
 
 
-def _describe_pull_failure(exc: Exception, base_url: str) -> str:
-    """One plain sentence for the Project Budgeting sync page. The raw exception text (connection-pool class names, memory
-    addresses, the whole URL) stays in the server log; it is unreadable in a table and is not what an admin acts on."""
-    if isinstance(exc, requests.ConnectTimeout):
-        return f'Project Budgeting at {base_url} did not answer (connection timed out). Is it running and reachable?'
-    if isinstance(exc, requests.ConnectionError):
-        return f'Could not connect to Project Budgeting at {base_url}. Is it running and reachable?'
+# Everything below is what an HR admin reads on the Project Budgeting sync page, so each ProjectSyncError and every stored
+# failure message is one plain sentence: no exception names, setting names, field names or addresses. The technical detail
+# goes to the server log next to where each is raised.
+MSG_NOT_RESPONDING = 'Project Budgeting is not responding. Please check that it is running.'
+MSG_TOO_SLOW = 'Project Budgeting is taking too long to respond.'
+MSG_NOT_UNDERSTOOD = 'Project Budgeting sent information AIRA could not understand.'
+MSG_NOT_SET_UP = 'The connection to Project Budgeting has not been set up yet.'
+MSG_STOPPED_TOO_LONG = 'Checking Project Budgeting took too long and was stopped. It will be tried again.'
+MSG_TOO_MUCH_DATA = 'Project Budgeting sent more information than AIRA can read in one check.'
+MSG_BAD_DETAILS = 'Project Budgeting sent project details that were incomplete or not valid, so nothing was changed.'
+MSG_NOT_SAVED = 'AIRA could not save this update. Please ask Project Budgeting to send it again.'
+
+
+def _describe_pull_failure(exc: Exception) -> str:
+    """The sentence for a failed pull. The raw exception text (connection-pool class names, memory addresses, the whole
+    URL) stays in the server log; it is unreadable in a table and is not what an admin acts on."""
+    if isinstance(exc, (requests.ConnectTimeout, requests.ConnectionError)):
+        return MSG_NOT_RESPONDING
     if isinstance(exc, requests.Timeout):
-        return f'Project Budgeting at {base_url} took too long to reply.'
+        return MSG_TOO_SLOW
     if isinstance(exc, requests.HTTPError) and exc.response is not None:
         code = exc.response.status_code
         if code in (401, 403):
-            return f'Project Budgeting rejected the API key (HTTP {code}).'
-        return f'Project Budgeting returned an error (HTTP {code}).'
-    return 'Project Budgeting sent a reply AIRA could not read.'
+            return f"Project Budgeting did not accept AIRA's access key (code {code})."
+        return f'Project Budgeting reported a problem (code {code}).'
+    return MSG_NOT_UNDERSTOOD
 
 
 def _get_all_pages(path: str, params: dict, *, budget_seconds: float | None = None) -> list[dict]:
@@ -130,13 +141,14 @@ def _get_all_pages(path: str, params: dict, *, budget_seconds: float | None = No
     asking for another page. None (the scheduled reconcile) means no overall cap, only the per-request timeouts."""
     credentials = _credentials()
     if credentials is None:
-        raise ProjectSyncError('PROJECT_BUDGET_API_BASE_URL / PROJECT_BUDGET_API_KEY are not configured.')
+        raise ProjectSyncError(MSG_NOT_SET_UP)
     base_url, api_key = credentials
     deadline = None if budget_seconds is None else time.monotonic() + budget_seconds
     rows: list[dict] = []
     for page in range(1, PULL_MAX_PAGES + 1):
         if deadline is not None and time.monotonic() >= deadline:
-            raise ProjectSyncError(f'Pull of {path} ran out of its {budget_seconds:g}s time budget before page {page}.')
+            logger.warning('Pull of %s ran out of its %gs time budget before page %s.', path, budget_seconds, page)
+            raise ProjectSyncError(MSG_STOPPED_TOO_LONG)
         try:
             response = requests.get(
                 f'{base_url}{path}', params={**params, 'page': page, 'page_size': PULL_PAGE_SIZE},
@@ -148,16 +160,18 @@ def _get_all_pages(path: str, params: dict, *, budget_seconds: float | None = No
             total_pages = int(data['total_pages'])
         except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
             logger.warning('Pull of %s failed on page %s: %s', path, page, exc)
-            raise ProjectSyncError(_describe_pull_failure(exc, base_url)) from exc
+            raise ProjectSyncError(_describe_pull_failure(exc)) from exc
         if page >= total_pages:
             return rows
-    raise ProjectSyncError(f'Pull of {path} exceeded {PULL_MAX_PAGES} pages.')
+    logger.warning('Pull of %s exceeded %s pages.', path, PULL_MAX_PAGES)
+    raise ProjectSyncError(MSG_TOO_MUCH_DATA)
 
 
 def _validated_rows(raw_rows: list[dict]) -> list[dict]:
     serializer = ProjectAssignmentRowSerializer(data=raw_rows, many=True)
     if not serializer.is_valid():
-        raise ProjectSyncError(f'Invalid assignment rows: {serializer.errors}')
+        logger.warning('Invalid assignment rows from Project Budgeting: %s', serializer.errors)
+        raise ProjectSyncError(MSG_BAD_DETAILS)
     return serializer.validated_data
 
 
@@ -259,7 +273,7 @@ def run_employee_assignments_pull(employee_code: str) -> None:
         sync_employee_snapshot(employee_code, rows, source=SOURCE_PULL, triggered_by=PULL_ACTOR)
     except (ProjectSyncError, SoftTimeLimitExceeded) as exc:
         logger.warning('Fallback pull failed for %s: %s', employee_code, exc)
-        _log_failed_pull(employee_code, f'{type(exc).__name__}: {exc}' if isinstance(exc, SoftTimeLimitExceeded) else str(exc))
+        _log_failed_pull(employee_code, MSG_STOPPED_TOO_LONG if isinstance(exc, SoftTimeLimitExceeded) else str(exc))
     except Exception:  # noqa: BLE001 — sync_employee_snapshot already logged it.
         logger.exception('Fallback pull crashed for %s', employee_code)
     finally:
@@ -302,6 +316,6 @@ def reconcile_all_employees() -> dict:
     ProjectSyncLog.objects.create(
         source=SOURCE_RECONCILE, triggered_by=RECONCILE_ACTOR,
         status=ProjectSyncLog.STATUS_FAILED if failed else ProjectSyncLog.STATUS_SUCCESS,
-        saved=len(raw_rows), message=f'Reconciled {summary["employees"]} employees, {failed} failed.',
+        saved=len(raw_rows), message=(f'Checked {summary["employees"]} employees.' if not failed else f'Checked {summary["employees"]} employees; {failed} could not be saved.'),
     )
     return summary

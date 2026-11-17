@@ -35,18 +35,23 @@ export function groupLogs(rows: ProjectSyncLogRow[]): SyncLogGroup[] {
 // addresses, the whole URL). Show those as the same sentence the backend now writes; anything else is shown as stored.
 export function plainMessage(message: string): string {
   if (!message) return "";
-  if (/ConnectTimeout|timed out/i.test(message)) return "Project Budgeting did not answer (connection timed out). Is it running and reachable?";
-  if (/NewConnectionError|ConnectionRefused|Connection refused|Failed to establish/i.test(message)) return "Could not connect to Project Budgeting. Is it running and reachable?";
-  if (/ReadTimeout|Read timed out/i.test(message)) return "Project Budgeting took too long to reply.";
-  if (/HTTPConnectionPool|HTTPSConnectionPool|MaxRetryError/.test(message)) return "Could not reach Project Budgeting.";
+  if (/ReadTimeout|Read timed out/i.test(message)) return "Project Budgeting is taking too long to respond.";
+  if (/ConnectTimeout|timed out|NewConnectionError|ConnectionRefused|Connection refused|Failed to establish|HTTPConnectionPool|HTTPSConnectionPool|MaxRetryError|did not answer|Could not connect/i.test(message)) {
+    return "Project Budgeting is not responding. Please check that it is running.";
+  }
+  // Anything else that still reads like a program error (exception names, field names, setting names, addresses) is never
+  // shown to an HR admin: say it plainly instead.
+  if (/Error\b|Exception|Traceback|0x[0-9a-f]{4,}|Rejected malformed|Invalid assignment|PROJECT_BUDGET|Pull of |\.py\b|\{|\[/i.test(message)) {
+    return "Something went wrong while updating from Project Budgeting. It will be tried again.";
+  }
   return message;
 }
 
 export function whatHappened(row: ProjectSyncLogRow): string {
   const who = row.employee_id ? ` for ${row.employee_id}` : "";
   if (row.source === "webhook") return `Project Budgeting sent an update${who}`;
-  if (row.source === "pull") return `Looked up${who} when their page opened`;
-  return "Scheduled catch-up for all employees";
+  if (row.source === "pull") return `Checked Project Budgeting${who} when their page opened`;
+  return "Regular check of Project Budgeting for all employees";
 }
 
 export function changeSummary(row: ProjectSyncLogRow): string {

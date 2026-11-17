@@ -88,6 +88,11 @@ class PushAuthAndValidationTests(PushTestCase):
         self.assertEqual(self.push('EMP00001', [bad]).status_code, 400)
         self.assertEqual(ProjectAssignment.objects.count(), 0)
         self.assertEqual(ProjectSyncLog.objects.filter(status='failed', source='webhook').count(), 3)
+        # The log shows a plain sentence: no field names or validator text (those go back to the sender in the 400).
+        for log in ProjectSyncLog.objects.filter(status='failed', source='webhook'):
+            self.assertIn('incomplete or not valid', log.message)
+            self.assertNotIn('employee_id', log.message)
+            self.assertNotIn('This field is required', log.message)
 
     def test_start_date_is_required(self):
         row = _row(1)
@@ -283,7 +288,10 @@ class SyncLogAndAlertTests(PushTestCase):
         self.assertEqual(resp.status_code, 500)
         log = ProjectSyncLog.objects.get(employee_code='EMP00001')
         self.assertEqual(log.status, 'failed')
-        self.assertIn('db down', log.message)
+        # What admins read is a plain sentence, not the exception text.
+        self.assertIn('could not save', log.message)
+        self.assertNotIn('db down', log.message)
+        self.assertNotIn('RuntimeError', log.message)
 
 
 @override_settings(PROJECT_BUDGET_API_BASE_URL='http://budget.invalid', PROJECT_BUDGET_API_KEY='k')

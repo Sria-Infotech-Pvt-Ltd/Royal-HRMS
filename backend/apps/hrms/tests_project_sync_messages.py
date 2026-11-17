@@ -23,34 +23,33 @@ def _http_error(code: int) -> requests.HTTPError:
 
 
 class DescribePullFailureTests(SimpleTestCase):
-    def test_connect_timeout_says_it_did_not_answer(self):
-        message = _describe_pull_failure(requests.ConnectTimeout(RAW_NOISE), BASE)
-        self.assertIn('did not answer', message)
-        self.assertIn(BASE, message)
+    def test_unreachable_server_says_it_is_not_responding(self):
+        for exc in (requests.ConnectTimeout(RAW_NOISE), requests.ConnectionError(RAW_NOISE)):
+            self.assertIn('not responding', _describe_pull_failure(exc))
 
-    def test_refused_connection_says_could_not_connect(self):
-        self.assertIn('Could not connect', _describe_pull_failure(requests.ConnectionError(RAW_NOISE), BASE))
-
-    def test_slow_reply_says_took_too_long(self):
-        self.assertIn('took too long', _describe_pull_failure(requests.ReadTimeout(RAW_NOISE), BASE))
+    def test_slow_reply_says_taking_too_long(self):
+        self.assertIn('taking too long', _describe_pull_failure(requests.ReadTimeout(RAW_NOISE)))
 
     def test_rejected_key_is_named_as_such(self):
         for code in (401, 403):
-            self.assertIn('rejected the API key', _describe_pull_failure(_http_error(code), BASE))
+            message = _describe_pull_failure(_http_error(code))
+            self.assertIn('access key', message)
+            self.assertIn(str(code), message)
 
-    def test_other_http_errors_carry_the_status(self):
-        self.assertIn('HTTP 500', _describe_pull_failure(_http_error(500), BASE))
+    def test_other_http_errors_carry_the_code(self):
+        self.assertIn('code 500', _describe_pull_failure(_http_error(500)))
 
     def test_unreadable_reply_is_described_without_the_parser_error(self):
-        message = _describe_pull_failure(KeyError('data'), BASE)
-        self.assertIn('could not read', message)
-        self.assertNotIn('data', message.replace('AIRA', ''))
+        message = _describe_pull_failure(KeyError('data'))
+        self.assertIn('could not understand', message)
+        self.assertNotIn('KeyError', message)
 
     def test_no_message_leaks_the_raw_exception_text(self):
         errors = [requests.ConnectTimeout(RAW_NOISE), requests.ConnectionError(RAW_NOISE), requests.ReadTimeout(RAW_NOISE)]
         for exc in errors:
-            message = _describe_pull_failure(exc, BASE)
+            message = _describe_pull_failure(exc)
             self.assertNotIn('HTTPConnectionPool', message)
+            self.assertNotIn('budgeting.test', message)
             self.assertNotIn('0x1e426', message)
             self.assertLess(len(message), 200)
 
@@ -65,7 +64,7 @@ class StoredFailureMessageTests(TestCase):
             with self.assertRaises(ProjectSyncError):
                 reconcile_all_employees()
         log = ProjectSyncLog.objects.get(source='reconcile', status=ProjectSyncLog.STATUS_FAILED)
-        self.assertIn('did not answer', log.message)
+        self.assertIn('not responding', log.message)
         self.assertNotIn('HTTPConnectionPool', log.message)
 
     def test_fallback_pull_logs_a_short_message(self):
@@ -73,5 +72,5 @@ class StoredFailureMessageTests(TestCase):
             run_employee_assignments_pull('EMP-NOMSG')
         log = ProjectSyncLog.objects.filter(source='pull', employee_code='EMP-NOMSG').first()
         self.assertIsNotNone(log)
-        self.assertIn('Could not connect', log.message)
+        self.assertIn('not responding', log.message)
         self.assertNotIn('HTTPConnectionPool', log.message)
