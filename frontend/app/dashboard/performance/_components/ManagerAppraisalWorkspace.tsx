@@ -30,7 +30,7 @@ export default function ManagerAppraisalWorkspace() {
   const cycle = reviews[0];
 
   return (
-    <div>
+    <div className="plain-stack">
       <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>Dashboard / Performance</div>
       <div className="pagehead">
         <div>

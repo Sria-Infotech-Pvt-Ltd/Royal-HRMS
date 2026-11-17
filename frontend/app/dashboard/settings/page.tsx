@@ -68,7 +68,7 @@ export default function SettingsPage() {
     : SETTINGS_ITEMS.filter((i) => i.cat === activeCat);
 
   return (
-    <div>
+    <div className="plain-stack">
       <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>Dashboard / Settings</div>
       <div className="pagehead">
         <div>

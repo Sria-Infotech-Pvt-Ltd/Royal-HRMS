@@ -834,3 +834,23 @@ main>div:has(>.wf-dashboard){padding:0}
 .wf-pill.link{border:0;font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:box-shadow .12s ease}
 .wf-pill.link:hover{box-shadow:0 0 0 2px color-mix(in srgb,currentColor 25%,transparent)}
 .wf-pill.link:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+/* ---- Top bar: pill-style active tab (replaces the heavy black underline) ----
+   The current section is a soft brand-tinted pill; hover and an open dropdown get a neutral pill; keyboard focus gets a ring.
+   Specificity matches the .topnav .nav-desktop rules above and this block comes later, so it wins without !important. */
+.topnav .nav-desktop .navlink{
+  height:34px;padding:0 12px;border:0;border-radius:10px;gap:6px;
+  transition:background-color .15s ease,color .15s ease,box-shadow .15s ease;
+}
+.topnav .nav-desktop .navlink:hover,
+.topnav .nav-desktop .navlink[aria-expanded="true"]{background:var(--sunken);color:var(--ink)}
+.topnav .nav-desktop .navlink.on{
+  background:color-mix(in srgb,var(--brand) 11%,var(--surface));
+  color:var(--brand);font-weight:700;
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--brand) 22%,transparent);
+}
+.topnav .nav-desktop .navlink.on:hover,
+.topnav .nav-desktop .navlink.on[aria-expanded="true"]{background:color-mix(in srgb,var(--brand) 16%,var(--surface));color:var(--brand)}
+.topnav .nav-desktop .navlink:focus-visible{outline:none;box-shadow:0 0 0 2px var(--surface),0 0 0 4px color-mix(in srgb,var(--brand) 55%,transparent)}
+.topnav .nav-desktop .navlink .ti{transition:transform .15s ease}
+@media (prefers-reduced-motion:reduce){.topnav .nav-desktop .navlink,.topnav .nav-desktop .navlink .ti{transition:none}}

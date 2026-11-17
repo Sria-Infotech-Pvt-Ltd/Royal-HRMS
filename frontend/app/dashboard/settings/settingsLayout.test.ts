@@ -3,24 +3,23 @@ import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 const GLOBALS_CSS = readFileSync(path.resolve(__dirname, "../../globals.css"), "utf8")
-const PAGE_SOURCE = readFileSync(path.resolve(__dirname, "page.tsx"), "utf8")
+const PAGES = ["page.tsx"]
 
-describe("Settings page layout", () => {
-  it("puts the four cards directly above the category band in a plain wrapper, which adds no gap by itself", () => {
-    const cards = PAGE_SOURCE.indexOf('className="stats"')
-    const band = PAGE_SOURCE.indexOf('className="settings-cats"')
-    expect(cards).toBeGreaterThan(-1)
-    expect(band).toBeGreaterThan(cards)
+describe("Settings page: the header, the four KPI cards and the block under them are never glued together", () => {
+  it("opts in to the plain-stack spacing, because its blocks sit in a plain wrapper that adds no gap", () => {
+    for (const file of PAGES) {
+      const source = readFileSync(path.resolve(__dirname, file), "utf8")
+      expect(source, file).toContain('className="plain-stack"')
+      expect(source, file).toContain('className="stats"')
+    }
   })
 
-  it("separates the category band from the cards above it with the page's 18px gap, so they never touch", () => {
-    const rule = GLOBALS_CSS.match(/\.stats\s*\+\s*\.settings-cats\s*\{([^}]*)\}/)
-    expect(rule).not.toBeNull()
-    expect(rule?.[1]).toMatch(/margin-top:\s*18px/)
+  it("gives the header and the block under the cards the page's standard 18px", () => {
+    expect(GLOBALS_CSS).toMatch(/\.plain-stack\s*>\s*\.pagehead\s*\+\s*\.stats\s*,\s*\.plain-stack\s*>\s*\.stats\s*\+\s*\*\s*\{[^}]*margin-top:\s*18px/)
   })
 
-  it("keeps the band's own space below it", () => {
-    const band = GLOBALS_CSS.match(/\.settings-cats\s*\{([^}]*)\}/)
-    expect(band?.[1]).toMatch(/margin-bottom:\s*20px/)
+  it("is not applied globally, because pages built on the page's own flex column already have that gap and it would double", () => {
+    expect(GLOBALS_CSS).not.toMatch(/(^|\n)\.pagehead\s*\+\s*\.stats/)
+    expect(GLOBALS_CSS).not.toMatch(/(^|\n)\.stats\s*\+\s*\*/)
   })
 })

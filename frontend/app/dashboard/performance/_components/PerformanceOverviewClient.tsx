@@ -24,7 +24,7 @@ export default function PerformanceOverviewClient({ onOpen }: { onOpen: () => vo
   }
 
   return (
-    <div>
+    <div className="plain-stack">
       <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>Dashboard / Performance</div>
       <div className="pagehead">
         <div>
