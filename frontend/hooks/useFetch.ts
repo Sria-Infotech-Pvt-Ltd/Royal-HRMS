@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import type { AxiosResponse } from "axios";
 import clientApi from "@/lib/clientApi";
 
 interface FetchState<T> {
@@ -40,6 +41,23 @@ const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 // session" from QA #67, not a permanent cross-session cache.
 const responseCache = new Map<string, { data: unknown; expiresAt: number }>();
 
+// GETs currently on their way, by URL. Several components on one screen often ask for the same URL in the same moment (the
+// Home page asked for attendance/today five times), and each of those was a separate round trip. A request that mounts while an
+// identical one is still in flight now joins it. Nothing is kept once it finishes, so nothing can go stale, and an explicit
+// refetch() (after a punch, a save...) always makes its own request so it can never receive an answer from before the change.
+const inFlightGets = new Map<string, Promise<AxiosResponse<unknown>>>();
+
+function getShared(url: string, asSignedInUser: boolean, joinInFlight: boolean): Promise<AxiosResponse<unknown>> {
+  const key = `${asSignedInUser ? "self" : "view"}:${url}`;
+  const running = joinInFlight ? inFlightGets.get(key) : undefined;
+  if (running) return running;
+  const request: Promise<AxiosResponse<unknown>> = clientApi
+    .get<unknown>(url, asSignedInUser ? { headers: { "X-View-As-Employee": "" } } : undefined)
+    .finally(() => { if (inFlightGets.get(key) === request) inFlightGets.delete(key); });
+  inFlightGets.set(key, request);
+  return request;
+}
+
 export function useFetch<T>(url: string | null, options?: UseFetchOptions): FetchState<T> {
   const useCache = options?.cache ?? false;
   const cacheTtlMs = options?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
@@ -79,8 +97,7 @@ export function useFetch<T>(url: string | null, options?: UseFetchOptions): Fetc
     setLoading(true);
     setError(null);
     setStatus(null);
-    clientApi
-      .get<{ data: T }>(url, asSignedInUser ? { headers: { "X-View-As-Employee": "" } } : undefined)
+    getShared(url, asSignedInUser, !opts?.bypassCache)
       .then(r => {
         if (ticket !== counter.current) return;
         // Unwrap the {success, message, data} envelope by checking for the
