@@ -203,10 +203,12 @@ export default function AttendanceSettings() {
                 value={form.overtime_rules.ot_threshold_hours}
                 onChange={e => setForm(f => ({ ...f, overtime_rules: { ...f.overtime_rules, ot_threshold_hours: e.target.value } }))}
               >
-                <option value="9.00">9 hours</option>
                 <option value="8.00">8 hours</option>
+                <option value="8.50">8.5 hours (a 9-6 shift with a 30-minute break)</option>
+                <option value="9.00">9 hours</option>
                 <option value="10.00">10 hours</option>
               </select>
+              <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>Worked hours after the break is deducted. Shift length minus the break makes overtime start exactly at shift end.</span>
               {fieldErr("overtime_rules", "ot_threshold_hours") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("overtime_rules", "ot_threshold_hours")}</span>}
             </div>
             <div className="field-group">
@@ -247,6 +249,16 @@ export default function AttendanceSettings() {
           </div>
         </div>
         <div className="card-body">
+          <div className="field-group" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
+            <div>
+              <div className="field-label" style={{ marginBottom: 2 }}>Forgive late arrival when full hours are completed</div>
+              <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Someone who arrives after the grace period but works the full-day hours is marked Present and gets no late mark. The late arrival stays as a note.</span>
+            </div>
+            <Toggle
+              on={form.late_mark_rules.forgive_late_when_full_hours}
+              onChange={() => setForm(f => ({ ...f, late_mark_rules: { ...f.late_mark_rules, forgive_late_when_full_hours: !f.late_mark_rules.forgive_late_when_full_hours } }))}
+            />
+          </div>
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Late Marks per LOP</label>

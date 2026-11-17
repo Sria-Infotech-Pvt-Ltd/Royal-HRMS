@@ -64,11 +64,12 @@ DEFAULT_SETTINGS: dict = {
         'early_exit_grace_minutes': 30,
     },
     'overtime_rules': {
-        'ot_threshold_hours':    '9.00',
+        'ot_threshold_hours':    '8.50',
         'ot_multiplier_regular': '1.50',
         'ot_multiplier_holiday': '2.00',
     },
     'late_mark_rules': {
+        'forgive_late_when_full_hours': True,
         'late_marks_per_lop': 3,
         'lop_deduction_unit': 'full_day',
     },

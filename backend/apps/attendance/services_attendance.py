@@ -54,6 +54,12 @@ def _time_to_display(t: Optional[time]) -> Optional[str]:
     return t.strftime('%H:%M') if t else None
 
 
+def _forgives_late(cfg) -> bool:
+    """True when the company's late-mark rule excuses a late arrival once the full-day hours are worked (on by default)."""
+    rules = getattr(cfg, 'late_mark_rules', None) if cfg else None
+    return bool(rules and rules.forgive_late_when_full_hours)
+
+
 def _ist_time(dt: datetime) -> time:
     """Return the IST wall-clock time for a UTC-aware datetime from punched_at.
 
@@ -490,6 +496,8 @@ class AttendanceProcessorService:
         if is_late:
             grace = cfg.working_hours.grace_period_minutes if cfg and hasattr(cfg, 'working_hours') else 0
             note = 'Grace exceeded' if grace else 'Late arrival'
+            if status == AttendanceRecord.STATUS_PRESENT:
+                note += ' - full hours completed, not counted as a late mark'
 
         return {
             'status':                status,
@@ -562,6 +570,8 @@ class AttendanceProcessorService:
             min_half = int(float(pr.min_hours_half_day) * 60)
 
         if net_minutes >= min_full:
+            if is_late and _forgives_late(cfg):
+                return AttendanceRecord.STATUS_PRESENT   # arrived late but completed the full hours: a full, on-time-equivalent day
             return AttendanceRecord.STATUS_LATE if is_late else AttendanceRecord.STATUS_PRESENT
         if net_minutes >= min_half:
             return AttendanceRecord.STATUS_HALF_DAY

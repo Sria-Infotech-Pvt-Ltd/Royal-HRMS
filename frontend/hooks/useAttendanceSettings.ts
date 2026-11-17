@@ -26,11 +26,12 @@ const DEFAULTS: AttendanceSettingsForm = {
     early_exit_grace_minutes: 30,
   },
   overtime_rules: {
-    ot_threshold_hours: "9.00",
+    ot_threshold_hours: "8.50",
     ot_multiplier_regular: "1.50",
     ot_multiplier_holiday: "2.00",
   },
   late_mark_rules: {
+    forgive_late_when_full_hours: true,
     late_marks_per_lop: 3,
     lop_deduction_unit: "full_day",
   },
@@ -90,6 +91,7 @@ function mergeWithDefaults(api: AttendanceSettingsApiResponse): AttendanceSettin
       ot_multiplier_holiday: ot.ot_multiplier_holiday ?? DEFAULTS.overtime_rules.ot_multiplier_holiday,
     },
     late_mark_rules: {
+      forgive_late_when_full_hours: lm.forgive_late_when_full_hours ?? DEFAULTS.late_mark_rules.forgive_late_when_full_hours,
       late_marks_per_lop: lm.late_marks_per_lop ?? DEFAULTS.late_mark_rules.late_marks_per_lop,
       lop_deduction_unit: lm.lop_deduction_unit  ?? DEFAULTS.late_mark_rules.lop_deduction_unit,
     },

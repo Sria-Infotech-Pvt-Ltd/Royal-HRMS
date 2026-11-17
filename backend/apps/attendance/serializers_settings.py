@@ -131,6 +131,7 @@ class OvertimeRulesWriteSerializer(serializers.Serializer):
 class LateMarkRulesWriteSerializer(serializers.Serializer):
     _VALID_LOP_UNITS = {c[0] for c in AttendanceLateMarkRules.LOP_UNIT_CHOICES}
 
+    forgive_late_when_full_hours = serializers.BooleanField(required=False, default=True)
     late_marks_per_lop = serializers.IntegerField(min_value=0, max_value=_MAX_LATE_MARKS)
     lop_deduction_unit = serializers.ChoiceField(choices=AttendanceLateMarkRules.LOP_UNIT_CHOICES)
 
@@ -277,7 +278,7 @@ class LateMarkRulesReadSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = AttendanceLateMarkRules
-        fields = ('late_marks_per_lop', 'lop_deduction_unit', 'lop_deduction_unit_display', 'is_lop_enabled')
+        fields = ('forgive_late_when_full_hours', 'late_marks_per_lop', 'lop_deduction_unit', 'lop_deduction_unit_display', 'is_lop_enabled')
         read_only_fields = fields
 
     def get_is_lop_enabled(self, obj: AttendanceLateMarkRules) -> bool:

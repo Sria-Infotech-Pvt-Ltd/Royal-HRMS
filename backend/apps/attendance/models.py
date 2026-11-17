@@ -855,8 +855,11 @@ class AttendanceOvertimeRules(models.Model):
         related_name='overtime_rules',
     )
     ot_threshold_hours      = models.DecimalField(
-        max_digits=4, decimal_places=2, default=Decimal('9.00'),
-        help_text='Total hours worked in a day before overtime begins.',
+        max_digits=4, decimal_places=2, default=Decimal('8.50'),
+        help_text=(
+            'Worked hours in a day (after the break is deducted) before overtime begins. Shift length minus the break puts overtime '
+            'right at shift end: a 9:00-18:00 shift with a 30-minute break is 8.5 hours.'
+        ),
     )
     ot_multiplier_regular   = models.DecimalField(
         max_digits=3, decimal_places=2, default=Decimal('1.50'),
@@ -888,6 +891,13 @@ class AttendanceLateMarkRules(models.Model):
         AttendanceSettings,
         on_delete=models.CASCADE,
         related_name='late_mark_rules',
+    )
+    forgive_late_when_full_hours = models.BooleanField(
+        default=True,
+        help_text=(
+            'When on, an employee who arrived after the grace period but completes the full-day hours is marked Present, not Late, '
+            'and that day does not count as a late mark towards LOP. The late arrival stays on the record as a note.'
+        ),
     )
     late_marks_per_lop = models.PositiveSmallIntegerField(
         default=3,

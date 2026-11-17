@@ -30,6 +30,7 @@ export interface OvertimeRulesSection {
 }
 
 export interface LateMarkRulesSection {
+  forgive_late_when_full_hours: boolean;   // late arrival + full hours worked = Present, no late mark
   late_marks_per_lop: number;       // 0 = tracking only (no LOP deduction)
   lop_deduction_unit: string;       // "full_day" | "half_day"
 }
