@@ -90,7 +90,7 @@ export function OverviewItem({ icon, tone, label, sub, chip, chipTone, progress,
   onOpen: () => void;
 }) {
   return (
-    <div className="wf-ov">
+    <div className="wf-ov wf-ov-click" onClick={onOpen}>
       <span className={`wf-ico ${tone}`}>{icon}</span>
       <div className="wf-ov-main">
         <b>{label}</b>
@@ -104,7 +104,7 @@ export function OverviewItem({ icon, tone, label, sub, chip, chipTone, progress,
         )}
       </div>
       {loading ? <Skel w={92} h={22} /> : <span className={`wf-chip ${chipTone}`}>{chip}</span>}
-      <button type="button" className="wf-open" onClick={onOpen} aria-label={`Open ${label}`}>
+      <button type="button" className="wf-open" aria-label={`Open ${label}`}>
         Open {WfIcon.chevron}
       </button>
     </div>

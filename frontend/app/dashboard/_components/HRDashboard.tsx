@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { KpiCard, OverviewItem, QuickTile, AttendanceTrend, AttendanceInsights, WfIcon } from "@/components/dashboard/WorkforceWidgets";
 import WorkforceOperations from "@/components/dashboard/WorkforceOperations";
 import DeptHeadcountChart from "@/components/dashboard/DeptHeadcountChart";
+import LinkCard from "@/components/dashboard/LinkCard";
 import { HeadcountTrendCard, LeaveTrendCard, PayrollCostTrendCard } from "@/components/dashboard/TrendCharts";
 import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { usePermission } from "@/hooks/usePermission";
@@ -194,13 +195,14 @@ export default function HRDashboard({ session }: Props) {
           <p>Where people work, and how headcount, leave and payroll cost have moved over the last six months.</p>
         </header>
         <div className="wf-analytics-grid">
-          <HeadcountTrendCard />
-          <DeptHeadcountChart />
-          <LeaveTrendCard />
-          <PayrollCostTrendCard />
+          <LinkCard href="/dashboard/employees" label="Open employees"><HeadcountTrendCard /></LinkCard>
+          <LinkCard href="/dashboard/employees" label="Open employees"><DeptHeadcountChart /></LinkCard>
+          <LinkCard href="/dashboard/leave" label="Open leave"><LeaveTrendCard /></LinkCard>
+          <LinkCard href="/dashboard/payroll" label="Open payroll"><PayrollCostTrendCard /></LinkCard>
         </div>
       </section>
 
+      <LinkCard href="/dashboard/attendance" label="Open attendance">
       <section className="wf-card wf-reveal" style={{ animationDelay: "0.18s" }}>
         <header className="wf-card-head">
           <div>
@@ -213,6 +215,7 @@ export default function HRDashboard({ session }: Props) {
           <AttendanceInsights data={data?.weekly_attendance ?? []} total={totalHeadcount} loading={loading} />
         </div>
       </section>
+      </LinkCard>
 
       <WorkforceOperations overview={data} overviewLoading={loading} />
     </div>

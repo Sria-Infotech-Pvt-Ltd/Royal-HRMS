@@ -27,7 +27,7 @@ function fmtDate(iso: string): string {
   return new Date(y, m - 1, d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-type Pill = { label: string; ok: boolean };
+type Pill = { label: string; ok: boolean; href?: string };
 
 function safeguardPills(
   health: SystemHealth | null, reports: ReportsOverview | null, overview: DashboardOverview | null,
@@ -44,16 +44,17 @@ function safeguardPills(
   }
   if (reports) {
     pills.push(
-      { label: `${reports.audit_events_30d} audit events retained (30 days)`, ok: true },
-      { label: `${reports.exports_today} permission-checked exports today`, ok: true },
+      { label: `${reports.audit_events_30d} audit events retained (30 days)`, ok: true, href: "/dashboard/settings/audit" },
+      { label: `${reports.exports_today} permission-checked exports today`, ok: true, href: "/dashboard/reports" },
     );
   }
-  if (overview) pills.push({ label: `${overview.compliance_pct}% document compliance`, ok: overview.compliance_pct >= 90 });
+  if (overview) pills.push({ label: `${overview.compliance_pct}% document compliance`, ok: overview.compliance_pct >= 90, href: "/dashboard/documents" });
   if (holidays) {
     const count = holidays.total ?? 0;
     pills.push({
       label: count > 0 ? `${count} holidays configured for ${year}` : `No holidays configured for ${year} — import required`,
       ok: count > 0,
+      href: "/dashboard/settings/holiday-calendar",
     });
   }
   return pills;
@@ -123,7 +124,9 @@ export default function WorkforceOperations({ overview, overviewLoading }: Props
         </header>
         <div className="wf-pills">
           {pillsLoading && pills.length === 0 && [150, 170, 140, 190].map((w) => <Skel key={w} w={w} h={30} />)}
-          {pills.map((p) => <span key={p.label} className={`wf-pill ${p.ok ? "ok" : "crit"}`}><i aria-hidden="true" />{p.label}</span>)}
+          {pills.map(({ label, ok, href }) => href
+            ? <button type="button" key={label} className={`wf-pill link ${ok ? "ok" : "crit"}`} onClick={() => router.push(href)}><i aria-hidden="true" />{label}</button>
+            : <span key={label} className={`wf-pill ${ok ? "ok" : "crit"}`}><i aria-hidden="true" />{label}</span>)}
           {!pillsLoading && pills.length === 0 && <span className="wf-empty">No health signals available for your role.</span>}
         </div>
       </section>

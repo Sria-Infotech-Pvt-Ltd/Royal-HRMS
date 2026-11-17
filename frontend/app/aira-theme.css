@@ -823,3 +823,14 @@ main>div:has(>.wf-dashboard){padding:0}
 .wf-analytics-grid>.card{margin:0;height:100%}
 @media (min-width:1500px){.wf-analytics-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media (max-width:900px){.wf-analytics-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* Clickable dashboard cards and rows */
+.wf-linkcard{display:block;height:100%;border-radius:12px;cursor:pointer;transition:box-shadow .15s ease,transform .15s ease}
+.wf-linkcard:hover{box-shadow:0 4px 14px color-mix(in srgb,var(--brand) 12%,transparent);transform:translateY(-1px)}
+.wf-linkcard:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.wf-linkcard>.card,.wf-linkcard>.wf-card{height:100%;margin:0}
+.wf-ov-click{cursor:pointer}
+.wf-ov-click:hover .wf-open{background:var(--brand-tint);color:var(--brand-ink)}
+.wf-pill.link{border:0;font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:box-shadow .12s ease}
+.wf-pill.link:hover{box-shadow:0 0 0 2px color-mix(in srgb,currentColor 25%,transparent)}
+.wf-pill.link:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
