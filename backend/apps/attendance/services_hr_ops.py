@@ -22,6 +22,8 @@ from apps.attendance.models import (
     AttendanceRecord,
 )
 from apps.attendance.serializers_hr import ImportRowSerializer
+from apps.attendance.services_attendance import AttendanceProcessorService, _get_settings
+from apps.attendance.services_recalculate import _is_calculated_note
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -377,18 +379,16 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
     records_to_create: list[tuple] = []   # (AttendanceRecord, emp_obj, pi, po, date)
     records_to_update: list[tuple] = []
 
+    # Same Punch Rules, break, grace and overtime as live punching - no hours are fixed in this file.
+    attendance_settings = _get_settings()
+
     for (emp_pk, date), (row_num, v, emp_obj) in deduped.items():
         punch_in  = v.get('punch_in')
         punch_out = v.get('punch_out')
 
-        minutes = 0
-        if punch_in and punch_out:
-            sd = datetime.datetime.combine(date, punch_in)
-            ed = datetime.datetime.combine(date, punch_out)
-            if ed > sd:
-                minutes = int((ed - sd).total_seconds() / 60)
-
-        rec_status = AttendanceRecord.STATUS_PRESENT if minutes >= 240 else AttendanceRecord.STATUS_ABSENT
+        day = AttendanceProcessorService.evaluate_times(punch_in, punch_out, attendance_settings)
+        minutes    = day['total_working_minutes']
+        rec_status = day['status']
         key = (emp_pk, date)
 
         if key in existing_records:
@@ -401,6 +401,11 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
             rec.first_punch_in        = punch_in
             rec.last_punch_out        = punch_out
             rec.total_working_minutes = minutes
+            rec.overtime_minutes      = day['overtime_minutes']
+            rec.is_late               = day['is_late']
+            rec.is_early_exit         = day['is_early_exit']
+            if _is_calculated_note(rec.note):   # a note written by a person is kept
+                rec.note              = day['note']
             rec.updated_at            = now_ts
             records_to_update.append((rec, emp_obj, punch_in, punch_out, date))
         elif key in approved_leave_dates:
@@ -425,6 +430,10 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
                 first_punch_in=punch_in,
                 last_punch_out=punch_out,
                 total_working_minutes=minutes,
+                overtime_minutes=day['overtime_minutes'],
+                is_late=day['is_late'],
+                is_early_exit=day['is_early_exit'],
+                note=day['note'],
             )
             records_to_create.append((rec, emp_obj, punch_in, punch_out, date))
 
@@ -460,7 +469,7 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
                     [t[0] for t in batch],
                     fields=[
                         'status', 'first_punch_in', 'last_punch_out',
-                        'total_working_minutes', 'updated_at',
+                        'total_working_minutes', 'overtime_minutes', 'is_late', 'is_early_exit', 'note', 'updated_at',
                     ],
                     batch_size=_BATCH_SIZE,
                 )
@@ -687,23 +696,19 @@ def _upsert_attendance_record(data: dict, imported_by) -> None:
     punch_in  = data['punch_in']
     punch_out = data.get('punch_out')
 
-    minutes = 0
-    if punch_in and punch_out:
-        start_dt = datetime.datetime.combine(data['date'], punch_in)
-        end_dt   = datetime.datetime.combine(data['date'], punch_out)
-        if end_dt > start_dt:
-            minutes = int((end_dt - start_dt).total_seconds() / 60)
-
-    rec_status = AttendanceRecord.STATUS_PRESENT if minutes >= 240 else AttendanceRecord.STATUS_ABSENT
-
+    day = AttendanceProcessorService.evaluate_times(punch_in, punch_out, _get_settings())
     record, _ = AttendanceRecord.objects.update_or_create(
         employee=employee,
         date=data['date'],
         defaults={
-            'status':                rec_status,
+            'status':                day['status'],
             'first_punch_in':        punch_in,
             'last_punch_out':        punch_out,
-            'total_working_minutes': minutes,
+            'total_working_minutes': day['total_working_minutes'],
+            'overtime_minutes':      day['overtime_minutes'],
+            'is_late':               day['is_late'],
+            'is_early_exit':         day['is_early_exit'],
+            'note':                  day['note'],
         },
     )
 

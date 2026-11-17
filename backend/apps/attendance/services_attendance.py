@@ -474,6 +474,36 @@ class AttendanceProcessorService:
             if out is not None
         )
 
+        has_open_session  = any(out is None for _, out in pairs)
+        has_complete_pair = any(out is not None for _, out in pairs)
+        return cls._result_from_totals(
+            _ist_time(first_in), _ist_time(last_out) if last_out else None,
+            closed_minutes, has_open_session, has_complete_pair, cfg,
+        )
+
+    @classmethod
+    def evaluate_times(cls, punch_in: Optional[time], punch_out: Optional[time], cfg) -> dict:
+        """Same result as a live day, for a day known only by its IN / OUT wall-clock (IST) times - the HR CSV import.
+
+        Uses the same Punch Rules, break deduction, grace and overtime as live punching, so an imported day and a punched
+        day with the same hours get the same status. No usable OUT (missing, or not after the IN) is Absent with 0 minutes,
+        as the import has always treated it.
+        """
+        if not punch_in or not punch_out or punch_out <= punch_in:
+            return {
+                'status': AttendanceRecord.STATUS_ABSENT, 'first_punch_in': punch_in, 'last_punch_out': punch_out,
+                'total_working_minutes': 0, 'overtime_minutes': 0, 'is_late': False, 'is_early_exit': False, 'note': '',
+            }
+        anchor = date(2000, 1, 3)
+        closed_minutes = int((datetime.combine(anchor, punch_out) - datetime.combine(anchor, punch_in)).total_seconds() / 60)
+        return cls._result_from_totals(punch_in, punch_out, closed_minutes, False, True, cfg)
+
+    @classmethod
+    def _result_from_totals(
+        cls, first_in: time, last_out: Optional[time], closed_minutes: int,
+        has_open_session: bool, has_complete_pair: bool, cfg,
+    ) -> dict:
+        """Break, late, early exit, status, overtime and note from a day's totals. The one place those rules live."""
         # Deduct break if configured
         break_deduction = 0
         if cfg and hasattr(cfg, 'working_hours'):
@@ -481,10 +511,8 @@ class AttendanceProcessorService:
         net_minutes = max(0, closed_minutes - break_deduction)
 
         # Determine status
-        has_open_session    = any(out is None for _, out in pairs)
-        has_complete_pair   = any(out is not None for _, out in pairs)
-        is_late             = cls._check_late(_ist_time(first_in), cfg)
-        is_early_exit       = cls._check_early_exit(_ist_time(last_out) if last_out else None, cfg)
+        is_late             = cls._check_late(first_in, cfg)
+        is_early_exit       = cls._check_early_exit(last_out, cfg)
         status              = cls._resolve_status(
             net_minutes, is_late, cfg, has_open_session, has_complete_pair
         )
@@ -501,8 +529,8 @@ class AttendanceProcessorService:
 
         return {
             'status':                status,
-            'first_punch_in':        _ist_time(first_in),
-            'last_punch_out':        _ist_time(last_out) if last_out else None,
+            'first_punch_in':        first_in,
+            'last_punch_out':        last_out,
             'total_working_minutes': net_minutes,
             'overtime_minutes':      ot_minutes,
             'is_late':               is_late,
