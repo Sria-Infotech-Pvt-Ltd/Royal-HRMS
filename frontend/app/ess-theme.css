@@ -249,3 +249,48 @@
    Home reference spec. */
 .ess-quick-tile{transition:border-color .12s,background .12s}
 .ess-quick-tile:hover{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 7%,var(--surface))}
+
+/* ── Responsive layer (employee workspace only) ──────────────────────────────
+   The Home, Profile, Employment, Policies and Appraisals tabs used to set their
+   column counts as inline styles, which media queries cannot reach, so a phone
+   got the same 5fr/3fr split and 3-column tile grid as a desktop. Those layouts
+   now live here. Every selector is an ess-* class or sits under .ess-shell, so
+   no Admin page changes. Desktop (≥ 901px) renders exactly as before. */
+.ess-split{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,3fr);gap:14px}
+.ess-split-wide{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:20px;align-items:start}
+.ess-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.ess-stat-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:12px;margin-bottom:20px}
+.ess-metrics.ess-metrics-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+/* Quick actions size to their own card, not the viewport: the card is narrow
+   both on a phone and beside the Today panel on a small tablet. */
+.ess-quick{container-type:inline-size}
+.ess-quick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:8px;row-gap:14px;padding:16px}
+.ess-quick-tile{display:flex;flex-direction:column;gap:10px;min-height:90px;min-width:0;padding:10px 8px;border:1px solid var(--outline-v);border-radius:8px;background:transparent;text-align:left;cursor:pointer;overflow-wrap:break-word}
+@container (max-width:440px){.ess-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px}}
+@container (max-width:230px){.ess-quick-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* Tab bar: swipeable on touch screens, with comfortable touch targets. */
+.ess-tabs{-webkit-overflow-scrolling:touch;scroll-padding-inline:8px}
+.ess-tabs::-webkit-scrollbar{display:none}
+@media (pointer:coarse){.ess-tab{min-height:36px}}
+
+/* Tablet and below: dashboard rows stack instead of squeezing side by side. */
+@media(max-width:900px){.ess-split,.ess-split-wide{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:640px){.ess-pair{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){.ess-metrics.ess-metrics-3{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:360px){.ess-metrics{grid-template-columns:minmax(0,1fr)}}
+
+/* Small phones and phone landscape: the hero + tab bar would hold a third of
+   the screen if it stayed pinned, so it scrolls with the page instead. */
+@media(max-width:560px),(max-height:520px){.ess-sticky{position:static;box-shadow:none}}
+
+/* Long names, IDs and amounts wrap instead of pushing cards wider. */
+.ess-shell .card,.ess-shell .ess-card,.ess-shell .ess-metric{min-width:0;overflow-wrap:break-word}
+.ess-shell .card-header{flex-wrap:wrap;gap:8px}
+
+/* Leave tab body (leave/_client.tsx, shared with the standalone Leave page):
+   same 2-column rows everywhere; only inside the employee workspace do they
+   stack on narrow screens. */
+.leave-pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch}
+@media(max-width:900px){.ess-shell .leave-pair{grid-template-columns:minmax(0,1fr)}}

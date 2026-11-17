@@ -3,6 +3,11 @@
 import { useState, type ReactNode } from "react";
 import type { OrgUnit, Position } from "@/types/orgStructure";
 import type { Selected } from "./OrgStructureClient";
+import type { UnitRollup } from "@/lib/orgStructureStats";
+
+export type SeatFilter = "all" | "vacant" | "filled";
+/** "Expand all" / "Collapse all": a new id is a new command, so pressing the same button twice still works. */
+export interface TreeCommand { id: number; action: "expand" | "collapse" }
 
 interface Props {
   units: OrgUnit[];
@@ -11,14 +16,33 @@ interface Props {
   branchFilter: number | null;
   selected: Selected;
   onSelect: (s: Selected) => void;
+  rollups: Map<string, UnitRollup>;
+  seatFilter: SeatFilter;
+  command: TreeCommand | null;
 }
 
 function initials(name: string): string {
   return name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 }
 
-export default function OrgTree({ units, positions, search, branchFilter, selected, onSelect }: Props) {
+/** The name with the searched text picked out. */
+function highlight(text: string, query: string): ReactNode {
+  const at = query ? text.toLowerCase().indexOf(query) : -1;
+  if (at < 0) return text;
+  return <>{text.slice(0, at)}<mark className="orgnode-hit">{text.slice(at, at + query.length)}</mark>{text.slice(at + query.length)}</>;
+}
+
+export default function OrgTree({ units, positions, search, branchFilter, selected, onSelect, rollups, seatFilter, command }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Apply a new Expand all / Collapse all while rendering (React's pattern for state that follows a prop), not in an effect.
+  const [seenCommandId, setSeenCommandId] = useState<number | null>(null);
+  if (command && command.id !== seenCommandId) {
+    setSeenCommandId(command.id);
+    setCollapsed(command.action === "expand" ? new Set() : new Set([
+      ...units.filter(u => positions.some(p => p.org_unit === u.id) || units.some(c => c.parent === u.id)).map(u => `u${u.id}`),
+      ...positions.filter(p => p.holder).map(p => `p${p.id}`),
+    ]));
+  }
   const q = search.trim().toLowerCase();
 
   // A branch-scoped position must match; a position with no branch set is
@@ -33,7 +57,9 @@ export default function OrgTree({ units, positions, search, branchFilter, select
   };
 
   const childUnits = (parentId: string | null) => units.filter(u => u.parent === parentId);
-  const posInUnit = (unitId: string) => positions.filter(p => p.org_unit === unitId && matchesBranch(p));
+  const matchesSeatFilter = (p: Position) =>
+    seatFilter === "all" || (seatFilter === "vacant" ? p.is_active && !p.holder : !!p.holder);
+  const posInUnit = (unitId: string) => positions.filter(p => p.org_unit === unitId && matchesBranch(p) && matchesSeatFilter(p));
 
   function toggle(key: string) {
     setCollapsed(prev => {
@@ -54,7 +80,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
   // posInUnit already applies the branch filter — a unit only "has a branch
   // match" once it (or a descendant) has at least one visible position left.
   function hasBranchMatch(u: OrgUnit): boolean {
-    if (branchFilter === null) return true;
+    if (branchFilter === null && seatFilter === "all") return true;
     if (posInUnit(u.id).length > 0) return true;
     return childUnits(u.id).some(hasBranchMatch);
   }
@@ -70,6 +96,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
     const hasChildren = kids.length + poss.length > 0;
     const isCollapsed = collapsed.has(`u${u.id}`) && !q;
     const isSel = selected?.type === "unit" && selected.id === u.id;
+    const rollup = rollups.get(u.id);
 
     return (
       <div key={`u${u.id}`}>
@@ -85,7 +112,12 @@ export default function OrgTree({ units, positions, search, branchFilter, select
             />
           ) : <span className="orgnode-caret" />}
           <span className="orgnode-glyph" style={{ background: "var(--primary-container, rgba(124,58,237,0.12))", color: "var(--primary)" }}>O</span>
-          <span className="orgnode-name">{u.name}</span>
+          <span className="orgnode-name">{highlight(u.name, q)}</span>
+          {rollup && rollup.total > 0 && (
+            <span className="orgnode-count" title={`${rollup.filled} of ${rollup.total} seats filled, including sub-units`}>
+              {rollup.filled}/{rollup.total}
+            </span>
+          )}
         </div>
         {!isCollapsed && (
           <>
@@ -122,7 +154,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
             />
           ) : <span className="orgnode-caret" />}
           <span className="orgnode-glyph" style={{ background: "var(--info-c)", color: "var(--info)" }}>S</span>
-          <span className="orgnode-name">{p.title}</span>
+          <span className="orgnode-name">{highlight(p.title, q)}</span>
           {p.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", fontSize: 13, flexShrink: 0 }} title="Chief position" />}
           {!p.is_active && <span className="badge" style={{ marginLeft: "auto", fontSize: 9.5, background: "var(--bg-low)", color: "var(--on-variant)", flexShrink: 0 }}>Inactive</span>}
           {p.is_active && !hasHolder && <span className="badge badge-warn" style={{ marginLeft: "auto", fontSize: 9.5 }}>Vacant</span>}
@@ -135,7 +167,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
           >
             <span className="orgnode-caret" />
             <span className="orgnode-glyph" style={{ background: "var(--success-c)", color: "var(--success)" }}>{initials(p.holder_name ?? "?")}</span>
-            <span className="orgnode-name">{p.holder_name}</span>
+            <span className="orgnode-name">{highlight(p.holder_name ?? "", q)}</span>
           </div>
         )}
       </div>
@@ -154,12 +186,14 @@ export default function OrgTree({ units, positions, search, branchFilter, select
         .orgnode-sel .orgnode-name { color: var(--primary); font-weight: 600; }
         .orgnode-caret { width:15px; height:15px; flex-shrink:0; font-size:13px; color: var(--outline); }
         .orgnode-glyph { width:21px; height:21px; border-radius:6px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:750; }
+        .orgnode-count { flex-shrink:0; font-size:10.5px; font-weight:650; padding:1px 7px; border-radius:10px; background:var(--bg-low); color:var(--on-variant); border:1px solid var(--outline-v); }
+        .orgnode-hit { background: rgba(250,204,21,0.45); color: inherit; border-radius: 3px; padding: 0 1px; }
         .orgnode-name { flex: 1 1 auto; min-width: 0; font-size:13px; font-weight:520; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       `}</style>
       {rendered.length > 0
         ? rendered
         : <div style={{ padding: 24, textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-            {q || branchFilter !== null ? "Nothing matches." : "No org units yet — add one to get started."}
+            {q || branchFilter !== null || seatFilter !== "all" ? "Nothing matches." : "No org units yet — add one to get started."}
           </div>
       }
     </>

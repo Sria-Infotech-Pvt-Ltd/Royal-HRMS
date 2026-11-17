@@ -157,7 +157,7 @@ export default function ProfileSummaryTab() {
           <div style={{ fontWeight: 700, fontSize: 15 }}>Profile controls</div>
           <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>Review your official record or update your contact details.</div>
         </div>
-        <div style={{ padding: "12px 20px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div className="ess-pair" style={{ padding: "12px 20px 20px", gap: 10 }}>
           <button
             type="button"
             onClick={() => setShowRecord(true)}

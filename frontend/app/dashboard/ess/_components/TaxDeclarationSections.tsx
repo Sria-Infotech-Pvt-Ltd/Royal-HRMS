@@ -64,7 +64,7 @@ function GroupBlock({ group, schema, form, onChange, onAmount }: Props & {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: 12 }}>
         {group.fields.map(field => {
           const cap = fieldCap(field.key, schema, form);
           const amount = parseAmount(form.amounts[field.key] ?? "");
@@ -90,7 +90,7 @@ function GroupBlock({ group, schema, form, onChange, onAmount }: Props & {
       </div>
 
       {group.key === "loans" && parseAmount(form.amounts["24B"] ?? "") > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, marginTop: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: 12, marginTop: 12 }}>
           <div className="field-group">
             <label className="field-label" htmlFor="tax-lender-name">Home loan lender&apos;s name <span style={{ color: "var(--error)" }}>*</span></label>
             <input

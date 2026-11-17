@@ -176,7 +176,7 @@ export default function HomeTab({ onNavigate, status, isReadOnly = false }: Prop
           when both cards are actually in that row, not just vertically
           near it. Middle row: Quick actions | Today. Bottom row: My
           requests | Payslips & documents. */}
-      <div style={{ display: "grid", gridTemplateColumns: "5fr 3fr", gap: 14, marginBottom: 20 }}>
+      <div className="ess-split" style={{ marginBottom: 20 }}>
         <HomeQuickActions primary={primaryActions} secondary={secondaryActions} />
         <HomeTodayPanel status={status} />
       </div>
@@ -185,7 +185,7 @@ export default function HomeTab({ onNavigate, status, isReadOnly = false }: Prop
 
       <HomeProjectsPanel onViewAll={() => onNavigate("employment")} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "5fr 3fr", gap: 14 }}>
+      <div className="ess-split">
         <HomeRequestsList items={requestItems.slice(0, 5)} onViewAll={() => onNavigate("requests")} />
         <HomePayslipsPanel
           payslips={payslips?.results ?? []}

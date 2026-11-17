@@ -144,7 +144,7 @@ export default function EssPayslipsTab({ onNavigateToTax }: { onNavigateToTax: (
           <div className="ess-card">
             <h2>Year-to-date summary</h2>
             <p>{ytd.monthRangeLabel} cumulative payroll.</p>
-            <div className="ess-metrics" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+            <div className="ess-metrics ess-metrics-3">
               <article className="ess-metric"><i>GROSS EARNINGS</i><b>{INR(ytd.gross)}</b><span>{ytd.periodCount} payroll period{ytd.periodCount === 1 ? "" : "s"}</span></article>
               <article className="ess-metric"><i>INCOME TAX</i><b>{INR(ytd.incomeTax)}</b><span>deducted to date</span></article>
               <article className="ess-metric"><i>NET PAY</i><b>{INR(ytd.net)}</b><span>credited to date</span></article>

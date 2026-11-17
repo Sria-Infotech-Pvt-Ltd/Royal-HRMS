@@ -95,7 +95,7 @@ function CurrentAssignmentCard({ profile }: { profile: EmploymentProfileData | n
       <div className="card-header">
         <div className="card-title"><i className="ti ti-id-badge-2" /> Current assignment</div>
       </div>
-      <div style={{ padding: "4px 20px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <div className="ess-pair" style={{ padding: "4px 20px 20px", gap: 14 }}>
         <Tile label="EMPLOYMENT STATUS"    value={profile?.employment_status_display || "—"} />
         <Tile label="EMPLOYEE ID"          value={profile?.employee_id || "—"} />
         <Tile label="POSITION"             value={profile?.designation || "—"} />

@@ -5,8 +5,13 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useAnyPermission, usePermission } from "@/hooks/usePermission";
 import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStructure";
-import OrgTree from "./OrgTree";
+import OrgTree, { type SeatFilter, type TreeCommand } from "./OrgTree";
 import OrgDetail from "./OrgDetail";
+import OrgChartView from "./OrgChartView";
+import OrgOverview from "./OrgOverview";
+import OrgReportingChart from "./OrgReportingChart";
+import { buildPositionsCsv, downloadTextFile } from "@/lib/orgExport";
+import { findAttention, rollupUnits } from "@/lib/orgStructureStats";
 import AddUnitModal from "./AddUnitModal";
 import AddPositionModal from "./AddPositionModal";
 import AssignHolderModal from "./AssignHolderModal";
@@ -28,6 +33,14 @@ export interface BranchOption {
   branch_name: string;
 }
 
+export type OrgView = "tree" | "chart" | "reporting";
+
+const VIEW_OPTIONS: { mode: OrgView; label: string; icon: string }[] = [
+  { mode: "tree", label: "Tree view", icon: "ti-list-tree" },
+  { mode: "chart", label: "Unit chart", icon: "ti-sitemap" },
+  { mode: "reporting", label: "Reporting line", icon: "ti-hierarchy-3" },
+];
+
 export type Selected = { type: "unit" | "position" | "person"; id: string } | null;
 
 export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { onBack?: () => void; initialSelectedUnitId?: string }) {
@@ -43,11 +56,17 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
   const [loading,    setLoading]    = useState(true);
   const [loadError,  setLoadError]  = useState<string | null>(null);
 
-  const [selected, setSelected] = useState<Selected>(
+  const [selected, replaceSelected] = useState<Selected>(
     initialSelectedUnitId ? { type: "unit", id: initialSelectedUnitId } : null,
   );
+  // What was open before, so the details panel can step Back (e.g. unit -> its position -> the person in it).
+  const [history, setHistory] = useState<Selected[]>([]);
+  const detailRef = useRef<HTMLDivElement>(null);
   const [search,   setSearch]   = useState("");
   const [branchFilter, setBranchFilter] = useState("");
+  const [view, setView] = useState<OrgView>("tree");
+  const [seatFilter, setSeatFilter] = useState<SeatFilter>("all");
+  const [treeCommand, setTreeCommand] = useState<TreeCommand | null>(null);
 
   const [addUnitParent,    setAddUnitParent]    = useState<string | null | "new">(null);
   const [addPositionUnit,  setAddPositionUnit]  = useState<string | null>(null);
@@ -127,6 +146,51 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
     return { units: units.length, positions: positions.length, vacant, placed: placed.size };
   }, [units, positions]);
 
+  function setSelected(next: Selected) {
+    if (next === null) { setHistory([]); replaceSelected(null); return; }
+    if (selected && (selected.type !== next.type || selected.id !== next.id)) setHistory(previous => [...previous.slice(-19), selected]);
+    replaceSelected(next);
+  }
+
+  function goBack() {
+    const stillExists = (item: Selected) => item === null ? false
+      : item.type === "unit" ? units.some(unit => unit.id === item.id)
+      : item.type === "position" ? positions.some(position => position.id === item.id)
+      : positions.some(position => position.holder === item.id);
+    const remaining = [...history];
+    let target: Selected = null;
+    // Skip anything that has been deleted since.
+    while (remaining.length > 0) {
+      const candidate = remaining.pop() ?? null;
+      if (stillExists(candidate)) { target = candidate; break; }
+    }
+    setHistory(remaining);
+    replaceSelected(target);
+  }
+
+  const rollups = useMemo(() => rollupUnits(units, positions), [units, positions]);
+  const isDrawer = view !== "tree";
+  const attention = useMemo(() => findAttention(units, rollups), [units, rollups]);
+  const hasSelection = selected !== null;
+
+  // Escape closes the slide-over details of the chart views.
+  useEffect(() => {
+    if (view === "tree" || !hasSelection) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setHistory([]); replaceSelected(null); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, hasSelection]);
+
+  // On a phone the tree view stacks the details below the tree: bring them into view when something is tapped.
+  useEffect(() => {
+    if (view !== "tree" || !selected || typeof window.matchMedia !== "function") return;
+    if (window.matchMedia("(max-width: 900px)").matches) detailRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [view, selected]);
+  // The chart draws units only, so a selected seat highlights the unit it sits in.
+  const selectedUnitId = selected?.type === "unit"
+    ? selected.id
+    : selected?.type === "position" ? positions.find(p => p.id === selected.id)?.org_unit ?? null : null;
+
   if (loading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, gap: 10, color: "var(--on-variant)" }}>
@@ -145,7 +209,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
               onClick={onBack}
               style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
             >
-              <i className="ti ti-arrow-left" /> Back to overview
+              <i className="ti ti-arrow-left" /> Back
             </button>
           )}
           <div className="page-title">Organization Management</div>
@@ -205,7 +269,40 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 16, alignItems: "start" }} className="org-split">
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <button type="button" className="btn btn-ghost btn-sm" title="Download every position as a spreadsheet file"
+          onClick={() => downloadTextFile(`organization-positions-${new Date().toISOString().slice(0, 10)}.csv`, buildPositionsCsv(units, positions))}>
+          <i className="ti ti-download" /> Export positions
+        </button>
+        <div role="group" aria-label="View" style={{ display: "inline-flex", border: "1px solid var(--outline-v)", borderRadius: 8, overflow: "hidden" }}>
+          {VIEW_OPTIONS.map(({ mode, label, icon }) => (
+            <button key={mode} type="button" aria-pressed={view === mode} onClick={() => setView(mode)}
+              style={{ padding: "6px 14px", border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600, background: view === mode ? "var(--primary)" : "transparent", color: view === mode ? "#fff" : "var(--on-variant)" }}>
+              <i className={`ti ${icon}`} /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: view === "tree" ? "360px 1fr" : "minmax(0, 1fr)", gap: 16, alignItems: "start" }} className="org-split">
+        {view !== "tree" ? (
+          <div className="card" style={{ overflow: "hidden" }}>
+            <div className="card-header"><div>
+              <div className="card-title">{view === "chart" ? "Unit chart" : "Reporting line"}</div>
+              <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>
+                {view === "chart" ? "One box per org unit · click a box for details" : "One box per position, joined by who it reports to · click a box for details"}
+              </div></div></div>
+            <div style={{ padding: 12 }}>
+              {view === "chart" ? (
+                <OrgChartView units={units} positions={positions} rollups={rollups} selectedUnitId={selectedUnitId}
+                  onSelectUnit={unitId => setSelected({ type: "unit", id: unitId })} />
+              ) : (
+                <OrgReportingChart positions={positions} selectedPositionId={selected?.type === "position" ? selected.id : null}
+                  onSelectPosition={positionId => setSelected({ type: "position", id: positionId })} />
+              )}
+            </div>
+          </div>
+        ) : (
         <div className="card" style={{ overflow: "hidden" }}>
           <div className="card-header">
             <div>
@@ -233,11 +330,25 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
                 options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
               />
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "0 8px 8px" }}>
+              {(["all", "vacant", "filled"] as const).map(option => (
+                <button key={option} type="button" aria-pressed={seatFilter === option} onClick={() => setSeatFilter(option)}
+                  className={seatFilter === option ? "btn btn-filled btn-sm" : "btn btn-ghost btn-sm"}>
+                  {option === "all" ? "All" : option === "vacant" ? "Vacant" : "Filled"}
+                </button>
+              ))}
+              <span style={{ flex: 1 }} />
+              <button type="button" className="btn btn-ghost btn-sm" title="Expand all" aria-label="Expand all"
+                onClick={() => setTreeCommand(previous => ({ id: (previous?.id ?? 0) + 1, action: "expand" }))}><i className="ti ti-arrows-diagonal" /></button>
+              <button type="button" className="btn btn-ghost btn-sm" title="Collapse all" aria-label="Collapse all"
+                onClick={() => setTreeCommand(previous => ({ id: (previous?.id ?? 0) + 1, action: "collapse" }))}><i className="ti ti-arrows-diagonal-minimize-2" /></button>
+            </div>
             <div className="org-tree-scroll" style={{ maxHeight: 640, overflow: "auto" }}>
               <OrgTree
                 units={units} positions={positions} search={search}
                 branchFilter={branchFilter ? Number(branchFilter) : null}
                 selected={selected} onSelect={setSelected}
+                rollups={rollups} seatFilter={seatFilter} command={treeCommand}
               />
             </div>
           </div>
@@ -247,15 +358,27 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--success-c)", color: "var(--success)" }}>P</span> Employee</span>
             <span><i className="ti ti-crown" style={{ color: "var(--warn)" }} /> Chief</span>
             <span className="badge badge-warn">Vacant</span>
+            <span><span className="orgnode-count" style={{ fontSize: 10.5, fontWeight: 650, padding: "1px 7px", borderRadius: 10, border: "1px solid var(--outline-v)" }}>3/5</span> filled / seats</span>
           </div>
         </div>
+        )}
 
-        <div className="card" style={{ position: "relative" }}>
+        {/* In the chart views the chart takes the whole width and the details open as a slide-over panel. */}
+        <div className="card" ref={detailRef} style={isDrawer ? {
+          position: "fixed", top: 76, right: 16, bottom: 16, width: 460, maxWidth: "calc(100vw - 32px)", zIndex: 60, overflow: "auto",
+          display: selected ? "block" : "none", boxShadow: "0 24px 64px rgba(15, 23, 42, 0.28)", borderRadius: 16,
+        } : { position: "relative" }}>
+          {isDrawer && (
+            <button type="button" onClick={() => setSelected(null)} aria-label="Close details" title="Close"
+              style={{ position: "absolute", top: 12, right: 12, zIndex: 6, width: 30, height: 30, borderRadius: 15, border: "1px solid var(--outline-v)", background: "var(--surface, #fff)", cursor: "pointer", color: "var(--on-variant)" }}>
+              <i className="ti ti-x" />
+            </button>
+          )}
           {saveStatus && (
             <div
               role="status"
               style={{
-                position: "absolute", top: 14, right: 16, zIndex: 5,
+                position: "absolute", top: 14, right: isDrawer ? 52 : 16, zIndex: 5,
                 display: "flex", alignItems: "center", gap: 6,
                 fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 20,
                 ...(saveStatus.state === "saving"
@@ -282,6 +405,14 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
             </div>
           )}
           <div style={{ padding: "18px 20px" }}>
+            {history.length > 0 && selected && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
+                <i className="ti ti-arrow-left" /> Back
+              </button>
+            )}
+            {!selected ? (
+              <OrgOverview attention={attention} onSelectUnit={unitId => setSelected({ type: "unit", id: unitId })} />
+            ) : (
             <OrgDetail
               selected={selected} units={units} positions={positions} jobs={jobs} branches={branches} canEdit={canEdit}
               placementHistory={placementHistory} placementHistoryLoading={placementHistoryLoading}
@@ -382,6 +513,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
                 }
               }}
             />
+            )}
           </div>
         </div>
       </div>

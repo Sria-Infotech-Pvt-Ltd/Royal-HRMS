@@ -27,7 +27,7 @@ export default function TaxPreviousEmployerFields({ form, onChange }: Props) {
         Joined this year? Enter what your previous employer paid you and the tax they deducted this financial year (from
         your Form 16 or last payslip). Leave blank if this is your first job this year.
       </p>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: 12 }}>
         <div className="field-group">
           <label className="field-label" htmlFor="tax-prev-name">Previous employer</label>
           <input id="tax-prev-name" className="field-input" value={previous.name} onChange={event => setPrevious({ name: event.target.value })} />

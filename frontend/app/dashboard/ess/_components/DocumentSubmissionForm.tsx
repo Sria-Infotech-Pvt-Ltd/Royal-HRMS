@@ -102,7 +102,7 @@ export default function DocumentSubmissionForm({ submitting, submitError, onSubm
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 16 }}>
           <div className="field-group">
             <label className="field-label">Document category</label>
             <select

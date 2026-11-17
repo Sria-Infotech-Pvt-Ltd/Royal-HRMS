@@ -52,7 +52,7 @@ export default function AppraisalGoalCard({ goal, value, disabled, onChange }: P
         )}
       </div>
 
-      <div style={{ padding: "8px 20px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="ess-pair" style={{ padding: "8px 20px 20px", gap: 16 }}>
         <div className="field-group">
           <label className="field-label">Self rating</label>
           <select
