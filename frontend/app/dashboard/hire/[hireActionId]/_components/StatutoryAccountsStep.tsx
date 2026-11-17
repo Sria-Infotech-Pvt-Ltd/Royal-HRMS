@@ -47,8 +47,19 @@ interface Props {
 }
 
 export default function StatutoryAccountsStep({ value, onChange, documents, uploading, docError, onUploadDoc, onDeleteDoc, savedUanMasked }: Props) {
+  // The newest form values. A change is merged into THESE, never into the `value` this render happened to receive: the IFSC lookup
+  // answers seconds later (it calls an outside service), and a merge into the older `value` put the IFSC back to what it was
+  // before its last character and wiped every field typed while the lookup was running (account holder, account number, PAN,
+  // Aadhaar...). The ref is refreshed after every render, so it never lags what the parent holds, and updated at once by
+  // each change, so two changes made in the same moment add up instead of the second erasing the first.
+  const latest = useRef(value);
+  useEffect(() => { latest.current = value; });
+  function update(patch: Partial<StatutoryDraft>) {
+    latest.current = { ...latest.current, ...patch };
+    onChange(latest.current);
+  }
   function set<K extends keyof StatutoryDraft>(key: K, v: StatutoryDraft[K]) {
-    onChange({ ...value, [key]: v });
+    update({ [key]: v } as Partial<StatutoryDraft>);  // the computed key is exactly one StatutoryDraft key, so this is a valid patch
   }
   const docFor = (key: string) => documents.find(d => d.document_type === key);
 
@@ -70,12 +81,14 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
         if (latestIfscRef.current !== normalized) return;
         if (!info) { setIfscStatus("not_found"); return; }
         setIfscStatus("found");
-        // Convenience auto-fill only — never clobber something the user
-        // already typed themselves (manually, or by editing a previous
-        // auto-fill) into these two fields.
-        if (info.bank && !value.bank_name.trim()) set("bank_name", info.bank);
+        // Convenience auto-fill only: never clobber something the user already typed themselves (manually, or by editing a
+        // previous auto-fill) into these two fields. "Already typed" is judged on the CURRENT values, not the ones from when the
+        // lookup started, and both fields are saved in one change.
+        const patch: Partial<StatutoryDraft> = {};
+        if (info.bank && !latest.current.bank_name.trim()) patch.bank_name = info.bank;
         const branchAddress = [info.branch, info.address, info.city, info.state].filter(Boolean).join(", ");
-        if (branchAddress && !value.bank_branch_address.trim()) set("bank_branch_address", branchAddress);
+        if (branchAddress && !latest.current.bank_branch_address.trim()) patch.bank_branch_address = branchAddress;
+        if (Object.keys(patch).length > 0) update(patch);
       });
     } else {
       setIfscStatus("idle");

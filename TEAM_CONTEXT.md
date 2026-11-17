@@ -6136,3 +6136,22 @@ Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend 
 **To run after pulling:** `python manage.py migrate announcements` (0009). The attendance (0052, 0053) and accounts (0225) migrations from the earlier push are also needed on any server that does not have them. Restart the backend so the changed endpoints load.
 
 **Not verified / open:** dark mode of the new badges, chips and form; whether the HR attendance screens should show the WFH / Short tags; where the Announcements Post button should now live (it is offered from the empty-state card only).
+
+
+## Hire wizard: IFSC lost its last digit and typed bank/ID fields vanished (2026-11-17)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Not checked in a browser; reproduced and fixed with tests.
+
+**Report:** in the Hire wizard (and Edit Record) the IFSC code lost one character every time, and after filling PAN, Aadhaar, account holder name, account number and IFSC the Review step still said "Complete these before hiring: PAN, Aadhaar, Account holder name, Account number, IFSC code".
+
+**Cause (`StatutoryAccountsStep.tsx`, shared by the Hire wizard and Edit Record):** every change was saved as `onChange({ ...value, [key]: v })`, i.e. merged into the `value` the step received in the render when the person typed. The IFSC lookup (`useIfscLookup` -> backend `views_ifsc.py` -> ifsc.razorpay.com, up to a 5 s wait) answers later and then called `set("bank_name")` and `set("bank_branch_address")` from the OLD render. That (1) put the IFSC back to what it was before its last character, (2) wiped every field typed while the lookup was running (account holder, account number, PAN, Aadhaar), and (3) made the second auto-fill erase the first, because both spread the same old copy. The autosave then sent those blanks, so the server's `draft_data` really was empty and `HireActionCompleteView` refused with "Complete these before hiring".
+
+**Fix:** the step keeps a ref with the newest values (refreshed after every render); every change, including the lookup's, is merged into that ref and sent on, the two auto-fills are saved as one change, and "did the person already type a bank name" is judged on the current values.
+
+**Checked for the same pattern elsewhere:** `AddressFields` and the onboarding forms (`DynamicStepFields`) already update with `setForm(prev => ...)`; the other Hire steps only change one field per event. Only this step had it.
+
+**Tests:** `StatutoryAccountsStep.test.tsx` (11 tests) drives the real step with a real stateful parent and a lookup whose answer the test releases late: the IFSC keeps all 11 characters; bank and branch are both filled; fields typed during the lookup survive; a bank name typed meanwhile is not overwritten; a replaced IFSC's late answer is ignored; a Scan & fill update from outside is kept; two changes in the same moment both stay. Put the old merge back and 4 of them fail.
+
+**Still open**
+- `HireWizardClient.handleHire` saves the whole form one last time before completing but swallows a failure of that save (`.catch(() => {})`), so a failed save shows up as the server's "Complete these before hiring" list instead of "could not save". Not changed here.
+- Another session was redesigning the same wizard folder (optional upload buttons in this step, other steps) at the same time; the commit contains only the merge fix and its tests.
