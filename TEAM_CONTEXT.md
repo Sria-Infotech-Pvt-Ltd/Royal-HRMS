@@ -6155,3 +6155,24 @@ Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend 
 **Still open**
 - `HireWizardClient.handleHire` saves the whole form one last time before completing but swallows a failure of that save (`.catch(() => {})`), so a failed save shows up as the server's "Complete these before hiring" list instead of "could not save". Not changed here.
 - Another session was redesigning the same wizard folder (optional upload buttons in this step, other steps) at the same time; the commit contains only the merge fix and its tests.
+
+
+## Hire wizard step 5, Family & nomination, redesigned (2026-11-17)
+
+**By:** New-AI session - **Branch:** New-AI. Frontend only. Not checked in a browser. Requested after "I don't like that step 5 UI, make it more advanced".
+
+**What it is now:** `app/onboarding/_components/FamilyNominationStep.tsx` (used by the Hire wizard, the HR-assisted onboarding page `employees/[id]/onboarding` and Edit Record, so all three changed at once). Props and the exported `FamilyEntry` / `NomineeEntry` types are unchanged; no caller was edited and nothing sent to the backend changed.
+- **Summary strip:** family members (only people with a name), dependants, and each scheme that has nominees with its total and a status dot.
+- **Family members as cards** (`FamilyMemberCard.tsx`): initials, name, relationship, age from the date of birth, Dependent and Nominee tags. A saved person starts closed (Edit / Done); a card with no name stays open; typing in a card keeps it open. Quick-add buttons Father / Mother / Spouse / Child / Someone else (a father is preset to male, a mother to female). A note appears on a second father or mother.
+- **Nominations as three lanes** (`NominationLane.tsx`: EPF + EPS, Gratuity, Both): a bar of the share assigned (amber under 100, green at 100, red over, the bar never overflows), a plain message ("40% still to assign", "Complete: 100%", "Over by 20%"), nominees picked from the family list, a person cannot be picked twice in one scheme, "Fill the rest (N%)" per nominee, "Split equally" (3 nominees give 34 / 33 / 33), and a note when a nominee is under 18 (it only asks to check whether a guardian is needed).
+- **Pure rules** in `nominationRules.ts` (age, totals, equal split, duplicate roles), types and fixed lists in `familyNominationTypes.ts`.
+- The quick-add and per-lane add buttons still call the callers' `onAddFamily()` / `onAddNominee()` (no arguments); the step then sets the relationship or scheme on the entry that just appeared, so the callers did not have to change.
+
+**Behaviour deliberately kept:** the share totals never block saving (the Review step refuses only a scheme over 100%); "Both" is still its own group, counted separately exactly as before; family is still saved before nominees.
+
+**Tests:** `nominationRules.test.ts` (26) and `FamilyNominationStep.test.tsx` (19, real parent with the Hire wizard's functional updates). Four deliberate breakages (new card starting closed, nominee landing in the wrong scheme, same person selectable twice, "fill the rest" ignoring the others) each fail tests. Whole frontend `vitest` 1,221 passed, `tsc` and `eslint` clean.
+
+**Open**
+- Removing a family member who is already a nominee leaves the nominee pointing at a person who no longer exists (the earlier version did the same); not changed here.
+- The minor-nominee note is a prompt to check, not a rule: whether and how a guardian is named is for HR / the EPF form.
+- Only the step's own look changed; the hire wizard frame, sidebar and the other steps belong to the UI pass another session is doing.

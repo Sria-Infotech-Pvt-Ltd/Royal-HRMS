@@ -1,52 +1,24 @@
 "use client";
-import DateInput from "@/components/shared/DateInput";
 
 // ── Step: Family & Nomination ────────────────────────────────────────────────
-// Two related repeatable lists in one step, matching the mockup's own
-// combined "Family & nomination" screen: Family Members (dependants) and
-// EPF/Gratuity Nominees. A nominee is picked from the family list rather
-// than re-typed — same "richer source, not re-entered" idea used elsewhere
-// in this app — so the nominee dropdown is built from `familyEntries`, not
-// a separate free-text field.
+// Two related lists in one step: family members (people cards) and EPF / Gratuity nominees (one lane per scheme). A nominee is
+// picked from the family list, never re-typed, so a person is added once and used wherever needed.
 //
-// One overall Save & Continue for the whole step (same convention as
-// EducationChecklist/ExperienceList) — everything here is local state until
-// the wizard's own Save & Continue reconciles both lists at once. Family is
-// always reconciled BEFORE nominees (see saveFamilyNominationEntries() in
-// both wizard pages) so a nominee referencing a not-yet-created (`temp-`)
-// family member gets translated to the real id the family save just
-// returned, before the nominee list is sent.
+// The props are unchanged from the earlier version (the Hire wizard, the HR-assisted onboarding page and Edit Record all use them):
+// everything is local state until the wizard's own Save & Continue reconciles both lists at once, family always BEFORE nominees
+// (see saveFamilyNominationEntries() in both wizard pages) so a nominee pointing at a not-yet-created (`temp-`) family member
+// gets the real id first. No rule here blocks saving: the share totals are guidance; the Review step refuses only a scheme over 100%.
 //
-// No server-side block on a nomination scheme's shares not summing to
-// 100% (matches the mockup, which only ever displays that total) — the
-// running total below is informational, not a gate.
+// The quick-add buttons call the same onAddFamily / onAddNominee as before (they take no arguments), then set the relationship or
+// scheme on the entry that just appeared, so no caller had to change.
 
-export interface FamilyEntry {
-  id: string;
-  name: string;
-  relationship: string;
-  date_of_birth: string;
-  gender: string;
-  blood_group: string;
-  is_dependent: boolean;
-}
+import { useEffect, useRef, useState } from "react";
+import FamilyMemberCard from "./FamilyMemberCard";
+import NominationLane from "./NominationLane";
+import { RELATIONSHIPS, RELATIONSHIP_LABELS, SCHEMES, type FamilyEntry, type NomineeEntry } from "./familyNominationTypes";
+import { duplicateRoleIds, namedMembers, presetFor, schemeState, schemeTotal, sharesIn } from "./nominationRules";
 
-export interface NomineeEntry {
-  id: string;
-  family_member: string; // FamilyEntry.id — may be a temp- id until saved
-  scheme: string;
-  share_percentage: string;
-}
-
-const RELATIONSHIPS = ["father", "mother", "spouse", "child", "sibling"];
-const RELATIONSHIP_LABELS: Record<string, string> = {
-  father: "Father", mother: "Mother", spouse: "Spouse", child: "Child", sibling: "Sibling",
-};
-const SCHEMES: { value: string; label: string }[] = [
-  { value: "epf_eps",  label: "EPF + EPS" },
-  { value: "gratuity", label: "Gratuity" },
-  { value: "both",     label: "Both" },
-];
+export type { FamilyEntry, NomineeEntry } from "./familyNominationTypes";
 
 type FamilyFieldValue = string | boolean;
 
@@ -62,139 +34,125 @@ interface Props {
   error: string | null;
 }
 
+const PILL: React.CSSProperties = { fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 999, background: "var(--surface-2, #f3f4f6)", color: "var(--ink-2, #374151)" };
+const DOT: Record<string, string> = { short: "var(--warn, #d97706)", complete: "var(--success, #16a34a)", over: "var(--crit, #dc2626)" };
+
 export default function FamilyNominationStep({
-  familyEntries, nomineeEntries, onAddFamily, onFamilyFieldChange, onRemoveFamily,
-  onAddNominee, onNomineeFieldChange, onRemoveNominee, error,
+  familyEntries, nomineeEntries, onAddFamily, onFamilyFieldChange, onRemoveFamily, onAddNominee, onNomineeFieldChange, onRemoveNominee, error,
 }: Props) {
-  const totalsByScheme = SCHEMES.reduce<Record<string, number>>((acc, s) => {
-    acc[s.value] = nomineeEntries
-      .filter(n => n.scheme === s.value)
-      .reduce((sum, n) => sum + (Number(n.share_percentage) || 0), 0);
-    return acc;
-  }, {});
+  // Cards the person has opened. A card with no name is always open, and one that already has a name starts closed.
+  const [openIds, setOpenIds] = useState<ReadonlySet<string>>(new Set());
+
+  // What a quick-add button wants the NEXT new entry to look like, applied once that entry shows up in the list.
+  const pendingFamily = useRef<Partial<FamilyEntry> | null>(null);
+  const pendingScheme = useRef<string | null>(null);
+  const knownFamily = useRef<Set<string>>(new Set(familyEntries.map(entry => entry.id)));
+  const knownNominees = useRef<Set<string>>(new Set(nomineeEntries.map(entry => entry.id)));
+  useEffect(() => {
+    const fresh = familyEntries.filter(entry => !knownFamily.current.has(entry.id));
+    knownFamily.current = new Set(familyEntries.map(entry => entry.id));
+    const preset = pendingFamily.current;
+    if (preset && fresh.length === 1) {
+      pendingFamily.current = null;
+      for (const [field, value] of Object.entries(preset)) onFamilyFieldChange(fresh[0].id, field as keyof FamilyEntry, value as string); // a preset only holds strings
+    }
+  }, [familyEntries, onFamilyFieldChange]);
+  useEffect(() => {
+    const fresh = nomineeEntries.filter(entry => !knownNominees.current.has(entry.id));
+    knownNominees.current = new Set(nomineeEntries.map(entry => entry.id));
+    const scheme = pendingScheme.current;
+    if (scheme && fresh.length === 1) {
+      pendingScheme.current = null;
+      onNomineeFieldChange(fresh[0].id, "scheme", scheme);
+    }
+  }, [nomineeEntries, onNomineeFieldChange]);
+
+  const people = namedMembers(familyEntries);
+  const nominatedIds = new Set(nomineeEntries.map(nominee => nominee.family_member).filter(Boolean));
+  const selectable = familyEntries.filter(entry => entry.name.trim() !== "" || nominatedIds.has(entry.id));
+  const duplicates = duplicateRoleIds(familyEntries);
+  const dependants = people.filter(entry => entry.is_dependent).length;
+
+  function quickAdd(relationship?: string) {
+    pendingFamily.current = relationship ? presetFor(relationship) : null;
+    onAddFamily();
+  }
+  function addNominee(scheme: string) {
+    pendingScheme.current = scheme;
+    onAddNominee();
+  }
+  function changeFamily(id: string, field: keyof FamilyEntry, value: FamilyFieldValue) {
+    setOpenIds(previous => (previous.has(id) ? previous : new Set(previous).add(id)));   // typing in a card keeps it open
+    onFamilyFieldChange(id, field, value);
+  }
+  function toggle(id: string, isOpen: boolean) {
+    setOpenIds(previous => {
+      const next = new Set(previous);
+      if (isOpen) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   return (
-    <div>
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+    <div style={{ display: "grid", gap: 18 }}>
+      {error && <div className="alert alert-error">{error}</div>}
 
-      <h4 style={{ fontSize: "0.95rem", marginBottom: 4 }}>Family Members</h4>
-      <p style={{ color: "var(--on-variant)", fontSize: ".85rem", marginBottom: 16 }}>
-        Add family before setting nominations below — a nominee is picked from this list.
-      </p>
+      <div role="status" aria-label="Summary" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <span style={PILL}>{people.length} family {people.length === 1 ? "member" : "members"}</span>
+        <span style={PILL}>{dependants} {dependants === 1 ? "dependant" : "dependants"}</span>
+        {SCHEMES.map(scheme => {
+          const list = sharesIn(nomineeEntries, scheme.value);
+          const total = schemeTotal(nomineeEntries, scheme.value);
+          const state = schemeState(total, list.length);
+          return list.length === 0 ? null : (
+            <span key={scheme.value} style={PILL}><span aria-hidden="true" style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: DOT[state], marginRight: 6 }} />{scheme.label} {total}%</span>
+          );
+        })}
+      </div>
 
-      {familyEntries.length === 0 && (
-        <p style={{ color: "var(--on-variant)", fontSize: ".9rem", marginBottom: 16 }}>
-          No family members added yet — optional, but add any dependants or nominees-to-be.
+      <div>
+        <h4 style={{ fontSize: "0.95rem", margin: "0 0 4px" }}>Family members</h4>
+        <p style={{ color: "var(--on-variant)", fontSize: ".85rem", margin: "0 0 12px" }}>
+          Add the people who depend on the employee or who may be nominated below. A person is added once and can be picked as a nominee.
         </p>
-      )}
-
-      {familyEntries.map(entry => (
-        <div key={entry.id} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
-          <div className="form-row cols-2">
-            <div className="field-group">
-              <label className="field-label">Name</label>
-              <input className="field-input" value={entry.name} onChange={e => onFamilyFieldChange(entry.id, "name", e.target.value)} />
-            </div>
-            <div className="field-group">
-              <label className="field-label">Relationship</label>
-              <select className="field-input field-select" value={entry.relationship} onChange={e => onFamilyFieldChange(entry.id, "relationship", e.target.value)}>
-                <option value="">— Select —</option>
-                {RELATIONSHIPS.map(r => <option key={r} value={r}>{RELATIONSHIP_LABELS[r]}</option>)}
-              </select>
-            </div>
-            <div className="field-group">
-              <label className="field-label">Date of Birth</label>
-              <DateInput separator="-" className="field-input" value={entry.date_of_birth} onChange={isoDate => onFamilyFieldChange(entry.id, "date_of_birth", isoDate)} />
-            </div>
-            <div className="field-group">
-              <label className="field-label">Gender</label>
-              <select className="field-input field-select" value={entry.gender} onChange={e => onFamilyFieldChange(entry.id, "gender", e.target.value)}>
-                <option value="">— Select —</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div className="field-group">
-              <label className="field-label">Blood Group</label>
-              {/* Free text let through values Personal Identity's own
-                  dropdown never would (typos, non-standard formats) — QA
-                  report #56 caught the inconsistency; matching the same
-                  fixed option list used there. */}
-              <select className="field-input field-select" value={entry.blood_group} onChange={e => onFamilyFieldChange(entry.id, "blood_group", e.target.value)}>
-                <option value="">— Select —</option>
-                {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(b => <option key={b} value={b}>{b}</option>)}
-              </select>
-            </div>
-          </div>
-          <label className="module-check" style={{ marginTop: 4, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
-            <input type="checkbox" checked={entry.is_dependent} onChange={e => onFamilyFieldChange(entry.id, "is_dependent", e.target.checked)} />
-            <span>Dependent</span>
-          </label>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemoveFamily(entry.id)}>
-            <i className="ti ti-trash" style={{ fontSize: 13 }} /> Remove
-          </button>
-        </div>
-      ))}
-
-      <button className="btn btn-ghost" type="button" onClick={onAddFamily} style={{ marginBottom: 24 }}>
-        <i className="ti ti-plus" /> Add Family Member
-      </button>
-
-      <div style={{ borderTop: "1px solid var(--outline-v)", paddingTop: 20 }}>
-        <h4 style={{ fontSize: "0.95rem", marginBottom: 4 }}>EPF / Gratuity Nomination</h4>
-        <p style={{ color: "var(--on-variant)", fontSize: ".85rem", marginBottom: 16 }}>
-          Each scheme&apos;s shares should add up to 100% across all nominees.
-        </p>
-
-        {familyEntries.length === 0 && (
-          <p style={{ color: "var(--warn)", fontSize: ".85rem", marginBottom: 16 }}>
-            Add a family member above before adding a nominee.
-          </p>
-        )}
-
-        {nomineeEntries.map(entry => (
-          <div key={entry.id} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
-            <div className="form-row cols-2">
-              <div className="field-group">
-                <label className="field-label">Nominee</label>
-                <select className="field-input field-select" value={entry.family_member} onChange={e => onNomineeFieldChange(entry.id, "family_member", e.target.value)}>
-                  <option value="">— Select from family —</option>
-                  {familyEntries.map(f => (
-                    <option key={f.id} value={f.id}>{f.name}{f.relationship ? ` (${RELATIONSHIP_LABELS[f.relationship] ?? f.relationship})` : ""}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Scheme</label>
-                <select className="field-input field-select" value={entry.scheme} onChange={e => onNomineeFieldChange(entry.id, "scheme", e.target.value)}>
-                  {SCHEMES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Share %</label>
-                <input
-                  className="field-input" type="number" min={0} max={100}
-                  value={entry.share_percentage}
-                  onChange={e => onNomineeFieldChange(entry.id, "share_percentage", e.target.value.replace(/[^0-9]/g, ""))}
-                />
-              </div>
-            </div>
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemoveNominee(entry.id)}>
-              <i className="ti ti-trash" style={{ fontSize: 13 }} /> Remove
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>Quick add</span>
+          {RELATIONSHIPS.filter(relationship => relationship !== "sibling").map(relationship => (
+            <button key={relationship} type="button" className="rvbtn" onClick={() => quickAdd(relationship)}>
+              <i className="ti ti-plus" aria-hidden="true" /> {RELATIONSHIP_LABELS[relationship]}
             </button>
-          </div>
-        ))}
-
-        <button className="btn btn-ghost" type="button" onClick={onAddNominee} disabled={familyEntries.length === 0}>
-          <i className="ti ti-plus" /> Add Nominee
-        </button>
-
-        {nomineeEntries.length > 0 && (
-          <p style={{ marginTop: 12, fontSize: ".85rem", color: "var(--on-variant)" }}>
-            {SCHEMES.map(s => `${s.label}: ${totalsByScheme[s.value]}%`).join(" · ")}
-          </p>
+          ))}
+          <button type="button" className="rvbtn ghost" onClick={() => quickAdd()}>Someone else</button>
+        </div>
+        {familyEntries.length === 0 && (
+          <p style={{ color: "var(--on-variant)", fontSize: ".9rem", margin: 0 }}>No family members yet. This is optional; use the buttons above to add someone.</p>
         )}
+        <div style={{ display: "grid", gap: 10 }}>
+          {familyEntries.map(entry => (
+            <FamilyMemberCard
+              key={entry.id} entry={entry} isOpen={openIds.has(entry.id)} isNominee={nominatedIds.has(entry.id)}
+              roleNote={duplicates.has(entry.id) ? `Another ${RELATIONSHIP_LABELS[entry.relationship].toLowerCase()} is already listed.` : null}
+              onToggle={() => toggle(entry.id, openIds.has(entry.id))} onChange={(field, value) => changeFamily(entry.id, field, value)} onRemove={() => onRemoveFamily(entry.id)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--line, #e5e7eb)", paddingTop: 16 }}>
+        <h4 style={{ fontSize: "0.95rem", margin: "0 0 4px" }}>EPF / Gratuity nomination</h4>
+        <p style={{ color: "var(--on-variant)", fontSize: ".85rem", margin: "0 0 12px" }}>
+          Each scheme&apos;s shares should add up to 100% across its nominees. Pick nominees from the family list above.
+        </p>
+        {people.length === 0 && <p style={{ color: "var(--warn)", fontSize: ".85rem", margin: "0 0 12px" }}>Add a family member with a name above before adding a nominee.</p>}
+        <div style={{ display: "grid", gap: 10 }}>
+          {SCHEMES.map(scheme => (
+            <NominationLane
+              key={scheme.value} scheme={scheme} nominees={sharesIn(nomineeEntries, scheme.value)} allNominees={nomineeEntries}
+              total={schemeTotal(nomineeEntries, scheme.value)} members={selectable} canAdd={people.length > 0}
+              onAdd={() => addNominee(scheme.value)} onField={onNomineeFieldChange} onRemove={onRemoveNominee}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
