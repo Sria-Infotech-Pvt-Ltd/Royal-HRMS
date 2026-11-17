@@ -152,7 +152,13 @@ export default function DashboardShell({
       </header>
 
       {/* ══════════════════ CONTENT ══════════════════ */}
-      <main className={`min-h-0 flex-1 overflow-y-auto bg-[var(--bg)]${isFitPage ? " flex flex-col" : ""}`}>
+      {/* scrollbarGutter reserves the scrollbar's space whether or not a page is tall enough to need
+          one — without it, every page that loads short-then-tall (or vice versa) shifted its whole
+          layout sideways by the scrollbar's width the instant it appeared/disappeared. */}
+      <main
+        className={`min-h-0 flex-1 overflow-y-auto bg-[var(--bg)]${isFitPage ? " flex flex-col" : ""}`}
+        style={{ scrollbarGutter: "stable" }}
+      >
         {/* The ESS shell uses the reference's .module-page spacing
             (16px 24px 40px) instead of the standard page gutter.
             The Employee Directory is a "fit" page (as in the reference): the wrapper fills <main>

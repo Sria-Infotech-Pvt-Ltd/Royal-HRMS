@@ -1,0 +1,125 @@
+/* =====================================================================
+   AIRA HRMS — spacing pass
+   Imported last in app/layout.tsx so these win over the existing compact
+   overrides in aira-theme.css (.page > …, .emp-fit > …) regardless of
+   CSS chunk order. The `html` prefix raises specificity for the same
+   reason, as a second line of defense.
+
+   Rhythm used everywhere: 4 · 8 · 12 · 16 · 20 · 24 px
+   - Inside a control/card ........ 12–16px
+   - Between related items ......... 8–12px
+   - Between page sections ......... 16px
+   - Before a new form section ..... 24px
+   ===================================================================== */
+
+:root {
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+}
+
+/* ---------- 1. Top navigation: stop menus overflowing on 1024–1279px ---------- */
+/* At ~1150px wide, Time & Pay / HR Ops / System were scrolled out of view.
+   The brand block reserved 174px for a 77px logo; that space now goes to the menu. */
+@media (min-width: 761px) and (max-width: 1279px) {
+  html .topnav { gap: var(--sp-3); padding: 0 var(--sp-4); }
+  html .topnav .brandmark { width: auto; min-width: 0; }
+  html .topnav .navlink { padding: 0 9px; }
+  html .topnav .navsearch { width: 150px; min-width: 0; max-width: 150px; }
+  html .topnav .kbd { display: none; }
+}
+
+/* ---------- 2. Page shell & header (list pages: .page / .emp-fit) ---------- */
+@media (min-width: 761px) {
+  html .page,
+  html .emp-fit {
+    gap: var(--sp-4);              /* was 8px between header / stats / table */
+    padding-top: var(--sp-3);      /* adds to the 8px container top → ~20px under the nav */
+  }
+  html .page > .pagehead,
+  html .emp-fit > .pagehead { gap: var(--sp-5); }
+
+  html .page > .pagehead .lede,
+  html .emp-fit > .pagehead .lede { margin-top: 6px; }     /* was 4px – title and subtitle touched */
+  html .page .headacts,
+  html .emp-fit .headacts { margin-top: 14px; }            /* was 7px above the action buttons */
+
+  /* KPI cards */
+  html .page > .stats,
+  html .emp-fit > .stats { gap: var(--sp-3); }             /* was 8px */
+  html .page > .stats .stat,
+  html .emp-fit > .stats .stat { padding: 14px var(--sp-4); gap: 6px; } /* was 8px 11px */
+  html .page > .stats .stat .ico,
+  html .emp-fit > .stats .stat .ico { height: 28px; width: 28px; }
+
+  /* Table panel */
+  html .page > .panel .panel-h,
+  html .emp-fit > .panel .panel-h { padding: 14px var(--sp-5) 0; }
+  html .page > .panel .toolbar,
+  html .emp-fit > .panel .toolbar { padding: var(--sp-3) var(--sp-5); gap: var(--sp-2); }
+  html .tbl-h { padding: 10px var(--sp-5); }
+  html .tr    { padding: 10px var(--sp-5); }
+  html .pager { padding: var(--sp-3) var(--sp-5); }
+
+  /* Breathing room above the footer */
+  html .site-footer { margin-top: var(--sp-4); }
+}
+
+/* Large screens: the old 28px side padding / 15px rows felt loose next to the
+   compact pages, so keep one consistent value and only grow slightly. */
+@media (min-width: 1440px) {
+  html .panel-h { padding: var(--sp-4) var(--sp-6) 0; }
+  html .toolbar { padding: 14px var(--sp-6); }
+  html .tbl-h   { padding: var(--sp-3) var(--sp-6); }
+  html .tr      { padding: var(--sp-3) var(--sp-6); }
+  html .pager   { padding: 14px var(--sp-6); }
+}
+
+/* ---------- 3. Forms (modals, drawers, hiring / leave / settings forms) ----------
+   Real class names here are .modal-head / .modal-body / .modal-foot (not
+   "-header"/"-footer") — see app/aira-theme.css. */
+html .modal-head   { padding: 18px var(--sp-6); }
+html .modal-body   { padding: var(--sp-5) var(--sp-6) var(--sp-6); }
+html .modal-foot    { padding: 14px var(--sp-6); gap: var(--sp-2); }
+html .drawer-body  { padding: var(--sp-5) var(--sp-6) var(--sp-6); }
+
+/* Section titles inside a form: more space above (new group),
+   less below (belongs to the fields that follow). */
+html .section-label:not(:first-child),
+html .space-y-4 > .section-label:not(:first-child) { margin-top: var(--sp-6); }
+html .section-label + *,
+html .space-y-4 > .section-label + * { margin-top: 10px; }
+
+/* Field grids: equal row/column gutters (was 10px × 13px) */
+html .g2,
+html .g3 { gap: var(--sp-4) var(--sp-4); }
+
+/* Label → input → helper text */
+html .f { gap: 6px; }
+html .f .hint,
+html .f > p { margin-top: 2px; line-height: 1.45; }
+html .finput,
+html .add { height: 40px; padding: 0 var(--sp-3); }
+
+/* Intro text at the top of a form */
+html .modal-body > .space-y-4 > .hint:first-child,
+html .modal-body > p.hint:first-child { line-height: 1.55; }
+
+/* Card bodies used by settings / detail pages */
+html .card-body { padding: var(--sp-5); }
+
+/* ---------- 4. Mobile: keep it compact but not cramped ---------- */
+@media (max-width: 760px) {
+  html .page,
+  html .emp-fit { gap: var(--sp-3); }
+  html .stats { gap: var(--sp-2); }
+  html .g2,
+  html .g3 { gap: 14px; }
+  html .modal-head,
+  html .modal-body,
+  html .modal-foot { padding-left: var(--sp-4); padding-right: var(--sp-4); }
+  html .card-body { padding: var(--sp-4); }
+}

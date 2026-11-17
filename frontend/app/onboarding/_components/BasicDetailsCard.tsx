@@ -48,6 +48,13 @@ interface Props {
 
 const EMP_TYPES = ["Permanent", "Contract", "Freelancer", "Consultant", "Part-Time", "Temporary", "Intern"];
 
+// Matches the required-field asterisk used elsewhere in the wizard
+// (OnboardingDynamicField.tsx, TabDocuments.tsx). Full Name is the only
+// field here backed by a real constraint: User.full_name has no
+// blank=True (models.py), and this card's own save() silently keeps the
+// old value rather than clearing it when sent blank (employees_detail.py).
+const Req = () => <span style={{ color: "var(--error, #dc2626)", marginLeft: 2 }}>*</span>;
+
 // .field-static is this codebase's existing "read-only value" box (see
 // globals.css) — same height/padding as a real .field-input so read-only
 // and editable mode line up identically, just a flat tinted fill instead of
@@ -182,7 +189,7 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
         <>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Full Name</label>
+              <label className="field-label">Full Name<Req /></label>
               <input className="field-input" value={form.full_name} onChange={e => set("full_name", e.target.value)} />
             </div>
             <div className="field-group">

@@ -29,7 +29,9 @@ export default function LeaveSupportingDocument({ file, isRequired, error, onCha
   }
 
   return (
-    <div>
+    // marginBottom matches ApprovalChainPreview's own spacing below — without it, this sat flush
+    // against LeaveHandoverFields right after it, with no visible gap between the two sections.
+    <div style={{ marginBottom: 16 }}>
       <Lbl text="Supporting document" required={isRequired} hint={isRequired ? undefined : "Optional"} />
       {file ? (
         <div className="flex items-center gap-3 rounded-lg border border-[var(--outline-v)] bg-[var(--bg-low)] px-3.5 py-2.5">

@@ -235,8 +235,11 @@ export default function VoiceCommandButton() {
         position: "fixed", zIndex: 1000,
         ...(dragPos
           ? { left: dragPos.x, top: dragPos.y }
-          // safe-area insets keep it clear of a phone's home indicator and rounded corners
-          : { right: "max(4px, env(safe-area-inset-right))", bottom: "max(4px, env(safe-area-inset-bottom))" }),
+          // safe-area insets keep it clear of a phone's home indicator and rounded corners; the extra
+          // 60px clears .site-footer (~52-56px tall) sitting at the same bottom edge — without it this
+          // button (and its hover bubble, stacked above it) sat on top of the footer and whatever table
+          // row/column happened to be at the bottom of the page underneath it.
+          : { right: "max(4px, env(safe-area-inset-right))", bottom: "calc(60px + max(4px, env(safe-area-inset-bottom)))" }),
         display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8,
       }}
     >

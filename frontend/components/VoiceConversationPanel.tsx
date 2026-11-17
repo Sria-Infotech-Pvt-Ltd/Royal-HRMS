@@ -142,7 +142,9 @@ export default function VoiceConversationPanel({
     <div
       data-testid="voice-panel"
       style={{
-        position: "fixed", right: 20, bottom: 20, zIndex: 1000,
+        // Same footer clearance as the collapsed VoiceCommandButton (~52-56px .site-footer) — this
+        // panel's bottom edge otherwise sat on top of the footer instead of floating clear of it.
+        position: "fixed", right: 20, bottom: 80, zIndex: 1000,
         width: PANEL_WIDTH, maxWidth: "calc(100vw - 40px)",
         display: "flex", flexDirection: "column",
         background: "var(--surface)", borderRadius: 14,

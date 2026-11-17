@@ -48,6 +48,13 @@ const SCHEMES: { value: string; label: string }[] = [
   { value: "both",     label: "Both" },
 ];
 
+// Matches the required-field asterisk used elsewhere in the wizard. Name is
+// the only field here the backend actually rejects when blank — it's
+// required whenever a family-member row is submitted at all (views_family_
+// nomination.py), though no row is itself required. Relationship stays
+// unmarked: the backend only validates its choice-set when non-empty.
+const Req = () => <span style={{ color: "var(--error, #dc2626)", marginLeft: 2 }}>*</span>;
+
 type FamilyFieldValue = string | boolean;
 
 interface Props {
@@ -92,7 +99,7 @@ export default function FamilyNominationStep({
         <div key={entry.id} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Name</label>
+              <label className="field-label">Name<Req /></label>
               <input className="field-input" value={entry.name} onChange={e => onFamilyFieldChange(entry.id, "name", e.target.value)} />
             </div>
             <div className="field-group">

@@ -46,7 +46,10 @@ export default function LeavePolicyGuidanceCard() {
           </span>
         )}
 
-        {pending ? (
+        {/* No fallback text when there's nothing pending — this card is about policy guidance, not
+            request status, and a message only here (not matched by a sibling absence anywhere else
+            on the page) read as filler left over from development rather than real guidance. */}
+        {pending && (
           <a
             href={`/dashboard/my-requests?tab=leave&request=${pending.id}`}
             className="btn btn-ghost btn-sm"
@@ -54,10 +57,6 @@ export default function LeavePolicyGuidanceCard() {
           >
             <i className="ti ti-progress" /> Track {fmtShortDate(pending.start_date)} request
           </a>
-        ) : (
-          <span style={{ fontSize: 12.5, color: "var(--on-variant)" }}>
-            No pending leave request to track right now.
-          </span>
         )}
       </div>
     </div>

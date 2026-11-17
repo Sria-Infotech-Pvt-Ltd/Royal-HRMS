@@ -222,7 +222,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
                       <tbody>
                         {result.errors.map((e, i) => (
                           <tr key={i} style={{ borderTop: "1px solid var(--outline-v)" }}>
-                            <td style={{ padding: "8px 12px", fontFamily: "Menlo, Consolas, monospace", color: "var(--on-variant)" }}>
+                            <td style={{ padding: "8px 12px", color: "var(--on-variant)" }}>
                               {e.row}
                             </td>
                             <td style={{ padding: "8px 12px", color: "var(--on-bg)" }}>

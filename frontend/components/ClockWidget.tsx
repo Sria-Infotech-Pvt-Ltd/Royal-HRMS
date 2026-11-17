@@ -82,7 +82,6 @@ export default function ClockWidget() {
               fontWeight: 300,
               fontVariantNumeric: "tabular-nums",
               letterSpacing: "0.06em",
-              fontFamily: "Menlo, Consolas, monospace",
               lineHeight: 1,
               marginBottom: 6,
             }}
@@ -137,7 +136,6 @@ export default function ClockWidget() {
                 Session
               </div>
               <div style={{
-                fontFamily: "Menlo, Consolas, monospace",
                 fontSize: 18,
                 fontWeight: 700,
                 color: isClockedIn ? "var(--success)" : "var(--on-variant)",
@@ -152,7 +150,6 @@ export default function ClockWidget() {
                 Total Today
               </div>
               <div style={{
-                fontFamily: "Menlo, Consolas, monospace",
                 fontSize: 18,
                 fontWeight: 700,
                 color: "var(--on-bg)",
@@ -220,7 +217,7 @@ export default function ClockWidget() {
                       className={`ti ${p.type === "IN" ? "ti-login" : "ti-logout"}`}
                       style={{ fontSize: 13, color: p.type === "IN" ? "var(--success)" : "var(--error)", flexShrink: 0 }}
                     />
-                    <span style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 13, fontWeight: 600, color: "var(--on-bg)", minWidth: 38 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)", minWidth: 38 }}>
                       {p.time}
                     </span>
                     <span style={{ fontSize: 11, color: "var(--on-variant)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

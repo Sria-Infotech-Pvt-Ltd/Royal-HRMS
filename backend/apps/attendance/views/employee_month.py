@@ -10,6 +10,7 @@ import datetime
 import logging
 
 from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -107,10 +108,30 @@ class HREmployeeMonthView(APIView):
             )
         }
 
+        # A day with no AttendanceRecord at all is ambiguous on its own — it covers
+        # a future date, a date before the employee joined, a configured weekly off
+        # with no punches, and a genuinely unmarked past working day, all the same
+        # way. Tell these apart the same way AttendanceProcessorService.process_day()
+        # would (see _is_weekly_off there) rather than showing "—" for all four.
+        from core.cache_service import WeeklyOffCacheService
+        today = timezone.localdate()
+        joining_date = employee.date_of_joining
+
+        def _no_record_status(day: datetime.date) -> str:
+            if day > today:
+                return 'future'
+            if joining_date and day < joining_date:
+                return 'pre_joining'
+            day_name = day.strftime('%A').lower()
+            if day_name in WeeklyOffCacheService.get_effective(employee, day):
+                return 'weekly_off'
+            return 'no_record'
+
         STATUS_LABELS = {
             'present': 'Present', 'late': 'Late Arrival', 'half_day': 'Half Day',
             'on_leave': 'On Leave', 'weekly_off': 'Week Off', 'holiday': 'Holiday',
             'absent': 'Absent', 'incomplete': 'Incomplete',
+            'future': 'Upcoming', 'pre_joining': 'Before Joining', 'no_record': 'No Record',
         }
         LOP_STATUSES = frozenset(['absent', 'incomplete'])
         stat_keys    = ('present', 'late', 'half_day', 'absent', 'on_leave',
@@ -123,7 +144,7 @@ class HREmployeeMonthView(APIView):
         current = month_start
         while current <= month_end:
             rec      = record_map.get(current)
-            status   = rec.status if rec else 'no_record'
+            status   = rec.status if rec else _no_record_status(current)
             minutes  = (rec.total_working_minutes or 0) if rec else 0
             ot_mins  = (rec.overtime_minutes or 0) if rec else 0
             clock_in  = rec.first_punch_in.strftime('%H:%M') if rec and rec.first_punch_in else None

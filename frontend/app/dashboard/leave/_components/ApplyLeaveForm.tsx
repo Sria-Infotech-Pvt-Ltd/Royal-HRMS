@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useApiErrors } from "@/hooks/useApiErrors";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getLeaveYear } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
@@ -19,6 +20,14 @@ import LeaveHandoverFields from "./LeaveHandoverFields";
 import { notifyLeaveChanged } from "@/hooks/useLeaveRefresh";
 import { useMyApprovals } from "@/hooks/useMyApprovals";
 import ApprovalChainPreview, { chainBlocksSubmit } from "@/components/approvals/ApprovalChainPreview";
+
+// Same shape as LeaveCalendarView's response (see TeamCalendar.tsx's own CalEvent).
+interface LeaveCalendarEvent {
+  id:            string;
+  employee_name: string;
+  start_date:    string;
+  end_date:      string;
+}
 
 const DURATION_OPTIONS: { value: DurationKey; label: string }[] = [
   { value: "full_day",       label: "Full day" },
@@ -105,6 +114,26 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
       + `&duration=${encodeURIComponent(form.duration)}`
     : null;
   const { data: preview, loading: previewLoading } = useFetch<LeavePreview>(previewUrl);
+
+  // Informational only, never blocks Submit — lets the requester see who else on
+  // the team is already out over the same dates before they ask for the same days.
+  // Reuses the calendar's own scope (settings.edit sees all, a manager sees their
+  // team, HR sees their branch, an ordinary employee sees every approved leave
+  // org-wide "to plan around absences" — see _calendar_scope_filter), so this never
+  // leaks more than the team calendar already would.
+  const currentUser = useCurrentUser();
+  const clashYear = form.from_date ? Number(form.from_date.slice(0, 4)) : null;
+  const { data: yearEvents } = useFetch<LeaveCalendarEvent[]>(
+    clashYear ? `${API.leave.calendar}?year=${clashYear}` : null
+  );
+  const teamClashes = useMemo(() => {
+    if (!yearEvents || !form.from_date) return [];
+    const rangeEnd = previewEndDate || form.from_date;
+    return yearEvents.filter(event =>
+      event.employee_name !== currentUser?.name &&
+      event.start_date <= rangeEnd && event.end_date >= form.from_date
+    );
+  }, [yearEvents, form.from_date, previewEndDate, currentUser?.name]);
 
   const insufficientBalance = !!preview && !preview.sufficient_balance && !preview.lop_enabled;
 
@@ -252,19 +281,31 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
             placeholder="Reason for leave"
             rows={3}
             maxLength={500}
-            style={{ resize: "none" }}
+            // Explicit height, matching the balance-preview box beside it exactly (both 76px) —
+            // rows={3}'s own natural height and the preview's old minHeight:76 landed a few px
+            // apart, so the two boxes' bottoms didn't line up in the side-by-side row below.
+            style={{ resize: "none", height: 76, boxSizing: "border-box" }}
           />
           <Err msg={errors.reason} />
         </div>
 
         <div>
           <SmallLbl text="Balance preview" />
-          <div className="field-input flex items-center" style={{ background: "var(--bg-low)", color: "var(--on-variant)", minHeight: 76 }}>
+          {/* field-static (not field-input) — this is read-only text, not an editable box; a disabled
+              input still invites a click/type attempt and looks like a box you're meant to fill in. */}
+          <div className="field-static flex items-center" style={{ color: "var(--on-variant)", height: 76, boxSizing: "border-box" }}>
             {previewLoading && canPreview ? "Checking balance…" : balancePreviewText}
           </div>
           {insufficientBalance && <Err msg="Insufficient leave balance for the selected dates." />}
         </div>
       </div>
+
+      {teamClashes.length > 0 && (
+        <div className="alert alert-warn" style={{ marginBottom: 16 }}>
+          <i className="ti ti-users" /> Already on leave over these dates: {teamClashes.map(c => c.employee_name).join(", ")}.
+          This doesn&apos;t block your request — just worth knowing before you submit.
+        </div>
+      )}
 
       <LeaveSupportingDocument file={docFile} isRequired={ltConfig.requiresDoc} error={errors.doc} onChange={setDocFile} />
 
@@ -274,6 +315,16 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
       {formError && Object.keys(errors).length === 0 && (
         <div className="alert alert-error mt-4" role="alert"><i className="ti ti-alert-circle" /> {formError}</div>
+      )}
+
+      {chainBlocksSubmit(chain, chainAcknowledged) && chain && chain.blocking.length > 0 && (
+        // Mirrors ApprovalChainPreview's own "blocking" alert above, repeated
+        // here so the reason Submit is disabled is visible without scrolling
+        // back up to it — a disabled button with no nearby explanation reads
+        // as "nothing happened" when clicked.
+        <div className="alert alert-error mt-4" role="alert">
+          <i className="ti ti-alert-circle" /> Submit is disabled — {chain.blocking.join(" ")}
+        </div>
       )}
 
       <div className="mt-6 flex items-center justify-between gap-2.5 border-t border-[var(--outline-v)] pt-4">

@@ -5,21 +5,26 @@ import { getLeaveYear } from "@/lib/fiscalYear";
 import AssessmentLockedNotice from "./AssessmentLockedNotice";
 
 const LEAVE_TYPE_LABEL: Record<string, string> = {
-  casual:    "Casual Leave",
-  sick:      "Sick Leave",
-  earned:    "Earned Leave",
-  maternity: "Maternity Leave",
-  paternity: "Paternity Leave",
-  lwp:       "Leave Without Pay",
+  casual:      "Casual Leave",
+  sick:        "Sick Leave",
+  earned:      "Earned Leave",
+  maternity:   "Maternity Leave",
+  paternity:   "Paternity Leave",
+  lwp:         "Leave Without Pay",
+  // Match the backend's own labels (apps.hrms.models LEAVE_TYPE_CHOICES).
+  bereavement: "Bereavement Leave",
+  comp_off:    "Compensatory Off",
 };
 
 const LEAVE_TYPE_COLOR: Record<string, string> = {
-  casual:    "var(--info)",
-  sick:      "var(--warn)",
-  earned:    "var(--success)",
-  maternity: "var(--secondary)",
-  paternity: "var(--primary)",
-  lwp:       "var(--outline)",
+  casual:      "var(--info)",
+  sick:        "var(--warn)",
+  earned:      "var(--success)",
+  maternity:   "var(--secondary)",
+  paternity:   "var(--primary)",
+  lwp:         "var(--outline)",
+  bereavement: "var(--error)",
+  comp_off:    "var(--on-variant)",
 };
 
 export default function EmpLeaveBalances() {

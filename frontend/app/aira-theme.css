@@ -750,7 +750,19 @@ main>div:has(>.wf-dashboard){padding:0}
    Tailwind (v2) has no arbitrary min-width variants. */
 .nav-desktop{display:none}
 .nav-mobile{display:block}
-@media (min-width:940px){.nav-desktop{display:flex}.nav-mobile{display:none}}
+@media (min-width:940px){
+  .nav-desktop{
+    display:flex;overflow-x:auto;scrollbar-width:none;
+    /* Matches .navlinks' own fade treatment above — without this, a row too
+       narrow for every section button let the last one(s) get visually
+       overlapped/hidden by .navright (search box, etc.) instead of
+       scrolling into view. */
+    -webkit-mask-image:linear-gradient(to right,transparent,black 20px,black calc(100% - 20px),transparent);
+    mask-image:linear-gradient(to right,transparent,black 20px,black calc(100% - 20px),transparent);
+  }
+  .nav-desktop::-webkit-scrollbar{display:none}
+  .nav-mobile{display:none}
+}
 .topnav .nav-desktop .navlink{font-size:13px;font-weight:600;padding:0 13px;gap:5px}
 .topnav .nav-desktop .navlink.on{font-weight:700;color:var(--ink)}
 

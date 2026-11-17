@@ -5,6 +5,7 @@ import "./aira-theme.css";
 import "./ess-theme.css";
 import "./directory-theme.css";
 import "./new-ui-bridge.css";
+import "./spacing.css";
 // Self-hosted (not an external CDN) so every icon in the app doesn't
 // depend on jsdelivr being reachable — imported (not a manual <link>) so
 // Next.js bundles it and resolves its font url()s itself.

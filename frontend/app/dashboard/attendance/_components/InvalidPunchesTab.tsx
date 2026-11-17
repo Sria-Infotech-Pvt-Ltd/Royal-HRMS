@@ -76,12 +76,12 @@ export default function InvalidPunchesTab({ onMutated }: Props) {
               {rows.map(p => (
                 <tr key={p.id}>
                   <td>
-                    <span style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12, color: "var(--on-bg)", fontWeight: 600 }}>
+                    <span style={{ fontSize: 12, color: "var(--on-bg)", fontWeight: 600 }}>
                       {p.device_id}
                     </span>
                   </td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{p.raw_time}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{p.biometric_id}</td>
+                  <td style={{ fontSize: 12 }}>{p.raw_time}</td>
+                  <td style={{ fontSize: 12 }}>{p.biometric_id}</td>
                   <td><span className={ISSUE_BADGE[p.issue_type] ?? "badge badge-neutral"}>{p.issue}</span></td>
                   <td style={{ color: "var(--on-variant)", fontSize: 12 }}>{p.suggested_match}</td>
                   <td>{p.branch}</td>

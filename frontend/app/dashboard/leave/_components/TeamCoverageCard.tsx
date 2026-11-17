@@ -92,7 +92,7 @@ export default function TeamCoverageCard() {
       <div className="card-header">
         <div>
           <div className="card-title"><i className="ti ti-users" /> Team coverage</div>
-          <div className="page-sub" style={{ marginTop: 2 }}>Demo view for planning leave before submission.</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>Who else is already away over the next {LOOKAHEAD_DAYS} days.</div>
         </div>
       </div>
       <div className="card-body" style={{ padding: 0 }}>

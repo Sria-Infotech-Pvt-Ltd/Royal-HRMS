@@ -108,7 +108,7 @@ export default function CorrectionsTab() {
         </select>
         <select
           className="field-input field-select"
-          style={{ width: 160 }}
+          style={{ width: 190 }}
           value={status}
           onChange={e => { setStatus(e.target.value as CorrectionStatus | ""); setPage(1); }}
         >
@@ -145,14 +145,14 @@ export default function CorrectionsTab() {
               )}
               {rows.map(r => (
                 <tr key={r.id}>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.employee_id}</td>
+                  <td style={{ fontSize: 12 }}>{r.employee_id}</td>
                   <td>{r.name}</td>
                   <td>{r.department}</td>
                   <td>{r.branch}</td>
                   <td>{r.date}</td>
                   <td>{PUNCH_TYPE_LABEL[r.punch_type]}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.requested_in ?? "—"}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.requested_out ?? "—"}</td>
+                  <td style={{ fontSize: 12 }}>{r.requested_in ?? "—"}</td>
+                  <td style={{ fontSize: 12 }}>{r.requested_out ?? "—"}</td>
                   <td style={{ maxWidth: 220, fontSize: 12, color: "var(--on-variant)" }}>{r.reason}</td>
                   <td>
                     <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>

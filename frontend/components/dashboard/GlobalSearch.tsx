@@ -82,8 +82,10 @@ export default function GlobalSearch({ navItems, canSearchEmployees }: Props) {
   const showResults = open && trimmed.length > 0;
   const hasResults = employees.length > 0 || matchingPages.length > 0;
 
+  // min-width comes from .navsearch itself (aira-theme.css) — this wrapper doesn't need its own,
+  // larger floor on top, which was fighting the nav row for space on narrower desktop widths.
   return (
-    <div ref={boxRef} className="relative w-full sm:w-auto sm:min-w-[240px]">
+    <div ref={boxRef} className="relative w-full sm:w-auto">
       <div className="navsearch">
         <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ flexShrink: 0 }}>
           <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />

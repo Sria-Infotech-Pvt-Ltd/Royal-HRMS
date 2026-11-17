@@ -67,9 +67,9 @@ export default function MyApprovalsOverview({ canApprove, canApproveAttendance, 
             <tr><th>Workflow</th><th>Waiting</th><th>For me to act on</th><th>Who sees it</th><th /></tr>
           </thead>
           <tbody>
-            {overview.isLoading && <tr><td colSpan={5} style={{ textAlign: "center", padding: 24 }}>Loading…</td></tr>}
+            {overview.isLoading && <tr><td colSpan={5} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>Loading…</td></tr>}
             {!overview.isLoading && shown.length === 0 && (
-              <tr><td colSpan={5} style={{ textAlign: "center", padding: 24 }}>Nothing is waiting for you.</td></tr>
+              <tr><td colSpan={5} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>Nothing is waiting for you.</td></tr>
             )}
             {!overview.isLoading && shown.map(row => (
               <tr key={row.key}>

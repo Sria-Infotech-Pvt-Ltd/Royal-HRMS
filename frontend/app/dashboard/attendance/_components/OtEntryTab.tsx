@@ -215,9 +215,9 @@ export default function OtEntryTab() {
                     </div>
                   </td>
                   <td>{r.date}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.ot_hours}</td>
+                  <td style={{ fontSize: 12 }}>{r.ot_hours}</td>
                   <td>{r.ot_type}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12, fontWeight: 600 }}>{r.ot_amount}</td>
+                  <td style={{ fontSize: 12, fontWeight: 600 }}>{r.ot_amount}</td>
                   <td>{r.approved_by}</td>
                   <td>
                     <span className={`badge ${r.status.toLowerCase() === "approved" ? "badge-success" : "badge-warn"}`}>

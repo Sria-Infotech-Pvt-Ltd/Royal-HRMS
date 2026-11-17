@@ -61,13 +61,13 @@ export default function AttendanceHistoryTable({ data, onRegularize, readOnly = 
                 <tr key={i}>
                   <td style={{ fontWeight: 600 }}>{row.date}</td>
                   <td style={{ color: "var(--on-variant)" }}>{row.day}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12, color: row.clockIn ? (isLateIn ? "var(--error)" : "var(--on-bg)") : "var(--outline-v)" }}>
+                  <td style={{ fontSize: 12, color: row.clockIn ? (isLateIn ? "var(--error)" : "var(--on-bg)") : "var(--outline-v)" }}>
                     {row.clockIn ?? "—"}
                   </td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12, color: row.clockOut ? "var(--on-bg)" : "var(--outline-v)" }}>
+                  <td style={{ fontSize: 12, color: row.clockOut ? "var(--on-bg)" : "var(--outline-v)" }}>
                     {row.clockOut ?? "—"}
                   </td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12, color: row.hours ? "var(--on-bg)" : "var(--outline-v)" }}>
+                  <td style={{ fontSize: 12, color: row.hours ? "var(--on-bg)" : "var(--outline-v)" }}>
                     {row.hours ?? "—"}
                   </td>
                   <td>

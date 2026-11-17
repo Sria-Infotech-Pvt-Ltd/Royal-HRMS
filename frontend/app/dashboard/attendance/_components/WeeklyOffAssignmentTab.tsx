@@ -13,6 +13,7 @@ import BranchFilterSelect from "@/components/BranchFilterSelect";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import DateInput from "@/components/shared/DateInput";
+import { formatDate } from "@/lib/formatDate";
 
 interface BranchOption { id: number; branch_name: string }
 
@@ -40,7 +41,7 @@ interface PaginatedAssignments {
 }
 
 const STATUS_OPTIONS = [
-  { value: "",             label: "All" },
+  { value: "",             label: "All Statuses" },
   { value: "assigned",     label: "Assigned" },
   { value: "unassigned",   label: "Not Assigned" },
 ];
@@ -207,13 +208,16 @@ export default function WeeklyOffAssignmentTab() {
               )}
               {rows.map(r => (
                 <tr key={r.employee_id}>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.employee_id}</td>
+                  <td style={{ fontSize: 12 }}>{r.employee_id}</td>
                   <td>{r.employee_name}</td>
                   <td>{r.department}</td>
                   <td>{r.branch}</td>
                   <td>{r.pattern_name ?? "—"}</td>
-                  <td>{r.effective_from ?? "—"}</td>
-                  <td>{r.effective_to ?? "-"}</td>
+                  <td>{r.effective_from ? formatDate(r.effective_from) : "—"}</td>
+                  {/* formatDate + "—" (em-dash), matching Effective From beside it — this was the
+                      raw ISO string wrapping onto two lines in the column, with a different blank
+                      mark ("-") than its own neighbor used. */}
+                  <td>{r.effective_to ? formatDate(r.effective_to) : "—"}</td>
                   <td>
                     <span className={r.status === "Assigned" ? "badge badge-success" : "badge badge-neutral"}>
                       {r.status}
@@ -267,7 +271,7 @@ export default function WeeklyOffAssignmentTab() {
           <p style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 12 }}>
             {assignTarget.employee_name} ({assignTarget.employee_id})
             {assignTarget.status === "Assigned" && (
-              <> — currently <strong>{assignTarget.pattern_name}</strong>, effective {assignTarget.effective_from}</>
+              <> — currently <strong>{assignTarget.pattern_name}</strong>, effective {formatDate(assignTarget.effective_from)}</>
             )}
           </p>
           <div className="field-group">

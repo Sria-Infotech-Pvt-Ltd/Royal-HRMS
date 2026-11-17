@@ -42,7 +42,10 @@ def _shift_end_deadline(cfg) -> time | None:
     """
     Returns the time (IST, naive) after which a missing clock-out becomes an
     un-punch: shift_end + missing_punch_grace_minutes.
-    Returns None if settings are not configured (always run detection).
+    Returns None if settings are not configured — detect_and_mark_unpunches()
+    then skips entirely rather than running (an unknown deadline must never
+    be treated as "already past it", which would flag anyone with an open
+    session as incomplete at any time of day, including mid-shift).
     """
     if not cfg or not hasattr(cfg, 'working_hours'):
         return None
@@ -92,7 +95,12 @@ def detect_and_mark_unpunches(
     deadline      = _shift_end_deadline(cfg)
     current_time  = _now_ist()
 
-    if deadline is not None and current_time <= deadline:
+    if deadline is None:
+        return {
+            'marked': 0, 'notified': 0, 'skipped': 0,
+            'reason': 'attendance_settings_not_configured',
+        }
+    if current_time <= deadline:
         return {
             'marked': 0, 'notified': 0, 'skipped': 0,
             'reason': f'shift_not_ended (deadline={deadline.strftime("%H:%M")})',

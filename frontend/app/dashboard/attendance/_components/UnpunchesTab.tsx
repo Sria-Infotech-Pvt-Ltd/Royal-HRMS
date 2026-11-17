@@ -9,6 +9,7 @@ import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import type { PaginatedUnpunches } from "@/types/attendance";
 import DateInput from "@/components/shared/DateInput";
+import AttendanceDetailDrawer from "./AttendanceDetailDrawer";
 
 interface BranchOption { id: number; branch_name: string }
 
@@ -30,6 +31,7 @@ export default function UnpunchesTab() {
   const [department, setDepartment]   = useState("");
   const [date, setDate]               = useState(new Date().toISOString().split("T")[0]);
   const [page, setPage]               = useState(1);
+  const [openRow, setOpenRow]         = useState<{ recordId: string; date: string } | null>(null);
 
   const branch = unrestricted ? branchInput : effectiveBranch;
 
@@ -42,7 +44,7 @@ export default function UnpunchesTab() {
   const listUrl = user
     ? `${API.attendance.unPunches}${toQuery({ date, branch, department, page, page_size: 20 })}`
     : null;
-  const { data, loading, error } = useFetch<PaginatedUnpunches>(listUrl);
+  const { data, loading, error, refetch } = useFetch<PaginatedUnpunches>(listUrl);
   const rows = data?.results ?? [];
 
   return (
@@ -83,27 +85,36 @@ export default function UnpunchesTab() {
                 <th>Clock In</th>
                 <th>Expected Out</th>
                 <th>Correction Status</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={7} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>Loading…</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>Loading…</td></tr>
               )}
               {!loading && rows.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>No un-punches found for this date.</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>No un-punches found for this date.</td></tr>
               )}
               {rows.map(r => (
                 <tr key={`${r.employee_id}-${r.date}`}>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.employee_id}</td>
+                  <td style={{ fontSize: 12 }}>{r.employee_id}</td>
                   <td>{r.name}</td>
                   <td>{r.branch}</td>
                   <td>{r.date}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.clock_in}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12, color: "var(--on-variant)" }}>{r.expected_out}</td>
+                  <td style={{ fontSize: 12 }}>{r.clock_in}</td>
+                  <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{r.expected_out}</td>
                   <td>
                     {r.correction_pending
                       ? <span className="badge badge-warn">Correction Submitted</span>
                       : <span className="badge badge-neutral">No Correction Filed</span>}
+                  </td>
+                  <td>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setOpenRow({ recordId: r.record_id, date: r.date })}
+                    >
+                      <i className="ti ti-edit" /> Regularize
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -125,6 +136,15 @@ export default function UnpunchesTab() {
           </div>
         )}
       </div>
+
+      {openRow && (
+        <AttendanceDetailDrawer
+          recordId={openRow.recordId}
+          date={openRow.date}
+          onClose={() => setOpenRow(null)}
+          onRecordChanged={refetch}
+        />
+      )}
     </>
   );
 }

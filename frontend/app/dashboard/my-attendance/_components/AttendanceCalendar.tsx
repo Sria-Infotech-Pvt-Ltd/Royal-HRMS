@@ -112,7 +112,7 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                   </div>
 
                   {record?.clockIn && !NON_WORKING.has(status) && (
-                    <div style={{ fontSize: 8, color: "var(--on-variant)", fontFamily: "Menlo, Consolas, monospace", lineHeight: 1.35 }}>
+                    <div style={{ fontSize: 8, color: "var(--on-variant)", lineHeight: 1.35 }}>
                       <div>{record.clockIn}</div>
                       {record.clockOut && <div>{record.clockOut}</div>}
                     </div>

@@ -24,8 +24,22 @@ interface Tab {
   badge?: number;
 }
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS   = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 function todayLabel(): string {
-  return new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  // Built by hand, not toLocaleDateString's weekday/day/month/year combo — en-IN puts a comma after
+  // the month too ("Wed, 11 Nov, 2026"), which reads oddly; this keeps the one comma after the weekday.
+  const d = new Date();
+  return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// A fixed-size skeleton in place of the number itself, instead of a "—" that's a different width —
+// the card's own layout (and the progress bar jumping from 0% to its real width) no longer shifts
+// the instant the real value pops in.
+function StatValue({ value, color, loading }: { value: number | undefined; color: string; loading: boolean }) {
+  if (loading) return <div className="skeleton" style={{ width: 36, height: 28 }} />;
+  return <div className="stat-value" style={{ color }}>{value ?? "—"}</div>;
 }
 
 export default function AttendanceDetailClient({ initialTab, onBack }: { initialTab?: string; onBack?: () => void }) {
@@ -74,7 +88,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
   const dashboardUrl = user
     ? `${API.attendance.dashboard}${effectiveBranch ? `?branch=${encodeURIComponent(effectiveBranch)}` : ""}`
     : null;
-  const { data: dashboard, refetch: refetchDashboard } = useFetch<DashboardData>(dashboardUrl);
+  const { data: dashboard, loading: dashboardLoading, refetch: refetchDashboard } = useFetch<DashboardData>(dashboardUrl);
 
   // Pending counts come from the caller's own review queue (the dashboard stats are cached per branch, not per user).
   const pendingUrl = user ? `${API.attendance.corrections}?status=pending&page_size=1` : null;
@@ -137,7 +151,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
             <div>
               <div className="stat-label">Present Today</div>
-              <div className="stat-value" style={{ color: "var(--success)" }}>{cards?.present_today ?? "—"}</div>
+              <StatValue value={cards?.present_today} color="var(--success)" loading={dashboardLoading} />
               <div className="stat-sub">of {total} employees</div>
             </div>
             <div className="stat-icon si-success"><i className="ti ti-user-check" /></div>
@@ -151,7 +165,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
             <div>
               <div className="stat-label">Absent</div>
-              <div className="stat-value" style={{ color: "var(--error)" }}>{cards?.absent ?? "—"}</div>
+              <StatValue value={cards?.absent} color="var(--error)" loading={dashboardLoading} />
               <div className="stat-sub">No check-in recorded</div>
             </div>
             <div className="stat-icon si-error"><i className="ti ti-user-off" /></div>
@@ -165,7 +179,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
             <div>
               <div className="stat-label">Late Arrivals</div>
-              <div className="stat-value" style={{ color: "var(--warn)" }}>{cards?.late_arrivals ?? "—"}</div>
+              <StatValue value={cards?.late_arrivals} color="var(--warn)" loading={dashboardLoading} />
               <div className="stat-sub">Arrived after 09:15</div>
             </div>
             <div className="stat-icon si-warn"><i className="ti ti-clock-exclamation" /></div>
@@ -179,7 +193,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
             <div>
               <div className="stat-label">On Leave</div>
-              <div className="stat-value" style={{ color: "var(--info)" }}>{cards?.on_leave ?? "—"}</div>
+              <StatValue value={cards?.on_leave} color="var(--info)" loading={dashboardLoading} />
               <div className="stat-sub">Approved leave</div>
             </div>
             <div className="stat-icon si-info"><i className="ti ti-calendar-event" /></div>

@@ -8,6 +8,7 @@ import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
 import type { AttendanceAuditEntry, AttendanceDetail, CorrectionReviewAction, CorrectionStatus, PaginatedCorrections, PunchType } from "@/types/attendance";
 import { AttendanceEditForm } from "./AttendanceEditForm";
+import { formatDate } from "@/lib/formatDate";
 
 interface Props {
   recordId:         string;
@@ -24,6 +25,9 @@ const STATUS_BADGE: Record<string, string> = {
   half_day:   "badge badge-primary",
   weekly_off: "badge badge-neutral",
   holiday:    "badge badge-neutral",
+  // Matches the Month View calendar's own orange for this status (close to --warn), instead of
+  // falling back to the generic grey neutral badge it got from being absent here.
+  incomplete: "badge badge-warn",
 };
 
 const CORRECTION_STATUS_BADGE: Record<CorrectionStatus, string> = {
@@ -52,6 +56,16 @@ const AUDIT_EVENT_BADGE: Record<string, string> = {
   INVALID_PUNCH_DISCARDED: "badge badge-error",
   INVALID_PUNCH_CONVERTED: "badge badge-success",
 };
+
+// clock_out reads "—" whenever the day's last raw punch is an IN (an open
+// session) — correct on the backend (there's genuinely no "left for the
+// day" time yet), but shown bare it looks like a contradiction next to the
+// punch history below, which may well list earlier, already-completed OUT
+// punches from prior sessions that same day. Name what's actually open.
+function openSessionSince(data: AttendanceDetail): string | null {
+  const last = data.punches[data.punches.length - 1];
+  return last && last.punch_type === "IN" ? last.time : null;
+}
 
 function formatEventLabel(event: string): string {
   return event
@@ -153,7 +167,7 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
                   )}
                 </div>
               </div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: editing ? 16 : 0 }}>{date}</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: editing ? 16 : 0 }}>{formatDate(date)}</div>
 
               {/* Edit form */}
               {editing && (
@@ -182,19 +196,23 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
               <div className="form-row cols-2" style={{ marginBottom: 8 }}>
                 <div>
                   <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Clock In</div>
-                  <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 13 }}>{data.clock_in}</div>
+                  <div style={{ fontSize: 13 }}>{data.clock_in}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Clock Out</div>
-                  <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 13 }}>{data.clock_out}</div>
+                  <div style={{ fontSize: 13 }}>
+                    {openSessionSince(data) ? (
+                      <span style={{ color: "var(--warn)" }}>Open since {openSessionSince(data)}</span>
+                    ) : data.clock_out}
+                  </div>
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Total Hours</div>
-                  <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 13 }}>{data.total_hours}</div>
+                  <div style={{ fontSize: 13 }}>{data.total_hours}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Overtime</div>
-                  <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 13 }}>{data.overtime}</div>
+                  <div style={{ fontSize: 13 }}>{data.overtime}</div>
                 </div>
               </div>
 
@@ -210,7 +228,10 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
               )}
 
               {data.note && (
-                <div className="alert alert-info mb-16">
+                // Late/incomplete notes ("Missing clock-out — shift ended without a punch-out.",
+                // "Grace exceeded") flag a real problem and read oddly in the same calm blue as a
+                // genuinely neutral note (a holiday's name, "Weekly off") — amber for those two statuses.
+                <div className={`alert ${data.status_key === "late" || data.status_key === "incomplete" ? "alert-warn" : "alert-info"} mb-16`}>
                   <i className="ti ti-note" /> <span>{data.note}</span>
                 </div>
               )}
@@ -227,7 +248,7 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
                     />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>
-                        {p.punch_type} <span style={{ fontFamily: "Menlo, Consolas, monospace", fontWeight: 400 }}>{p.time}</span>
+                        {p.punch_type} <span style={{ fontWeight: 400 }}>{p.time}</span>
                       </div>
                       <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
                         {p.source} · {p.mode}

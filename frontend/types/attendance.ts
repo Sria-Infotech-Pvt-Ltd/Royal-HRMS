@@ -229,6 +229,7 @@ export interface InvalidPunchConvertPayload {
 }
 
 export interface UnpunchRow {
+  record_id:           string;
   employee_id:         string;
   name:                string;
   initials:            string;

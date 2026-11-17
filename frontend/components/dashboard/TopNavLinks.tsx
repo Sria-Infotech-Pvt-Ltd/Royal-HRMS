@@ -39,7 +39,7 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
   return (
     <>
       <nav className="nav-desktop h-full min-w-0 flex-1 items-center gap-0.5" aria-label="Main">
-        {bar.map(entry => {
+        {bar.map((entry, entryIndex) => {
           if (entry.kind === "link") {
             const { item } = entry;
             return (
@@ -51,6 +51,10 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
           const isOpen = menu.openKey === entry.id;
           const isCurrent = entry.items.some(item => item.id === activeNavId);
           const isTwoColumn = entry.items.length > TWO_COLUMN_THRESHOLD;
+          // A panel anchored to its button's left edge runs off the right side of the screen for whichever
+          // section sits in the second half of the bar (confirmed on "Time & Pay"/"System"); anchoring to the
+          // right edge instead for that half keeps every panel on-screen without measuring actual positions.
+          const anchorRight = entryIndex >= bar.length / 2;
           return (
             <div key={entry.id} className="relative flex h-full items-center" {...{ [MENU_ATTRIBUTE]: "" }} onMouseEnter={() => menu.switchTo(entry.id)}>
               <button
@@ -65,7 +69,7 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
                 <i className={`ti ${isOpen ? "ti-chevron-up" : "ti-chevron-down"}`} style={{ fontSize: 12 }} />
               </button>
               {isOpen && (
-                <div className={`${PANEL_CLASS} left-0 ${isTwoColumn ? "w-[520px]" : "w-[300px]"}`} role="menu" aria-label={entry.title} style={PANEL_STYLE}>
+                <div className={`${PANEL_CLASS} ${anchorRight ? "right-0" : "left-0"} ${isTwoColumn ? "w-[520px]" : "w-[300px]"}`} role="menu" aria-label={entry.title} style={PANEL_STYLE}>
                   <PanelHeader title={entry.title} count={entry.items.length} />
                   <NavMenuItems items={entry.items} activeNavId={activeNavId} onSelect={select} isTwoColumn={isTwoColumn} />
                 </div>

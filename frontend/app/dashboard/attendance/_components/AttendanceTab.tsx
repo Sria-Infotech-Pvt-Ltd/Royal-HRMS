@@ -34,6 +34,9 @@ const STATUS_BADGE: Record<string, string> = {
   half_day:   "badge badge-primary",
   weekly_off: "badge badge-neutral",
   holiday:    "badge badge-neutral",
+  // Missing here entirely before — fell back to the generic grey neutral badge, while the Month View
+  // calendar already colors this status its own orange (#c2410c, close to --warn's own #a2620c).
+  incomplete: "badge badge-warn",
 };
 
 const CHIP_CONFIG: { key: keyof DashboardData["summary_chips"]; label: string; color: string }[] = [
@@ -251,14 +254,14 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
                   </td>
                   <td>{r.department}</td>
                   <td>{r.branch}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12, color: r.clock_in === "—" ? "var(--outline-v)" : r.is_late ? "var(--error)" : "var(--on-bg)" }}>
+                  <td style={{ fontSize: 12, color: r.clock_in === "—" ? "var(--outline-v)" : r.is_late ? "var(--error)" : "var(--on-bg)" }}>
                     {r.clock_in}
                   </td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12, color: r.clock_out === "—" ? "var(--outline-v)" : "var(--on-bg)" }}>
+                  <td style={{ fontSize: 12, color: r.clock_out === "—" ? "var(--outline-v)" : "var(--on-bg)" }}>
                     {r.clock_out}
                   </td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.total_hours}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12, color: r.ot === "—" ? "var(--outline-v)" : "var(--success)" }}>{r.ot}</td>
+                  <td style={{ fontSize: 12 }}>{r.total_hours}</td>
+                  <td style={{ fontSize: 12, color: r.ot === "—" ? "var(--outline-v)" : "var(--success)" }}>{r.ot}</td>
                   <td><span className={STATUS_BADGE[r.status_key] ?? "badge badge-neutral"}>{r.status}</span></td>
                   <td>
                     <button

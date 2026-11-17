@@ -227,6 +227,19 @@ a {
   margin-top: 4px;
 }
 
+/* Reusable loading placeholder, sized to fill its own space so a card's
+   layout doesn't jump once the real value/width pops in. */
+.skeleton {
+  display: inline-block;
+  border-radius: 4px;
+  background: var(--outline-v);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
 .stat-icon {
   width: 32px;
   height: 32px;
@@ -376,7 +389,9 @@ tr:hover td {
 }
 
 .btn-sm {
-  padding: 5px 12px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 12px;
   font-size: 12px;
 }
 
@@ -708,7 +723,9 @@ textarea.field-input {
 
 .tab.active {
   color: var(--on-bg);
-  font-weight: 700;
+  /* No font-weight bump here on purpose — 600 to 700 shifted each label's
+     width just enough to nudge every tab after it sideways on selection.
+     Color + the border-bottom below already carry the active state. */
   border-bottom-color: var(--on-bg);
 }
 
@@ -885,6 +902,15 @@ textarea.field-input {
   flex-wrap: wrap;
 }
 
+/* Scoped to filter rows, not .field-input globally — a textarea or a tall
+   multi-line field elsewhere still needs its own natural height. Matches
+   .btn-sm's fixed 36px so date pickers, selects and buttons in the same
+   toolbar row line up instead of each rendering at a different height. */
+.filter-bar .field-input {
+  height: 36px;
+  box-sizing: border-box;
+}
+
 /* Empty state */
 .empty-state {
   text-align: center;
@@ -1032,7 +1058,9 @@ textarea.field-input {
 /* Toast */
 .toast-container {
   position: fixed;
-  top: 24px;
+  /* Clears .topnav's 64px height + a gap — at top:24px a toast rendered on top of (not below) the
+     header, since its z-index (9999) is deliberately higher so it stays visible over everything else. */
+  top: 76px;
   right: 24px;
   z-index: 9999;
   display: flex;

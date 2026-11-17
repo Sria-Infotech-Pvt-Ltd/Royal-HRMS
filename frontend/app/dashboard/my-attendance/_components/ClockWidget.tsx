@@ -174,7 +174,7 @@ export default function ClockWidget() {
                 return (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "4px 8px", background: "var(--bg-low)", borderRadius: 6 }}>
                     <span style={{ fontWeight: 700, color: p.type === "IN" ? "var(--success)" : "var(--error)", minWidth: 30 }}>{p.type}</span>
-                    <span style={{ fontFamily: "Menlo, Consolas, monospace", color: "var(--on-bg)" }}>{p.time}</span>
+                    <span style={{ color: "var(--on-bg)" }}>{p.time}</span>
                     <span title={dot.title} style={{ width: 7, height: 7, borderRadius: "50%", background: dot.color, display: "inline-block", flexShrink: 0 }} />
                     <span style={{ color: "var(--on-variant)", fontSize: 11 }}>{p.attendance_mode}</span>
                   </div>

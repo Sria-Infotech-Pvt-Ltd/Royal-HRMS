@@ -13,7 +13,9 @@ interface Props {
 export default function LeaveHandoverFields({ form, onChange }: Props) {
   const hasContent = !!(form.handover_to || form.contact_during_leave || form.handover_notes);
   return (
-    <details className="group rounded-lg border border-[var(--outline-v)]" open={hasContent}>
+    // mb-4 matches LeaveSupportingDocument/ApprovalChainPreview's own spacing — without it, this sat
+    // flush against the approval-chain preview right after it, with no visible gap between the two.
+    <details className="group mb-4 rounded-lg border border-[var(--outline-v)]" open={hasContent}>
       <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-2.5 text-[13px] font-semibold text-[var(--on-bg)]">
         <span>Handover &amp; contact <span className="ml-1 text-xs font-normal text-[var(--on-variant)]">Optional</span></span>
         <i className="ti ti-chevron-down text-[var(--on-variant)] transition-transform group-open:rotate-180" />

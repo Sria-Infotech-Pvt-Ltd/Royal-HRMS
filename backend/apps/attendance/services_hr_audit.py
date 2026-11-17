@@ -247,6 +247,7 @@ def get_unpunches(
 
     return [
         {
+            'record_id':          str(r.id),
             'employee_id':        r.employee.employee_id or '',
             'name':               r.employee.full_name or '',
             'initials':           _initials(r.employee.full_name or ''),

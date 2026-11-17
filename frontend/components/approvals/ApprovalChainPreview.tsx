@@ -18,7 +18,20 @@ interface Props {
 
 /** Who will approve this leave request, stage by stage, shown before it is submitted. */
 export default function ApprovalChainPreview({ chain, loading, acknowledged, onAcknowledge }: Props) {
-  if (loading) return <p style={{ color: "var(--on-variant)", fontSize: 13 }}>Checking who will approve this request…</p>;
+  if (loading) {
+    // Sized close to the typical 2-stage loaded card (header + 2 rows) rather than one short line of
+    // text — the real card loading in at a very different height was pushing everything below it
+    // (Submit included) down the instant it arrived, easy to miss if you'd already started reading on.
+    return (
+      <div className="rvcard" style={{ marginBottom: 16 }}>
+        <h4><i className="ti ti-route" /> WHO WILL APPROVE THIS REQUEST</h4>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+          <div className="skeleton" style={{ width: "70%", height: 14 }} />
+          <div className="skeleton" style={{ width: "55%", height: 14 }} />
+        </div>
+      </div>
+    );
+  }
   if (!chain) return null;
   return (
     <div className="rvcard" style={{ marginBottom: 16 }}>

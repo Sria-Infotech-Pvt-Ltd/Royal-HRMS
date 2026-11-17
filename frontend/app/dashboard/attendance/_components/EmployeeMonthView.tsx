@@ -54,7 +54,10 @@ interface EmpListResponse {
 const STATUS_COLOR: Record<string, string> = {
   present: "#15803d", late: "#b45309", half_day: "#1d4ed8",
   on_leave: "#6d28d9", weekly_off: "var(--on-variant)", holiday: "#0f766e",
-  absent: "#b91c1c", incomplete: "#c2410c", no_record: "var(--on-variant)",
+  absent: "#b91c1c", incomplete: "#c2410c",
+  // "no_record" is the one that needs attention — a past working day with
+  // nothing on file. "future"/"pre_joining" are expected blanks, not gaps.
+  no_record: "#b45309", future: "var(--on-variant)", pre_joining: "var(--on-variant)",
 };
 
 const STATUS_BG: Record<string, string> = {
@@ -62,12 +65,19 @@ const STATUS_BG: Record<string, string> = {
   half_day: "rgba(29,78,216,0.10)", on_leave: "rgba(109,40,217,0.10)",
   weekly_off: "rgba(0,0,0,0.03)", holiday: "rgba(15,118,110,0.10)",
   absent: "rgba(185,28,28,0.10)", incomplete: "rgba(194,65,12,0.10)",
+  no_record: "rgba(180,83,9,0.06)", future: "transparent", pre_joining: "transparent",
 };
 
 const STATUS_SHORT: Record<string, string> = {
   present: "P", late: "Late", half_day: "½", on_leave: "OL",
-  weekly_off: "WO", holiday: "Hol", absent: "A", incomplete: "Inc", no_record: "—",
+  weekly_off: "WO", holiday: "Hol", absent: "A", incomplete: "Inc",
+  no_record: "—", future: "", pre_joining: "",
 };
+
+// Days with nothing applicable (not yet happened, or before this employee
+// joined) read the same muted/reduced-opacity treatment as weekly off and
+// holiday — only a genuine gap (no_record) should draw the eye.
+const MUTED_STATUSES = new Set(["weekly_off", "holiday", "future", "pre_joining"]);
 
 const DAY_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -150,6 +160,7 @@ export default function EmployeeMonthView({ initialEmployee, initialMonth }: Pro
   const { data, loading, error, refetch: refetchMonth } = useFetch<MonthData>(calUrl);
 
   const grid = data ? buildGrid(data.days, month) : [];
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   function pickEmployee(emp: EmployeeOption) {
     setSelected(emp);
@@ -271,14 +282,19 @@ export default function EmployeeMonthView({ initialEmployee, initialMonth }: Pro
                   <div
                     key={di}
                     onClick={() => day && handleDayClick(day)}
+                    title={day?.status_label}
                     style={{
                       padding: "8px 10px",
                       minHeight: 72,
                       background: day ? (STATUS_BG[day.status] ?? "transparent") : "transparent",
                       borderRight: di < 6 ? "1px solid var(--outline-v)" : "none",
                       cursor: day ? "pointer" : "default",
-                      opacity: day?.status === "weekly_off" || day?.status === "holiday" ? 0.45 : 1,
-                      outline: day?.is_flagged ? `2px solid ${STATUS_COLOR[day.status]}` : "none",
+                      opacity: day && MUTED_STATUSES.has(day.status) ? 0.45 : 1,
+                      outline: day?.is_flagged
+                        ? `2px solid ${STATUS_COLOR[day.status]}`
+                        : day?.date === todayIso
+                          ? "2px solid var(--primary)"
+                          : "none",
                       outlineOffset: -2,
                       borderRadius: 0,
                       transition: "background 0.1s",

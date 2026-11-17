@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePermission } from "@/hooks/usePermission";
 import Modal from "@/components/Modal";
 import LeaveDashboard, { LeaveBalanceStats } from "./_components/LeaveDashboard";
 import ApplyLeaveForm from "./_components/ApplyLeaveForm";
@@ -32,6 +33,10 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
   const [showApply,    setShowApply]    = useState(initialTab === "apply");
   const [showCalendar, setShowCalendar] = useState(initialTab === "calendar");
   const [showAnalytics, setShowAnalytics] = useState(initialTab === "analytics");
+  // The approval inbox/team-balance view lives on its own page (Approvals >
+  // Team Approvals), not here — this is just a pointer to it for whoever's
+  // looking for it from the Leave page, same as a manager or HR would.
+  const canApprove = usePermission("leave.approve");
 
   return (
     <div>
@@ -45,10 +50,17 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
               <i className="ti ti-arrow-left" /> Back to overview
             </button>
           )}
-          <div className="page-title">Leave</div>
+          {/* Full label, matching every other page (e.g. Organization Management) — navConfig's
+              shorter topNavLabel ("Leave") is for the compact top nav only, not the page itself. */}
+          <div className="page-title">Leave Management</div>
           <div className="page-sub">Balances, requests, holidays and team coverage.</div>
         </div>
         <div className="page-actions" style={{ display: "flex", gap: 8 }}>
+          {canApprove && (
+            <a href="/dashboard/approvals" className="btn btn-ghost" suppressHydrationWarning>
+              <i className="ti ti-checklist" style={{ marginRight: 5 }} /> Team approvals
+            </a>
+          )}
           <button className="btn btn-filled" onClick={() => setShowApply(true)} suppressHydrationWarning>
             Request leave
           </button>
