@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -9,7 +10,16 @@ import ItemsModal from "./_components/ItemsModal";
 import EmployeeMyAssessments from "./_components/EmployeeMyAssessments";
 import AssessmentResultsPanel from "./_components/AssessmentResultsPanel";
 import AssignAssessmentModal from "./_components/AssignAssessmentModal";
-import Modal from "@/components/Modal";
+import AssessmentsHeader from "./_components/AssessmentsHeader";
+import AssessmentStats from "./_components/AssessmentStats";
+import AssessmentToolbar from "./_components/AssessmentToolbar";
+import AssessmentCard from "./_components/AssessmentCard";
+import AssessmentEmptyState from "./_components/AssessmentEmptyState";
+import AssessmentFormModal from "./_components/AssessmentFormModal";
+import type { buildAssessmentPayload } from "@/lib/assessmentForm";
+import AssessmentTemplatePicker from "./_components/AssessmentTemplatePicker";
+import type { AssessmentTemplate } from "@/lib/assessmentTemplates";
+import { filterAssessments, hasActiveFilters, summarize, type SortKey, type StateFilter } from "@/lib/assessmentFilters";
 import {
   EMPTY, apiErr,
   type AssessmentSettings, type Assessment, type AssignEmployee,
@@ -41,7 +51,7 @@ export default function AssessmentsPage() {
   const { data, loading, error, refetch } = useFetch<{ results: Assessment[] }>(
     isAdminView ? API.assessments.list : null
   );
-  const assessments = data?.results ?? [];
+  const assessments = useMemo(() => data?.results ?? [], [data]);
 
   const { data: settingsData } = useFetch<AssessmentSettings>(
     isAdminView ? API.settings.assessmentConfig : null
@@ -82,18 +92,28 @@ export default function AssessmentsPage() {
     e.employee_id.toLowerCase().includes(assignSearch.toLowerCase())
   );
 
-  // ── Overall stats ──────────────────────────────────────────────────────────
+  // ── Overview, search / filter / sort ───────────────────────────────────────
 
-  const totalAssigned    = assessments.reduce((s, a) => s + (a.assigned_count    ?? 0), 0);
-  const totalPending     = assessments.reduce((s, a) => s + (a.pending_count     ?? 0), 0);
-  const totalInProgress  = assessments.reduce((s, a) => s + (a.in_progress_count ?? 0), 0);
-  const totalCompleted   = assessments.reduce((s, a) => s + (a.completed_count   ?? 0), 0);
+  const router = useRouter();
+  const [search,      setSearch]      = useState("");
+  const [stateFilter, setStateFilter] = useState<StateFilter>("");
+  const [sort,        setSort]        = useState<SortKey>("newest");
+  const totals  = useMemo(() => summarize(assessments), [assessments]);
+  const visible = useMemo(() => filterAssessments(assessments, search, stateFilter, sort), [assessments, search, stateFilter, sort]);
+  const hasFilters = hasActiveFilters(search, stateFilter);
+  const clearFilters = () => { setSearch(""); setStateFilter(""); };
+  const goBack = () => {
+    if (window.history.length > 1) router.back();
+    else router.push("/dashboard");
+  };
 
   // ── Assessment CRUD ────────────────────────────────────────────────────────
 
-  function openCreate() {
+  function openCreate(template?: AssessmentTemplate) {
     setForm({
       ...EMPTY,
+      title:           template?.formTitle ?? "",
+      description:     template?.formDescription ?? "",
       pass_percentage: String(settingsData?.default_pass_percentage ?? 70),
       max_attempts:    "",
       time_limit_mins: settingsData?.time_limit_mins ? String(settingsData.time_limit_mins) : "",
@@ -110,22 +130,11 @@ export default function AssessmentsPage() {
     setFormErr(""); setFormModal({ open: true, target: a });
   }
 
-  async function saveAssessment() {
-    if (!form.title.trim()) { setFormErr("Title is required."); return; }
+  async function saveAssessment(payload: ReturnType<typeof buildAssessmentPayload>) {
     setSaving(true); setFormErr("");
-    const payload = {
-      title:          form.title,
-      description:    form.description,
-      is_active:      form.is_active,
-      is_default:     false, // assessments are never auto-assigned; HR assigns them explicitly
-      pass_percentage: Number(form.pass_percentage) || 70,
-      max_attempts:   form.max_attempts !== "" ? Number(form.max_attempts) : null,
-      time_limit_mins: form.time_limit_mins !== "" ? Number(form.time_limit_mins) : null,
-    };
     try {
-      formModal.target
-        ? await clientApi.put(API.assessments.detail(formModal.target.id), payload)
-        : await clientApi.post(API.assessments.list, payload);
+      if (formModal.target) await clientApi.put(API.assessments.detail(formModal.target.id), payload);
+      else await clientApi.post(API.assessments.list, payload);
       refetch();
       setFormModal({ open: false, target: null });
     } catch (e) { setFormErr(apiErr(e)); }
@@ -183,192 +192,79 @@ export default function AssessmentsPage() {
   if (!isAdminView) return <EmployeeMyAssessments />;
 
   return (
-    <>
+    <div className="cand-page">
+      <AssessmentsHeader onBack={goBack} />
 
-      {/* Page header */}
-      <div className="page-header">
-        <div>
-          <h2 className="page-title">Assessment Management</h2>
-          <p className="page-sub">Build pre-onboarding assessments and assign them to candidates</p>
-        </div>
-        <div className="page-actions">
-          {canCreate && (
-            <button className="btn btn-filled" onClick={openCreate}>
-              <i className="ti ti-plus" /> New Assessment
-            </button>
-          )}
-        </div>
-      </div>
+      <AssessmentStats totals={totals} isLoading={loading} />
 
-      {/* Overall stats */}
-      {!loading && assessments.length > 0 && (
-        <div className="stats-grid">
-          {[
-            { label: "Total Assigned",    value: totalAssigned,   icon: "ti-users",        color: "var(--primary)" },
-            { label: "Pending",           value: totalPending,    icon: "ti-clock",        color: "#d97706" },
-            { label: "In Progress",       value: totalInProgress, icon: "ti-pencil",       color: "#0284c7" },
-            { label: "Completed",         value: totalCompleted,  icon: "ti-circle-check", color: "#16a34a" },
-          ].map(s => (
-            <div key={s.label} className="card" style={{ padding: "16px 20px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: `color-mix(in srgb, ${s.color} 12%, transparent)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <i className={`ti ${s.icon}`} style={{ color: s.color, fontSize: 18 }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
-                  <div className="text-xs text-[var(--on-variant)]" style={{ marginTop: 3 }}>{s.label}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+      {assessments.length > 0 && (
+        <AssessmentToolbar
+          search={search} onSearch={setSearch} state={stateFilter} onState={setStateFilter} sort={sort} onSort={setSort}
+          shown={visible.length} total={assessments.length} hasFilters={hasFilters} onClear={clearFilters}
+        />
       )}
 
-      {error && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{error}</div></div>}
+      {error && (
+        <div className="alert alert-error"><i className="ti ti-alert-circle" /><div>{error}</div>
+          <button type="button" className="btn-link" style={{ marginLeft: "auto" }} onClick={refetch}>Try again</button>
+        </div>
+      )}
       {deleteErr && (
-        <div className="alert alert-error mb-16" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="alert alert-error" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <i className="ti ti-alert-circle" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1 }}>{deleteErr}</div>
-          <button
-            onClick={() => setDeleteErr("")}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "inherit" }}
-           aria-label="Close">
+          <button onClick={() => setDeleteErr("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "inherit" }} aria-label="Close">
             <i className="ti ti-x" style={{ fontSize: 14 }} />
           </button>
         </div>
       )}
 
       {loading ? (
-        <div className="text-center py-20"><i className="ti ti-loader-2 spin" style={{ fontSize: 28 }} /></div>
-      ) : assessments.length === 0 ? (
-        <div className="empty-state">
-          <i className="ti ti-clipboard" />
-          <h3>No assessments yet</h3>
-          <p>Create your first assessment to assign to candidates during onboarding.</p>
-          {canCreate && <button className="btn btn-filled mt-12" onClick={openCreate}>Create Assessment</button>}
+        <div className="asm-list" role="status" aria-label="Loading assessments">
+          {[0, 1, 2].map(row => <div key={row} className="asm-skeleton" />)}
         </div>
+      ) : visible.length === 0 ? (
+        error ? null : (
+          <AssessmentEmptyState isFiltered={assessments.length > 0 && hasFilters} canCreate={canCreate} onCreate={openCreate} onClear={clearFilters} />
+        )
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {assessments.map(a => (
-            <div key={a.id} className="card">
-              <div className="card-body">
-
-                {/* Assessment header row */}
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: expandedId === a.id ? 14 : 0 }}>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-8 flex-wrap mb-4">
-                      <span className="font-semibold text-[var(--on-bg)]">{a.title}</span>
-                      {a.is_active  && <span className="badge badge-success">Active</span>}
-                    </div>
-                    {a.description && <p className="text-sm text-[var(--on-variant)] mb-4">{a.description}</p>}
-                    <div className="flex items-center gap-12 flex-wrap" style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                      <span><i className="ti ti-percentage mr-4" />{a.pass_percentage}% pass</span>
-                      <span><i className="ti ti-refresh mr-4" />{a.effective_max_attempts === 0 ? "Unlimited" : `${a.effective_max_attempts} attempt${a.effective_max_attempts !== 1 ? "s" : ""}`}{a.max_attempts == null ? " (global)" : ""}</span>
-                      <span><i className="ti ti-clock mr-4" />{a.effective_time_limit_mins ? `${a.effective_time_limit_mins} min` : "No limit"}{a.time_limit_mins == null && a.effective_time_limit_mins ? " (global)" : ""}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-8 flex-wrap shrink-0">
-                    <button className="btn btn-ghost btn-sm" onClick={() => toggleResults(a.id)}>
-                      <i className={`ti ${expandedId === a.id ? "ti-chevron-up" : "ti-chevron-down"}`} /> Results
-                    </button>
-                    {canEdit && (
-                      <button className="btn btn-ghost btn-sm" onClick={() => setItemsFor(a)}>
-                        <i className="ti ti-layout-list" /> Sections
-                      </button>
-                    )}
-                    {canEdit && (
-                      <button className="btn btn-ghost btn-sm" onClick={() => openAssign(a)}>
-                        <i className="ti ti-user-plus" /> Assign
-                      </button>
-                    )}
-                    {canEdit && (
-                      <button className="btn btn-ghost btn-sm" title="Edit assessment" onClick={() => openEdit(a)} aria-label="Edit assessment">
-                        <i className="ti ti-pencil" />
-                      </button>
-                    )}
-                    {canDelete && (
-                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title="Delete assessment" onClick={() => deleteAssessment(a.id)} aria-label="Delete assessment">
-                        <i className="ti ti-trash" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Expandable results: stats + candidate log */}
-                {expandedId === a.id && (
-                  <AssessmentResultsPanel
-                    assessment={a}
-                    expandedBreakdown={expandedBreakdown}
-                    onToggleBreakdown={id => setExpandedBreakdown(prev => prev === id ? null : id)}
-                  />
-                )}
-
-              </div>
-            </div>
+        <div className="asm-list">
+          {visible.map(a => (
+            <AssessmentCard
+              key={a.id}
+              assessment={a}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              isExpanded={expandedId === a.id}
+              onToggleResults={() => toggleResults(a.id)}
+              onSections={() => setItemsFor(a)}
+              onAssign={() => openAssign(a)}
+              onEdit={() => openEdit(a)}
+              onDelete={() => deleteAssessment(a.id)}
+            >
+              <AssessmentResultsPanel
+                assessment={a}
+                expandedBreakdown={expandedBreakdown}
+                onToggleBreakdown={id => setExpandedBreakdown(prev => prev === id ? null : id)}
+              />
+            </AssessmentCard>
           ))}
+          {canCreate && !hasFilters && <AssessmentTemplatePicker variant="compact" onPick={openCreate} />}
         </div>
       )}
 
       {/* ── Assessment create / edit modal ── */}
       {formModal.open && (
-        <Modal
-          title={formModal.target ? "Edit Assessment" : "New Assessment"}
+        <AssessmentFormModal
+          isEditing={formModal.target !== null}
+          form={form}
+          onChange={setForm}
+          serverError={formErr}
+          isSaving={saving}
+          defaults={{ maxAttempts: settingsData?.max_attempts, timeLimitMins: settingsData?.time_limit_mins }}
+          onSave={saveAssessment}
           onClose={() => setFormModal({ open: false, target: null })}
-          maxWidth={500}
-          footer={
-            <>
-              <button className="btn btn-ghost" onClick={() => setFormModal({ open: false, target: null })}>Cancel</button>
-              <button className="btn btn-primary" onClick={saveAssessment} disabled={saving}>
-                {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save"}
-              </button>
-            </>
-          }
-        >
-              {formErr && <div className="alert alert-error mb-12"><i className="ti ti-alert-circle" /><div>{formErr}</div></div>}
-              <div className="field-group mb-12">
-                <label className="field-label">Title *</label>
-                <input className="field-input" value={form.title} placeholder="e.g. Onboarding Assessment"
-                  onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
-              </div>
-              <div className="field-group mb-12">
-                <label className="field-label">Description</label>
-                <textarea className="field-input" rows={2} value={form.description}
-                  onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-                <div className="field-group mb-0">
-                  <label className="field-label">Pass % *</label>
-                  <input type="number" min={1} max={100} className="field-input"
-                    value={form.pass_percentage}
-                    onChange={e => setForm(p => ({ ...p, pass_percentage: e.target.value }))}
-                    placeholder="70" />
-                </div>
-                <div className="field-group mb-0">
-                  <label className="field-label">Max Attempts</label>
-                  <input type="number" min={0} className="field-input"
-                    value={form.max_attempts}
-                    onChange={e => setForm(p => ({ ...p, max_attempts: e.target.value }))}
-                    placeholder="Use global (0=∞)" />
-                </div>
-                <div className="field-group mb-0">
-                  <label className="field-label">Time Limit (min)</label>
-                  <input type="number" min={1} className="field-input"
-                    value={form.time_limit_mins}
-                    onChange={e => setForm(p => ({ ...p, time_limit_mins: e.target.value }))}
-                    placeholder="None" />
-                </div>
-              </div>
-              <div style={{ fontSize: ".72rem", color: "var(--on-variant)", marginBottom: 12 }}>
-                Leave Max Attempts / Time Limit blank to inherit the global default from Settings → Assessment Config.
-              </div>
-              <div className="flex gap-20">
-                <label className="flex items-center gap-8 cursor-pointer text-sm">
-                  <input type="checkbox" checked={form.is_active}
-                    onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} />
-                  Active
-                </label>
-              </div>
-        </Modal>
+        />
       )}
 
       {/* ── Assign modal ── */}
@@ -400,6 +296,6 @@ export default function AssessmentsPage() {
           onClose={() => { setItemsFor(null); refetch(); }}
         />
       )}
-    </>
+    </div>
   );
 }
