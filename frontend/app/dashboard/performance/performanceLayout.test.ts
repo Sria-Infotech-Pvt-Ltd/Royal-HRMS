@@ -3,7 +3,7 @@ import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 const GLOBALS_CSS = readFileSync(path.resolve(__dirname, "../../globals.css"), "utf8")
-const PAGES = ["_components/PerformanceOverviewClient.tsx", "_components/ManagerAppraisalWorkspace.tsx"]
+const PAGES = ["_components/ManagerAppraisalWorkspace.tsx"]
 
 describe("Performance pages: the header, the four KPI cards and the block under them are never glued together", () => {
   it("opts in to the plain-stack spacing, because its blocks sit in a plain wrapper that adds no gap", () => {

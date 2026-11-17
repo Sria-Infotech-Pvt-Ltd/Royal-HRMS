@@ -11,7 +11,7 @@
 import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import type { ApiReview } from "../_client";
+import type { ApiReview } from "@/types/performanceHub";
 
 interface Props {
   review: ApiReview;
