@@ -84,6 +84,59 @@ def sync_code_defined_permissions() -> dict:
     return {'created': created, 'unchanged': unchanged}
 
 
+# Permission templates every installation starts with (apply one to a position in Settings > Access > Permission templates).
+# Least privilege: only what acting as an approver needs, no edit / delete / payroll / sensitive-data access.
+#  - attendance.create is the gate attendance corrections check for BOTH levels (services_hr_corrections), so both hold it; it
+#    also allows entering attendance by hand, which is why it is called out here instead of being hidden.
+#  - timesheet.approve is the HR fallback approver's permission; an assigned manager does not need it, so only L2 has it.
+#  - can_manage_team is what puts a manager's own approvals in their L1 queue.
+DEFAULT_PERMISSION_TEMPLATES = [
+    {
+        'name': 'L1 Approver',
+        'description': 'First-level approver (the team manager): approves leave, expense, work-from-home and attendance-correction requests.',
+        'can_manage_team': True,
+        'permissions': [
+            'employees.view', 'attendance.view', 'attendance.create',
+            'leave.approve', 'expenses.approve', 'wfh.approve',
+        ],
+    },
+    {
+        'name': 'L2 Approver (HR)',
+        'description': 'Second-level (HR) approver: the same approvals as L1, plus weekly timesheets, without team-manager scope.',
+        'can_manage_team': False,
+        'permissions': [
+            'employees.view', 'attendance.view', 'attendance.create',
+            'leave.approve', 'expenses.approve', 'wfh.approve', 'timesheet.approve',
+        ],
+    },
+]
+
+
+def sync_default_permission_templates() -> dict:
+    """Create the default templates that are missing. An existing template (same name) is NEVER changed, so an admin's edits
+    survive every migrate; a default that was deleted comes back, the same as a code-defined permission would."""
+    import logging
+
+    from apps.accounts.models import Permission, PermissionTemplate
+
+    created = unchanged = 0
+    for spec in DEFAULT_PERMISSION_TEMPLATES:
+        template, was_created = PermissionTemplate.objects.get_or_create(
+            name=spec['name'],
+            defaults={'description': spec['description'], 'can_manage_team': spec['can_manage_team'], 'can_manage_branch': False},
+        )
+        if not was_created:
+            unchanged += 1
+            continue
+        found = list(Permission.objects.filter(codename__in=spec['permissions']))
+        template.permissions.set(found)
+        missing = set(spec['permissions']) - {permission.codename for permission in found}
+        if missing:
+            logging.getLogger(__name__).warning('Default template %r is missing permission(s): %s', spec['name'], ', '.join(sorted(missing)))
+        created += 1
+    return {'created': created, 'unchanged': unchanged}
+
+
 def sync() -> dict:
     entity = generate_entity_permissions()
     code = sync_code_defined_permissions()

@@ -57,7 +57,10 @@ class PermissionTemplateCrudTests(TestCase):
         PermissionTemplate.objects.create(name='B')
         resp = self.client.get(reverse('permission-template-list'))
         self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertEqual({t['name'] for t in resp.data['data']}, {'A', 'B'})
+        names = {t['name'] for t in resp.data['data']}
+        self.assertTrue({'A', 'B'} <= names, names)
+        # The default approver templates are created after every migrate, so they are listed too.
+        self.assertTrue({'L1 Approver', 'L2 Approver (HR)'} <= names, names)
 
     def test_update_template(self):
         template = PermissionTemplate.objects.create(name='HR')

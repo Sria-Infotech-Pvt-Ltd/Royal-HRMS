@@ -6025,3 +6025,19 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Verified:** 63 database-free backend tests pass (18 new), 122 frontend test files / 979 tests pass, `tsc` and `eslint` clean, `manage.py check` clean, single migration leaf `0225`, `npm run build` passes. Migration `0225` was applied to the LOCAL dev database (`hrms_dev`) and the rule data / eligible people / an employee's chain were checked read-only there. **Not verified:** saving a rule through the real API and the page in a browser; any other environment. **Every environment must run `python manage.py migrate accounts` before this code is used, or the Approval Rules page fails (missing column).**
 
 **Not changed:** the page still lists three workflows (leave, expense, attendance correction: `_WORKFLOW_ORDER`); Work From Home and Weekly Timesheet rules are not on it. The Django version differs between the `backend/H` venv (5.1.15) and the system Python (6.0.4); cached pickled models raise a harmless version warning.
+
+## Default L1 / L2 approver permission templates (2026-11-17)
+
+**Why:** to make someone an L1 or L2 approver, HR had to build a permission bundle by hand. Two templates now exist on every installation; HR applies one to the position of whoever should approve (Settings > Access > Templates > Apply).
+
+**What:** `permissions_registry.DEFAULT_PERMISSION_TEMPLATES`, created by `sync_permissions` (which runs after every migrate, after the permissions themselves) through `sync_default_permission_templates()`.
+- **L1 Approver** (`can_manage_team`): `employees.view`, `attendance.view`, `attendance.create`, `leave.approve`, `expenses.approve`, `wfh.approve`.
+- **L2 Approver (HR)** (not a team manager): the same, plus `timesheet.approve`.
+- Why these: attendance corrections check `attendance.create` at BOTH levels (`services_hr_corrections`), so both hold it (note it also allows entering attendance by hand); `timesheet.approve` is the HR fallback approver's permission, a manager does not need it; `can_manage_team` is what puts a manager's approvals in their L1 queue. Nothing for edit / delete / payroll / sensitive data / settings (a test fails if one is added).
+- An existing template with the same name is NEVER changed (an admin's edits survive every migrate). A default that was deleted comes back on the next migrate.
+
+**Careful:** applying a template REPLACES the position's current permissions (anything not in the template is removed) and forces its holders to log in again; it is a one-time stamp, not a live link. Nothing was applied to anyone.
+
+**Tests:** 13 database-free tests (`tests_default_permission_templates.py`). `tests_permission_templates.py::test_list_returns_all_templates` used to assert the list was exactly {A, B}; it now asserts A and B and the two defaults are present (not run: needs a database).
+
+**Verified:** 75 database-free backend tests, `manage.py check`, and `sync_permissions` run twice on the local dev database (created 2, then changed nothing). **Not verified:** the template screens in a browser; the changed list test. The local dev database also holds two older, empty, hand-made templates ("L1 Manager", "L2 manager"); they were not touched.
