@@ -799,7 +799,7 @@ main>div:has(>.wf-dashboard){padding:0}
 
 /* Workforce dashboard — compact variant. Scoped to .wf-compact so the module overview pages that share the wf-* classes keep
    their current sizes. Tighter cards, smaller numbers, slimmer rows. */
-.wf-compact{gap:14px;padding:16px 24px 36px}
+.wf-compact{gap:14px;padding:16px 28px 36px}
 .wf-compact .wf-stats{gap:12px}
 .wf-compact .wf-kpi{padding:12px 14px;gap:4px;border-radius:12px}
 .wf-compact .wf-kpi-num{font-size:24px;min-height:28px}
