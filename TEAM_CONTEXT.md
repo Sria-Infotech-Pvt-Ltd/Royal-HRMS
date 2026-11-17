@@ -5920,3 +5920,23 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Overtime:** the default threshold is now 8.50 worked hours (shift length minus the break), so overtime starts at shift end: 9:00 to 19:00 gives 60 minutes. Migration `0051` lowers existing settings only when the threshold equals the shift length exactly (the old clash: 9.00 with a 9:00-18:00 shift and a break), to shift length minus break; a threshold the company chose, settings with no break, and overnight shifts are untouched. The Overtime select in Settings now offers 8.5 hours.
 
 **Not done:** past attendance records are not recalculated (reprocess a date or month from HR attendance if needed); the "Late" count on the HR dashboard and the Late list now show only days that stayed Late; the arrival is still visible through `is_late` and the note.
+
+## Recalculate existing attendance days after a Punch Rules change (2026-11-17)
+
+**Why:** a day keeps its stored status until something re-processes it, so changing the full-day / half-day minimum, break or grace in Attendance Config only affects later days. The existing `POST /api/attendance/reprocess/` rebuilds a day purely from the punch log (one date per call, needs Celery), so a day with no punches (leave, HR import, manual entry) would turn **Absent**. New safe tool instead.
+
+**What it does:** `python manage.py recalculate_attendance_status [--month YYYY-MM] [--employee-id CODE] [--apply]`. Default is a **preview** that writes nothing: it prints the settings in use (full-day min, half-day min, break, grace), counts by status move (for example `half_day -> present`), skip reasons and the first 40 rows. `--apply` writes the same selection and one `RECALCULATED` audit entry per record. Default period is the current month up to today; a future month is an error.
+- Only a day with a Present / Late / Half Day record **and** real IN/OUT punches (last punch is OUT) is considered, and it is computed with `AttendanceProcessorService._calculate`, the same function live punches use (one rule, not two).
+- Never touched: leave, holiday, weekly off, absent, incomplete, open sessions (still clocked in), days with a `MANUALLY_EDITED` audit entry, days inside a Paid or Closed payroll cycle. A note written by a person is kept; only notes the calculation wrote ("Grace exceeded...", "Late arrival...") are refreshed. `--apply` only updates a record whose status is still what the preview saw.
+- A stricter rule can turn a Present day into Half Day; the preview shows both directions.
+
+**Files:** `apps/attendance/services_recalculate.py` (logic), `apps/attendance/management/commands/recalculate_attendance_status.py`, `apps/attendance/tests_recalculate_attendance.py` (9 tests, `SimpleTestCase`, no database).
+
+**Verified:** the 24 database-free backend tests pass (9 new), `manage.py check` clean, the command loads, `npm run build` passes. **Not verified:** the database queries (record lookup, payroll-lock check, audit write) and `--apply` have not run against any database. Run the preview on the server first and read it before `--apply`. Dashboard counts can take a few minutes to refresh.
+
+**Findings recorded here, NOT changed:**
+- The HR attendance import (`services_hr_ops.py` lines ~391 and ~697) hardcodes `minutes >= 240` => Present else Absent: it ignores Punch Rules and the break deduction and never produces Half Day, so it disagrees with live punching.
+- Fallback numbers are duplicated in code instead of read from the model defaults (`services_attendance.py` 480/240 min, 30 min early-exit grace, 8 h shift; `services_unpunch.py` 8 h and 18:00), used only when no attendance settings row exists.
+- `half_day_minimum_minutes` / `full_day_minimum_minutes` on `Shift` (`models_shift.py`) are never read.
+- Grace only sets the Late flag; it does not lower the hours needed for a full day, so the full-day minimum should be shift length minus lunch minus grace (for 09:00-18:00, 1 h lunch, 20 min grace: 7.67 h).
+- When staff punch out and in for lunch, the gap is already excluded and the fixed break is subtracted again (double deduction); set the break to 0 for such teams.
