@@ -106,6 +106,23 @@ def _credentials() -> tuple[str, str] | None:
     return (base_url.rstrip('/'), api_key) if base_url and api_key else None
 
 
+def _describe_pull_failure(exc: Exception, base_url: str) -> str:
+    """One plain sentence for the Project Budgeting sync page. The raw exception text (connection-pool class names, memory
+    addresses, the whole URL) stays in the server log; it is unreadable in a table and is not what an admin acts on."""
+    if isinstance(exc, requests.ConnectTimeout):
+        return f'Project Budgeting at {base_url} did not answer (connection timed out). Is it running and reachable?'
+    if isinstance(exc, requests.ConnectionError):
+        return f'Could not connect to Project Budgeting at {base_url}. Is it running and reachable?'
+    if isinstance(exc, requests.Timeout):
+        return f'Project Budgeting at {base_url} took too long to reply.'
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        code = exc.response.status_code
+        if code in (401, 403):
+            return f'Project Budgeting rejected the API key (HTTP {code}).'
+        return f'Project Budgeting returned an error (HTTP {code}).'
+    return 'Project Budgeting sent a reply AIRA could not read.'
+
+
 def _get_all_pages(path: str, params: dict, *, budget_seconds: float | None = None) -> list[dict]:
     """Every row from a paginated Project Budgeting list, or ProjectSyncError (callers must not act on partial data).
 
@@ -130,7 +147,8 @@ def _get_all_pages(path: str, params: dict, *, budget_seconds: float | None = No
             rows.extend(data['results'])
             total_pages = int(data['total_pages'])
         except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
-            raise ProjectSyncError(f'Pull of {path} failed on page {page}: {exc}') from exc
+            logger.warning('Pull of %s failed on page %s: %s', path, page, exc)
+            raise ProjectSyncError(_describe_pull_failure(exc, base_url)) from exc
         if page >= total_pages:
             return rows
     raise ProjectSyncError(f'Pull of {path} exceeded {PULL_MAX_PAGES} pages.')
