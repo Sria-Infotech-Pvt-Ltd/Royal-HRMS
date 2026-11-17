@@ -1316,15 +1316,24 @@ def _ensure_default_rules():
     ])
 
 
-def _serialize_rule(rule: ApprovalWorkflowRule) -> dict:
-    return {
+def _serialize_rule(rule: ApprovalWorkflowRule, *, with_options: bool = False) -> dict:
+    """A global rule for the Approval Rules page. `with_options` adds everyone who may be named as its approver (people holding
+    the workflow's approve capability) so the page can offer them next to "Reporting manager" and "HR partner"."""
+    from apps.accounts.services_approval import rule_stage_label
+    data = {
         'workflow_type':      rule.workflow_type,
         'workflow_label':     rule.get_workflow_type_display(),
         'l1_approver_kind':   rule.l1_approver_kind,
-        'l1_approver_label':  rule.get_l1_approver_kind_display(),
+        'l1_approver_label':  rule_stage_label(rule, 'l1'),
+        'l1_approver_user_id': str(rule.l1_approver_user_id) if rule.l1_approver_user_id else None,
         'l2_approver_kind':   rule.l2_approver_kind,
-        'l2_approver_label':  rule.get_l2_approver_kind_display(),
+        'l2_approver_label':  rule_stage_label(rule, 'l2') if rule.l2_approver_kind else '',
+        'l2_approver_user_id': str(rule.l2_approver_user_id) if rule.l2_approver_user_id else None,
     }
+    if with_options:
+        from apps.accounts.services_approver_assignment import rule_person_options
+        data['eligible_approvers'] = rule_person_options(rule.workflow_type)
+    return data
 
 
 def _resolve_rule_approver(kind, employee):
@@ -1346,12 +1355,26 @@ def _resolve_rule_approver(kind, employee):
     return None
 
 
+def _rule_label(rule, level: str) -> str:
+    from apps.accounts.services_approval import rule_stage_label
+    return rule_stage_label(rule, level)
+
+
+def _matrix_rule_approver(rule, level: str, employee):
+    """_resolve_rule_approver for a relationship kind; the named person for a 'person' rule (same check as the request chain)."""
+    kind = rule.l1_approver_kind if level == 'l1' else rule.l2_approver_kind
+    if kind == ApprovalWorkflowRule.APPROVER_PERSON:
+        from apps.accounts.services_approval import resolve_rule_approver
+        return resolve_rule_approver(rule, level, employee)
+    return _resolve_rule_approver(kind, employee)
+
+
 def _build_matrix_row(rule: ApprovalWorkflowRule, override, employee=None) -> dict:
     # Per-employee override takes priority; otherwise resolve from employee's FK fields
     if override and override.l1_override:
         l1_id, l1_name, l1_is_override = str(override.l1_override.id), override.l1_override.full_name, True
     else:
-        l1_user = _resolve_rule_approver(rule.l1_approver_kind, employee) if employee else None
+        l1_user = _matrix_rule_approver(rule, 'l1', employee) if employee else None
         l1_id   = str(l1_user.id) if l1_user else None
         l1_name = l1_user.full_name if l1_user else None
         l1_is_override = False
@@ -1359,7 +1382,7 @@ def _build_matrix_row(rule: ApprovalWorkflowRule, override, employee=None) -> di
     if override and override.l2_override:
         l2_id, l2_name, l2_is_override = str(override.l2_override.id), override.l2_override.full_name, True
     else:
-        l2_user = _resolve_rule_approver(rule.l2_approver_kind, employee) if employee else None
+        l2_user = _matrix_rule_approver(rule, 'l2', employee) if employee else None
         l2_id   = str(l2_user.id) if l2_user else None
         l2_name = l2_user.full_name if l2_user else None
         l2_is_override = False
@@ -1368,12 +1391,12 @@ def _build_matrix_row(rule: ApprovalWorkflowRule, override, employee=None) -> di
         'workflow_type':     rule.workflow_type,
         'workflow_label':    rule.get_workflow_type_display(),
         'l1_approver_kind':  rule.l1_approver_kind,
-        'l1_approver_label': rule.get_l1_approver_kind_display(),
+        'l1_approver_label': _rule_label(rule, 'l1'),
         'l1_approver_id':    l1_id,
         'l1_approver_name':  l1_name,
         'l1_is_override':    l1_is_override,
         'l2_approver_kind':  rule.l2_approver_kind,
-        'l2_approver_label': rule.get_l2_approver_kind_display(),
+        'l2_approver_label': _rule_label(rule, 'l2'),
         'l2_approver_id':    l2_id,
         'l2_approver_name':  l2_name,
         'l2_is_override':    l2_is_override,

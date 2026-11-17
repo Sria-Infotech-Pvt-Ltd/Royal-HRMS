@@ -128,6 +128,25 @@ from apps.accounts.views.shared import *  # noqa: F401,F403
 
 
 
+def _named_approvers(data: dict) -> tuple[dict, str]:
+    """({'l1': User, 'l2': User} for each level whose kind is 'person', error text or ''). A person who may not approve this
+    workflow (inactive, no employee record, missing its approve capability) is refused here, exactly as the dropdown would not
+    have offered them."""
+    from apps.accounts.services_approver_assignment import rule_person_refusal
+    named: dict = {}
+    for level in ('l1', 'l2'):
+        if data.get(f'{level}_approver_kind') != ApprovalWorkflowRule.APPROVER_PERSON:
+            continue
+        person = User.objects.filter(pk=data.get(f'{level}_approver_user')).first()
+        if person is None:
+            return {}, 'The selected person was not found.'
+        refusal = rule_person_refusal(person, data['workflow_type'])
+        if refusal:
+            return {}, refusal
+        named[level] = person
+    return named, ''
+
+
 class ApprovalWorkflowRuleView(APIView):
     """GET all global workflow rules; PATCH a single rule."""
     permission_classes = [IsAuthenticated, CanManageRoles]
@@ -136,7 +155,7 @@ class ApprovalWorkflowRuleView(APIView):
         _ensure_default_rules()
         from core.cache_service import ApprovalWorkflowCacheService
         data = [
-            _serialize_rule(rule)
+            _serialize_rule(rule, with_options=True)
             for wf in _WORKFLOW_ORDER
             if (rule := ApprovalWorkflowCacheService.get_rule(wf)) is not None
         ]
@@ -150,11 +169,19 @@ class ApprovalWorkflowRuleView(APIView):
         data = serializer.validated_data
         _ensure_default_rules()
 
+        named, refusal = _named_approvers(data)
+        if refusal:
+            return error(refusal)
+
         rule = ApprovalWorkflowRule.objects.get(workflow_type=data['workflow_type'])
         rule.l1_approver_kind = data['l1_approver_kind']
         rule.l2_approver_kind = data.get('l2_approver_kind') or ''
+        rule.l1_approver_user = named.get('l1')
+        rule.l2_approver_user = named.get('l2')
         rule.updated_by       = request.user
-        rule.save(update_fields=['l1_approver_kind', 'l2_approver_kind', 'updated_by', 'updated_at'])
+        rule.save(update_fields=[
+            'l1_approver_kind', 'l2_approver_kind', 'l1_approver_user', 'l2_approver_user', 'updated_by', 'updated_at',
+        ])
 
         from core.cache_service import ApprovalWorkflowCacheService
         ApprovalWorkflowCacheService.invalidate(data['workflow_type'])

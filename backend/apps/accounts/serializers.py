@@ -2481,6 +2481,15 @@ class ApprovalWorkflowRuleUpdateSerializer(serializers.Serializer):
     workflow_type    = serializers.ChoiceField(choices=[c[0] for c in _Rule.WORKFLOW_CHOICES])
     l1_approver_kind = serializers.ChoiceField(choices=[c[0] for c in _Rule.APPROVER_CHOICES])
     l2_approver_kind = serializers.ChoiceField(choices=[c[0] for c in _Rule.APPROVER_CHOICES], required=False, allow_blank=True, default='')
+    # Which person, when the matching kind is 'person'; ignored (and cleared) for every other kind.
+    l1_approver_user = serializers.UUIDField(required=False, allow_null=True, default=None)
+    l2_approver_user = serializers.UUIDField(required=False, allow_null=True, default=None)
+
+    def validate(self, attrs: dict) -> dict:
+        for level in ('l1', 'l2'):
+            if attrs.get(f'{level}_approver_kind') == self._Rule.APPROVER_PERSON and not attrs.get(f'{level}_approver_user'):
+                raise serializers.ValidationError({f'{level}_approver_user': 'Choose the person who approves at this level.'})
+        return attrs
 
 
 # ── Employee Bulk Import ───────────────────────────────────────────────────────

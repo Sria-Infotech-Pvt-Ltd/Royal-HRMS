@@ -5,14 +5,10 @@ import { useRouter } from "next/navigation";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
-import type { GlobalApprovalRule, ApprovalWorkflowType, ApproverKind } from "@/types/approvalMatrix";
+import type { GlobalApprovalRule, ApprovalWorkflowType, ApprovalRulePerson } from "@/types/approvalMatrix";
+import { buildApproverOptions, fromSelectValue, toSelectValue } from "@/lib/approvalRuleOptions";
 import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
-
-const APPROVER_OPTIONS: { value: ApproverKind; label: string }[] = [
-  { value: "reporting_manager", label: "Reporting manager" },
-  { value: "hr",                label: "HR partner" },
-];
 
 const WORKFLOW_ICONS: Record<string, string> = {
   leave:                 "ti-beach",
@@ -22,10 +18,14 @@ const WORKFLOW_ICONS: Record<string, string> = {
 };
 
 interface EditState {
-  workflow_type:    ApprovalWorkflowType;
-  workflow_label:   string;
-  l1_approver_kind: ApproverKind;
-  l2_approver_kind: ApproverKind;
+  workflow_type:  ApprovalWorkflowType;
+  workflow_label: string;
+  /** Dropdown values: "reporting_manager", "hr", "person:<id>" or "". */
+  l1_choice:      string;
+  l2_choice:      string;
+  eligible:       ApprovalRulePerson[];
+  l1_saved:       { userId: string | null; label: string } | null;
+  l2_saved:       { userId: string | null; label: string } | null;
 }
 
 export default function ApprovalRulesPage() {
@@ -41,10 +41,13 @@ export default function ApprovalRulesPage() {
 
   function openEdit(rule: GlobalApprovalRule) {
     setEditing({
-      workflow_type:    rule.workflow_type,
-      workflow_label:   rule.workflow_label,
-      l1_approver_kind: rule.l1_approver_kind,
-      l2_approver_kind: rule.l2_approver_kind,
+      workflow_type:  rule.workflow_type,
+      workflow_label: rule.workflow_label,
+      l1_choice:      toSelectValue(rule.l1_approver_kind, rule.l1_approver_user_id),
+      l2_choice:      toSelectValue(rule.l2_approver_kind, rule.l2_approver_user_id),
+      eligible:       rule.eligible_approvers ?? [],
+      l1_saved:       { userId: rule.l1_approver_user_id, label: rule.l1_approver_label },
+      l2_saved:       { userId: rule.l2_approver_user_id, label: rule.l2_approver_label },
     });
     setApiError("");
   }
@@ -54,10 +57,14 @@ export default function ApprovalRulesPage() {
     setSaving(true);
     setApiError("");
     try {
+      const l1 = fromSelectValue(editing.l1_choice);
+      const l2 = fromSelectValue(editing.l2_choice);
       await clientApi.patch(API.settings.approvalRules, {
         workflow_type:    editing.workflow_type,
-        l1_approver_kind: editing.l1_approver_kind,
-        l2_approver_kind: editing.l2_approver_kind,
+        l1_approver_kind: l1.kind,
+        l1_approver_user: l1.userId,
+        l2_approver_kind: l2.kind,
+        l2_approver_user: l2.userId,
       });
       refetch();
       setEditing(null);
@@ -158,7 +165,7 @@ export default function ApprovalRulesPage() {
               <button
                 className="btn btn-primary"
                 onClick={handleSave}
-                disabled={saving || !editing.l1_approver_kind}
+                disabled={saving || !editing.l1_choice}
               >
                 {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save Rule"}
               </button>
@@ -174,10 +181,10 @@ export default function ApprovalRulesPage() {
           <div className="field-group mb-16">
             <label className="field-label">L1 approver *</label>
             <SearchableSelect
-              value={editing.l1_approver_kind}
-              onChange={v => setEditing(prev => prev ? { ...prev, l1_approver_kind: v as ApproverKind } : prev)}
+              value={editing.l1_choice}
+              onChange={v => setEditing(prev => prev ? { ...prev, l1_choice: v } : prev)}
               placeholder="— Select who approves —"
-              options={APPROVER_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+              options={buildApproverOptions(editing.eligible, editing.l1_saved)}
               inputClassName="field-input"
             />
           </div>
@@ -188,10 +195,10 @@ export default function ApprovalRulesPage() {
               <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>(leave blank for single-level)</span>
             </label>
             <SearchableSelect
-              value={editing.l2_approver_kind}
-              onChange={v => setEditing(prev => prev ? { ...prev, l2_approver_kind: v as ApproverKind } : prev)}
+              value={editing.l2_choice}
+              onChange={v => setEditing(prev => prev ? { ...prev, l2_choice: v } : prev)}
               placeholder="— Single level (no L2) —"
-              options={APPROVER_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+              options={buildApproverOptions(editing.eligible, editing.l2_saved)}
               inputClassName="field-input"
             />
           </div>

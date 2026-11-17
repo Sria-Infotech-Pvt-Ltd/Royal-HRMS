@@ -38,9 +38,11 @@ def _employee_for(actor, employee_id: str):
 def _rule_payload() -> dict:
     """What an empty L1 / L2 choice means: the global approval rule for leave. A screen uses it to say so; it never assumes
     L1 is the reporting manager unless the rule says that."""
+    from apps.accounts.services_approval import rule_stage_label
+
     rule = ApprovalWorkflowCacheService.get_rule(LEAVE)
     return {
-        'l1': rule.get_l1_approver_kind_display() if rule else '', 'l2': rule.get_l2_approver_kind_display() if rule else '',
+        'l1': rule_stage_label(rule, 'l1') if rule else '', 'l2': rule_stage_label(rule, 'l2') if rule and rule.l2_approver_kind else '',
         'l1_kind': rule.l1_approver_kind if rule else '', 'l2_kind': rule.l2_approver_kind if rule else '',
     }
 

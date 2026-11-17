@@ -33,6 +33,44 @@ def _usable_override(approver: 'User | None', employee: 'User') -> 'User | None'
     return approver if approver is not None and approver.is_active and approver.pk != employee.pk else None
 
 
+def _named_person(rule, level: str) -> 'User | None':
+    """The person a rule names for `level` ('l1' | 'l2') when its kind is 'person', else None. Fetched fresh (not through the
+    cached rule's related object) so a deactivated or deleted person is noticed straight away."""
+    from apps.accounts.models import ApprovalWorkflowRule, User
+
+    kind = rule.l1_approver_kind if level == 'l1' else rule.l2_approver_kind
+    person_id = rule.l1_approver_user_id if level == 'l1' else rule.l2_approver_user_id
+    if kind != ApprovalWorkflowRule.APPROVER_PERSON or not person_id:
+        return None
+    return User.objects.filter(pk=person_id).first()
+
+
+def resolve_rule_approver(rule, level: str, employee: 'User') -> 'User | None':
+    """Who one level ('l1' | 'l2') of a global rule resolves to for `employee`.
+
+    'reporting_manager' and 'hr' resolve by relationship (resolve_approver). 'person' is the one named user: active, and
+    never the requester themself. If the named L1 IS the requester, that level falls back to their reporting manager (they
+    cannot approve their own request); any other unusable named person gives None, and the caller's existing fallback runs
+    (for L2 that is resolve_approver_route), so a request is never left waiting on nobody.
+    """
+    kind = rule.l1_approver_kind if level == 'l1' else rule.l2_approver_kind
+    if kind != 'person':
+        return resolve_approver(kind, employee)
+    person = _named_person(rule, level)
+    if person is not None and person.pk == employee.pk and level == 'l1':
+        return resolve_approver('reporting_manager', employee)
+    return _usable_override(person, employee)
+
+
+def rule_stage_label(rule, level: str) -> str:
+    """Text for a rule's L1 / L2 on a screen: 'Reporting manager', 'HR partner', or the named person's name."""
+    kind = rule.l1_approver_kind if level == 'l1' else rule.l2_approver_kind
+    if kind == 'person':
+        person = _named_person(rule, level)
+        return (person.full_name or person.email) if person is not None else 'A specific person (not chosen)'
+    return rule.get_l1_approver_kind_display() if level == 'l1' else rule.get_l2_approver_kind_display()
+
+
 def resolve_approval_chain(employee: 'User', workflow_type: str) -> tuple:
     """
     Return (l1_approver, l2_approver) for the given employee and workflow.
@@ -54,8 +92,8 @@ def resolve_approval_chain(employee: 'User', workflow_type: str) -> tuple:
     if not rule:
         return l1, l2
 
-    l1 = l1 or resolve_approver(rule.l1_approver_kind, employee)
-    l2 = l2 or resolve_approver(rule.l2_approver_kind, employee)
+    l1 = l1 or resolve_rule_approver(rule, 'l1', employee)
+    l2 = l2 or resolve_rule_approver(rule, 'l2', employee)
     if l2 is None:
         # The HR stage must never be left with nobody: fall back along the configured chain (reporting approver, branch HR,
         # company HR/admin). The manager is excluded because that is the first stage, not this one.

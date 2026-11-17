@@ -29,6 +29,12 @@ LABELS = {KIND_REPORTING_MANAGER: 'reporting manager', KIND_L1: 'L1 approver', K
 FIELD_KINDS = {'reporting_manager_id': KIND_REPORTING_MANAGER, 'l1_approver_id': KIND_L1, 'hr_id': KIND_L2_HR}
 _MAX_CHAIN_DEPTH = 100
 _OPTION_SCAN_LIMIT = 300
+# The capability whoever acts on a request of each workflow must hold. Attendance corrections are decided on the leave
+# approval screens, so they use the leave capability.
+WORKFLOW_APPROVE_PERMISSION = {
+    'leave': 'leave.approve', 'attendance_correction': 'leave.approve', 'expense': 'expenses.approve',
+    'wfh': 'wfh.approve', 'timesheet': 'timesheet.approve',
+}
 
 
 class AssignmentError(Exception):
@@ -163,3 +169,31 @@ def assign_approvers(actor: User, employee: User, data: dict, *, ip_address: str
                 changes={'employee': employee.employee_id, **changes}, branch=employee.branch or '', ip_address=ip_address,
             )
     return changes
+
+
+def rule_person_refusal(candidate: User, workflow_type: str) -> str | None:
+    """Why `candidate` cannot be the named approver of a global `workflow_type` rule, or None."""
+    name = _name(candidate)
+    if not candidate.is_active:
+        return f'{name} is inactive and cannot be an approver.'
+    if not candidate.employee_id:
+        return f'{name} has no employee record and cannot be an approver.'
+    codename = WORKFLOW_APPROVE_PERMISSION.get(workflow_type, APPROVER_PERMISSION)
+    if not has_perm(candidate, codename):
+        return f'{name} cannot approve this kind of request (missing {codename}).'
+    return None
+
+
+def rule_person_options(workflow_type: str) -> list[dict]:
+    """Everyone who may be named as the approver of a `workflow_type` rule: active people holding that workflow's approve
+    capability (and superusers). Each was checked against rule_person_refusal(), the same check a save applies."""
+    codename = WORKFLOW_APPROVE_PERMISSION.get(workflow_type, APPROVER_PERMISSION)
+    pool = (
+        User.objects.filter(is_active=True).exclude(employee_id='')
+        .filter(users_with_permission(codename) | Q(is_superuser=True))
+        .order_by('full_name')[:_OPTION_SCAN_LIMIT]
+    )
+    people = [u for u in pool if rule_person_refusal(u, workflow_type) is None]
+    from apps.accounts.services_placement import org_unit_names_for
+    units = org_unit_names_for([u.pk for u in people])
+    return [{**user_ref(u), 'department': units.get(u.pk) or u.department} for u in people]

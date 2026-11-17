@@ -3011,12 +3011,18 @@ class ApprovalWorkflowRule(models.Model):
     # their reporting manager, or their assigned HR partner. Blank = no approver at that level.
     APPROVER_REPORTING_MANAGER = 'reporting_manager'
     APPROVER_HR                = 'hr'
+    APPROVER_PERSON            = 'person'   # one named person (see l1_approver_user / l2_approver_user)
     APPROVER_CHOICES = [
         (APPROVER_REPORTING_MANAGER, 'Reporting manager'),
         (APPROVER_HR,                'HR partner'),
+        (APPROVER_PERSON,            'A specific person'),
     ]
     l1_approver_kind = models.CharField(max_length=20, choices=APPROVER_CHOICES, blank=True, default='')
     l2_approver_kind = models.CharField(max_length=20, choices=APPROVER_CHOICES, blank=True, default='')
+    # Only used when the matching kind is 'person'. SET_NULL: if that person is ever deleted the level has nobody named,
+    # which resolve_rule_approver treats like any other missing approver (it falls back, it never blocks a request).
+    l1_approver_user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    l2_approver_user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
                      User,

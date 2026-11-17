@@ -10,7 +10,7 @@ from __future__ import annotations
 from django.db.models import Q
 
 from apps.accounts.models import EmployeeApprovalOverride, User
-from apps.accounts.services_approval import resolve_approval_chain
+from apps.accounts.services_approval import _named_person, resolve_approval_chain
 from apps.accounts.services_approver_assignment import APPROVER_PERMISSION, LEAVE, user_ref
 from apps.accounts.services_reporting_line import resolve_manager_with_source
 from core.access import can_manage_team, users_with_permission
@@ -32,7 +32,11 @@ def _inactive_assignments(employee: User, workflow: str) -> dict[str, User]:
     rule = ApprovalWorkflowCacheService.get_rule(workflow)
     manual_manager = employee.reporting_manager if rule and rule.l1_approver_kind == 'reporting_manager' and not employee.reporting_manager_from_org_chart else None
     hr_partner = employee.hr if rule and rule.l2_approver_kind == 'hr' else None
-    candidates = {'l1': (override.l1_override if override else None) or manual_manager, 'l2': (override.l2_override if override else None) or hr_partner}
+    named = _named_person
+    candidates = {
+        'l1': (override.l1_override if override else None) or manual_manager or (named(rule, 'l1') if rule else None),
+        'l2': (override.l2_override if override else None) or hr_partner or (named(rule, 'l2') if rule else None),
+    }
     for stage, person in candidates.items():
         if person is not None and not person.is_active:
             found[stage] = person
