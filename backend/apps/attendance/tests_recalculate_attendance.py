@@ -7,7 +7,7 @@ from unittest import mock
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase
 
-from apps.attendance.management.commands.recalculate_attendance_status import _month_range
+from apps.attendance.management.commands.recalculate_attendance_status import _month_range, _period
 from apps.attendance.models import AttendancePunch, AttendanceRecord
 from apps.attendance.services_recalculate import RecalcPlan, _is_calculated_note, plan_record_change
 
@@ -105,3 +105,14 @@ class SupportingFunctionTests(SimpleTestCase):
             for bad in ('November', '2026-13', '2027-01'):
                 with self.assertRaises(CommandError):
                     _month_range(bad)
+
+    def test_from_month_covers_every_month_up_to_the_end_month(self):
+        with mock.patch('apps.attendance.management.commands.recalculate_attendance_status.timezone.localdate', return_value=date(2026, 11, 16)):
+            self.assertEqual(_period('2026-04', ''), (date(2026, 4, 1), date(2026, 11, 16)))
+            self.assertEqual(_period('2026-04', '2026-09'), (date(2026, 4, 1), date(2026, 9, 30)))
+            self.assertEqual(_period('', '2026-10'), (date(2026, 10, 1), date(2026, 10, 31)))
+
+    def test_from_month_after_the_end_month_is_refused(self):
+        with mock.patch('apps.attendance.management.commands.recalculate_attendance_status.timezone.localdate', return_value=date(2026, 11, 16)):
+            with self.assertRaises(CommandError):
+                _period('2026-11', '2026-09')

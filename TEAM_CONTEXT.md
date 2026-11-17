@@ -5940,3 +5940,16 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 - `half_day_minimum_minutes` / `full_day_minimum_minutes` on `Shift` (`models_shift.py`) are never read.
 - Grace only sets the Late flag; it does not lower the hours needed for a full day, so the full-day minimum should be shift length minus lunch minus grace (for 09:00-18:00, 1 h lunch, 20 min grace: 7.67 h).
 - When staff punch out and in for lunch, the gap is already excluded and the fixed break is subtracted again (double deduction); set the break to 0 for such teams.
+
+
+## Reprocessing past attendance with the new late and overtime rules (2026-11-17)
+
+**By:** New-AI session - **Branch:** New-AI. Backend only. Tests: `attendance/tests_recalculate_attendance.py` (+2) and `tests_late_forgiveness.py` pass (29). `npm run build` run before the push. Follows the late-forgiveness entry above.
+
+**What exists:** `python manage.py recalculate_attendance_status` (preview unless `--apply`; `services_recalculate.py`) recalculates Present / Late / Half Day for existing days with the CURRENT settings through `AttendanceProcessorService._calculate`, so past days now get the "late arrival forgiven once the full hours are worked" rule and the new overtime threshold. It only touches days that already have a Present / Late / Half Day record with real IN and OUT punches, were not edited by hand, and are not in a Paid or Closed payroll cycle; every change gets an audit entry.
+
+**Added:** `--from-month YYYY-MM` so one run covers every month from there up to `--month` (default: now), instead of one month at a time. Example: `python manage.py recalculate_attendance_status --from-month 2026-04` to preview, the same with `--apply` to write.
+
+**Ran on the local dev database:** nothing to change (1 record, already correct). It has not been run on the live server: run the preview there first, check the moves (expected: Late -> Present for late arrivals that completed the full hours, and overtime minutes up where the threshold moved from 9 to 8.5), then `--apply`. Days inside Paid or Closed payroll cycles are skipped, so already-paid LOP is not rewritten.
+
+**Dev note:** the local server briefly returned 500 on `/api/attendance/settings/` ("column ...forgive_late_when_full_hours does not exist") because `migrate attendance` had not yet been applied to the database that server was using; the Django used by the server is the one in `backend/H` (5.1.15).

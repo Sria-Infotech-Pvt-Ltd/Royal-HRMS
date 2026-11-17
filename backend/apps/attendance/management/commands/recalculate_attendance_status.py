@@ -4,6 +4,7 @@ Recalculate Present / Late / Half Day for existing days with the CURRENT attenda
 Preview first (writes nothing):
     python manage.py recalculate_attendance_status                      # this month so far
     python manage.py recalculate_attendance_status --month 2026-10
+    python manage.py recalculate_attendance_status --from-month 2026-04 --month 2026-11   # every month from April to November
     python manage.py recalculate_attendance_status --employee-id <employee code>
 
 Then apply the same selection:
@@ -45,6 +46,18 @@ def _month_range(month: str) -> tuple[date, date]:
     return first, min(last, today)
 
 
+def _period(from_month: str, month: str) -> tuple[date, date]:
+    """The days to look at: one month (default: this month so far), or every month from --from-month up to --month (default: now)."""
+    start, end = _month_range(month)
+    if not from_month:
+        return start, end
+    first, _last = _month_range(from_month)
+    first = first.replace(day=1)
+    if first > end:
+        raise CommandError('--from-month must not be later than --month.')
+    return first, end
+
+
 def _describe_settings(cfg) -> str:
     if cfg is None or not hasattr(cfg, 'punch_rules') or not hasattr(cfg, 'working_hours'):
         return 'No attendance settings saved yet - the built-in defaults would be used.'
@@ -60,11 +73,12 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--month', default='', help='YYYY-MM. Default: the current month up to today.')
+        parser.add_argument('--from-month', default='', help='YYYY-MM. Start here and cover every month up to --month (default: now).')
         parser.add_argument('--employee-id', default='', help='Only this employee code.')
         parser.add_argument('--apply', action='store_true', help='Write the changes. Without it, only a preview is shown.')
 
     def handle(self, *args, **options):
-        start, end = _month_range(options['month'])
+        start, end = _period(options['from_month'], options['month'])
         self.stdout.write(f'Period: {start} to {end}')
         self.stdout.write(f'Settings in use: {_describe_settings(_get_settings())}')
         plan = build_plan(start, end, employee_code=options['employee_id'])
