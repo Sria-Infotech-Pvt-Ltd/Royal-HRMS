@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KpiCard, OverviewItem, QuickTile, AttendanceTrend, AttendanceInsights, WfIcon } from "@/components/dashboard/WorkforceWidgets";
 import WorkforceOperations from "@/components/dashboard/WorkforceOperations";
+import DeptHeadcountChart from "@/components/dashboard/DeptHeadcountChart";
+import { HeadcountTrendCard, LeaveTrendCard, PayrollCostTrendCard } from "@/components/dashboard/TrendCharts";
 import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { usePermission } from "@/hooks/usePermission";
 import { useToast } from "@/components/ToastProvider";
@@ -86,7 +88,7 @@ export default function HRDashboard({ session }: Props) {
   ].filter((a): a is Exclude<typeof a, false> => Boolean(a));
 
   return (
-    <div className="wf-dashboard">
+    <div className="wf-dashboard wf-compact">
       <div className="wf-pagehead wf-reveal" style={{ animationDelay: "0.02s" }}>
         <div className="wf-titleblock">
           <div className="wf-eyebrow">Dashboard / Overview{dateLabel && <> <span aria-hidden="true">·</span> {dateLabel}</>}</div>
@@ -185,6 +187,19 @@ export default function HRDashboard({ session }: Props) {
           </div>
         </section>
       </div>
+
+      <section className="wf-reveal" style={{ animationDelay: "0.16s" }} aria-labelledby="wf-analytics-title">
+        <header className="wf-analytics-head">
+          <h2 id="wf-analytics-title">Analytics</h2>
+          <p>Where people work, and how headcount, leave and payroll cost have moved over the last six months.</p>
+        </header>
+        <div className="wf-analytics-grid">
+          <HeadcountTrendCard />
+          <DeptHeadcountChart />
+          <LeaveTrendCard />
+          <PayrollCostTrendCard />
+        </div>
+      </section>
 
       <section className="wf-card wf-reveal" style={{ animationDelay: "0.18s" }}>
         <header className="wf-card-head">
