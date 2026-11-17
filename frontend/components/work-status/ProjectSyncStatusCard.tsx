@@ -54,9 +54,9 @@ function Pager({ logs, onPage }: { logs: ProjectSyncStatus["logs"]; onPage: (pag
   if (logs.total_pages <= 1) return null;
   return (
     <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, padding: "12px 0 0" }}>
-      <button className="btn btn-outlined" disabled={logs.page <= 1} onClick={() => onPage(logs.page - 1)}>Previous</button>
+      <button className="btn btn-outline btn-sm" disabled={logs.page <= 1} onClick={() => onPage(logs.page - 1)}><i className="ti ti-chevron-left" /> Previous</button>
       <span style={{ fontSize: 12 }}>Page {logs.page} of {logs.total_pages}</span>
-      <button className="btn btn-outlined" disabled={logs.page >= logs.total_pages} onClick={() => onPage(logs.page + 1)}>Next</button>
+      <button className="btn btn-outline btn-sm" disabled={logs.page >= logs.total_pages} onClick={() => onPage(logs.page + 1)}>Next <i className="ti ti-chevron-right" /></button>
     </div>
   );
 }

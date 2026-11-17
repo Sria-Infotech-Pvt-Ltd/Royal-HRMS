@@ -419,6 +419,13 @@ tr:hover td {
   background: color-mix(in srgb, var(--sec-c) 70%, var(--primary));
 }
 
+/* A disabled outline button (e.g. "Previous" on the first page) must not look clickable. */
+.btn-outline:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: transparent;
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--on-variant);

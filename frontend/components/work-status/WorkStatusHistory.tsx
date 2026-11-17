@@ -44,9 +44,9 @@ export default function WorkStatusHistory({ history, onPageChange }: Props) {
       </div>
       {history.total_pages > 1 && (
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, padding: "8px 0" }}>
-          <button className="btn btn-outlined" disabled={history.page <= 1} onClick={() => onPageChange(history.page - 1)}>Previous</button>
+          <button className="btn btn-outline btn-sm" disabled={history.page <= 1} onClick={() => onPageChange(history.page - 1)}><i className="ti ti-chevron-left" /> Previous</button>
           <span style={{ fontSize: 12 }}>Page {history.page} of {history.total_pages}</span>
-          <button className="btn btn-outlined" disabled={history.page >= history.total_pages} onClick={() => onPageChange(history.page + 1)}>Next</button>
+          <button className="btn btn-outline btn-sm" disabled={history.page >= history.total_pages} onClick={() => onPageChange(history.page + 1)}>Next <i className="ti ti-chevron-right" /></button>
         </div>
       )}
     </>
