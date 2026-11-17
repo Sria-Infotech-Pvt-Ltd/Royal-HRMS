@@ -8,11 +8,14 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.accounts.models import EmailLog
+from apps.accounts.services_email_resend import resend_blocked_reason
 
 
 class EmailLogSerializer(serializers.ModelSerializer):
     triggered_by_name  = serializers.SerializerMethodField()
     smtp_settings_name = serializers.SerializerMethodField()
+    # Why Resend is not offered for this email (a one-time link that must be re-issued instead), or None when a replay is fine.
+    resend_blocked_reason = serializers.SerializerMethodField()
 
     class Meta:
         model  = EmailLog
@@ -20,7 +23,7 @@ class EmailLogSerializer(serializers.ModelSerializer):
             'id', 'recipient_email', 'subject', 'status', 'module',
             'template_name', 'triggered_by_name', 'smtp_settings_name',
             'is_resend', 'resend_of', 'had_attachments', 'attachment_filenames',
-            'has_sensitive_context', 'error_message', 'created_at',
+            'has_sensitive_context', 'error_message', 'created_at', 'resend_blocked_reason',
         ]
 
     def get_triggered_by_name(self, obj) -> str:
@@ -30,6 +33,9 @@ class EmailLogSerializer(serializers.ModelSerializer):
 
     def get_smtp_settings_name(self, obj) -> str:
         return obj.smtp_settings.name if obj.smtp_settings else ''
+
+    def get_resend_blocked_reason(self, obj):
+        return resend_blocked_reason(obj.template_name, obj.has_sensitive_context)
 
 
 class EmailLogDetailSerializer(EmailLogSerializer):

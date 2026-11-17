@@ -221,6 +221,11 @@ class DayRecordSerializer(serializers.Serializer):
     holiday_name            = serializers.CharField(allow_null=True, required=False)
     canRegularize           = serializers.BooleanField()
     regularization_required = serializers.BooleanField()
+    # 'office' | 'wfh' (None for a day with no record): how the day was worked, shown as a WFH tag.
+    work_mode               = serializers.CharField(allow_null=True, required=False)
+    # "Hours not completed": minutes short of a full day on a Present / Late day, and the same as text ("1h 20m").
+    short_minutes           = serializers.IntegerField(required=False, default=0)
+    short_display           = serializers.CharField(allow_null=True, required=False)
 
 
 class CalendarSerializer(serializers.Serializer):

@@ -210,6 +210,14 @@ def _reset_link(token_id) -> str:
     return f'{base.rstrip("/")}{path}' if base else path
 
 
+_LINK_HIDDEN_IN_LOG = '[one-time link not stored]'
+
+
+def hide_link_in_log(html: str, link: str) -> str:
+    """The body to store in the email log: the same email with its live one-time link replaced. The mail that is SENT keeps the link."""
+    return html.replace(link, _LINK_HIDDEN_IN_LOG)
+
+
 def send_activation_invite(user, *, created_by=None, extra_html: str = '', bulk_import: bool = False) -> tuple['PasswordResetToken', bool]:  # noqa: F821 - type-hint only, real import below to avoid a cycle
     """Issues a fresh single-use activation invite (replacing any
     outstanding one for this user) and emails the link — the credentials-
@@ -282,26 +290,28 @@ def send_activation_invite(user, *, created_by=None, extra_html: str = '', bulk_
         EmailLog.record(
             recipient_email=user.email,
             subject=subject,
-            body_html=html_body,
+            body_html=hide_link_in_log(html_body, link),
             template_name='onboarding_invite',
             module='accounts',
             status=EmailLog.STATUS_FAILED,
             error_message=str(exc),
             triggered_by=created_by,
             smtp_settings=_smtp,
+            has_sensitive_context=True,   # holds a live one-time link: Email Logs must never replay it (see services_email_resend)
         )
         raise
 
     EmailLog.record(
         recipient_email=user.email,
         subject=subject,
-        body_html=html_body,
+        body_html=hide_link_in_log(html_body, link),
         template_name='onboarding_invite',
         module='accounts',
         status=EmailLog.STATUS_SENT,
         error_message='',
         triggered_by=created_by,
         smtp_settings=_smtp,
+        has_sensitive_context=True,
     )
     return token, True
 
@@ -411,6 +421,7 @@ _SENSITIVE_CONTEXT_KEYS = {
     'password', 'temp_password', 'otp', 'token', 'secret',
     'api_key', 'access_token', 'refresh_token', 'pin',
     'onboarding_link',   # a live, single-use link into the candidate's session: never stored in the email log
+    'reset_link',        # a live, single-use password-reset link (admin-triggered reset): never stored in the email log
 }
 
 

@@ -19,7 +19,9 @@ export interface WeeklyOffSection {
 
 export interface PunchRulesSection {
   min_hours_full_day: string;       // "8.00"
-  min_hours_half_day: string;       // "4.00"
+  min_hours_half_day: string;       // "4.00": the half-day LIMIT (a finished day of this many hours or fewer is a Half Day)
+  short_hours_as_half_day: boolean; // on: every day below the full-day minimum is a Half Day (the older rule)
+  wfh_max_backdated_days: number;   // days in the past a work-from-home request may start; 0 = today or later only
   early_exit_grace_minutes: number;
 }
 

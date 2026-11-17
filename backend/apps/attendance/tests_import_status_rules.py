@@ -25,17 +25,21 @@ class EvaluateTimesTests(SimpleTestCase):
         # The old import rule was "240 minutes or more is Present". 09:00-13:00 is 3 h after lunch: a half day.
         self.assertEqual(evaluate(time(9, 0), time(13, 0), cfg())['status'], HALF)
 
-    def test_late_and_short_is_a_half_day(self):
-        day = evaluate(time(9, 30), time(18, 0), cfg())     # 9:30 is past the 9:20 grace; 7h30 is below 7h40
-        self.assertEqual((day['status'], day['is_late']), (HALF, True))
+    def test_late_and_a_little_short_stays_late_with_hours_not_completed(self):
+        day = evaluate(time(9, 30), time(18, 0), cfg())     # 9:30 is past the 9:20 grace; 7h30 is 10 min below 7h40
+        self.assertEqual((day['status'], day['is_late'], day['short_minutes']), (LATE, True, 10))
 
     def test_late_but_full_hours_follows_the_forgive_late_setting(self):
         self.assertEqual(evaluate(time(10, 0), time(19, 0), cfg(forgive_late=False))['status'], LATE)
         self.assertEqual(evaluate(time(10, 0), time(19, 0), cfg(forgive_late=True))['status'], PRESENT)
 
     def test_the_status_follows_whatever_minimums_are_saved(self):
-        for full, expected in (('8', HALF), ('7.5', PRESENT)):
-            self.assertEqual(evaluate(time(9, 12), time(18, 0), cfg(full=full))['status'], expected, full)
+        # 7h48 worked: a full day at a 7.5 h minimum; Present with 12 min short at 8 h; a Half Day at 8 h if short days are halved.
+        for settings, expected, short in (
+            (cfg(full='7.5'), PRESENT, 0), (cfg(full='8'), PRESENT, 12), (cfg(full='8', short_as_half=True), HALF, 12),
+        ):
+            day = evaluate(time(9, 12), time(18, 0), settings)
+            self.assertEqual((day['status'], day['short_minutes']), (expected, short))
 
     def test_overtime_comes_from_the_overtime_threshold(self):
         day = evaluate(time(9, 0), time(20, 0), cfg())      # 11h minus 1h lunch = 600 min; threshold 9h = 540
@@ -51,7 +55,9 @@ class EvaluateTimesTests(SimpleTestCase):
 
     def test_without_saved_settings_it_falls_back_to_the_defaults(self):
         self.assertEqual(evaluate(time(9, 0), time(17, 0), None)['status'], PRESENT)    # 8 h, no break
-        self.assertEqual(evaluate(time(9, 0), time(14, 0), None)['status'], HALF)       # 5 h
+        short = evaluate(time(9, 0), time(14, 0), None)                                 # 5 h: above 4 h, 3 h short of 8 h
+        self.assertEqual((short['status'], short['short_minutes']), (PRESENT, 180))
+        self.assertEqual(evaluate(time(9, 0), time(13, 0), None)['status'], HALF)       # exactly 4 h
 
     def test_an_imported_day_matches_a_punched_day_with_the_same_times(self):
         for start, end in ((time(9, 12), time(18, 0)), (time(9, 30), time(18, 0)), (time(9, 0), time(13, 0)), (time(10, 0), time(20, 0))):

@@ -162,7 +162,7 @@ export default function AttendanceSettings() {
               {fieldErr("punch_rules", "min_hours_full_day") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("punch_rules", "min_hours_full_day")}</span>}
             </div>
             <div className="field-group">
-              <label className="field-label">Min Hours — Half Day</label>
+              <label className="field-label">Half-Day Limit (hours or fewer)</label>
               <select className="field-input field-select" style={errStyle("punch_rules", "min_hours_half_day")}
                 value={form.punch_rules.min_hours_half_day}
                 onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, min_hours_half_day: e.target.value } }))}
@@ -185,6 +185,38 @@ export default function AttendanceSettings() {
               </select>
               {fieldErr("punch_rules", "early_exit_grace_minutes") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("punch_rules", "early_exit_grace_minutes")}</span>}
             </div>
+          </div>
+          <div className="field-group" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 16 }}>
+            <div>
+              <div className="field-label" style={{ marginBottom: 2 }}>Treat every day below the full day as a Half Day</div>
+              <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                Off (recommended): a finished day of the half-day limit or fewer is a Half Day; a day above it but short of the full-day minimum stays
+                Present and is shown as &ldquo;hours not completed&rdquo; with the minutes short. On: every day below the full-day minimum is a Half Day.
+              </span>
+            </div>
+            <Toggle
+              on={form.punch_rules.short_hours_as_half_day}
+              onChange={() => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, short_hours_as_half_day: !f.punch_rules.short_hours_as_half_day } }))}
+            />
+          </div>
+          <div className="field-group" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 16 }}>
+            <div>
+              <div className="field-label" style={{ marginBottom: 2 }}>Work-from-home requests may start in the past</div>
+              <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                How many days back an employee can request work from home. Not allowed (recommended): today or a later date only, because an approved
+                request for a past day relabels that day after the fact and the home-location check cannot be met.
+              </span>
+            </div>
+            <select className="field-input field-select" style={{ maxWidth: 220, ...errStyle("punch_rules", "wfh_max_backdated_days") }}
+              value={form.punch_rules.wfh_max_backdated_days}
+              onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, wfh_max_backdated_days: Number(e.target.value) } }))}
+            >
+              <option value={0}>Not allowed (today or later)</option>
+              <option value={1}>Up to 1 day back</option>
+              <option value={2}>Up to 2 days back</option>
+              <option value={3}>Up to 3 days back</option>
+              <option value={7}>Up to 7 days back</option>
+            </select>
           </div>
         </div>
       </div>

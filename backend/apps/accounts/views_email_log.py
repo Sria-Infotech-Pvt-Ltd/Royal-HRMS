@@ -28,6 +28,7 @@ from core.responses import error, success
 
 from apps.accounts.models import EmailLog
 from apps.accounts.serializers_email_log import EmailLogDetailSerializer, EmailLogSerializer
+from apps.accounts.services_email_resend import resend_blocked_reason
 from apps.accounts.utils import resend_logged_email
 
 logger = logging.getLogger(__name__)
@@ -122,13 +123,11 @@ class EmailLogResendView(APIView):
         if log.status != EmailLog.STATUS_FAILED:
             return error('Only failed emails can be resent.', http_status=status.HTTP_409_CONFLICT)
 
-        if log.has_sensitive_context:
-            return error(
-                'This email contained a one-time credential and cannot be resent generically '
-                'for security reasons. Use the dedicated resend action in its originating module '
-                '(e.g. Recruitment → Candidate → Resend Portal Invite), which issues a fresh credential.',
-                http_status=status.HTTP_409_CONFLICT,
-            )
+        # An email whose point is a one-time link must be re-issued by the action that made it (a fresh link), never replayed:
+        # the saved copy holds the old link, which has expired or been cancelled.
+        blocked = resend_blocked_reason(log.template_name, log.has_sensitive_context)
+        if blocked:
+            return error(blocked, http_status=status.HTTP_409_CONFLICT)
 
         cooldown_cutoff = timezone.now() - timedelta(seconds=_RESEND_COOLDOWN_SECONDS)
         recent_resend = EmailLog.objects.filter(resend_of=log, created_at__gte=cooldown_cutoff).exists()

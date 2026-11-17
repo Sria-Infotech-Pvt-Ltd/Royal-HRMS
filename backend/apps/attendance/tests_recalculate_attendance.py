@@ -16,12 +16,15 @@ from apps.attendance.services_recalculate import (
 DAY = date(2026, 11, 10)
 
 
-def cfg(full='7.67', half='4', break_minutes=60, grace=20, forgive_late=False):
+def cfg(full='7.67', half='4', break_minutes=60, grace=20, forgive_late=False, short_as_half=False):
     return SimpleNamespace(
         working_hours=SimpleNamespace(
             shift_start=time(9, 0), shift_end=time(18, 0), grace_period_minutes=grace, break_duration_minutes=break_minutes,
         ),
-        punch_rules=SimpleNamespace(min_hours_full_day=Decimal(full), min_hours_half_day=Decimal(half), early_exit_grace_minutes=30),
+        punch_rules=SimpleNamespace(
+            min_hours_full_day=Decimal(full), min_hours_half_day=Decimal(half), early_exit_grace_minutes=30,
+            short_hours_as_half_day=short_as_half,
+        ),
         overtime_rules=SimpleNamespace(ot_threshold_hours=Decimal('9')),
         late_mark_rules=SimpleNamespace(forgive_late_when_full_hours=forgive_late),
     )
@@ -34,11 +37,12 @@ def punch(kind, ist_hour, ist_minute):
     return SimpleNamespace(punch_type=kind, punched_at=utc)
 
 
-def record(status, minutes, is_late=False, note='', is_early_exit=False, first_in=None, last_out=None):
+def record(status, minutes, is_late=False, note='', is_early_exit=False, first_in=None, last_out=None, short_minutes=0):
     return SimpleNamespace(
         pk='record-1', employee=SimpleNamespace(employee_id='E1', full_name='Test Person'),
         date=DAY, status=status, total_working_minutes=minutes, overtime_minutes=0,
         is_late=is_late, is_early_exit=is_early_exit, note=note, first_punch_in=first_in, last_punch_out=last_out,
+        short_minutes=short_minutes,
     )
 
 
@@ -52,16 +56,19 @@ class PlanRecordChangeTests(SimpleTestCase):
         changes = plan_record_change(record(HALF, 468), [punch(IN, 9, 12), punch(OUT, 18, 0)], cfg())
         self.assertEqual(changes, {'status': PRESENT})
 
-    def test_the_same_day_stays_half_day_under_the_old_eight_hour_minimum(self):
-        self.assertIsNone(plan_record_change(record(HALF, 468), [punch(IN, 9, 12), punch(OUT, 18, 0)], cfg(full='8')))
+    def test_under_an_eight_hour_minimum_the_same_day_becomes_present_with_hours_not_completed(self):
+        # 7h48 is above the 4 h half-day limit but short of 8 h: Present, 12 minutes short (not a Half Day any more).
+        changes = plan_record_change(record(HALF, 468), [punch(IN, 9, 12), punch(OUT, 18, 0)], cfg(full='8'))
+        self.assertEqual(changes, {'status': PRESENT, 'short_minutes': 12})
 
-    def test_a_stricter_minimum_can_also_turn_a_full_day_into_a_half_day(self):
-        changes = plan_record_change(record(PRESENT, 468), [punch(IN, 9, 12), punch(OUT, 18, 0)], cfg(full='8'))
-        self.assertEqual(changes, {'status': HALF})
+    def test_with_short_days_as_half_days_switched_on_the_old_rule_still_applies(self):
+        self.assertIsNone(plan_record_change(record(HALF, 468, short_minutes=12), [punch(IN, 9, 12), punch(OUT, 18, 0)], cfg(full='8', short_as_half=True)))
+        changes = plan_record_change(record(PRESENT, 468), [punch(IN, 9, 12), punch(OUT, 18, 0)], cfg(full='8', short_as_half=True))
+        self.assertEqual(changes, {'status': HALF, 'short_minutes': 12})
 
     def test_a_short_day_stays_half_day_not_absent(self):
         # Leaving at 12:00 is an early exit, so the stored record already carries that flag.
-        self.assertIsNone(plan_record_change(record(HALF, 120, is_early_exit=True), [punch(IN, 9, 0), punch(OUT, 12, 0)], cfg()))
+        self.assertIsNone(plan_record_change(record(HALF, 120, is_early_exit=True, short_minutes=340), [punch(IN, 9, 0), punch(OUT, 12, 0)], cfg()))
 
     def test_a_day_with_no_punches_is_left_alone(self):
         self.assertIsNone(plan_record_change(record(HALF, 0), [], cfg()))
@@ -133,7 +140,7 @@ class ImportedDayTests(SimpleTestCase):
         old = record(PRESENT, 240, first_in=time(9, 0), last_out=time(13, 0))     # the old rule: 240 min or more is Present
         self.assertEqual(
             plan_imported_change(old, cfg()),
-            {'status': HALF, 'total_working_minutes': 180, 'is_early_exit': True},
+            {'status': HALF, 'total_working_minutes': 180, 'short_minutes': 280, 'is_early_exit': True},
         )
 
     def test_an_import_that_is_already_right_is_left_alone(self):

@@ -50,6 +50,10 @@ export interface DayRecord {
   regularization_required: boolean;
   /** How the day was worked. "wfh" when an approved work-from-home request covered it; absent/null for days with no record. */
   work_mode?:              "office" | "wfh" | null;
+  /** Minutes short of the full-day minimum on a finished day that stayed Present / Late ("hours not completed"); 0 or absent otherwise. */
+  short_minutes?:          number;
+  /** The same as text, "1h 20m"; null when there is no shortfall. */
+  short_display?:          string | null;
 }
 
 export interface CalendarResponse {

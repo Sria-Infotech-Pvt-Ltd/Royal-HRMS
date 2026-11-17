@@ -90,9 +90,10 @@ export default function EssShellClient({ session: _session, viewAsEmployee }: { 
 
   return (
     <div className="ess-shell">
+      {viewAsEmployee && <ViewAsStrip />}
+      {/* The welcome banner scrolls away with the page. Only the slim tab bar stays fixed, so a tall block never covers the cards under it. */}
+      <HomeBanner status={status} onPunchSuccess={refetchStatus} isReadOnly={!!viewAsEmployee} />
       <div className="ess-sticky">
-        {viewAsEmployee && <ViewAsStrip />}
-        <HomeBanner status={status} onPunchSuccess={refetchStatus} isReadOnly={!!viewAsEmployee} />
         <nav className="ess-tabs" aria-label="Employee Self Service">
           {TABS.map(t => (
             <button

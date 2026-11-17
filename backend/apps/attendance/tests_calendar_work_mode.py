@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from django.test import SimpleTestCase
 
 from apps.attendance.models import AttendanceRecord
+from apps.attendance.serializers_my_attendance import CalendarSerializer
 from apps.attendance.services_attendance import AttendanceDashboardService
 
 TODAY = date(2026, 11, 17)
@@ -41,4 +42,28 @@ class CalendarWorkModeTests(SimpleTestCase):
         day = build(16, record(AttendanceRecord.STATUS_LATE, AttendanceRecord.WORK_MODE_WFH))
         self.assertEqual(day['clockIn'], '13:04')
         self.assertEqual({'date', 'status', 'color', 'clockIn', 'clockOut', 'hours', 'note', 'holiday_name', 'canRegularize',
-                          'regularization_required', 'work_mode'}, set(day))
+                          'regularization_required', 'work_mode', 'short_minutes', 'short_display'}, set(day))
+
+
+class CalendarApiResponseTests(SimpleTestCase):
+    """What the page actually receives: the calendar goes through CalendarSerializer, which drops any field it does not list."""
+
+    @staticmethod
+    def api_days(rec):
+        day = AttendanceDashboardService._build_day(16, 2026, 11, {date(2026, 11, 16): rec}, set(), set(), set(), TODAY)
+        return CalendarSerializer({'days': {16: day}}).data['days']
+
+    def test_the_work_mode_and_the_shortfall_reach_the_page(self):
+        rec = record(AttendanceRecord.STATUS_PRESENT, AttendanceRecord.WORK_MODE_WFH)
+        rec.short_minutes = 80
+        day = self.api_days(rec)['16']
+        self.assertEqual(day['work_mode'], 'wfh')
+        self.assertEqual((day['short_minutes'], day['short_display']), (80, '1h 20m'))
+
+    def test_a_day_without_a_shortfall_or_record_still_serialises(self):
+        day = self.api_days(record(AttendanceRecord.STATUS_PRESENT, AttendanceRecord.WORK_MODE_OFFICE))['16']
+        self.assertEqual((day['work_mode'], day['short_minutes'], day['short_display']), ('office', 0, None))
+
+    def test_the_api_day_has_every_field_the_page_reads(self):
+        day = self.api_days(record(AttendanceRecord.STATUS_LATE, AttendanceRecord.WORK_MODE_WFH))['16']
+        self.assertTrue({'status', 'clockIn', 'clockOut', 'hours', 'work_mode', 'short_minutes', 'short_display'} <= set(day))

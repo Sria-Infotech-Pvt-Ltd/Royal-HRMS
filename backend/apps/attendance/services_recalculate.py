@@ -34,7 +34,7 @@ RECALCULABLE_STATUSES = (
     AttendanceRecord.STATUS_LATE,
     AttendanceRecord.STATUS_HALF_DAY,
 )
-_TRACKED_FIELDS = ('status', 'total_working_minutes', 'overtime_minutes', 'is_late', 'is_early_exit')
+_TRACKED_FIELDS = ('status', 'total_working_minutes', 'overtime_minutes', 'short_minutes', 'is_late', 'is_early_exit')
 # Notes written by the calculation itself; any other note was written by a person and is kept.
 _CALCULATED_NOTE_PREFIXES = ('Grace exceeded', 'Late arrival')
 SOURCE_PUNCHES = 'punches'

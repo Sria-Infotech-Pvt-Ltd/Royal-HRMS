@@ -8,19 +8,44 @@
 import { useState, type SyntheticEvent } from "react";
 import { buildMonthGrid, isoDate, WEEKDAY_SHORT } from "@/lib/attendanceCalendarGrid";
 import { isWorkFromHome } from "@/lib/workMode";
+import { shortHoursText } from "@/lib/shortHours";
 import type { DayRecord } from "@/types/attendance";
 
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const LEGEND: ReadonlyArray<[string, string]> = [
-  ["present", "Present"],
-  ["late", "Late"],
-  ["absent", "Absent"],
-  ["half-day", "Half day"],
-  ["leave", "On leave"],
-  ["unrecorded", "Week off / Holiday"],
-  ["incomplete", "Incomplete"],
+interface LegendEntry { className: string; label: string; meaning: string }
+
+/** Every colour the calendar can show, with what it means. The inline legend lists only the ones present in the month. */
+const LEGEND: ReadonlyArray<LegendEntry> = [
+  { className: "present",    label: "Present",            meaning: "A full working day." },
+  { className: "late",       label: "Late",               meaning: "Arrived after the grace time." },
+  { className: "absent",     label: "Absent",             meaning: "No attendance recorded on a working day." },
+  { className: "half-day",   label: "Half day",           meaning: "Worked up to the half-day limit." },
+  { className: "leave",      label: "On leave",           meaning: "Approved leave." },
+  { className: "unrecorded", label: "Week off / Holiday", meaning: "Not a working day." },
+  { className: "incomplete", label: "Incomplete",         meaning: "Punched in but never punched out. Raise a correction so the day gets its hours." },
 ];
+const WFH_MEANING = "Worked from home (approved request).";
+const SHORT_MEANING = "Hours not completed: worked more than a half day but less than a full day. The tag shows how many minutes short.";
+
+/** The legend class a day's status colour belongs to (week off and holiday share one entry). */
+function legendClassFor(statusClass: string): string {
+  return statusClass === "weekly-off" || statusClass === "holiday" ? "unrecorded" : statusClass;
+}
+
+/** What the month actually contains, so the legend lists only that. */
+function usedInMonth(calendar: Record<string, DayRecord>): { classes: Set<string>; hasWfh: boolean; hasShort: boolean } {
+  const classes = new Set<string>();
+  let hasWfh = false;
+  let hasShort = false;
+  for (const record of Object.values(calendar)) {
+    const statusClass = dayClass(record.status);
+    if (statusClass !== "not-joined") classes.add(legendClassFor(statusClass));
+    hasWfh = hasWfh || isWorkFromHome(record);
+    hasShort = hasShort || shortHoursText(record) !== null;
+  }
+  return { classes, hasWfh, hasShort };
+}
 
 /** Maps the backend's display status to the colour class used by .ess-status-dot. */
 export function dayClass(status: string | undefined): string {
@@ -58,6 +83,8 @@ function dayTitle(day: number, monthName: string, year: number, record: DayRecor
   const parts = [`${day} ${monthName} ${year}`];
   if (record?.status) parts.push(record.holiday_name ? `${record.status}: ${record.holiday_name}` : record.status);
   if (isWorkFromHome(record)) parts.push("Work from home");
+  const short = shortHoursText(record);
+  if (short) parts.push(`Hours not completed (short by ${short})`);
   if (record?.clockIn) parts.push(`In ${record.clockIn}${record.clockOut ? ` · Out ${record.clockOut}` : ""}`);
   return parts.join(" — ");
 }
@@ -76,6 +103,9 @@ function DayTip({ heading, record, position }: { heading: string; record: DayRec
       <strong>{heading}</strong>
       {record?.status && <span className="ess-cal-tip-status">{record.holiday_name ? `${record.status}: ${record.holiday_name}` : record.status}</span>}
       {isWorkFromHome(record) && <span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /> Work from home</span>}
+      {shortHoursText(record) && (
+        <span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /> Hours not completed: short by {shortHoursText(record)}</span>
+      )}
       {hasPunch ? (
         <dl>
           <dt>Punched in</dt><dd>{record?.clockIn || "—"}</dd>
@@ -126,7 +156,20 @@ function DayCell({ day, year, month, record: rawRecord, isToday }: {
           <span className="ess-cal-label">{label}</span>
         </span>
       )}
-      {isWorkFromHome(record) && <span className="ess-cal-wfh" title="Work from home"><i className="ti ti-home" aria-hidden="true" /> WFH</span>}
+      {(isWorkFromHome(record) || shortHoursText(record)) && (
+        <div className="ess-cal-tags">
+          {isWorkFromHome(record) && (
+            <span className="ess-cal-wfh" title="Work from home">
+              <i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">WFH</span>
+            </span>
+          )}
+          {shortHoursText(record) && (
+            <span className="ess-cal-short" title={`Hours not completed: short by ${shortHoursText(record)}`}>
+              <i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">Short {shortHoursText(record)}</span>
+            </span>
+          )}
+        </div>
+      )}
       {tipPosition && <DayTip heading={`${day} ${MONTH_LONG[month - 1]} ${year}`} record={record} position={tipPosition} />}
     </div>
   );
@@ -138,6 +181,7 @@ export default function EssAttendanceCalendar({
   const now = new Date();
   const isCurrentMonth = now.getFullYear() === year && now.getMonth() + 1 === month;
   const weeks = buildMonthGrid(year, month);
+  const used = usedInMonth(calendar);
 
   return (
     <div className="ess-cal">
@@ -160,11 +204,39 @@ export default function EssAttendanceCalendar({
       </div>
 
       <div className="ess-calendar-legend" aria-label="Attendance status colors">
-        {LEGEND.map(([className, label]) => (
-          <span key={className}><i className={`ess-status-dot ${className}`} />{label}</span>
+        {LEGEND.filter(entry => used.classes.has(entry.className)).map(entry => (
+          <span key={entry.className} title={entry.meaning}><i className={`ess-status-dot ${entry.className}`} />{entry.label}</span>
         ))}
-        <span><i className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /> WFH</i>Work from home</span>
+        {used.hasWfh && (
+          <span title={WFH_MEANING}>
+            <span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">WFH</span></span>Work from home
+          </span>
+        )}
+        {used.hasShort && (
+          <span title={SHORT_MEANING}>
+            <span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">Short</span></span>Hours not completed
+          </span>
+        )}
       </div>
+      <details className="ess-cal-key">
+        <summary>What do these mean?</summary>
+        <dl>
+          {LEGEND.map(entry => (
+            <div key={entry.className} className="ess-cal-key-row">
+              <dt><i className={`ess-status-dot ${entry.className}`} />{entry.label}</dt>
+              <dd>{entry.meaning}</dd>
+            </div>
+          ))}
+          <div className="ess-cal-key-row">
+            <dt><span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">WFH</span></span>Work from home</dt>
+            <dd>{WFH_MEANING}</dd>
+          </div>
+          <div className="ess-cal-key-row">
+            <dt><span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">Short</span></span>Hours not completed</dt>
+            <dd>{SHORT_MEANING}</dd>
+          </div>
+        </dl>
+      </details>
 
       <div
         className="ess-cal-grid"

@@ -402,6 +402,7 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
             rec.last_punch_out        = punch_out
             rec.total_working_minutes = minutes
             rec.overtime_minutes      = day['overtime_minutes']
+            rec.short_minutes         = day['short_minutes']
             rec.is_late               = day['is_late']
             rec.is_early_exit         = day['is_early_exit']
             if _is_calculated_note(rec.note):   # a note written by a person is kept
@@ -431,6 +432,7 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
                 last_punch_out=punch_out,
                 total_working_minutes=minutes,
                 overtime_minutes=day['overtime_minutes'],
+                short_minutes=day['short_minutes'],
                 is_late=day['is_late'],
                 is_early_exit=day['is_early_exit'],
                 note=day['note'],
@@ -469,7 +471,7 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
                     [t[0] for t in batch],
                     fields=[
                         'status', 'first_punch_in', 'last_punch_out',
-                        'total_working_minutes', 'overtime_minutes', 'is_late', 'is_early_exit', 'note', 'updated_at',
+                        'total_working_minutes', 'overtime_minutes', 'short_minutes', 'is_late', 'is_early_exit', 'note', 'updated_at',
                     ],
                     batch_size=_BATCH_SIZE,
                 )
@@ -706,6 +708,7 @@ def _upsert_attendance_record(data: dict, imported_by) -> None:
             'last_punch_out':        punch_out,
             'total_working_minutes': day['total_working_minutes'],
             'overtime_minutes':      day['overtime_minutes'],
+            'short_minutes':         day['short_minutes'],
             'is_late':               day['is_late'],
             'is_early_exit':         day['is_early_exit'],
             'note':                  day['note'],

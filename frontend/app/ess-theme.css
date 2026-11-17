@@ -6,7 +6,8 @@
 .ess-mode .navlinks,.ess-mode .navsearch{display:none}
 .ess-mode .brandcopy small{display:block}
 .ess-shell{display:flex;flex-direction:column;gap:14px}
-.ess-sticky{position:sticky;top:-16px;z-index:25;display:flex;flex-direction:column;gap:10px;padding:16px 0 8px;background:var(--bg);box-shadow:0 8px 14px color-mix(in srgb,var(--bg) 88%,transparent)}
+/* Only the tab bar is sticky: the welcome banner above it scrolls away, so a tall fixed block never covers the content under it. */
+.ess-sticky{position:sticky;top:0;z-index:25;padding:0 0 8px;background:var(--bg);box-shadow:0 8px 14px color-mix(in srgb,var(--bg) 88%,transparent)}
 .ess-hero{display:grid;grid-template-columns:1.35fr .65fr;gap:14px;padding:22px;border-radius:18px;background:linear-gradient(125deg,#312e81,#6d28d9 62%,#8b5cf6);color:#fff;box-shadow:0 12px 28px rgba(76,29,149,.2)}
 .ess-person{display:flex;align-items:center;gap:15px}
 .ess-photo{width:64px;height:64px;border-radius:18px;background-image:url('/employee-headshots.png');background-size:700% 700%;background-position:0% 0%;border:3px solid rgba(255,255,255,.35)}
@@ -39,7 +40,7 @@
 .ess-row .state.ok{background:var(--ok-bg);color:var(--ok)}
 .ess-footer-note{font-size:10px;color:var(--muted);text-align:center}
 @media(max-width:900px){.ess-hero,.ess-grid{grid-template-columns:1fr}.ess-clock{justify-content:flex-start}.ess-metrics{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:560px){.ess-sticky{top:-16px;padding-top:16px}.ess-actions{grid-template-columns:repeat(2,1fr)}.ess-hero{padding:12px 14px;gap:8px;border-radius:14px}.ess-photo{width:44px;height:44px;border-radius:12px}.ess-hero h1{font-size:18px}.ess-hero p{font-size:10px}.ess-clock{justify-content:space-between}.ess-clock b{font-size:12px}.ess-clock span{font-size:10px}.ess-tabs{border-radius:10px}}
+@media(max-width:560px){.ess-sticky{top:0}.ess-actions{grid-template-columns:repeat(2,1fr)}.ess-hero{padding:12px 14px;gap:8px;border-radius:14px}.ess-photo{width:44px;height:44px;border-radius:12px}.ess-hero h1{font-size:18px}.ess-hero p{font-size:10px}.ess-clock{justify-content:space-between}.ess-clock b{font-size:12px}.ess-clock span{font-size:10px}.ess-tabs{border-radius:10px}}
 .ess-profile{border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:18px;scroll-margin-top:12px}
 .ess-profile-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
 .ess-profile-head h2{font-size:18px;margin:0}
@@ -112,9 +113,26 @@
 .ess-cal-tip strong{font-size:12px}
 .ess-cal-tip-status,.ess-cal-tip-empty{color:var(--muted);font-weight:600}
 /* "WFH" tag: a day worked from home, shown next to its status (work mode is separate from the status) */
-.ess-cal-wfh{display:inline-flex;align-items:center;gap:3px;width:fit-content;margin-top:2px;padding:1px 6px;border-radius:5px;font-size:9px;font-weight:700;letter-spacing:.02em;color:var(--info,#2563eb);background:color-mix(in srgb,var(--info,#2563eb) 12%,transparent)}
+.ess-cal-wfh{display:inline-flex;align-items:center;gap:3px;width:fit-content;margin-top:2px;padding:1px 6px;border-radius:5px;font-size:9px;font-weight:700;font-style:normal;letter-spacing:.02em;color:var(--info,#2563eb);background:color-mix(in srgb,var(--info,#2563eb) 12%,transparent)}
 .ess-cal-wfh .ti{font-size:10px}
-.ess-calendar-legend .ess-cal-wfh{margin-top:0;margin-right:4px}
+/* "Short" tag: a finished day that stayed Present / Late but did not complete the full-day hours ("hours not completed") */
+.ess-cal-short{display:inline-flex;align-items:center;gap:3px;width:fit-content;margin-top:2px;padding:1px 6px;border-radius:5px;font-size:9px;font-weight:700;font-style:normal;letter-spacing:.02em;color:var(--warn,#a2620c);background:color-mix(in srgb,var(--warn,#a2620c) 14%,transparent)}
+.ess-cal-short .ti{font-size:10px}
+/* The legend styles every span inside it (muted, 9px); restate the chips so they keep their own colours. */
+.ess-calendar-legend .ess-cal-wfh{margin:0 4px 0 0;color:var(--info,#2563eb);font-size:9px}
+.ess-calendar-legend .ess-cal-short{margin:0 4px 0 0;color:var(--warn,#a2620c);font-size:9px}
+/* Tags under a day's status: stacked tightly instead of one flex gap apart */
+.ess-cal-tags{display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin-top:-2px}
+.ess-cal-tags .ess-cal-wfh,.ess-cal-tags .ess-cal-short{margin-top:0}
+/* "What do these mean?" key under the legend */
+.ess-cal-key{margin:0 0 10px;font-size:11px;color:var(--muted)}
+.ess-cal-key summary{cursor:pointer;width:fit-content;font-weight:600;color:var(--brand-ink)}
+.ess-cal-key dl{display:grid;gap:6px;margin:8px 0 0}
+.ess-cal-key-row{display:grid;grid-template-columns:minmax(150px,auto) 1fr;gap:4px 14px;align-items:center}
+.ess-cal-key dt{display:flex;align-items:center;gap:6px;font-weight:700;color:var(--ink)}
+.ess-cal-key dd{margin:0}
+@container (max-width:460px){.ess-cal-tag-text{display:none}.ess-cal-wfh,.ess-cal-short{padding:1px 4px}}
+@media (max-width:520px){.ess-cal-key-row{grid-template-columns:1fr}}
 .ess-cal-tip dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:2px 0 0}
 .ess-cal-tip dt{color:var(--muted)}
 .ess-cal-tip dd{margin:0;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}

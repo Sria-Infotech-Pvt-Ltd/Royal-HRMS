@@ -21,6 +21,8 @@ type EmailLogRow = {
   is_resend:              boolean;
   had_attachments:        boolean;
   has_sensitive_context:  boolean;
+  /** Why Resend is not offered (a one-time link must be re-issued by the action that made it), or null when a replay is fine. */
+  resend_blocked_reason:  string | null;
   error_message:          string;
   created_at:             string;
 };
@@ -284,7 +286,15 @@ export default function EmailLogsPage() {
                   <td>{row.triggered_by_name || "—"}</td>
                   <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtDateTime(row.created_at)}</td>
                   <td>
-                    {row.status === "failed" && canResend && (
+                    {row.status === "failed" && canResend && row.resend_blocked_reason && (
+                      <span
+                        title={row.resend_blocked_reason}
+                        style={{ fontSize: 11, color: "var(--on-variant)", cursor: "help" }}
+                      >
+                        <i className="ti ti-info-circle" /> Re-issue from the employee
+                      </span>
+                    )}
+                    {row.status === "failed" && canResend && !row.resend_blocked_reason && (
                       <button
                         className="btn btn-filled btn-sm"
                         style={{ fontSize: ".78rem" }}

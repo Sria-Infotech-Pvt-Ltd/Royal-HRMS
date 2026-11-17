@@ -149,3 +149,82 @@ describe("EssAttendanceCalendar work from home", () => {
     expect(tagged).toHaveLength(0);
   });
 });
+
+describe("EssAttendanceCalendar hours not completed", () => {
+  it("tags a Present day that fell short of a full day with the minutes short, keeping its status", () => {
+    const html = render(2026, 11, { "10": record("Present", { short_minutes: 80, short_display: "1h 20m", clockIn: "09:12" }) });
+    expect(html).toContain("ess-cal-label\">Present<");
+    expect(html).toMatch(/class="ess-cal-short" title="Hours not completed: short by 1h 20m"/);
+    expect(html).toContain("Short 1h 20m");
+    expect(html).toContain("10 November 2026 — Present — Hours not completed (short by 1h 20m) — In 09:12");
+    expect(html).toContain("Hours not completed</span>");   // the legend entry
+  });
+
+  it("does not tag completed days, half days or days with no record", () => {
+    const html = render(2026, 11, {
+      "10": record("Present", { short_minutes: 0, short_display: null }),
+      "11": record("Half Day"),
+    });
+    const cells = html.split('role="cell"');
+    expect(cells.filter(cell => cell.includes('title="Hours not completed'))).toHaveLength(0);
+  });
+
+  it("can show both tags on one day", () => {
+    const html = render(2026, 11, { "10": record("Late", { work_mode: "wfh", short_minutes: 30, short_display: "30m" }) });
+    expect(html).toContain('title="Work from home"');
+    expect(html).toContain("Short 30m");
+  });
+});
+
+/** The inline legend (the coloured key under the heading), not the "What do these mean?" list below it. */
+function inlineLegend(html: string): string {
+  const start = html.indexOf('class="ess-calendar-legend"');
+  const end = html.indexOf("<details", start);
+  return html.slice(start, end);
+}
+
+describe("EssAttendanceCalendar legend", () => {
+  it("lists only the colours that appear in the month shown", () => {
+    const legend = inlineLegend(render(2026, 11, {
+      "10": record("Present"), "11": record("Late"), "14": record("Weekly Off"),
+    }));
+    expect(legend).toContain("Present");
+    expect(legend).toContain("Late");
+    expect(legend).toContain("Week off / Holiday");
+    for (const absent of ["Absent", "Half day", "On leave", "Incomplete", "Work from home", "Hours not completed"]) {
+      expect(legend).not.toContain(absent);
+    }
+  });
+
+  it("shows no legend entries for a month with nothing recorded, but still offers the full key", () => {
+    const html = render(2026, 11, {});
+    expect(inlineLegend(html)).not.toContain("ess-status-dot");
+    expect(html).toContain("What do these mean?");
+  });
+
+  it("explains every colour and both tags in plain words in the key, including Incomplete", () => {
+    const html = render(2026, 11, {});
+    const key = html.slice(html.indexOf("<details"));
+    for (const label of ["Present", "Late", "Absent", "Half day", "On leave", "Week off / Holiday", "Incomplete", "Work from home", "Hours not completed"]) {
+      expect(key).toContain(label);
+    }
+    expect(key).toContain("Punched in but never punched out");
+    expect(key).toContain("Raise a correction");
+  });
+
+  it("does not count days before joining as a legend entry", () => {
+    const legend = inlineLegend(render(2026, 11, { "2": record("Not Employed"), "10": record("Present") }));
+    expect(legend).toContain("Present");
+    expect(legend).not.toContain("Week off / Holiday");
+  });
+
+  it("draws the tags as spans, never as italic <i> elements, and stacks the two tags together in one block", () => {
+    const html = render(2026, 11, { "10": record("Late", { work_mode: "wfh", short_minutes: 30, short_display: "30m" }) });
+    expect(html).not.toMatch(/<i class="ess-cal-(wfh|short)"/);
+    expect(html).toMatch(/<div class="ess-cal-tags"><span class="ess-cal-wfh"[\s\S]*<span class="ess-cal-short"/);
+  });
+
+  it("adds no tags block to a day without tags", () => {
+    expect(render(2026, 11, { "10": record("Present") })).not.toContain("ess-cal-tags");
+  });
+});

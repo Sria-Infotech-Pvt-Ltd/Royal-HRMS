@@ -104,6 +104,11 @@ class WeeklyOffWriteSerializer(serializers.Serializer):
 class PunchRulesWriteSerializer(serializers.Serializer):
     min_hours_full_day       = serializers.DecimalField(max_digits=4, decimal_places=2, min_value=Decimal('0.50'))
     min_hours_half_day       = serializers.DecimalField(max_digits=4, decimal_places=2, min_value=Decimal('0.25'))
+    # On: every finished day below the full-day minimum is a Half Day (the older rule). Off (default): only days at or below
+    # the half-day limit are, and the days between are Present with "hours not completed".
+    short_hours_as_half_day  = serializers.BooleanField(required=False, default=False)
+    # How many days in the past a work-from-home request may start (0 = today or a future date only).
+    wfh_max_backdated_days   = serializers.IntegerField(min_value=0, max_value=31, required=False, default=0)
     early_exit_grace_minutes = serializers.IntegerField(min_value=0, max_value=_MAX_EARLY_EXIT_GRACE)
 
     def validate(self, attrs: dict) -> dict:
@@ -259,7 +264,7 @@ class WeeklyOffReadSerializer(serializers.ModelSerializer):
 class PunchRulesReadSerializer(serializers.ModelSerializer):
     class Meta:
         model  = AttendancePunchRules
-        fields = ('min_hours_full_day', 'min_hours_half_day', 'early_exit_grace_minutes')
+        fields = ('min_hours_full_day', 'min_hours_half_day', 'short_hours_as_half_day', 'wfh_max_backdated_days', 'early_exit_grace_minutes')
         read_only_fields = fields
 
 

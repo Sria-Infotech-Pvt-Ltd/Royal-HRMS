@@ -601,6 +601,12 @@ class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
         end   = data.get('end_date')
         if start and end and end < start:
             raise serializers.ValidationError({'end_date': 'End date must be on or after start date.'})
+        if start:
+            from django.utils import timezone
+            from apps.hrms.services_wfh_dates import wfh_backdate_limit_days, wfh_start_refusal
+            refusal = wfh_start_refusal(start, timezone.localdate(), wfh_backdate_limit_days())
+            if refusal:
+                raise serializers.ValidationError({'start_date': refusal})
         return data
 
 

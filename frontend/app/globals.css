@@ -1698,6 +1698,12 @@ textarea.field-input {
   border-radius: var(--radius-lg);
 }
 
+/* The category band sits directly under the four KPI cards inside a plain wrapper (no flex gap), so without this it touches them.
+   18px is the page's standard gap between blocks. */
+.stats + .settings-cats {
+  margin-top: 18px;
+}
+
 .settings-cat-pill {
   padding: 8px 14px;
   border-radius: var(--radius);

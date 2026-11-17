@@ -67,6 +67,16 @@ describe("My Workspace shell: the timesheet view", () => {
     expect(screen.getByText("banner")).toBeTruthy();                                   // it stays inside the workspace
   });
 
+  it("keeps only the tab bar fixed at the top: the welcome banner scrolls away with the page", () => {
+    query = "";
+    mount();
+    const fixedBlock = document.querySelector(".ess-sticky");
+    expect(fixedBlock).not.toBeNull();
+    expect(fixedBlock?.querySelector("nav[aria-label='Employee Self Service']")).not.toBeNull();   // the tabs stay fixed
+    expect(fixedBlock?.textContent).not.toContain("banner");                                       // the banner does not
+    expect(screen.getByText("banner")).toBeTruthy();                                                // it is still on the page
+  });
+
   it("falls back to this week when the link's week is missing or not a date", () => {
     query = "tab=timesheet";
     const { unmount } = mount();

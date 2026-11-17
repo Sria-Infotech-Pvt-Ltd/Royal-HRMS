@@ -64,7 +64,8 @@ def _describe_settings(cfg) -> str:
         return 'No attendance settings saved yet - the built-in defaults would be used.'
     rules, hours = cfg.punch_rules, cfg.working_hours
     return (
-        f'Full-day minimum {rules.min_hours_full_day} h, half-day minimum {rules.min_hours_half_day} h, '
+        f'Full-day minimum {rules.min_hours_full_day} h, half-day limit {rules.min_hours_half_day} h '
+        f'({"short days are Half Days" if getattr(rules, "short_hours_as_half_day", False) else "days above it stay Present with hours not completed"}), '
         f'break {hours.break_duration_minutes} min, late grace {hours.grace_period_minutes} min.'
     )
 

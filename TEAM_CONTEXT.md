@@ -6056,3 +6056,15 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Tests:** 4 database-free backend tests (`tests_calendar_work_mode.py`), 2 calendar tests added to `EssAttendanceCalendar.test.tsx`, `lib/workMode.test.ts`.
 
 **Verified:** 37 database-free attendance backend tests, 123 frontend test files / 982 tests, `tsc`, `eslint`, `npm run build`; the real calendar output for the affected employee on the local dev database (16 Nov: Late + wfh, 17 Nov: Late + office). **Not verified:** the pages in a browser.
+
+
+## Short-hours rule, WFH backdating limit, Email Log resend guard (2026-11-17)
+
+**By:** New-AI sessions - **Branch:** New-AI. Committed together; tests below pass; `npm run build` run before the push. Not checked in a browser.
+
+- **Short-hours rule** (migration `attendance/0052_short_hours_rule`): a finished day above the half-day limit but below the full-day minimum stays Present with "hours not completed" and the missing minutes are stored in `AttendanceRecord.short_minutes`. The older "every short day is a Half Day" behaviour is kept behind `short_hours_as_half_day` (default off). Frontend: `lib/shortHours.ts`, Attendance Settings, ESS and My Attendance calendars. Tests: `tests_short_hours_rule.py`, `lib/shortHours.test.ts`.
+- **WFH backdating limit** (migration `attendance/0053_wfh_backdating_limit`): `wfh_max_backdated_days` (default 0 = a WFH request may start today or later only). Logic in `hrms/services_wfh_dates.py`. Tests: `tests_wfh_backdating.py`.
+- **Email Log resend guard**: `accounts/services_email_resend.py` blocks generic Resend for emails built around a one-time link (onboarding invite, admin password reset) and tells the user which action re-issues it. Tests: `tests_email_resend_guard.py`.
+- Also in this commit: attendance recalculation / import changes and the WFH tag on calendars from the same sessions.
+
+**Run on the server:** `migrate attendance` (0052, 0053).

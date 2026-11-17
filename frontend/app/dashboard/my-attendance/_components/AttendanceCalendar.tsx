@@ -2,6 +2,7 @@
 
 import type { DayRecord } from "@/types/attendance";
 import { isWorkFromHome } from "@/lib/workMode";
+import { shortHoursText } from "@/lib/shortHours";
 
 interface Props {
   year:         number;
@@ -115,6 +116,12 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                   {isWorkFromHome(record) && (
                     <div title="Work from home" style={{ fontSize: 8, fontWeight: 800, color: "var(--info, #2563eb)", letterSpacing: "0.04em" }}>
                       <i className="ti ti-home" aria-hidden="true" /> WFH
+                    </div>
+                  )}
+
+                  {shortHoursText(record) && (
+                    <div title={`Hours not completed: short by ${shortHoursText(record)}`} style={{ fontSize: 8, fontWeight: 800, color: "var(--warn, #b45309)" }}>
+                      <i className="ti ti-alert-triangle" aria-hidden="true" /> Short {shortHoursText(record)}
                     </div>
                   )}
 

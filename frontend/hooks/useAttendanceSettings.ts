@@ -23,6 +23,8 @@ const DEFAULTS: AttendanceSettingsForm = {
   punch_rules: {
     min_hours_full_day: "8.00",
     min_hours_half_day: "4.00",
+    short_hours_as_half_day: false,
+    wfh_max_backdated_days: 0,
     early_exit_grace_minutes: 30,
   },
   overtime_rules: {
@@ -83,6 +85,8 @@ function mergeWithDefaults(api: AttendanceSettingsApiResponse): AttendanceSettin
     punch_rules: {
       min_hours_full_day:       pr.min_hours_full_day       ?? DEFAULTS.punch_rules.min_hours_full_day,
       min_hours_half_day:       pr.min_hours_half_day       ?? DEFAULTS.punch_rules.min_hours_half_day,
+      short_hours_as_half_day:  pr.short_hours_as_half_day  ?? DEFAULTS.punch_rules.short_hours_as_half_day,
+      wfh_max_backdated_days:   pr.wfh_max_backdated_days   ?? DEFAULTS.punch_rules.wfh_max_backdated_days,
       early_exit_grace_minutes: pr.early_exit_grace_minutes ?? DEFAULTS.punch_rules.early_exit_grace_minutes,
     },
     overtime_rules: {

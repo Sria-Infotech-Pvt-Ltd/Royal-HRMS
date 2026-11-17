@@ -61,6 +61,8 @@ DEFAULT_SETTINGS: dict = {
     'punch_rules': {
         'min_hours_full_day':       '8.00',
         'min_hours_half_day':       '4.00',
+        'short_hours_as_half_day':  False,
+        'wfh_max_backdated_days':   0,
         'early_exit_grace_minutes': 30,
     },
     'overtime_rules': {

@@ -832,11 +832,22 @@ class AttendancePunchRules(models.Model):
     )
     min_hours_half_day        = models.DecimalField(
         max_digits=4, decimal_places=2, default=Decimal('4.00'),
-        help_text='Minimum clocked hours to count as a half-day present.',
+        help_text=(
+            'Half-day limit: a finished day of this many hours or fewer is a Half Day. Above it but below the full-day minimum '
+            'the day stays Present with "hours not completed" (unless short_hours_as_half_day is on).'
+        ),
+    )
+    short_hours_as_half_day   = models.BooleanField(
+        default=False,
+        help_text='On: every finished day below the full-day minimum is a Half Day (the older rule), not just days at or below the half-day limit.',
     )
     early_exit_grace_minutes  = models.PositiveSmallIntegerField(
         default=30,
         help_text='Minutes before shift end that an early departure is forgiven.',
+    )
+    wfh_max_backdated_days    = models.PositiveSmallIntegerField(
+        default=0,
+        help_text='How many days in the past a work-from-home request may start. 0 = today or a future date only.',
     )
 
     class Meta:
@@ -1269,6 +1280,10 @@ class AttendanceRecord(models.Model):
         help_text='Net working time in minutes after break deduction.',
     )
     overtime_minutes       = models.PositiveIntegerField(default=0)
+    # "Hours not completed": how many minutes short of the full-day minimum a finished day was (0 = completed, still clocked
+    # in, or not a worked day). A day above the half-day limit but short of a full day stays Present / Late and records its
+    # shortfall here; the calendars show it as a tag.
+    short_minutes          = models.PositiveIntegerField(default=0)
     is_late                = models.BooleanField(default=False)
     is_early_exit          = models.BooleanField(default=False)
     note                   = models.CharField(max_length=200, blank=True, default='')

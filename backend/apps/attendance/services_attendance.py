@@ -60,6 +60,21 @@ def _forgives_late(cfg) -> bool:
     return bool(rules and rules.forgive_late_when_full_hours)
 
 
+def _calendar_short_minutes(status_key: str, rec) -> int:
+    """The shortfall to show on a calendar day: only for a Present / Late day (a Half Day or Absent day has its own status)."""
+    if rec is None or status_key not in (AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE):
+        return 0
+    return int(getattr(rec, 'short_minutes', 0) or 0)
+
+
+def _short_display(minutes: int):
+    """1h 20m / 40m for the "hours not completed" tag; None when there is no shortfall."""
+    if not minutes:
+        return None
+    hours, rest = divmod(minutes, 60)
+    return f'{hours}h {rest:02d}m' if hours else f'{rest}m'
+
+
 def _ist_time(dt: datetime) -> time:
     """Return the IST wall-clock time for a UTC-aware datetime from punched_at.
 
@@ -366,6 +381,7 @@ class AttendanceProcessorService:
                 'last_punch_out':        None,
                 'total_working_minutes': 0,
                 'overtime_minutes':      0,
+                'short_minutes':         0,
                 'is_late':               False,
                 'is_early_exit':         False,
                 'note':                  cls._holiday_name(for_date, branch_name),
@@ -378,6 +394,7 @@ class AttendanceProcessorService:
                 'last_punch_out':        None,
                 'total_working_minutes': 0,
                 'overtime_minutes':      0,
+                'short_minutes':         0,
                 'is_late':               False,
                 'is_early_exit':         False,
                 'note':                  'Weekly off',
@@ -492,7 +509,8 @@ class AttendanceProcessorService:
         if not punch_in or not punch_out or punch_out <= punch_in:
             return {
                 'status': AttendanceRecord.STATUS_ABSENT, 'first_punch_in': punch_in, 'last_punch_out': punch_out,
-                'total_working_minutes': 0, 'overtime_minutes': 0, 'is_late': False, 'is_early_exit': False, 'note': '',
+                'total_working_minutes': 0, 'overtime_minutes': 0, 'short_minutes': 0, 'is_late': False,
+                'is_early_exit': False, 'note': '',
             }
         anchor = date(2000, 1, 3)
         closed_minutes = int((datetime.combine(anchor, punch_out) - datetime.combine(anchor, punch_in)).total_seconds() / 60)
@@ -520,6 +538,10 @@ class AttendanceProcessorService:
         # Overtime
         ot_minutes = cls._calc_overtime(net_minutes, cfg)
 
+        # Hours not completed: minutes short of the full-day minimum on a finished day (0 while still clocked in).
+        min_full = cls._punch_thresholds(cfg)[0]
+        short_minutes = max(0, min_full - net_minutes) if has_complete_pair and not has_open_session else 0
+
         note = ''
         if is_late:
             grace = cfg.working_hours.grace_period_minutes if cfg and hasattr(cfg, 'working_hours') else 0
@@ -533,6 +555,7 @@ class AttendanceProcessorService:
             'last_punch_out':        last_out,
             'total_working_minutes': net_minutes,
             'overtime_minutes':      ot_minutes,
+            'short_minutes':         short_minutes,
             'is_late':               is_late,
             'is_early_exit':         is_early_exit,
             'note':                  note,
@@ -547,6 +570,7 @@ class AttendanceProcessorService:
             'last_punch_out':        None,
             'total_working_minutes': 0,
             'overtime_minutes':      0,
+            'short_minutes':         0,
             'is_late':               False,
             'is_early_exit':         False,
             'note':                  'No punch recorded',
@@ -589,24 +613,33 @@ class AttendanceProcessorService:
         if has_open_session:
             return AttendanceRecord.STATUS_LATE if is_late else AttendanceRecord.STATUS_PRESENT
 
-        if not cfg or not hasattr(cfg, 'punch_rules'):
-            min_full = 480
-            min_half = 240
-        else:
-            pr = cfg.punch_rules
-            min_full = int(float(pr.min_hours_full_day) * 60)
-            min_half = int(float(pr.min_hours_half_day) * 60)
+        min_full, min_half, short_as_half = AttendanceProcessorService._punch_thresholds(cfg)
 
         if net_minutes >= min_full:
             if is_late and _forgives_late(cfg):
                 return AttendanceRecord.STATUS_PRESENT   # arrived late but completed the full hours: a full, on-time-equivalent day
             return AttendanceRecord.STATUS_LATE if is_late else AttendanceRecord.STATUS_PRESENT
-        if net_minutes >= min_half:
-            return AttendanceRecord.STATUS_HALF_DAY
-        # Employee did physically clock in and out — floor at half_day, not absent
+        if net_minutes > min_half and not short_as_half:
+            # Above the half-day limit but short of a full day: still a present day. The shortfall is recorded as
+            # short_minutes ("hours not completed") instead of halving the day.
+            return AttendanceRecord.STATUS_LATE if is_late else AttendanceRecord.STATUS_PRESENT
+        # At or below the half-day limit (or any short day, when short_hours_as_half_day is on). Someone who physically
+        # clocked in and out is floored at half_day, never absent.
         if has_complete_pair:
             return AttendanceRecord.STATUS_HALF_DAY
         return AttendanceRecord.STATUS_ABSENT
+
+    @staticmethod
+    def _punch_thresholds(cfg) -> tuple:
+        """(full-day minutes, half-day-limit minutes, short days count as half day?) from the saved Punch Rules; the built-in
+        defaults only when no settings are saved. The one place these three values are read."""
+        pr = getattr(cfg, 'punch_rules', None) if cfg else None
+        if pr is None:
+            return 480, 240, False
+        return (
+            int(float(pr.min_hours_full_day) * 60), int(float(pr.min_hours_half_day) * 60),
+            bool(getattr(pr, 'short_hours_as_half_day', False)),
+        )
 
     @staticmethod
     def _calc_overtime(net_minutes: int, cfg) -> int:
@@ -1140,6 +1173,9 @@ class AttendanceDashboardService:
             # How the day was worked ('office' | 'wfh'), set from an approved work-from-home request. It is orthogonal to the
             # status (a day can be Late and WFH), so the calendar shows it as a separate tag.
             'work_mode':               rec.work_mode if rec else None,
+            # Hours not completed on a finished day that stayed Present / Late (a Half Day already says so by its status).
+            'short_minutes':           _calendar_short_minutes(key, rec),
+            'short_display':           _short_display(_calendar_short_minutes(key, rec)),
         }
 
 
