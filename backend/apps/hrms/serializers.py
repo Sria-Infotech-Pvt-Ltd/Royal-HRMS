@@ -163,6 +163,8 @@ _POLICY_RULE_FIELDS = [
     # Eligibility Rules
     'applicable_branches', 'applicable_departments', 'applicable_designations',
     'applicable_employment_types', 'applicable_gender', 'minimum_service_period',
+    # How the leave is given: every year to everyone, or per case on request (maternity, paternity)
+    'grant_mode',
     # Documentation Rules
     'attachment_required', 'medical_certificate_required', 'medical_certificate_after_days',
     # Leave Restrictions
@@ -234,6 +236,7 @@ class LeavePolicyCreateSerializer(serializers.Serializer):
     applicable_employment_types = serializers.ListField(child=serializers.CharField(allow_blank=True), default=list, required=False)
     applicable_gender           = serializers.ChoiceField(choices=['all', 'male', 'female'], default='all', required=False)
     minimum_service_period      = serializers.IntegerField(min_value=0, default=0, required=False)
+    grant_mode                  = serializers.ChoiceField(choices=['annual', 'on_request'], default='annual', required=False)
     # Documentation Rules
     attachment_required            = serializers.BooleanField(default=False, required=False)
     medical_certificate_required   = serializers.BooleanField(default=False, required=False)

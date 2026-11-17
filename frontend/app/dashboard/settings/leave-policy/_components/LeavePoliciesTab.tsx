@@ -50,6 +50,8 @@ export interface LeavePolicy {
   applicable_employment_types: string[];
   applicable_gender:           string;
   minimum_service_period:      number;
+  /** "annual": credited to every eligible employee each year. "on_request": granted per case when an eligible employee applies (maternity, paternity). */
+  grant_mode:                  "annual" | "on_request";
 
   attachment_required:            boolean;
   medical_certificate_required:   boolean;
@@ -91,6 +93,8 @@ export interface PolicyRuleFields {
   applicable_employment_types: string[];
   applicable_gender:           string;
   minimum_service_period:      number;
+  /** "annual": credited to every eligible employee each year. "on_request": granted per case when an eligible employee applies (maternity, paternity). */
+  grant_mode:                  "annual" | "on_request";
 
   attachment_required:            boolean;
   medical_certificate_required:   boolean;
@@ -114,7 +118,7 @@ function defaultRules(): PolicyRuleFields {
     allow_future_leave: true, maximum_future_days: 0,
     sandwich_leave_enabled: false, count_holidays_as_leave: false, count_weekoffs_as_leave: false,
     applicable_branches: [], applicable_departments: [], applicable_designations: [],
-    applicable_employment_types: [], applicable_gender: "all", minimum_service_period: 0,
+    applicable_employment_types: [], applicable_gender: "all", minimum_service_period: 0, grant_mode: "annual",
     attachment_required: false, medical_certificate_required: false, medical_certificate_after_days: 3,
     allow_negative_balance: false, convert_to_lop: false,
     allow_leave_cancellation: true, cancellation_allowed_until: 0,
@@ -143,6 +147,7 @@ function extractRules(p: LeavePolicy): PolicyRuleFields {
     applicable_employment_types: p.applicable_employment_types ?? [],
     applicable_gender:            p.applicable_gender || "all",
     minimum_service_period:      Number(p.minimum_service_period),
+    grant_mode:                  p.grant_mode === "on_request" ? "on_request" : "annual",
     attachment_required:            p.attachment_required,
     medical_certificate_required:   p.medical_certificate_required,
     medical_certificate_after_days: Number(p.medical_certificate_after_days),

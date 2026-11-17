@@ -29,6 +29,7 @@ from ..models import (
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
 )
+from ..services_leave_event import hide_unused_event_balances
 from ..services_leave_ledger import employee_matches_policy_gender, is_unpaid_lwp
 from ..serializers import (
     CarryForwardInputSerializer,
@@ -102,8 +103,8 @@ class LeavePolicyView(APIView):
             'earned':    {'annual_days': 15, 'can_carry_forward': True,  'max_carry_forward_days': 30, 'minimum_notice_period': 3, 'policy_note': 'Min 3 days notice. Carry-forward up to 30 days.'},
             'sick':      {'annual_days': 12, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Medical certificate required for 3+ consecutive days.'},
             'lwp':       {'annual_days': 0,  'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Salary deducted. Requires HR approval. No carry-forward.'},
-            'maternity': {'annual_days': 90, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'applicable_gender': 'female', 'policy_note': 'Set the entitlement in Leave Policy settings. HR approval required.'},
-            'paternity': {'annual_days': 5,  'can_carry_forward': False, 'max_carry_forward_days': 0, 'applicable_gender': 'male', 'policy_note': 'Within 15 days of child\'s birth. Birth certificate required.'},
+            'maternity': {'annual_days': 90, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'applicable_gender': 'female', 'grant_mode': 'on_request', 'policy_note': 'Granted per case when an eligible employee applies, for the entitlement set here. HR approval required.'},
+            'paternity': {'annual_days': 5,  'can_carry_forward': False, 'max_carry_forward_days': 0, 'applicable_gender': 'male', 'grant_mode': 'on_request', 'policy_note': 'Within 15 days of child\'s birth. Birth certificate required.'},
             'bereavement': {'annual_days': 5, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'For the loss of an immediate family member.'},
             # Not a fixed annual allotment (earned per instance of extra worked
             # time, credited separately) — annual_days=0 here is informational
@@ -212,6 +213,7 @@ class LeaveBalanceView(APIView):
             if balance.leave_type not in restricted_policies
             or employee_matches_policy_gender(employee, restricted_policies[balance.leave_type])
         ]
+        eligible_balances = hide_unused_event_balances(eligible_balances, employee)   # maternity / paternity only once used or requested
         return success('Balances retrieved.', LeaveBalanceSerializer(eligible_balances, many=True).data)
 
     def post(self, request):
@@ -230,7 +232,8 @@ class LeaveBalanceView(APIView):
         if specific_id:
             employees = employees.filter(employee_id=specific_id)
 
-        policies = {p.leave_type: p for p in LeavePolicy.objects.filter(is_active=True)}
+        # On-request leave (maternity, paternity) is granted per case when someone applies, never credited to everyone.
+        policies = {p.leave_type: p for p in LeavePolicy.objects.filter(is_active=True).exclude(grant_mode='on_request')}
         created_count = 0
 
         for emp in employees:

@@ -32,6 +32,7 @@ from ..models import (
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
 )
+from ..services_leave_event import ensure_event_balance
 from ..services_leave_ledger import is_unpaid_lwp, pending_leave_days
 from ..serializers import (
     CarryForwardInputSerializer,
@@ -193,6 +194,7 @@ class LeaveRequestListCreateView(APIView):
                 )
 
             if not is_unpaid_lwp(leave_type):
+                ensure_event_balance(request.user, leave_type, year, start)   # maternity / paternity: created now, for an eligible applicant
                 balance = (
                     LeaveBalance.objects
                     .select_for_update()

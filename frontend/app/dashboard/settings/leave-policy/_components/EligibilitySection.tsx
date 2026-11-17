@@ -114,6 +114,19 @@ export default function EligibilitySection({ rules, setField }: Props) {
             </select>
           </div>
           <div className="field-group mb-16">
+            <label className="field-label">How is this leave given?</label>
+            <select className="field-input field-select" value={rules.grant_mode} onChange={e => setField("grant_mode", e.target.value === "on_request" ? "on_request" : "annual")} suppressHydrationWarning>
+              <option value="annual">Credited to every eligible employee each year</option>
+              <option value="on_request">Granted per case when an eligible employee applies (maternity, paternity)</option>
+            </select>
+            {rules.grant_mode === "on_request" && (
+              <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "4px 0 0" }}>
+                Nobody is credited in advance. The days entered above become the entitlement for one case, created when an employee who meets
+                the gender and service rules applies; what was taken in the last 12 months is deducted.
+              </p>
+            )}
+          </div>
+          <div className="field-group mb-16">
             <label className="field-label">Minimum Service Period (months)</label>
             <input className="field-input" type="number" min={0} value={rules.minimum_service_period} onChange={e => setField("minimum_service_period", Number(e.target.value))} />
           </div>

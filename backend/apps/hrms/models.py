@@ -215,6 +215,13 @@ CARRY_FORWARD_MODE_CHOICES = [
 
 GENDER_CHOICES = [('all', 'All'), ('male', 'Male'), ('female', 'Female')]
 
+GRANT_ANNUAL     = 'annual'
+GRANT_ON_REQUEST = 'on_request'
+GRANT_MODE_CHOICES = [
+    (GRANT_ANNUAL,     'Credited to every eligible employee each year'),
+    (GRANT_ON_REQUEST, 'Granted per case when an eligible employee applies (maternity, paternity)'),
+]
+
 ACCRUAL_ANNUAL  = 'annual'
 ACCRUAL_MONTHLY = 'monthly'
 ACCRUAL_FREQUENCY_CHOICES = [
@@ -236,6 +243,9 @@ class LeavePolicy(models.Model):
     # that task's own docstring (apps/hrms/tasks.py) for how the two stay
     # mutually exclusive per policy.
     accrual_frequency      = models.CharField(max_length=10, choices=ACCRUAL_FREQUENCY_CHOICES, default=ACCRUAL_ANNUAL)
+    # 'on_request': never credited by the yearly / monthly / joining jobs; the balance is created when an eligible employee applies
+    # (see services_leave_event.py). annual_days is then the entitlement for one case.
+    grant_mode             = models.CharField(max_length=12, choices=GRANT_MODE_CHOICES, default=GRANT_ANNUAL)
     can_carry_forward         = models.BooleanField(default=False)
     max_carry_forward_days    = models.PositiveIntegerField(default=0)
     carry_forward_type        = models.CharField(max_length=20, choices=CARRY_FORWARD_TYPE_CHOICES, default=CARRY_FORWARD_LIMITED)

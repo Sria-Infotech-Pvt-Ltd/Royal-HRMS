@@ -47,6 +47,7 @@ def reset_annual_leave_balances(self):
             LeavePolicy.objects.filter(is_active=True)
             .exclude(carry_forward_mode=CARRY_FORWARD_MANUAL)
             .exclude(accrual_frequency=ACCRUAL_MONTHLY)
+            .exclude(grant_mode='on_request')   # maternity / paternity are granted per case, not credited each year
         )
 
         created_total = 0
@@ -176,7 +177,7 @@ def accrue_monthly_leave_balances(self):
         active_employees = list(
             User.objects.filter(is_active=True, employee_id__isnull=False).exclude(employee_id='')
         )
-        policies = list(LeavePolicy.objects.filter(is_active=True, accrual_frequency=ACCRUAL_MONTHLY))
+        policies = list(LeavePolicy.objects.filter(is_active=True, accrual_frequency=ACCRUAL_MONTHLY).exclude(grant_mode='on_request'))
 
         credited_total = 0
         skipped_total  = 0

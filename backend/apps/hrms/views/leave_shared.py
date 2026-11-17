@@ -29,6 +29,7 @@ from ..models import (
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
 )
+from ..services_leave_event import ensure_event_balance
 from ..services_leave_ledger import employee_matches_policy_gender, is_unpaid_lwp, pending_leave_days
 from ..serializers import (
     CarryForwardInputSerializer,
@@ -257,6 +258,8 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
 
         if not employee_matches_policy_gender(employee, policy):
             continue
+        if policy.grant_mode == 'on_request':
+            continue   # maternity / paternity are granted per case when the employee applies, never at joining
 
         # Round to nearest 0.5 — standard HRMS display precision
         raw     = float(policy.annual_days) * remaining_months / 12
@@ -505,6 +508,7 @@ def _leave_preview(request):
     pending_days   = 0.0
     convert_to_lop = getattr(policy, 'convert_to_lop', False)
     if leave_type and not is_unpaid_lwp(leave_type):
+        ensure_event_balance(request.user, leave_type, start.year, start)   # maternity / paternity: the case's balance appears on application
         bal = LeaveBalance.objects.filter(
             employee=request.user, leave_type=leave_type, year=start.year
         ).first()

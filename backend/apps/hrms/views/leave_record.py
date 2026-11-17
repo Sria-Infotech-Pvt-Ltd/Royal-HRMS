@@ -27,6 +27,7 @@ from ..models import (
     REQ_APPROVED, REQ_L2_PENDING, REQ_PENDING, LeaveBalance, LeaveRequest, WorkFromHomeRequest,
 )
 from ..serializers import LeaveRequestSerializer
+from ..services_leave_event import ensure_event_balance
 from .leave_shared import (
     _calc_working_days, _deduct_balance_safe, _sync_leave_attendance, _validate_leave_policy,
     _zero_working_days_reason,
@@ -140,6 +141,7 @@ class LeaveRecordView(APIView):
                 return error(clash)
             lop_days = 0.0
             if data['leave_type'] != LEAVE_LWP:
+                ensure_event_balance(target, data['leave_type'], data['start_date'].year, data['start_date'])
                 balance = LeaveBalance.objects.select_for_update().filter(
                     employee=target, leave_type=data['leave_type'], year=data['start_date'].year,
                 ).first()

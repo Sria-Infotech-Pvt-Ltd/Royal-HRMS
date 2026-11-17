@@ -83,7 +83,10 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
     () => calcWorkingDays(form.from_date, form.to_date, form.duration, sandwichEnabled),
     [form.from_date, form.to_date, form.duration, sandwichEnabled]
   );
-  const available     = balance ? Number(balance.available_days) : 0;
+  // Maternity / paternity have no balance until the employee applies (the server creates the case's balance then), so before that the
+  // estimate is the policy's entitlement for one case; the server preview below is what decides.
+  const entitlementIfNoBalance = policy?.grant_mode === "on_request" ? Number(policy.annual_days) : 0;
+  const available     = balance ? Number(balance.available_days) : entitlementIfNoBalance;
   const pendingDays   = balance ? Number(balance.pending_days ?? 0) : 0;
   const convertToLop   = policy?.convert_to_lop ?? false;
   const exceedsBalance = !ltConfig.isLwp && workDays > available && workDays > 0;

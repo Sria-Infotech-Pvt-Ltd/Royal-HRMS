@@ -42,6 +42,8 @@ export interface LeavePolicy {
   leave_type:            LeaveTypeKey;
   leave_type_display:    string;
   matches_gender_for_requester: boolean;
+  /** "on_request": granted per case when the employee applies (maternity, paternity), not credited each year. */
+  grant_mode?: "annual" | "on_request";
   annual_days:           number;
   can_carry_forward:     boolean;
   max_carry_forward_days: number;
