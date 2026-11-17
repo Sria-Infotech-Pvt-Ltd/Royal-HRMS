@@ -111,6 +111,10 @@
 .ess-cal-tip{position:fixed;z-index:60;display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 12px 32px rgba(24,20,48,.18);color:var(--ink);font-size:11px;pointer-events:none;text-align:left}
 .ess-cal-tip strong{font-size:12px}
 .ess-cal-tip-status,.ess-cal-tip-empty{color:var(--muted);font-weight:600}
+/* "WFH" tag: a day worked from home, shown next to its status (work mode is separate from the status) */
+.ess-cal-wfh{display:inline-flex;align-items:center;gap:3px;width:fit-content;margin-top:2px;padding:1px 6px;border-radius:5px;font-size:9px;font-weight:700;letter-spacing:.02em;color:var(--info,#2563eb);background:color-mix(in srgb,var(--info,#2563eb) 12%,transparent)}
+.ess-cal-wfh .ti{font-size:10px}
+.ess-calendar-legend .ess-cal-wfh{margin-top:0;margin-right:4px}
 .ess-cal-tip dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:2px 0 0}
 .ess-cal-tip dt{color:var(--muted)}
 .ess-cal-tip dd{margin:0;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}

@@ -1,6 +1,7 @@
 "use client";
 
 import type { DayRecord } from "@/types/attendance";
+import { isWorkFromHome } from "@/lib/workMode";
 
 interface Props {
   year:         number;
@@ -110,6 +111,12 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                       </span>
                     )}
                   </div>
+
+                  {isWorkFromHome(record) && (
+                    <div title="Work from home" style={{ fontSize: 8, fontWeight: 800, color: "var(--info, #2563eb)", letterSpacing: "0.04em" }}>
+                      <i className="ti ti-home" aria-hidden="true" /> WFH
+                    </div>
+                  )}
 
                   {record?.clockIn && !NON_WORKING.has(status) && (
                     <div style={{ fontSize: 8, color: "var(--on-variant)", fontFamily: "Menlo, Consolas, monospace", lineHeight: 1.35 }}>

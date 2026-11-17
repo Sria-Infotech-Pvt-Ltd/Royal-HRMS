@@ -132,3 +132,20 @@ describe("dayClass", () => {
     expect(dayClass(undefined)).toBe("unrecorded");
   });
 });
+
+describe("EssAttendanceCalendar work from home", () => {
+  it("tags a day worked from home, keeping its status, and explains the tag in the title and the legend", () => {
+    const html = render(2026, 11, { "16": record("Late", { work_mode: "wfh", clockIn: "13:04" }) });
+    expect(html).toContain("ess-cal-label\">Late<");
+    expect(html).toMatch(/class="ess-cal-wfh" title="Work from home"/);
+    expect(html).toContain("16 November 2026 — Late — Work from home — In 13:04");
+    expect(html).toContain("Work from home</span>");   // the legend entry
+  });
+
+  it("does not tag office days or days with no record", () => {
+    const html = render(2026, 11, { "17": record("Present", { work_mode: "office" }), "18": record("Late") });
+    const cells = html.split('role="cell"');
+    const tagged = cells.filter(cell => cell.includes('title="Work from home"'));
+    expect(tagged).toHaveLength(0);
+  });
+});

@@ -7,6 +7,7 @@
 
 import { useState, type SyntheticEvent } from "react";
 import { buildMonthGrid, isoDate, WEEKDAY_SHORT } from "@/lib/attendanceCalendarGrid";
+import { isWorkFromHome } from "@/lib/workMode";
 import type { DayRecord } from "@/types/attendance";
 
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -56,6 +57,7 @@ interface EssAttendanceCalendarProps {
 function dayTitle(day: number, monthName: string, year: number, record: DayRecord | undefined): string {
   const parts = [`${day} ${monthName} ${year}`];
   if (record?.status) parts.push(record.holiday_name ? `${record.status}: ${record.holiday_name}` : record.status);
+  if (isWorkFromHome(record)) parts.push("Work from home");
   if (record?.clockIn) parts.push(`In ${record.clockIn}${record.clockOut ? ` · Out ${record.clockOut}` : ""}`);
   return parts.join(" — ");
 }
@@ -73,6 +75,7 @@ function DayTip({ heading, record, position }: { heading: string; record: DayRec
     <div className="ess-cal-tip" role="tooltip" style={{ left: position.left, top: position.top, width: TIP_WIDTH }}>
       <strong>{heading}</strong>
       {record?.status && <span className="ess-cal-tip-status">{record.holiday_name ? `${record.status}: ${record.holiday_name}` : record.status}</span>}
+      {isWorkFromHome(record) && <span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /> Work from home</span>}
       {hasPunch ? (
         <dl>
           <dt>Punched in</dt><dd>{record?.clockIn || "—"}</dd>
@@ -123,6 +126,7 @@ function DayCell({ day, year, month, record: rawRecord, isToday }: {
           <span className="ess-cal-label">{label}</span>
         </span>
       )}
+      {isWorkFromHome(record) && <span className="ess-cal-wfh" title="Work from home"><i className="ti ti-home" aria-hidden="true" /> WFH</span>}
       {tipPosition && <DayTip heading={`${day} ${MONTH_LONG[month - 1]} ${year}`} record={record} position={tipPosition} />}
     </div>
   );
@@ -159,6 +163,7 @@ export default function EssAttendanceCalendar({
         {LEGEND.map(([className, label]) => (
           <span key={className}><i className={`ess-status-dot ${className}`} />{label}</span>
         ))}
+        <span><i className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /> WFH</i>Work from home</span>
       </div>
 
       <div

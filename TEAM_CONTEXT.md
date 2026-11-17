@@ -6041,3 +6041,18 @@ New `frontend/components/dashboard/TrendCharts.tsx` (3 self-contained bar-chart 
 **Tests:** 13 database-free tests (`tests_default_permission_templates.py`). `tests_permission_templates.py::test_list_returns_all_templates` used to assert the list was exactly {A, B}; it now asserts A and B and the two defaults are present (not run: needs a database).
 
 **Verified:** 75 database-free backend tests, `manage.py check`, and `sync_permissions` run twice on the local dev database (created 2, then changed nothing). **Not verified:** the template screens in a browser; the changed list test. The local dev database also holds two older, empty, hand-made templates ("L1 Manager", "L2 manager"); they were not touched.
+
+## Attendance calendars show a "WFH" tag (2026-11-17)
+
+**Problem:** a day worked from home was stored correctly (`AttendanceRecord.work_mode = 'wfh'`, set from an approved work-from-home request in `process_day`) but both employee calendars showed only the status ("Late"), because the calendar day never carried the work mode and the pages had no way to show it.
+
+**Change:**
+- `AttendanceDashboardService._build_day` (the calendar API) adds `work_mode` to each day: `'office'` or `'wfh'`, `None` when the day has no record. All other fields are unchanged. Work mode is separate from the status: a day can be Late and WFH, and the status label does not change.
+- `types/attendance.ts` `DayRecord.work_mode?`, new `lib/workMode.ts` `isWorkFromHome()`.
+- ESS calendar (`EssAttendanceCalendar.tsx`): a blue "WFH" tag under the status, "Work from home" in the hover card, in the cell's title / aria-label and in the legend; the style is `.ess-cal-wfh` in `ess-theme.css`. My Attendance page calendar (`my-attendance/_components/AttendanceCalendar.tsx`): the same small tag.
+
+**Known limits:** the tag needs a record for the day, so an approved-WFH day with no punch still shows Absent with no tag. The HR attendance screens and the HR employee month view are not changed. A day with no punch-out still shows Late with 0 hours (a separate display issue).
+
+**Tests:** 4 database-free backend tests (`tests_calendar_work_mode.py`), 2 calendar tests added to `EssAttendanceCalendar.test.tsx`, `lib/workMode.test.ts`.
+
+**Verified:** 37 database-free attendance backend tests, 123 frontend test files / 982 tests, `tsc`, `eslint`, `npm run build`; the real calendar output for the affected employee on the local dev database (16 Nov: Late + wfh, 17 Nov: Late + office). **Not verified:** the pages in a browser.

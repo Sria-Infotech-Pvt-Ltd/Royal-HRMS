@@ -48,6 +48,8 @@ export interface DayRecord {
   holiday_name?:           string | null;
   canRegularize:           boolean;
   regularization_required: boolean;
+  /** How the day was worked. "wfh" when an approved work-from-home request covered it; absent/null for days with no record. */
+  work_mode?:              "office" | "wfh" | null;
 }
 
 export interface CalendarResponse {

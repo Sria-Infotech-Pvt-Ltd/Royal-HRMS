@@ -1137,6 +1137,9 @@ class AttendanceDashboardService:
             'holiday_name':            holiday_name,
             'canRegularize':           can_reg,
             'regularization_required': reg_required,
+            # How the day was worked ('office' | 'wfh'), set from an approved work-from-home request. It is orthogonal to the
+            # status (a day can be Late and WFH), so the calendar shows it as a separate tag.
+            'work_mode':               rec.work_mode if rec else None,
         }
 
 
