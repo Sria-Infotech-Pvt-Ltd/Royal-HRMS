@@ -266,21 +266,6 @@ class CandidateBulkImportSampleView(APIView):
         from rest_framework.renderers import JSONRenderer
         return (JSONRenderer(), 'application/json')
 
-    _HEADERS = [
-        'Candidate Name', 'Email', 'Mobile Number', 'Position Applied',
-        'Company Code', 'Interview Date', 'Interview Mode', 'Notes',
-    ]
-    _SAMPLE_ROWS = [
-        [
-            'Rahul Sharma', 'rahul.sharma@email.com', '9876543210',
-            'Software Engineer', 'Mumbai HQ', '2026-07-25', 'In-Person', '',
-        ],
-        [
-            'Priya Patel', 'priya.patel@email.com', '9123456789',
-            'Product Manager', 'Delhi Branch', '2026-07-26', 'Video Call', 'Strong candidate',
-        ],
-    ]
-
     def get(self, request):
         if not _has_perm(request.user, 'recruitment.view'):
             return error(
@@ -288,15 +273,17 @@ class CandidateBulkImportSampleView(APIView):
                 http_status=status.HTTP_403_FORBIDDEN,
             )
 
-        from core.file_utils import build_sample_csv, build_sample_xlsx, _CSV_MIME, _XLSX_MIME
+        from core.file_utils import _CSV_MIME, _XLSX_MIME
+        from apps.recruitment.services_import_template import build_import_sample_csv, build_import_sample_xlsx
 
         fmt = request.query_params.get('format', 'csv').lower().strip()
         if fmt == 'xlsx':
-            content  = build_sample_xlsx(self._HEADERS, self._SAMPLE_ROWS, 'Candidate Import')
+            # Drop-down lists for Position / Company Code / Interview Mode, filled from this company's own data.
+            content  = build_import_sample_xlsx()
             filename = 'candidate_import_sample.xlsx'
             mime     = _XLSX_MIME
         else:
-            content  = build_sample_csv(self._HEADERS, self._SAMPLE_ROWS)
+            content  = build_import_sample_csv()
             filename = 'candidate_import_sample.csv'
             mime     = _CSV_MIME
 

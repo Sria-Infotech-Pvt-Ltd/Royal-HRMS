@@ -21,6 +21,10 @@ import { LogsModal }                  from "./LogsModal";
 import { EditCandidateModal }         from "./EditCandidateModal";
 import { CandidateBulkImportModal }   from "./CandidateBulkImportModal";
 import CandidateTable from "./CandidateTable";
+import InterviewHeader from "./InterviewHeader";
+import CandidateStatCards from "./CandidateStatCards";
+import CandidateToolbar from "./CandidateToolbar";
+import { hasActiveFilters } from "./_filters";
 import { FeedbackModal } from "./FeedbackModal";
 import ConfirmModal from "@/components/ConfirmModal";
 
@@ -190,102 +194,46 @@ export default function InterviewListPage() {
 
   const activeBranch = branches.find(b => b.id === branchFilter);
 
-  const statCards = [
-    { label: "Total",    value: stats?.total    ?? "—", icon: "ti-users",      iconCls: "si-primary" },
-    { label: "Pending",  value: stats?.pending  ?? "—", icon: "ti-clock",      iconCls: "si-warn" },
-    { label: "Selected", value: stats?.selected ?? "—", icon: "ti-user-check", iconCls: "si-success" },
-    { label: "Rejected", value: stats?.rejected ?? "—", icon: "ti-user-x",     iconCls: "si-error" },
-  ];
+  const hasFilters = hasActiveFilters(search, statusFilter, branchFilter, unrestricted);
+
+  function clearFilters() {
+    const nextBranch = unrestricted ? "" : branchFilter;
+    setSearch("");
+    setStatusFilter("");
+    setBranchFilter(nextBranch);
+    fetchAll("", "", nextBranch, 1);
+  }
 
   return (
-    <>
-      {/* Header */}
-      <div className="page-header">
-        <div>
-          <div className="page-title">Interview List</div>
-          <div className="page-sub">
-            {activeBranch
-              ? <>Showing candidates for <strong>{activeBranch.branch_name}</strong></>
-              : "Manage all interview candidates and their status"}
-          </div>
-        </div>
-        <div className="page-actions" style={{ gap: 10 }}>
-          {/* Search */}
-          <div className="search-bar">
-            <i className="ti ti-search" />
-            <input
-              placeholder="Search candidates…"
-              value={search}
-              onChange={e => handleSearch(e.target.value)}
-              suppressHydrationWarning
-            />
-          </div>
+    <div className="cand-page">
+      <InterviewHeader
+        branchName={activeBranch?.branch_name}
+        canCreate={canCreate}
+        onBulkImport={() => setShowBulkImport(true)}
+        onAdd={() => setShowAdd(true)}
+      />
 
-          {/* Branch filter dropdown — locked to their own branch for branch-restricted users */}
-          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
-            {unrestricted ? (
-              <>
-                <select
-                  className="field-input field-select"
-                  style={{ minWidth: 180, paddingLeft: 32 }}
-                  value={branchFilter}
-                  onChange={e => handleBranchFilter(e.target.value ? Number(e.target.value) : "")}
-                  suppressHydrationWarning
-                >
-                  <option value="">All Company Codes</option>
-                  {branches.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.branch_name} ({b.branch_code})
-                    </option>
-                  ))}
-                </select>
-                <i
-                  className="ti ti-building"
-                  style={{
-                    position: "absolute", left: 10, top: "50%",
-                    transform: "translateY(-50%)", color: "var(--on-variant)",
-                    pointerEvents: "none",
-                  }}
-                />
-              </>
-            ) : (
-              <select
-                className="field-input field-select"
-                style={{ minWidth: 180, paddingLeft: 32, background: "var(--bg-low)", cursor: "not-allowed" }}
-                value={effectiveBranch}
-                disabled
-                title="Scoped to your Company Code"
-                suppressHydrationWarning
-              >
-                <option value={effectiveBranch}>{effectiveBranch || "—"}</option>
-              </select>
-            )}
-            {!unrestricted && <i className="ti ti-lock" style={{ color: "var(--on-variant)", fontSize: 14 }} />}
-          </div>
+      <CandidateStatCards
+        stats={stats}
+        branchName={activeBranch?.branch_name}
+        activeStatus={statusFilter}
+        onSelect={handleStatusFilter}
+      />
 
-          {canCreate && (
-            <>
-              <button className="btn btn-ghost" onClick={() => setShowBulkImport(true)} suppressHydrationWarning>
-                <i className="ti ti-file-upload" /> Bulk Import
-              </button>
-              <button className="btn btn-filled" onClick={() => setShowAdd(true)}>
-                <i className="ti ti-plus" /> Add Candidate
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="stats-grid">
-        {statCards.map(s => (
-          <div key={s.label} className="stat-card">
-            <div className={`stat-icon ${s.iconCls}`}><i className={`ti ${s.icon}`} /></div>
-            <div className="stat-label">{s.label}</div>
-            <div className="stat-value">{s.value}</div>
-          </div>
-        ))}
-      </div>
+      <CandidateToolbar
+        search={search}
+        onSearch={handleSearch}
+        branches={branches}
+        branchFilter={branchFilter}
+        onBranch={handleBranchFilter}
+        canChooseBranch={unrestricted}
+        lockedBranch={effectiveBranch}
+        statusFilter={statusFilter}
+        statusChoices={statusChoices}
+        onStatus={handleStatusFilter}
+        hasFilters={hasFilters}
+        onClear={clearFilters}
+      />
 
       {/* Portal login feedback */}
       {portalMsg && (
@@ -301,12 +249,6 @@ export default function InterviewListPage() {
         </div>
       )}
 
-      {/* Info banner */}
-      <div className="alert alert-info" style={{ marginBottom: 16 }}>
-        <i className="ti ti-info-circle" />
-        <div>Move candidates through the pipeline stages. Selected candidates receive the nine-step self-service onboarding wizard; direct hires use the HR hiring form and skip it.</div>
-      </div>
-
       {/* Table */}
       <CandidateTable
         candidates={candidates}
@@ -314,9 +256,9 @@ export default function InterviewListPage() {
         error={error}
         activeBranch={activeBranch}
         totalCount={totalCount}
-        statusFilter={statusFilter}
+        hasFilters={hasFilters}
+        onClearFilters={clearFilters}
         statusChoices={statusChoices}
-        onStatusFilter={handleStatusFilter}
         canEditRec={canEditRec}
         sendingPortal={sendingPortal}
         page={page}
@@ -378,6 +320,6 @@ export default function InterviewListPage() {
           }}
         />
       )}
-    </>
+    </div>
   );
 }

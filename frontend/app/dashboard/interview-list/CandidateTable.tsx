@@ -1,6 +1,7 @@
 "use client";
 
-import { Branch, Candidate, CandidateStatus, fmtDate, MODE_LABELS } from "./_data";
+import { Branch, Candidate, CandidateStatus } from "./_data";
+import { interviewSummary, needsDetails } from "./_filters";
 import { Avatar, StatusBadge, StatusDropdown } from "./_pageHelpers";
 
 interface CandidateTableProps {
@@ -9,9 +10,9 @@ interface CandidateTableProps {
   error: string;
   activeBranch: Branch | undefined;
   totalCount: number;
-  statusFilter: "" | CandidateStatus;
+  hasFilters: boolean;
+  onClearFilters: () => void;
   statusChoices: { value: CandidateStatus; label: string }[];
-  onStatusFilter: (val: "" | CandidateStatus) => void;
   canEditRec: boolean;
   sendingPortal: number | null;
   page: number;
@@ -26,8 +27,8 @@ interface CandidateTableProps {
 }
 
 export default function CandidateTable({
-  candidates, loading, error, activeBranch, totalCount, statusFilter, statusChoices,
-  onStatusFilter, canEditRec, sendingPortal, page, totalPages, onPageChange,
+  candidates, loading, error, activeBranch, totalCount, hasFilters, onClearFilters, statusChoices,
+  canEditRec, sendingPortal, page, totalPages, onPageChange,
   onOpenLogs, onEdit, onStatusChanged, onMarkRequest, onSendPortalLogin, onOpenFeedback,
 }: CandidateTableProps) {
   return (
@@ -37,18 +38,9 @@ export default function CandidateTable({
           <i className="ti ti-users" />
           {activeBranch ? `${activeBranch.branch_name} Candidates` : "All Candidates"} ({totalCount})
         </span>
-        <select
-          className="field-input field-select"
-          style={{ width: 180 }}
-          value={statusFilter}
-          onChange={e => onStatusFilter(e.target.value as "" | CandidateStatus)}
-          suppressHydrationWarning
-        >
-          <option value="">All Status</option>
-          {statusChoices.map(s => (
-            <option key={s.value} value={s.value}>{s.label}</option>
-          ))}
-        </select>
+        <span className="cand-hint" title="Move candidates through the stages. Selected candidates receive the nine-step self-service onboarding wizard; direct hires use the HR hiring form and skip it.">
+          <i className="ti ti-info-circle" aria-hidden="true" /> How the pipeline works
+        </span>
       </div>
 
       {error && (
@@ -59,30 +51,47 @@ export default function CandidateTable({
 
       <div className="table-wrap">
         {loading ? (
-          <div className="text-center py-10"><i className="ti ti-loader-2 spin text-3xl" /></div>
+          <div className="cand-skeleton" role="status" aria-label="Loading candidates">
+            {[0, 1, 2, 3, 4].map(row => (
+              <div key={row} className="cand-skeleton-row">
+                <span className="cand-skeleton-dot" /><span className="cand-skeleton-bar" /><span className="cand-skeleton-bar short" />
+              </div>
+            ))}
+          </div>
         ) : !Array.isArray(candidates) || candidates.length === 0 ? (
-          <div className="empty-state">
-            <i className="ti ti-users" />
-            <h3>{activeBranch ? `No candidates in ${activeBranch.branch_name}` : "No candidates found"}</h3>
-            <p>{activeBranch ? "Add a candidate to this Company Code to get started." : "Add a candidate or adjust your filters."}</p>
+          <div className="empty-state cand-empty">
+            <i className={`ti ${hasFilters ? "ti-search-off" : "ti-users"}`} />
+            <h3>
+              {hasFilters ? "No candidates match your filters"
+                : activeBranch ? `No candidates in ${activeBranch.branch_name}` : "No candidates yet"}
+            </h3>
+            <p>
+              {hasFilters ? "Try a different search or stage, or clear the filters to see everyone."
+                : "Add a candidate or bulk-import a sheet to start building your pipeline."}
+            </p>
+            {hasFilters && (
+              <button type="button" className="btn btn-ghost" onClick={onClearFilters}>
+                <i className="ti ti-filter-off" /> Clear filters
+              </button>
+            )}
           </div>
         ) : (
           <table>
             <thead>
               <tr>
                 <th>Candidate</th><th>Position</th><th>Company Code</th>
-                <th>Interview Date</th><th>Mode</th><th>Status</th><th>Actions</th>
+                <th>Interview</th><th>Status</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {candidates.map(c => (
                 <tr key={c.id}>
                   <td>
-                    <div className="flex items-center gap-3">
+                    <div className="cand-person">
                       <Avatar name={c.name} size={32} />
-                      <div>
+                      <div className="cand-person-text">
                         <strong>{c.name}</strong>
-                        <div className="text-xs text-[var(--on-variant)]">{c.email}</div>
+                        <span>{c.email}</span>
                         {c.referral_by !== null && (
                           <div style={{ fontSize: 11, color: "#7c3aed", display: "flex", alignItems: "center", gap: 3, marginTop: 2 }}>
                             <i className="ti ti-user-plus" style={{ fontSize: 10 }} />
@@ -98,25 +107,36 @@ export default function CandidateTable({
                       ? <span className="badge badge-neutral" style={{ fontSize: 11 }}>{c.branch_name}</span>
                       : <span className="text-xs text-[var(--on-variant)]">—</span>}
                   </td>
-                  <td>{fmtDate(c.interview_date)}</td>
-                  <td><span className="text-xs">{MODE_LABELS[c.interview_mode]}</span></td>
+                  <td>
+                    {(() => {
+                      const summary = interviewSummary(c);
+                      return summary.when ? (
+                        <div className="cand-interview">
+                          <strong>{summary.when}</strong>
+                          <span>{summary.mode}{summary.interviewer ? ` · ${summary.interviewer}` : ""}</span>
+                        </div>
+                      ) : (
+                        <div className="cand-interview"><span>Not scheduled</span><span>{summary.mode}</span></div>
+                      );
+                    })()}
+                  </td>
                   <td><StatusBadge status={c.status} /></td>
                   <td>
-                    <div className="flex items-center gap-2">
-                      <button className="btn btn-ghost btn-sm" onClick={() => onOpenLogs(c)}>
-                        <i className="ti ti-history" /> Logs
+                    <div className="cand-actions">
+                      <button className="btn btn-ghost btn-sm cand-icon-btn" title="Activity log" aria-label={`Activity log for ${c.name}`} onClick={() => onOpenLogs(c)}>
+                        <i className="ti ti-history" />
                       </button>
 
-                      <button className="btn btn-ghost btn-sm" onClick={() => onOpenFeedback(c)}>
-                        <i className="ti ti-message-2-star" /> Feedback
+                      <button className="btn btn-ghost btn-sm cand-icon-btn" title="Interview feedback" aria-label={`Interview feedback for ${c.name}`} onClick={() => onOpenFeedback(c)}>
+                        <i className="ti ti-message-2-star" />
                       </button>
 
                       {/* Edit — update interview details; not applicable once converted to an employee */}
                       {canEditRec && c.status !== "converted" && (
                         <button className="btn btn-ghost btn-sm" onClick={() => onEdit(c)} suppressHydrationWarning
-                          style={c.referral_by !== null && (!c.branch || !c.interview_date) ? { color: "var(--warn)" } : undefined}>
+                          style={needsDetails(c) ? { color: "var(--warn)" } : undefined}>
                           <i className="ti ti-pencil" />
-                          {c.referral_by !== null && (!c.branch || !c.interview_date) ? " Set Details" : " Edit"}
+                          {needsDetails(c) ? " Set Details" : " Edit"}
                         </button>
                       )}
 
