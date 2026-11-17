@@ -10,8 +10,9 @@ Preview first (writes nothing):
 Then apply the same selection:
     python manage.py recalculate_attendance_status --apply
 
-Only days with real IN and OUT punches and a Present / Late / Half Day status are considered; leave, holiday, weekly off,
-hand-edited, imported-without-punches and paid/closed payroll days are never touched. See services_recalculate.py.
+Only Present / Late / Half Day days are considered, and only those with real IN and OUT punches or created by the HR CSV
+import (recomputed from the stored IN / OUT times). Leave, holiday, weekly off, manual entries, days still clocked in,
+hand-edited days and paid/closed payroll days are never touched. See services_recalculate.py.
 """
 from __future__ import annotations
 
@@ -94,7 +95,10 @@ class Command(BaseCommand):
 
     def _print_plan(self, plan: RecalcPlan) -> None:
         moves = Counter((change.old_status, change.new_status) for change in plan.changes)
+        sources = Counter(change.source for change in plan.changes)
         self.stdout.write(f'Would change: {len(plan.changes)}   Already correct: {plan.unchanged}')
+        for source, count in sorted(sources.items()):
+            self.stdout.write(f'  from {source}: {count}')
         for (old, new), count in sorted(moves.items()):
             self.stdout.write(f'  {old} -> {new}: {count}')
         for reason, count in sorted(plan.skipped.items()):
@@ -103,6 +107,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 f'  {change.day}  {change.employee_code:<10} {change.employee_name[:24]:<24} '
                 f'{change.old_status} ({change.old_minutes} min) -> {change.new_status} ({change.new_minutes} min)'
+                f'  [{change.source}]'
             )
         if len(plan.changes) > PREVIEW_ROWS:
             self.stdout.write(f'  ... and {len(plan.changes) - PREVIEW_ROWS} more')

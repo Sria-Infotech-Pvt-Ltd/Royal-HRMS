@@ -7,11 +7,12 @@ so a day with no punches (leave, an HR import, a manual entry) would turn Absent
 
 It only ever touches a day that:
   - already has a Present / Late / Half Day record, and
-  - has real IN and OUT punches (no open session), and
+  - has real IN and OUT punches (no open session), OR was created by the HR CSV import (it has an IMPORTED audit entry and
+    stored IN / OUT times but no punch rows - those are recomputed from the stored times), and
   - was not edited by hand (no MANUALLY_EDITED audit entry), and
   - is not inside a Paid or Closed payroll cycle.
-Everything else is counted as skipped and left alone. The status is computed by the same function live punches use
-(AttendanceProcessorService._calculate), so there is one rule, not two.
+Everything else (leave, manual entries, days still clocked in) is counted as skipped and left alone. The status is computed by
+the same function live punches use (AttendanceProcessorService._calculate / evaluate_times), so there is one rule, not two.
 """
 from __future__ import annotations
 
@@ -36,6 +37,8 @@ RECALCULABLE_STATUSES = (
 _TRACKED_FIELDS = ('status', 'total_working_minutes', 'overtime_minutes', 'is_late', 'is_early_exit')
 # Notes written by the calculation itself; any other note was written by a person and is kept.
 _CALCULATED_NOTE_PREFIXES = ('Grace exceeded', 'Late arrival')
+SOURCE_PUNCHES = 'punches'
+SOURCE_IMPORT = 'imported times'
 
 
 @dataclass
@@ -49,6 +52,7 @@ class RecalcChange:
     old_minutes: int
     new_minutes: int
     fields: dict = field(default_factory=dict)
+    source: str = SOURCE_PUNCHES
 
 
 @dataclass
@@ -74,7 +78,24 @@ def plan_record_change(record, punches: list, cfg) -> Optional[dict]:
         return None
     if punches[-1].punch_type != AttendancePunch.PUNCH_OUT:
         return None   # still clocked in (open session) - the live path owns this day
-    calculated = AttendanceProcessorService._calculate(punches, record.date, cfg)
+    return _diff(record, AttendanceProcessorService._calculate(punches, record.date, cfg))
+
+
+def plan_imported_change(record, cfg) -> Optional[dict]:
+    """Like plan_record_change, for a day made by the HR import: recompute from the stored IN / OUT times (no punch rows).
+
+    Pure function. A day without a usable IN and OUT pair is left alone (it would only come out Absent).
+    """
+    if not record.first_punch_in or not record.last_punch_out:
+        return None
+    calculated = AttendanceProcessorService.evaluate_times(record.first_punch_in, record.last_punch_out, cfg)
+    if calculated['status'] == AttendanceRecord.STATUS_ABSENT:
+        return None
+    return _diff(record, calculated)
+
+
+def _diff(record, calculated: dict) -> Optional[dict]:
+    """The tracked fields whose value differs from the freshly calculated day (a person's note is never overwritten)."""
     changes = {name: calculated[name] for name in _TRACKED_FIELDS if getattr(record, name) != calculated[name]}
     if changes and _is_calculated_note(record.note) and calculated['note'] != record.note:
         changes['note'] = calculated['note']
@@ -93,6 +114,14 @@ def _locked_ranges(start: date, end: date) -> list:
 def _manually_edited(start: date, end: date) -> set:
     rows = AttendanceAuditLog.objects.filter(
         event=AttendanceAuditLog.EVENT_MANUALLY_EDITED, date__gte=start, date__lte=end,
+    ).values_list('employee_id', 'date')
+    return set(rows)
+
+
+def _imported_days(start: date, end: date) -> set:
+    """{(employee_id, date)} that the HR CSV import wrote (its IMPORTED audit entry)."""
+    rows = AttendanceAuditLog.objects.filter(
+        event=AttendanceAuditLog.EVENT_IMPORTED, date__gte=start, date__lte=end,
     ).values_list('employee_id', 'date')
     return set(rows)
 
@@ -123,34 +152,45 @@ def build_plan(start: date, end: date, employee_code: str = '') -> RecalcPlan:
 
     locked = _locked_ranges(start, end)
     edited = _manually_edited(start, end)
+    imported = _imported_days(start, end)
     punches = _punches_by_day(start, end, {record.employee_id for record in records})
 
     for record in records:
+        key = (record.employee_id, record.date)
         if any(first <= record.date <= last for first, last in locked):
             plan.skip('inside a paid/closed payroll cycle')
-            continue
-        if (record.employee_id, record.date) in edited:
+        elif key in edited:
             plan.skip('edited by hand')
-            continue
-        day_punches = punches.get((record.employee_id, record.date), [])
-        if not day_punches or day_punches[-1].punch_type != AttendancePunch.PUNCH_OUT:
-            plan.skip('no punches, or still clocked in')
-            continue
-        changes = plan_record_change(record, day_punches, cfg)
-        if changes is None:
-            plan.unchanged += 1
-            continue
-        plan.changes.append(_to_change(record, changes))
+        else:
+            _plan_one(plan, record, punches.get(key, []), key in imported, cfg)
     return plan
 
 
-def _to_change(record, changes: dict) -> RecalcChange:
+def _plan_one(plan: RecalcPlan, record, day_punches: list, was_imported: bool, cfg) -> None:
+    """Add this record to the plan (or count why it was left alone). Punch rows win over stored import times."""
+    if day_punches:
+        if day_punches[-1].punch_type != AttendancePunch.PUNCH_OUT:
+            plan.skip('still clocked in')
+            return
+        changes, source = plan_record_change(record, day_punches, cfg), SOURCE_PUNCHES
+    elif was_imported:
+        changes, source = plan_imported_change(record, cfg), SOURCE_IMPORT
+    else:
+        plan.skip('no punches and not from the import (leave, manual entry)')
+        return
+    if changes is None:
+        plan.unchanged += 1
+        return
+    plan.changes.append(_to_change(record, changes, source))
+
+
+def _to_change(record, changes: dict, source: str = SOURCE_PUNCHES) -> RecalcChange:
     return RecalcChange(
         record_id=record.pk, employee_code=record.employee.employee_id, employee_name=record.employee.full_name or '',
         day=record.date, old_status=record.status, new_status=changes.get('status', record.status),
         old_minutes=record.total_working_minutes,
         new_minutes=changes.get('total_working_minutes', record.total_working_minutes),
-        fields=changes,
+        fields=changes, source=source,
     )
 
 
@@ -169,7 +209,7 @@ def apply_plan(plan: RecalcPlan) -> int:
         write_audit_log(
             employee=record.employee, date=record.date, event=AttendanceAuditLog.EVENT_RECALCULATED, record=record,
             old_value=f'{change.old_status} | {change.old_minutes} min', new_value=f'{change.new_status} | {change.new_minutes} min',
-            action='Recalculated with the current attendance settings',
+            action=f'Recalculated with the current attendance settings (from {change.source})',
         )
         updated += 1
     return updated

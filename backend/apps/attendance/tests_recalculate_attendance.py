@@ -9,7 +9,9 @@ from django.test import SimpleTestCase
 
 from apps.attendance.management.commands.recalculate_attendance_status import _month_range, _period
 from apps.attendance.models import AttendancePunch, AttendanceRecord
-from apps.attendance.services_recalculate import RecalcPlan, _is_calculated_note, plan_record_change
+from apps.attendance.services_recalculate import (
+    SOURCE_IMPORT, SOURCE_PUNCHES, RecalcPlan, _is_calculated_note, _plan_one, plan_imported_change, plan_record_change,
+)
 
 DAY = date(2026, 11, 10)
 
@@ -32,10 +34,11 @@ def punch(kind, ist_hour, ist_minute):
     return SimpleNamespace(punch_type=kind, punched_at=utc)
 
 
-def record(status, minutes, is_late=False, note='', is_early_exit=False):
+def record(status, minutes, is_late=False, note='', is_early_exit=False, first_in=None, last_out=None):
     return SimpleNamespace(
+        pk='record-1', employee=SimpleNamespace(employee_id='E1', full_name='Test Person'),
         date=DAY, status=status, total_working_minutes=minutes, overtime_minutes=0,
-        is_late=is_late, is_early_exit=is_early_exit, note=note,
+        is_late=is_late, is_early_exit=is_early_exit, note=note, first_punch_in=first_in, last_punch_out=last_out,
     )
 
 
@@ -116,3 +119,57 @@ class SupportingFunctionTests(SimpleTestCase):
         with mock.patch('apps.attendance.management.commands.recalculate_attendance_status.timezone.localdate', return_value=date(2026, 11, 16)):
             with self.assertRaises(CommandError):
                 _period('2026-11', '2026-09')
+
+
+class ImportedDayTests(SimpleTestCase):
+    """Days the HR import wrote before it followed the Punch Rules: stored IN/OUT times, no punch rows."""
+
+    def test_an_old_import_loses_the_break_it_never_deducted(self):
+        # The old import stored the raw span (09:12-18:00 = 528 min) and skipped the 1 h lunch.
+        old = record(PRESENT, 528, first_in=time(9, 12), last_out=time(18, 0))
+        self.assertEqual(plan_imported_change(old, cfg()), {'total_working_minutes': 468})
+
+    def test_an_old_four_hour_import_is_no_longer_a_full_day(self):
+        old = record(PRESENT, 240, first_in=time(9, 0), last_out=time(13, 0))     # the old rule: 240 min or more is Present
+        self.assertEqual(
+            plan_imported_change(old, cfg()),
+            {'status': HALF, 'total_working_minutes': 180, 'is_early_exit': True},
+        )
+
+    def test_an_import_that_is_already_right_is_left_alone(self):
+        current = record(PRESENT, 468, first_in=time(9, 12), last_out=time(18, 0))
+        self.assertIsNone(plan_imported_change(current, cfg()))
+
+    def test_an_import_without_a_usable_in_out_pair_is_left_alone(self):
+        self.assertIsNone(plan_imported_change(record(PRESENT, 0), cfg()))
+        self.assertIsNone(plan_imported_change(record(PRESENT, 0, first_in=time(9, 0), last_out=None), cfg()))
+        self.assertIsNone(plan_imported_change(record(PRESENT, 0, first_in=time(18, 0), last_out=time(9, 0)), cfg()))
+
+    def test_a_person_s_note_on_an_imported_day_is_kept(self):
+        old = record(PRESENT, 240, note='Checked with HR', first_in=time(9, 0), last_out=time(13, 0))
+        self.assertNotIn('note', plan_imported_change(old, cfg()))
+
+    def test_planning_uses_stored_times_only_for_days_from_the_import(self):
+        old = record(PRESENT, 240, first_in=time(9, 0), last_out=time(13, 0))
+        plan = RecalcPlan()
+        _plan_one(plan, old, [], True, cfg())
+        self.assertEqual([change.source for change in plan.changes], [SOURCE_IMPORT])
+        self.assertEqual(plan.changes[0].new_status, HALF)
+
+    def test_a_day_with_no_punches_that_was_not_imported_is_skipped(self):
+        # leave, manual entry and the like: nothing to recompute from
+        plan = RecalcPlan()
+        _plan_one(plan, record(PRESENT, 240, first_in=time(9, 0), last_out=time(13, 0)), [], False, cfg())
+        self.assertEqual((plan.changes, list(plan.skipped)), ([], ['no punches and not from the import (leave, manual entry)']))
+
+    def test_real_punches_win_over_stored_import_times(self):
+        stored = record(HALF, 468, first_in=time(9, 0), last_out=time(13, 0))
+        plan = RecalcPlan()
+        _plan_one(plan, stored, [punch(IN, 9, 12), punch(OUT, 18, 0)], True, cfg())
+        self.assertEqual([change.source for change in plan.changes], [SOURCE_PUNCHES])
+        self.assertEqual(plan.changes[0].new_status, PRESENT)
+
+    def test_a_day_still_clocked_in_is_skipped_even_if_imported(self):
+        plan = RecalcPlan()
+        _plan_one(plan, record(PRESENT, 0, first_in=time(9, 0), last_out=time(13, 0)), [punch(IN, 9, 0)], True, cfg())
+        self.assertEqual((plan.changes, plan.skipped), ([], {'still clocked in': 1}))
