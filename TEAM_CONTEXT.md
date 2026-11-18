@@ -6288,3 +6288,12 @@ Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend 
 - `hrms/tests_project_sync_queue` (2): the log message now reads "...took too long and was stopped" where the tests expect 'time budget' / 'SoftTimeLimitExceeded'.
 - `attendance/tests_face_id_policy.WelcomeEmailTemplateTests` (2): the test creates a `welcome_employee` email template that migrations now seed, so it hits `hrms_email_templates_name_key`.
 - A logged (not failing) `RuntimeError: No active SMTP configuration found` appears during the lifecycle tests: one email path is not covered by the SMTP mock there.
+
+
+## The last 5 stale tests fixed (2026-11-18)
+
+**By:** New-AI session - **Branch:** New-AI. Test-only. Each failure was a test left behind by a deliberate later change, so the tests were updated, not the code. Recruitment + attendance + hrms suites: 869 passed (5 skipped), 0 failures.
+- `attendance/tests_late_forgiveness`: the short-hours rule (f8cd31de) keeps a day above the half-day limit but short of full hours as Present/Late; a Half Day only applies when `short_hours_as_half_day` is on. The test now expects Late for the default, and a new test covers `short_hours_as_half_day=True` -> Half Day.
+- `hrms/tests_project_sync_queue` (2): sync failures are written in plain language (ee830ba2, c8673060): a time-out reads `MSG_STOPPED_TOO_LONG`, and the exception name `SoftTimeLimitExceeded` must NOT appear in the message. Both tests now assert that.
+- `attendance/tests_face_id_policy.WelcomeEmailTemplateTests` (2): `hire_welcome_credentials` is seeded by migrations (name is unique), so the test replaces its content with `update_or_create` instead of creating a second row.
+- The earlier "still failing" list in the section above is now empty. The logged `No active SMTP configuration found` during the lifecycle tests is still not covered by the SMTP mock there (it does not fail anything).

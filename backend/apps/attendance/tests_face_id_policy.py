@@ -300,10 +300,12 @@ class WelcomeEmailTemplateTests(TestCase):
         importlib.import_module('apps.accounts.migrations.0201_welcome_email_face_id_block').add_face_id_block(apps, None)
 
     def _template(self, body):
-        return EmailTemplate.objects.create(
-            name='hire_welcome_credentials', display_name='Welcome', template_type='accounts', subject='Hi',
-            body=body, available_variables=['employee_name'],
+        # Migrations already seed this built-in template (name is unique), so replace its content instead of creating a second row.
+        template, _ = EmailTemplate.objects.update_or_create(
+            name='hire_welcome_credentials',
+            defaults=dict(display_name='Welcome', template_type='accounts', subject='Hi', body=body, available_variables=['employee_name']),
         )
+        return template
 
     def test_the_builtin_welcome_email_gets_the_face_id_block(self):
         import importlib

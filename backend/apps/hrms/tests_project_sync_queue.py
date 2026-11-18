@@ -187,7 +187,7 @@ class BackgroundPullTests(QueuedPullTestCase):
         self.assertEqual(pages['asked'], 1)            # it stopped before asking for page 2
         self.assertFalse(ProjectAssignment.objects.filter(employee_code=CODE).exists())   # partial data is never applied
         failure = ProjectSyncLog.objects.get(source='pull', status='failed', employee_code=CODE)
-        self.assertIn('time budget', failure.message)
+        self.assertEqual(failure.message, sync.MSG_STOPPED_TOO_LONG)   # plain language: no "time budget" jargon for the person reading the log
 
     def test_it_never_overwrites_assignments_that_arrived_in_the_meantime(self):
         self.store(assignment_id=5)                    # a webhook push got there first
@@ -215,7 +215,9 @@ class BackgroundPullTests(QueuedPullTestCase):
         from celery.exceptions import SoftTimeLimitExceeded
         with patch('apps.hrms.services_project_sync._get_all_pages', side_effect=SoftTimeLimitExceeded()):
             run_employee_assignments_pull(CODE)
-        self.assertTrue(ProjectSyncLog.objects.filter(source='pull', status='failed', message__contains='SoftTimeLimitExceeded').exists())
+        failure = ProjectSyncLog.objects.get(source='pull', status='failed', employee_code=CODE)
+        self.assertEqual(failure.message, sync.MSG_STOPPED_TOO_LONG)
+        self.assertNotIn('SoftTimeLimitExceeded', failure.message)   # the exception name is for the developer log, never the person reading this
 
 
 class DuplicateAndEnqueueFailureTests(QueuedPullTestCase):

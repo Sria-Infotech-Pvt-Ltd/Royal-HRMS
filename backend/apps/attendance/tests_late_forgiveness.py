@@ -19,12 +19,13 @@ IST = ZoneInfo('Asia/Kolkata')
 DAY = datetime.date(2030, 3, 4)
 
 
-def config(forgive: bool = True, ot_threshold: str = '8.50') -> SimpleNamespace:
+def config(forgive: bool = True, ot_threshold: str = '8.50', short_as_half: bool = False) -> SimpleNamespace:
     return SimpleNamespace(
         working_hours=SimpleNamespace(
             shift_start=datetime.time(9, 0), shift_end=datetime.time(18, 0), grace_period_minutes=15, break_duration_minutes=30,
         ),
-        punch_rules=SimpleNamespace(min_hours_full_day=Decimal('8.00'), min_hours_half_day=Decimal('4.00'), early_exit_grace_minutes=30),
+        punch_rules=SimpleNamespace(min_hours_full_day=Decimal('8.00'), min_hours_half_day=Decimal('4.00'), early_exit_grace_minutes=30,
+                                    short_hours_as_half_day=short_as_half),
         overtime_rules=SimpleNamespace(ot_threshold_hours=Decimal(ot_threshold)),
         late_mark_rules=SimpleNamespace(forgive_late_when_full_hours=forgive),
     )
@@ -50,7 +51,12 @@ class LateForgivenessTests(SimpleTestCase):
         self.assertEqual(day((9, 20), (17, 50))['status'], AttendanceRecord.STATUS_PRESENT)      # 8h30 gross = 8h net
 
     def test_late_arrival_without_full_hours_is_not_forgiven(self):
-        self.assertEqual(day((9, 20), (17, 40))['status'], AttendanceRecord.STATUS_HALF_DAY)     # 8h20 gross = 7h50 net
+        # 8h20 gross = 7h50 net: above the half-day limit but short of a full day. Under the short-hours rule the day stays a
+        # present day (here Late, because the arrival was late and the hours were not made up), never forgiven to Present.
+        self.assertEqual(day((9, 20), (17, 40))['status'], AttendanceRecord.STATUS_LATE)
+
+    def test_the_same_short_day_is_a_half_day_when_short_hours_as_half_day_is_on(self):
+        self.assertEqual(day((9, 20), (17, 40), short_as_half=True)['status'], AttendanceRecord.STATUS_HALF_DAY)
 
     def test_still_clocked_in_after_a_late_arrival_shows_late_until_clock_out(self):
         self.assertEqual(day((9, 20), None)['status'], AttendanceRecord.STATUS_LATE)
