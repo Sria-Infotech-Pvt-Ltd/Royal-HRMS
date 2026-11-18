@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
@@ -14,6 +14,9 @@ import { usePermission } from "@/hooks/usePermission";
 import PermissionMatrix from "@/components/PermissionMatrix";
 import PersonAccessPanel from "@/components/PersonAccessPanel";
 import PermissionTemplatesPanel from "@/components/settings/PermissionTemplatesPanel";
+import PermissionStatCards from "@/components/settings/PermissionStatCards";
+import PermissionChangeReview from "@/components/settings/PermissionChangeReview";
+import { sensitiveOn } from "@/lib/permissionMatrixView";
 import type { PermissionCatalogueItem } from "@/types/orgStructure";
 
 interface Catalogue { results: Record<string, PermissionCatalogueItem[]> }
@@ -30,6 +33,7 @@ export default function AccessSettingsPage() {
   const [granted, setGranted] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<"everyone" | "person" | "templates">("everyone");
   const [isSaving, setIsSaving] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   useEffect(() => {
@@ -73,6 +77,24 @@ export default function AccessSettingsPage() {
     0,
   );
 
+  // What differs from the saved baseline: the number the "unsaved changes" bar reports.
+  const savedCodenames = useMemo(() => new Set(baseline.data?.codenames ?? []), [baseline.data]);
+  const changedCount = useMemo(() => {
+    let changed = 0;
+    granted.forEach(codename => { if (!savedCodenames.has(codename)) changed += 1; });
+    savedCodenames.forEach(codename => { if (!granted.has(codename)) changed += 1; });
+    return changed;
+  }, [granted, savedCodenames]);
+  const hasUnsavedChanges = changedCount > 0;
+
+  // Leaving with unsaved changes asks first.
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedChanges]);
+
   const isLoading = catalogue.loading || baseline.loading;
   const loadError = catalogue.error || baseline.error;
   const catalogueByModule = catalogue.data?.results ?? {};
@@ -108,13 +130,13 @@ export default function AccessSettingsPage() {
 
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={tab === "everyone"} className={`tab${tab === "everyone" ? " active" : ""}`} onClick={() => setTab("everyone")}>
-          Everyone
+          <i className="ti ti-users-group mr-1.5" />Everyone
         </button>
         <button role="tab" aria-selected={tab === "person"} className={`tab${tab === "person" ? " active" : ""}`} onClick={() => setTab("person")}>
-          One person
+          <i className="ti ti-user-check mr-1.5" />One person
         </button>
         <button role="tab" aria-selected={tab === "templates"} className={`tab${tab === "templates" ? " active" : ""}`} onClick={() => setTab("templates")}>
-          Bulk apply (Templates)
+          <i className="ti ti-stack-2 mr-1.5" />Bulk apply (Templates)
         </button>
       </div>
 
@@ -134,9 +156,15 @@ export default function AccessSettingsPage() {
       ) : (
         <>
           <p className="text-sm text-[var(--on-variant)]">
-            What every employee can do, whatever their position. <strong className="text-[var(--on-bg)]">{grantedCount} of {permissionCount}</strong> enabled.
+            What every employee can do, whatever their position. Changes take effect the next time each person signs in.
           </p>
+          <PermissionStatCards
+            granted={grantedCount} total={permissionCount} sensitive={sensitiveOn(modules, granted)}
+            modulesFullyOn={modules.filter(([, items]) => items.every(item => granted.has(item.codename))).length} moduleCount={modules.length}
+            changed={changedCount}
+          />
           <PermissionMatrix
+            isAdvanced
             modules={modules}
             granted={granted}
             onToggle={toggle}
@@ -145,6 +173,28 @@ export default function AccessSettingsPage() {
             isReadOnly={!canEdit}
           />
           {!canEdit && <p className="text-center text-xs text-[var(--on-variant)]">You have read-only access to baseline permissions.</p>}
+          {canEdit && hasUnsavedChanges && (
+            <div className="sticky bottom-4 z-30 space-y-2 rounded-2xl border px-4 py-3 shadow-lg" role="status"
+              style={{ background: "var(--surface)", borderColor: "var(--primary)" }}>
+              {isReviewing && <PermissionChangeReview modules={modules} granted={granted} saved={savedCodenames} />}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-[var(--on-bg)]">
+                  <i className="ti ti-pencil mr-2 text-[var(--primary)]" />{changedCount} unsaved {changedCount === 1 ? "change" : "changes"}
+                </span>
+                <span className="flex flex-wrap gap-2">
+                  <button className="btn btn-ghost" type="button" onClick={() => setIsReviewing(open => !open)} aria-expanded={isReviewing}>
+                    <i className={`ti ${isReviewing ? "ti-chevron-down" : "ti-list-details"}`} /> {isReviewing ? "Hide changes" : "Review changes"}
+                  </button>
+                  <button className="btn btn-ghost" type="button" onClick={() => { setGranted(new Set(savedCodenames)); setIsReviewing(false); }} disabled={isSaving}>
+                    <i className="ti ti-arrow-back-up" /> Discard
+                  </button>
+                  <button className="btn btn-filled" type="button" onClick={save} disabled={isSaving}>
+                    <i className={`ti ${isSaving ? "ti-loader-2 animate-spin" : "ti-device-floppy"}`} /> {isSaving ? "Saving…" : "Save baseline"}
+                  </button>
+                </span>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

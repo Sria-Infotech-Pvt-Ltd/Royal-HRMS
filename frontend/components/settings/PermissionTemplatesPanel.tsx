@@ -5,7 +5,7 @@
 // positions in one action, instead of opening each position's own access
 // modal one at a time (Organization > a position > Permissions).
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
@@ -13,8 +13,21 @@ import { useToast } from "@/components/ToastProvider";
 import ConfirmModal from "@/components/ConfirmModal";
 import PermissionTemplateEditor from "./PermissionTemplateEditor";
 import ApplyTemplateModal from "./ApplyTemplateModal";
+import PermissionTemplateCard from "./PermissionTemplateCard";
+import StatCardGrid from "./StatCardGrid";
+import {
+  copyName, filterCounts, summarise, visibleTemplates, type TemplateFilter, type TemplateSort,
+} from "@/lib/permissionTemplatesView";
 import type { PermissionTemplate } from "./permissionTemplateTypes";
 import type { PermissionCatalogueItem } from "@/types/orgStructure";
+
+const FILTERS: { value: TemplateFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "team", label: "Team manager" },
+  { value: "branch", label: "Branch-wide" },
+  { value: "empty", label: "Empty" },
+  { value: "unused", label: "Not applied yet" },
+];
 
 interface Props {
   catalogue: Record<string, PermissionCatalogueItem[]>;
@@ -28,6 +41,30 @@ export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) 
   const [applying, setApplying] = useState<PermissionTemplate | null>(null);
   const [deleting, setDeleting] = useState<PermissionTemplate | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<TemplateFilter>("all");
+  const [sort, setSort] = useState<TemplateSort>("name");
+
+  const all = useMemo(() => templates ?? [], [templates]);
+  const shown = useMemo(() => visibleTemplates(all, query, filter, sort), [all, query, filter, sort]);
+  const counts = useMemo(() => filterCounts(all), [all]);
+  const summary = useMemo(() => summarise(all, catalogue), [all, catalogue]);
+
+  async function duplicate(template: PermissionTemplate) {
+    try {
+      await clientApi.post(API.settings.permissionTemplates, {
+        name: copyName(template.name, all.map(entry => entry.name)),
+        description: template.description,
+        can_manage_team: template.can_manage_team,
+        can_manage_branch: template.can_manage_branch,
+        codenames: template.permission_codenames,
+      });
+      refetch();
+      showToast(`Copied "${template.name}". Rename it with Edit.`, "success");
+    } catch (err: unknown) {
+      showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not copy this template.", "error");
+    }
+  }
 
   function onSaved() {
     setEditing(null);
@@ -71,40 +108,60 @@ export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) 
       ) : templates && templates.length === 0 ? (
         <p className="py-10 text-center text-sm text-[var(--on-variant)]">No templates yet. Create one to start applying bulk access.</p>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {templates?.map(template => (
-            <div key={template.id} className="rounded-2xl border border-[var(--outline-v)] bg-[var(--surface)] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="truncate text-sm font-bold text-[var(--on-bg)]">{template.name}</h3>
-                  {template.description && <p className="mt-0.5 text-xs text-[var(--on-variant)]">{template.description}</p>}
-                </div>
-                <span className="shrink-0 rounded-full border border-[var(--primary-c)] bg-[var(--sec-c)] px-2.5 py-1 text-[11px] font-semibold text-[var(--primary)]">
-                  {template.permission_codenames.length} permission{template.permission_codenames.length === 1 ? "" : "s"}
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[var(--on-variant)]">
-                {template.can_manage_team && <span className="rounded-full bg-[var(--bg-low)] px-2 py-0.5">Team manager</span>}
-                {template.can_manage_branch && <span className="rounded-full bg-[var(--bg-low)] px-2 py-0.5">Branch-wide access</span>}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button className="btn btn-filled btn-sm" type="button" onClick={() => setApplying(template)} disabled={!canEdit}>
-                  <i className="ti ti-users" /> Apply to positions
-                </button>
-                {canEdit && (
-                  <>
-                    <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditing(template)}>
-                      <i className="ti ti-edit" /> Edit
-                    </button>
-                    <button className="btn btn-ghost btn-sm" type="button" style={{ color: "var(--error)" }} onClick={() => setDeleting(template)}>
-                      <i className="ti ti-trash" /> Delete
-                    </button>
-                  </>
-                )}
-              </div>
+        <>
+          <StatCardGrid
+            cards={[
+              { icon: "ti-stack-2", tone: "var(--primary)", label: "Templates", value: String(summary.templates), note: "Reusable bundles" },
+              { icon: "ti-briefcase", tone: "var(--success)", label: "Positions using them", value: String(summary.applications), note: "Across all templates" },
+              { icon: "ti-alert-circle", tone: "var(--warn)", label: "Empty templates", value: String(summary.empty), note: summary.empty === 0 ? "None" : "Grant nothing: fill or delete" },
+              { icon: "ti-alert-triangle", tone: "var(--warn)", label: "Sensitive permissions", value: String(summary.sensitive), note: "Counted across templates" },
+            ]}
+          />
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-72 max-w-full">
+              <i className="ti ti-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--on-variant)]" />
+              <input className="finput w-full !pl-9" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search templates" aria-label="Search templates" />
             </div>
-          ))}
-        </div>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter templates">
+              {FILTERS.map(option => (
+                <button
+                  key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => setFilter(option.value)}
+                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold"
+                  style={filter === option.value
+                    ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
+                    : { background: "var(--surface)", borderColor: "var(--outline-v)", color: "var(--on-variant)" }}
+                >
+                  {option.label}
+                  <span className="rounded-full px-1.5 text-[10px]" style={{ background: filter === option.value ? "rgba(255,255,255,.25)" : "var(--bg-low)" }}>{counts[option.value]}</span>
+                </button>
+              ))}
+            </div>
+            <label className="ml-auto flex items-center gap-2 text-xs text-[var(--on-variant)]">
+              Sort by
+              <select className="finput w-44" value={sort} onChange={event => setSort(event.target.value as TemplateSort)} aria-label="Sort templates">
+                <option value="name">Name</option>
+                <option value="permissions">Most permissions</option>
+                <option value="positions">Most positions</option>
+                <option value="updated">Recently updated</option>
+              </select>
+            </label>
+          </div>
+
+          {shown.length === 0 ? (
+            <p className="py-10 text-center text-sm text-[var(--on-variant)]">No template matches. Clear the search or choose &ldquo;All&rdquo;.</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {shown.map(template => (
+                <PermissionTemplateCard
+                  key={template.id} template={template} catalogue={catalogue} canEdit={canEdit}
+                  onApply={() => setApplying(template)} onEdit={() => setEditing(template)}
+                  onDuplicate={() => duplicate(template)} onDelete={() => setDeleting(template)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {editing && (
