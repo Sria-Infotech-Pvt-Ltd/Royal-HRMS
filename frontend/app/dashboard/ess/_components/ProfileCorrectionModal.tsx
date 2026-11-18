@@ -71,13 +71,13 @@ export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) 
     >
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
-          <label className="field-label">Section</label>
+          <label className="field-label">Section<span style={{ color: "var(--error)" }}> *</span></label>
           <select className="field-input field-select" value={section} onChange={e => changeSection(e.target.value)} suppressHydrationWarning>
             {CORRECTION_SECTIONS.map(entry => <option key={entry.value} value={entry.value}>{entry.value}</option>)}
           </select>
         </div>
         <div className="field-group">
-          <label className="field-label">Field to change</label>
+          <label className="field-label">Field to change<span style={{ color: "var(--error)" }}> *</span></label>
           <select className="field-input field-select" value={field} onChange={e => changeField(e.target.value)} suppressHydrationWarning>
             <option value="">Select a field…</option>
             {fieldsForSection(section).map(name => <option key={name} value={name}>{name}</option>)}
@@ -86,13 +86,20 @@ export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) 
       </div>
       {spec && (
         <div className="field-group mb-16">
-          <label className="field-label">New {spec.label.toLowerCase()}</label>
+          <label className="field-label">Current {spec.label.toLowerCase()} (on record)</label>
+          <input className="field-input" value={spec.current_value || "Not set"} readOnly aria-readonly="true" tabIndex={-1}
+            style={{ background: "var(--surface-variant, #f4f4f6)", color: "var(--on-variant)", cursor: "not-allowed" }} />
+        </div>
+      )}
+      {spec && (
+        <div className="field-group mb-16">
+          <label className="field-label">New {spec.label.toLowerCase()}<span style={{ color: "var(--error)" }}> *</span></label>
           <ProfileChangeValueInput spec={spec} value={newValue} onChange={setNewValue} />
           <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "4px 0 0" }}>HR reviews this before your record is updated.</p>
         </div>
       )}
       <div className="field-group">
-        <label className="field-label">Reason</label>
+        <label className="field-label">Reason<span style={{ color: "var(--error)" }}> *</span></label>
         <textarea
           className="field-input"
           rows={3}

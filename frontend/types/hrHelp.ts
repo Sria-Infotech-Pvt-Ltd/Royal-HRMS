@@ -41,6 +41,8 @@ export interface ProfileChangeField {
   max_length: number;
   choices:    { value: string; label: string }[];
   full_access_only: boolean;
+  /** The signed-in person's own value on record now, as they read it (empty if none); only on GET /hr-help/change-fields/. */
+  current_value?: string;
 }
 
 // Topic value backing "Document request" (e.g. the employment letter request

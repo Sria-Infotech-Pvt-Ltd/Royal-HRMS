@@ -6270,3 +6270,8 @@ Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend 
 - Years between the joining year and this year get no balance (history is not rebuilt), and no carry-forward from earlier years is computed.
 - Nothing creates attendance records, leave history or payslips for the past months. Payroll for a past cycle would use the default working days (26 unless changed in Payroll settings) with no LOP. Confirm with payroll before running a past cycle for a back-dated employee.
 - `tests_lifecycle_mvp` (12 problems) and `tests_approver_route` fail identically with and without this change: they were already failing, not caused here.
+
+## Profile correction form: current value and required stars (2026-11-18)
+
+- `GET /hr-help/change-fields/` now also returns `current_value` for each field: the signed-in employee's own value on record (dates DD-MM-YYYY, choices by label), read only and never creating a profile (`public_registry(employee)`).
+- `ProfileCorrectionModal` shows it as a read-only "Current <field> (on record)" box above the new value, and marks Section, Field to change, New value and Reason with a red star. Bank, family and "Other" still have no automatic apply, so no current value there.

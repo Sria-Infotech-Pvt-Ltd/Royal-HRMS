@@ -172,3 +172,22 @@ class ProfileChangeApplyTests(TestCase):
         self.assertEqual(gender['kind'], 'choice')
         self.assertIn('male', [choice['value'] for choice in gender['choices']])
         self.assertTrue(next(row for row in rows if row['key'] == 'date_of_joining')['full_access_only'])
+
+
+class ChangeFieldsRegistryCurrentValueTests(TestCase):
+    """The request form shows what is on record now, read from the signed-in person's own record only."""
+
+    def test_registry_carries_the_employees_own_current_values(self):
+        from apps.hrms.profile_change_fields import public_registry
+
+        employee = make_user(email='current.value@example.com', full_name='Asha Rao')
+        EmployeeProfile.objects.update_or_create(
+            user=employee, defaults={'date_of_birth': datetime.date(1995, 8, 15), 'gender': 'female', 'place_of_birth': 'Warangal'},
+        )
+        rows = {row['key']: row for row in public_registry(employee)}
+        gender_label = {choice['value']: choice['label'] for choice in rows['gender']['choices']}['female']
+        self.assertEqual(rows['full_name']['current_value'], 'Asha Rao')
+        self.assertEqual(rows['date_of_birth']['current_value'], '15-08-1995')
+        self.assertEqual(rows['place_of_birth']['current_value'], 'Warangal')
+        self.assertEqual(rows['gender']['current_value'], gender_label)
+        self.assertNotIn('current_value', public_registry()[0])

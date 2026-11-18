@@ -8,7 +8,7 @@ import { CORRECTION_SECTIONS, OTHER_FIELD, OTHER_SECTION, fieldsForSection } fro
 const post = vi.fn();
 vi.mock("@/lib/clientApi", () => ({ default: { post: (...args: unknown[]) => post(...args) } }));
 const changeFields = [
-  { key: "full_name", section: "Personal details", label: "Full name", kind: "text", max_length: 150, choices: [], full_access_only: false },
+  { key: "full_name", section: "Personal details", label: "Full name", kind: "text", max_length: 150, choices: [], full_access_only: false, current_value: "Gadde Durga" },
 ];
 vi.mock("@/hooks/useFetch", () => ({ useFetch: () => ({ data: changeFields, loading: false, error: null, refetch: vi.fn() }) }));
 
@@ -76,5 +76,23 @@ describe("ProfileCorrectionModal", () => {
       message: "Section: Personal details. Field to change: Full name. Reason: The name on my ID card differs",
       change_new_value: "Gadde Durga Prasad",
     }));
+  });
+
+  it("shows the value on record now, read only, above the new value", () => {
+    render(<ProfileCorrectionModal onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    expect(screen.queryByLabelText(/Current full name/i)).toBeNull();
+    fireEvent.change(selects()[1], { target: { value: "Full name" } });
+    const current = screen.getByDisplayValue("Gadde Durga") as HTMLInputElement;
+    expect(current.readOnly).toBe(true);
+    expect(screen.getByText(/Current full name \(on record\)/)).toBeTruthy();
+  });
+
+  it("marks every required box with a star", () => {
+    render(<ProfileCorrectionModal onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    fireEvent.change(selects()[1], { target: { value: "Full name" } });
+    for (const label of ["Section", "Field to change", "New full name", "Reason"]) {
+      const element = screen.getByText((_, node) => node?.tagName === "LABEL" && node.textContent === `${label} *`);
+      expect(element).toBeTruthy();
+    }
   });
 });

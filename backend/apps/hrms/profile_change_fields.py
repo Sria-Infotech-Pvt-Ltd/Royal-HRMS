@@ -88,13 +88,30 @@ def spec_for_label(section: str, label: str) -> ChangeField | None:
     return _BY_LABEL.get((section, label))
 
 
-def public_registry() -> list[dict]:
-    """What the frontend needs to draw the right input for each field."""
-    return [
-        {
+def _display_value(spec: ChangeField, raw) -> str:
+    """The value as a person reads it: a date as DD-MM-YYYY, a choice by its label."""
+    if raw is None or raw == '':
+        return ''
+    if spec.kind == KIND_DATE and hasattr(raw, 'strftime'):
+        return raw.strftime('%d-%m-%Y')
+    if spec.kind == KIND_CHOICE:
+        return dict(spec.choices).get(str(raw), str(raw))
+    return str(raw)
+
+
+def public_registry(employee=None) -> list[dict]:
+    """What the frontend needs to draw the right input for each field. With `employee`, each field also carries that person's own
+    current value (read only, never created) so the request form can show what is on record now."""
+    profile = EmployeeProfile.objects.filter(user=employee).first() if employee is not None else None
+    rows = []
+    for spec in CHANGE_FIELDS:
+        row = {
             'key': spec.key, 'section': spec.section, 'label': spec.label, 'kind': spec.kind, 'max_length': spec.max_length,
             'choices': [{'value': value, 'label': label} for value, label in spec.choices],
             'full_access_only': spec.full_access_only,
         }
-        for spec in CHANGE_FIELDS
-    ]
+        if employee is not None:
+            holder = employee if spec.target == TARGET_USER else profile
+            row['current_value'] = _display_value(spec, getattr(holder, spec.attr, None)) if holder is not None else ''
+        rows.append(row)
+    return rows

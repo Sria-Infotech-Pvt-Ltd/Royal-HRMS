@@ -135,7 +135,7 @@ class HRHelpChangeFieldsView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
-        return success('Profile change fields retrieved.', public_registry())
+        return success('Profile change fields retrieved.', public_registry(request.user))
 
 
 class HRHelpDecideChangeView(APIView):
