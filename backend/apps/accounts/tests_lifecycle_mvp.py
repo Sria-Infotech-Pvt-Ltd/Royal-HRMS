@@ -31,7 +31,7 @@ from rest_framework.test import APIClient
 
 import apps.accounts.tests_hire_wizard as wizard
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import EmailLog, OnboardingEvent, OrgUnit, PasswordResetToken, Position, User
+from apps.accounts.models import Company, EmailLog, OnboardingEvent, OrgUnit, PasswordResetToken, Position, User
 from apps.attendance.models import AttendancePunch
 from apps.hrms.models import REQ_APPROVED, REQ_L2_PENDING, REQ_REJECTED, LeaveBalance, LeavePolicy, LeaveRequest
 
@@ -50,6 +50,9 @@ class _EmailBoundary:
     """Mixin: SMTP is mocked at the message-building/sending boundary; tokens and EmailLog rows stay real."""
 
     def _mock_email(self):
+        # Invitation links are only built from a valid company portal address (services_frontend_url.frontend_origin); without
+        # a Company row the invite is never created and every test that reads the invite token fails.
+        Company.objects.get_or_create(defaults={'company_name': 'Test Co', 'portal_url': 'https://aira.nxsys.in'})
         smtp = patch('apps.accounts.utils._get_smtp_connection', return_value=(None, 'noreply@test.com', None))
         build = patch('apps.accounts.utils._build_message')
         template_mail = patch('apps.accounts.utils.send_template_email')  # notification mails (e.g. leave decisions)

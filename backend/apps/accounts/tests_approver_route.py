@@ -75,7 +75,8 @@ class LeaveWithoutManagerTests(TestCase):
         LeavePolicy.objects.update_or_create(
             leave_type='casual',
             defaults={'annual_days': 4, 'is_active': True, 'minimum_notice_period': 0, 'maximum_consecutive_days': 0,
-                      'minimum_service_period': 0, 'applicable_gender': 'all'},
+                      'minimum_service_period': 0, 'applicable_gender': 'all',
+                      'allow_probation_leave': True},   # the test is about the approver route, not the probation rule
         )
         _admin('leave.route.admin@test.com', 'EMPLR090')
         self.employee = make_user('leave.nomgr@test.com', employee_id='EMPLR001', branch='Kondapur')  # no manager, no HR assigned

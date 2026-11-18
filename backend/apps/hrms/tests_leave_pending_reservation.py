@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.accounts.factories import make_user
+from apps.accounts.factories import make_role, make_user
 from apps.hrms.models import REQ_CANCELLED, REQ_PENDING, REQ_REJECTED, LeaveBalance, LeavePolicy, LeaveRequest
 from apps.hrms.services_leave_ledger import pending_leave_days
 
@@ -30,8 +30,12 @@ class PendingLeaveReservationTests(TestCase):
             defaults={
                 'annual_days': 4, 'is_active': True, 'convert_to_lop': False, 'allow_negative_balance': False,
                 'minimum_notice_period': 0, 'maximum_consecutive_days': 0, 'minimum_service_period': 0, 'applicable_gender': 'all',
+                'allow_probation_leave': True,   # these tests are about pending-day reservation, not the probation rule
             },
         )
+        # A leave request needs somebody who can approve it (otherwise it is refused with "Nobody is available to approve").
+        make_user('leave.pending.admin@test.com', employee_id='EMPLP090', branch='Mulugu',
+                  role=make_role('leave_pending_admin', permission_codenames=['settings.edit', 'leave.approve', 'leave.view']))
         self.employee = make_user('leave.pending@test.com', employee_id='EMPLP001', branch='Kondapur')
         LeaveBalance.objects.create(employee=self.employee, leave_type='casual', year=YEAR, total_days=4, used_days=0)
         self.client = APIClient()

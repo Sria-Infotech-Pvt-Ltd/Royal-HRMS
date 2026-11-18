@@ -6275,3 +6275,16 @@ Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend 
 
 - `GET /hr-help/change-fields/` now also returns `current_value` for each field: the signed-in employee's own value on record (dates DD-MM-YYYY, choices by label), read only and never creating a profile (`public_registry(employee)`).
 - `ProfileCorrectionModal` shows it as a read-only "Current <field> (on record)" box above the new value, and marks Section, Field to change, New value and Reason with a red star. Bank, family and "Other" still have no automatic apply, so no current value there.
+
+
+## Failing lifecycle tests fixed (2026-11-18)
+
+**By:** New-AI session - **Branch:** New-AI. Test-only change; no application code was touched. 17 tests that were failing now pass:
+- `accounts/tests_lifecycle_mvp.py` (12): the hire's invitation email is only built from a valid company portal address (`services_frontend_url.frontend_origin`, added later), but the tests never created a `Company` with `portal_url`, so no invite token existed. The shared `_EmailBoundary._mock_email` now creates one.
+- `accounts/tests_approver_route.py` (1) and `hrms/tests_leave_pending_reservation.py` (4): the casual-leave policy used in these tests now needs `allow_probation_leave=True` (a probationary employee is refused otherwise; the default was tightened later) and, for the reservation tests, an approver (a request is refused with "Nobody is available to approve this request" when no one can approve). Both preconditions are set in the test setup, so the tests check what they were written to check (the approver route, the pending-day reservation).
+
+**Still failing, not touched (different causes, need a decision on whether the test or the code is right):**
+- `attendance/tests_late_forgiveness`: `test_late_arrival_without_full_hours_is_not_forgiven` expects 'late' but gets 'half_day'.
+- `hrms/tests_project_sync_queue` (2): the log message now reads "...took too long and was stopped" where the tests expect 'time budget' / 'SoftTimeLimitExceeded'.
+- `attendance/tests_face_id_policy.WelcomeEmailTemplateTests` (2): the test creates a `welcome_employee` email template that migrations now seed, so it hits `hrms_email_templates_name_key`.
+- A logged (not failing) `RuntimeError: No active SMTP configuration found` appears during the lifecycle tests: one email path is not covered by the SMTP mock there.
