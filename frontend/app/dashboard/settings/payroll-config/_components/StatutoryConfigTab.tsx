@@ -71,6 +71,8 @@ export default function StatutoryConfigTab() {
         const n = Number(val ?? 0);
         if (Number.isNaN(n) || n < 0 || n > 100) return `${label} must be between 0 and 100.`;
       }
+      const dailyLimit = Number(current.esi_daily_wage_exemption_threshold ?? 0);
+      if (Number.isNaN(dailyLimit) || dailyLimit < 0) return "Employee-exempt daily wage must be a non-negative number.";
     }
     if (current.lwf_applicable) {
       for (const [label, val] of [
@@ -236,8 +238,16 @@ export default function StatutoryConfigTab() {
                       onChange={v => setField("esi_employer_rate", v)}
                       step="0.01"
                     />
+                    <NumField
+                      label="Employee-Exempt Daily Wage (₹)"
+                      value={String(current.esi_daily_wage_exemption_threshold ?? "")}
+                      onChange={v => setField("esi_daily_wage_exemption_threshold", v)}
+                    />
                   </div>
                 )}
+                <p className="text-[11px] text-gray-500 mt-2">
+                  An employee averaging at or below the daily wage above is exempt from their own ESI share. The employer share is still due.
+                </p>
               </Section>
 
               {/* LWF */}

@@ -5,6 +5,7 @@ export interface PayrollSettings {
   pay_day: number;
   approval_levels: "L1" | "L1_L2";
   employee_query_window_hours: number;
+  default_working_days_per_month: number;
   enable_reimbursements: boolean;
   enable_bonuses: boolean;
   basic_pay_visible_lines: string[];
@@ -83,6 +84,7 @@ export interface StatutoryConfig {
   esi_wage_ceiling: string;
   esi_employee_rate: string;
   esi_employer_rate: string;
+  esi_daily_wage_exemption_threshold: string;
   lwf_applicable: boolean;
   lwf_employee_amount: string;
   lwf_employer_amount: string;

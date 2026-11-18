@@ -125,6 +125,8 @@ class DocumentListCreateView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
+        if not _has_perm(request.user, 'documents.view'):
+            return error('You do not have permission to view documents.', http_status=status.HTTP_403_FORBIDDEN)
         qs = (
             Document.objects
             .select_related('uploaded_by', 'branch')
@@ -277,7 +279,11 @@ class DocumentDetailView(APIView):
     def get(self, request, pk: int):
         token = request.query_params.get('t', '').strip()
         if token:
+            # A signed-link download is authenticated by the signed token itself (get_permissions() skips the login check
+            # for exactly this case), not by the caller's own permission grants.
             return self._stream_file(pk, token)
+        if not _has_perm(request.user, 'documents.view'):
+            return error('You do not have permission to view documents.', http_status=status.HTTP_403_FORBIDDEN)
         doc = self._get_doc(pk)
         if not doc:
             return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
@@ -413,6 +419,8 @@ class DocumentStatsView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def get(self, request):
+        if not _has_perm(request.user, 'documents.view'):
+            return error('You do not have permission to view documents.', http_status=status.HTTP_403_FORBIDDEN)
         rows = (
             Document.objects
             .filter(is_active=True)

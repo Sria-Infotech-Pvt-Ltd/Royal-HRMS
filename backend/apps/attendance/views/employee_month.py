@@ -96,6 +96,8 @@ class HREmployeeMonthView(APIView):
 
         if not employee:
             return error('Employee not found.', http_status=404)
+        if not _manager_can_access_employee(request.user, employee):
+            return error('Permission denied.', http_status=403)
 
         month_start = datetime.date(year, mon, 1)
         month_end   = datetime.date(year, mon, _calendar.monthrange(year, mon)[1])

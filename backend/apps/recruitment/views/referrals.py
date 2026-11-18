@@ -168,7 +168,7 @@ class ReferralRuleListCreateView(APIView):
         })
 
     def post(self, request):
-        if not _has_perm(request.user, 'settings.view'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         serializer = ReferralRuleSerializer(data=request.data)
         if not serializer.is_valid():
@@ -189,7 +189,7 @@ class ReferralRuleDetailView(APIView):
             return None
 
     def patch(self, request, pk):
-        if not _has_perm(request.user, 'settings.view'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         rule = self._get_rule(pk)
         if not rule:
@@ -202,7 +202,7 @@ class ReferralRuleDetailView(APIView):
         return success('Rule updated.', ReferralRuleSerializer(rule).data)
 
     def delete(self, request, pk):
-        if not _has_perm(request.user, 'settings.view'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         rule = self._get_rule(pk)
         if not rule:

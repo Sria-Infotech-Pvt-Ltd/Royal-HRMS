@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from core.responses import error
 from core.permissions import has_perm as _has_perm
 from apps.payroll.models import PayrollCycle, EmployeePayslip, PayrollSettings, BranchPayrollConfig
+from apps.payroll.views.shared import _is_admin, _resolve_user_branch
 from apps.branch.models import Branch
 
 logger = logging.getLogger(__name__)
@@ -46,11 +47,15 @@ def _get_authorized_cycle(request, cycle_pk, resource_label: str = 'ECR file'):
     except PayrollCycle.DoesNotExist:
         return None, error('Payroll cycle not found.', http_status=404)
 
-    # Branch-scoped access: a non-superuser can only download for their own branch.
-    # Users with no branch assigned (global admins) may access any cycle.
-    if not getattr(request.user, 'is_superuser', False):
-        user_branch_id = getattr(request.user, 'branch_id', None)
-        if cycle.branch_id and user_branch_id and cycle.branch_id != user_branch_id:
+    # Branch-scoped access: only a payroll admin (_is_admin: superuser or settings.edit) may download any branch's cycle. A
+    # payroll.view/edit holder who simply has no branch assigned is NOT an admin; the earlier check let such a user through to
+    # every branch because `user_branch_id and ...` short-circuited to False when the user's branch was empty.
+    if not _is_admin(request.user):
+        # The user's branch is branch_fk (there is no `branch_id` on User, so the old getattr always answered None and the old
+        # comparison therefore never denied anything); fall back to the legacy name match for a user not yet migrated.
+        own_branch = _resolve_user_branch(request.user)
+        user_branch_id = getattr(request.user, 'branch_fk_id', None) or (own_branch.pk if own_branch else None)
+        if cycle.branch_id != user_branch_id:
             return None, error('You do not have access to this payroll cycle.', http_status=403)
 
     if cycle.status not in ('payslips_generated', 'query_window_open', 'paid', 'closed'):

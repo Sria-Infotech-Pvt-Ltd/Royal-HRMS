@@ -27,6 +27,7 @@ from apps.payroll.models import (
     SalaryStructure,
     SalaryComponent,
     StatutoryConfig,
+    PayrollSettings,
     PayrollAdjustment,
     BranchPayrollConfig,
     EmployeeTaxDeclaration,
@@ -257,12 +258,12 @@ def _compute_employee_payslip(
         gross <= statutory.esi_wage_ceiling or esi_covered_earlier_this_period
     ):
         esi_employer = gross * statutory.esi_employer_rate / 100
-        # An employee averaging <=₹176/day is exempt from their OWN 0.75%
-        # share — the employer's 3.25% share is still due regardless; this
-        # is a deliberate asymmetric exemption, not a skip of both sides.
+        # An employee averaging at or below statutory.esi_daily_wage_exemption_threshold (176 rupees a day unless an admin changed
+        # it) is exempt from their OWN share; the employer's share is still due regardless. This is a deliberate asymmetric
+        # exemption, not a skip of both sides.
         days_paid = max(Decimal('1'), Decimal(total_working_days) - lop_days)
         daily_wage = gross / days_paid
-        if daily_wage > Decimal('176'):
+        if daily_wage > statutory.esi_daily_wage_exemption_threshold:
             esi_employee = gross * statutory.esi_employee_rate / 100
 
     # PT
@@ -579,6 +580,8 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     (an out-of-branch/inactive/system_admin code simply won't match and is
     silently excluded, same as if it had never been selected)."""
     default_structure = SalaryStructure.objects.filter(is_default=True, is_active=True).first()
+    payroll_settings = PayrollSettings.objects.first()
+    default_working_days = payroll_settings.default_working_days_per_month if payroll_settings else 26
 
     employees_qs = _eligible_employees_qs(cycle)
     if selected_employee_codes is not None:
@@ -772,7 +775,7 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
             + leave_lop_by_emp.get(employee.id, Decimal('0'))
         )
         # Use actual working days from attendance records; fall back to settings default if no records
-        emp_working_days = working_days_by_emp.get(employee.id) or 26
+        emp_working_days = working_days_by_emp.get(employee.id) or default_working_days
         tax_declaration = tax_declaration_by_employee.get(employee.id)
         computed[employee.id] = _compute_employee_payslip(
             salary_config, components, branch_config, statutory, adjustments, structure,

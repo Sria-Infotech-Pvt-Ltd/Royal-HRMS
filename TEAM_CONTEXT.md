@@ -6232,3 +6232,27 @@ Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend 
 - Backend edits restart the dev server and can drop an upload or save in flight.
 - `FamilyNominationStep` calls `scrollIntoView`, which jsdom lacks: stubbed in its test.
 - Existing lint error (not from this work): `react-hooks/refs` on `flushAutosaveRef.current = ...` in `HireWizardClient`.
+
+
+## Audit fixes ported from `Backend/24/08/2026` onto New-AI (2026-11-18)
+
+**By:** New-AI session - **Branch:** New-AI. Why: that branch's last commits (25-31 Aug 2026: audit fixes, email gaps, performance) went into `demo` / `ai` but never into `New-AI`, and a merge is not possible (a trial `git merge-tree` shows 15 conflicting files for `Backend/24/08/2026`, 20 for `demo`: `views.py` files were split into packages here, plus clashing `hrms` / `notifications` migrations). So the FIXES were ported by hand, one by one, each checked against today's code and today's screens. Nothing was merged; no branch history changed.
+
+**Ported (with tests: `accounts/tests_audit_port.py`, 15 tests, 10 fail on the old code; `payroll/tests_configurable_payroll_values.py`, 7 tests)**
+- Documents list, stats and detail now need `documents.view` (a BASELINE permission, so every employee keeps access; a signed download link still works without it).
+- One employee's attendance month (`HREmployeeMonthView`) and weekly-off history (unknown employee is now a 404) respect `_manager_can_access_employee`.
+- Birthday automation settings: PATCH needs `settings.edit` (was the read permission `employees.view`).
+- Referral rule create / update / delete need `settings.edit` (was `settings.view`).
+- HR decision on a selected candidate now applies the same branch scoping as every other candidate action.
+- ECR / payroll file download: a `payroll.view` user with no branch was treated as a global admin. The old code read `user.branch_id`, which does not exist on `User` (it is `branch_fk`), so the check never denied anything. Now only `_is_admin` (superuser or `settings.edit`) may reach any branch; everyone else only their own branch's cycles.
+- Two numbers that were fixed in code are now settings, defaults unchanged: `PayrollSettings.default_working_days_per_month` (26) and `StatutoryConfig.esi_daily_wage_exemption_threshold` (176.00). Used by the payroll engine (`engine/legacy.py`) and the pay estimator; editable in Payroll settings and the Statutory tab. **Migration `payroll/0041` must be applied (`python manage.py migrate`) before the payroll settings / statutory screens are opened, or they answer 500.**
+- Admin dashboard: `alignItems: "start"` on the two grids removes the blank gap under the lifecycle tabs.
+
+**Deliberately NOT ported (read before re-attempting)**
+- `GET /payroll/settings/` gated by `payroll.view`: employees read it on their payslip pages (`EssPayslipsTab`, `HomeTab`, `my-payslip`), so it would break them. Salary-structure / statutory / branch-config GETs: used by the Hire wizard's Employment step and the Basic Pay editor by people who may not hold `payroll.view`; needs a decision on who may read them.
+- `GET /settings/email-templates/` gated by `settings.view`: the approval modal, candidate review, interview list and birthday-wish modals all list templates for users without that permission. Referral rule LIST gate: the Referrals page shows the rules to employees.
+- The 7 automatic "email gap" templates (regularization, expense submitted / pending, payslip dispatched / paid, assessment deadline reminder, password-reset confirmation): here an approver picks the email template when deciding (`template_name` on the expense approval, "approval without notification" is audited on purpose), so automatic decision emails would send duplicates and override that design. Submission-time emails and the deadline reminder are a product decision, not a fix.
+- Face-registration, separation and leave emails already exist; the audit-log user index (`auditlog_user_created_idx`), default facial-recognition / assessments permissions, async voice endpoints, Nginx `X-Forwarded-Proto` and welcome-mail company name are already present or obsolete here. Cloudinary `collectstatic` fix: this branch uses ImageKit. `tenants` / platform-admin (SMTP test button, reveal-password modal): that app does not exist on `New-AI`.
+- Attendance query-efficiency work (WFH request passed through the punch path, holiday cache, a face-verification index): a performance change, not a fix, and the punch path has changed too much for the patch to apply. Worth redoing separately with `tests_query_efficiency.py` as the guard.
+
+**Checks:** payroll suite 261 passed; frontend 1,291 passed, `tsc` clean. The wider recruitment + attendance + hrms run had 9 failures in files this work does not touch (`tests_leave_pending_reservation`, `tests_project_sync_queue`, `tests_late_forgiveness`, `WelcomeEmailTemplateTests`; the last is a duplicate `hrms_email_templates_name_key` in the shared kept test database). Not proven pre-existing with a clean checkout.

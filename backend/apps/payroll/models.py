@@ -48,6 +48,13 @@ class PayrollSettings(models.Model):
         default=24,
         help_text='Hours employees have to raise queries after payslip is sent',
     )
+    default_working_days_per_month = models.PositiveSmallIntegerField(
+        default=26,
+        help_text=(
+            'Working days in a month used for an employee payslip when there are no attendance records for the cycle yet. '
+            'It used to be a fixed 26 inside the payroll code.'
+        ),
+    )
     enable_reimbursements = models.BooleanField(default=True)
     enable_bonuses = models.BooleanField(default=True)
     basic_pay_visible_lines = models.JSONField(
@@ -131,6 +138,13 @@ class StatutoryConfig(models.Model):
     esi_employer_rate = models.DecimalField(
         max_digits=5, decimal_places=2, default=3.25,
         help_text='Employer contribution %',
+    )
+    esi_daily_wage_exemption_threshold = models.DecimalField(
+        max_digits=8, decimal_places=2, default=176.00,
+        help_text=(
+            'An employee averaging at or below this daily wage is exempt from their own ESI contribution; the employer share is '
+            'still due. The government-notified limit (currently 176 rupees a day), kept here so a change needs no code release.'
+        ),
     )
 
     # Labour Welfare Fund

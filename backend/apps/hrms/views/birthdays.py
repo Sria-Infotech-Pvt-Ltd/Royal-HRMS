@@ -110,7 +110,9 @@ class BirthdaySettingsView(APIView):
         return success('Birthday settings retrieved.', data=self._serialize(settings_obj))
 
     def patch(self, request):
-        if not _has_perm(request.user, 'employees.view'):
+        # A change to the company-wide automation: employees.view (a read permission) used to be enough, so anyone with read-only
+        # employee visibility could alter it for the whole company.
+        if not _has_perm(request.user, 'settings.edit'):
             return error(_DENIED, http_status=403)
 
         from apps.accounts.models import BirthdaySettings

@@ -249,6 +249,8 @@ class CandidateHRDecisionView(APIView):
             candidate = Candidate.objects.get(pk=pk, status=Candidate.STATUS_SELECTED)
         except Candidate.DoesNotExist:
             return error('Candidate not found or not selected.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         decision = request.data.get('decision')
         if decision not in {'approve', 'reject'}:

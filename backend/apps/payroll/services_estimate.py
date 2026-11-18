@@ -199,7 +199,7 @@ def _compute_from_gross_basis(
     esi_employer = Decimal('0')
     if statutory and statutory.esi_applicable and gross <= statutory.esi_wage_ceiling:
         esi_employer = gross * statutory.esi_employer_rate / 100
-        if (gross / 30) > Decimal('176'):
+        if (gross / 30) > statutory.esi_daily_wage_exemption_threshold:
             esi_employee = gross * statutory.esi_employee_rate / 100
 
     pt = Decimal(str(statutory.compute_pt(gross))) if statutory else Decimal('0')

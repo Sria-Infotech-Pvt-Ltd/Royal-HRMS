@@ -207,6 +207,17 @@ export default function PayrollConfigPage() {
                       className="w-full rounded-lg border border-[var(--outline-v)] text-sm px-3 py-2 text-[var(--on-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-c)]"
                     />
                   </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>Default Working Days per Month</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>Used for a payslip when there is no attendance for the cycle yet</div>
+                    <input
+                      type="number"
+                      min={1} max={31}
+                      value={draft.default_working_days_per_month ?? ""}
+                      onChange={e => set("default_working_days_per_month", Number(e.target.value))}
+                      className="w-full rounded-lg border border-[var(--outline-v)] text-sm px-3 py-2 text-[var(--on-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-c)]"
+                    />
+                  </div>
                 </div>
               </div>
 
