@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import logging
 import re
+import hashlib
+import hmac
 import uuid
 from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password as _check_hash
-from django.contrib.auth.hashers import make_password as _make_hash
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from apps.accounts.migration_utils import PortableExclusionConstraint as ExclusionConstraint
 from django.contrib.postgres.fields import DateRangeField, RangeBoundary, RangeOperators
@@ -966,8 +967,22 @@ class OTPVerification(models.Model):
             and timezone.now() < self.expires_at
         )
 
+    _FAST_PREFIX = 'hmac$'
+
+    @classmethod
+    def _digest(cls, user_id, plain_otp: str) -> str:
+        """A keyed hash (HMAC-SHA256 with the server secret) of one person's code.
+
+        A 6-digit code lives for minutes and locks after a few wrong tries, so what protects it is the attempt limit and the
+        secret, not a deliberately slow password hash: PBKDF2 here took seconds per check, which made the reset page hang and
+        people click twice. Codes issued before this change keep their old hash and are still checked with it."""
+        key = settings.SECRET_KEY.encode()
+        return cls._FAST_PREFIX + hmac.new(key, f'otp:{user_id}:{plain_otp}'.encode(), hashlib.sha256).hexdigest()
+
     def check_otp(self, plain_otp: str) -> bool:
         """Verify a plain OTP against the stored hash."""
+        if self.otp.startswith(self._FAST_PREFIX):
+            return hmac.compare_digest(self.otp, self._digest(self.user_id, plain_otp))
         return _check_hash(plain_otp, self.otp)
 
     @classmethod
@@ -983,7 +998,7 @@ class OTPVerification(models.Model):
 
         otp_obj = cls.objects.create(
             user       = user,
-            otp        = _make_hash(plain_otp),   # store the hash
+            otp        = cls._digest(user.pk, plain_otp),   # store a keyed hash, never the code
             expires_at = timezone.now() + timedelta(minutes=expiry_minutes),
         )
         return otp_obj, plain_otp

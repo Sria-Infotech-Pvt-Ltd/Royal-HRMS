@@ -92,3 +92,27 @@ class OtpResendTests(TestCase):
         locked = self._verify(real)
         self.assertEqual(locked.status_code, 400)
         self.assertIn('expired or maximum attempts', locked.data['message'])
+
+
+class OtpStorageTests(TestCase):
+    def setUp(self):
+        self.user = make_user('otp-store@test.com', full_name='Otp Store')
+
+    def test_a_new_code_is_stored_as_a_keyed_hash_never_as_the_code(self):
+        otp, plain = OTPVerification.create_for_user(self.user)
+        self.assertTrue(otp.otp.startswith('hmac$'))
+        self.assertNotIn(plain, otp.otp)
+        self.assertTrue(otp.check_otp(plain))
+        self.assertFalse(otp.check_otp('000000' if plain != '000000' else '111111'))
+
+    def test_a_code_belongs_to_one_person(self):
+        other = make_user('otp-other@test.com', full_name='Other')
+        otp, plain = OTPVerification.create_for_user(self.user)
+        stolen = OTPVerification(user=other, otp=otp.otp)
+        self.assertFalse(stolen.check_otp(plain))
+
+    def test_a_code_issued_before_the_change_is_still_accepted(self):
+        from django.contrib.auth.hashers import make_password
+        legacy = OTPVerification.objects.create(user=self.user, otp=make_password('482913'), expires_at=timezone.now() + timedelta(minutes=5))
+        self.assertTrue(legacy.check_otp('482913'))
+        self.assertFalse(legacy.check_otp('482914'))
