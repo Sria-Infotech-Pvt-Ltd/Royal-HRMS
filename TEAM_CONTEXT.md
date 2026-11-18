@@ -6205,3 +6205,30 @@ Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend 
 - Fixed: a PIN code with no district in the dataset crashed the PIN lookup (`_smart_title(None)`).
 - Gotcha for anyone testing in a browser: the app allows one live login per account in practice; a minted test session gets signed out while the real user is using the same account.
 - Not run here: `tests_hire_draft_autosave` / `tests_hire_wizard` (the shared test database was in use by another session).
+
+
+## Hire wizard: reopened drafts overwrote edits, faster autosave, resilient document upload, back-dated hires (2026-11-18)
+
+**By:** New-AI session - **Branch:** New-AI. Triggered by: "family details not saved", "company code required even though filled", "uploads slow / Daphne killed", "autosave too slow", "hire from past dates".
+
+**1. The real cause of "edits on a reopened draft never saved" (fixed).** `HireWizardClient` loaded the saved draft into the small `verification` state with `setVerification(v => ({ ...v, ...(d as Partial<VerificationDraft>) }))`. The cast filters nothing, so the WHOLE draft (family, nominees, education, company code, PAN, names ...) went into `verification`, and `buildFullDraftPayload()` ends with `...verification`, so every save wrote the load-time values back over what had been typed since. Only a draft opened with data in it was affected (a brand-new draft was not), which is why it looked random. Now only the three verification fields are copied. This also explains the earlier "First name, last name, email and company code are required" refusal on Hire (the other session's "two open copies" fix is still valid and stays). Test: `HireWizardFamilySave.test.tsx` runs the REAL wizard against a fake server that merges PATCHes like the backend: new family member, quick-add Father, nominee with share, edit on a resumed draft, removal; the last two failed before the fix.
+
+**2. Autosave is quicker** (`HireWizardClient`): 400 ms after the last keystroke (was 1.2 s), at most 1.5 s while typing without a pause (was 5 s), and a save the moment a field loses focus (`focusout`). Saves now run one after another through `saveChainRef`, so a slow save cannot land after a newer one; Hire waits for any save in flight.
+
+**3. Document upload** (measured, not guessed). Validation, hashing and DB each took under 5 ms. A real ImageKit write took 2.1 s for 70 KB and 4.4 s for 1.2 MB from this machine (an earlier "0.25 Mbit/s" figure came from a Cloudflare test endpoint and was wrong for ImageKit). The hang: the ImageKit SDK defaulted to 60 s x 2 retries, so one stalled connection held a request up to 3 minutes; the browser gave up, and Daphne logged "took too long to shut down and was killed". Fixed:
+- `core/storage.py`: `STORAGE_TIMEOUT` (connect 5 s, read/write 30 s of no progress; per-chunk, so a slow but moving upload is not cut) and `STORAGE_MAX_RETRIES = 1`; a stall raises `StorageUnavailable`, which the view answers with a clear 503 ("upload the file again").
+- `services_hire_documents.py` (new): the same bytes again for the same slot return the stored row (200, no storage write); the storage write is outside any transaction; only the "one file per slot, newest wins" step runs under a lock on the draft row, so overlapping uploads leave exactly one row; replaced files are now deleted from ImageKit in a background thread after commit (they used to be left there forever); a draft completed mid-upload is refused and its file dropped.
+- `lib/shrinkImage.ts`: JPEG/PNG over 70 KB are resized in the browser (ladder 1400/1200/1000 px, quality .75/.65/.55) to about 70 KB before upload; PDFs and unreadable images go as they were.
+- Tests: `tests_hire_document_upload.py` (10), plus a real-thread run on a throwaway draft (8 uploads to one slot -> 1 row and 7 files removed; 6 identical retries -> 1 row; 5 slots -> 5 rows). Known limit: identical retries sent at the very same instant still each write to storage (extras are removed; one row remains).
+
+**4. Hire error names the missing fields** ("The server does not have these yet: Company code ...", `data.missing_fields`), and before sending Hire the wizard compares what the server kept with the screen for 9 key fields (`savedDraftCheck.ts`).
+
+**5. Back-dated hires.** A hire can start on a past date (months or years back). The only limit is `MIN_JOINING_DATE` = 01-01-1990 (`views_hire.py` and `HireEmployeeModal.tsx`). The date becomes the joining date, the position start and the weekly-off start. A seat someone else took after that date is refused with "overlapping placement". NOT done: nothing creates leave credit, attendance or payslips for the past months; decide that with payroll first.
+
+**Operations gotchas found on the way**
+- `pycountry` is in requirements.txt but was missing from the Python used to run the server (`No module named 'pycountry'` -> `/onboarding/location/countries/` 502). `python -m pip install pycountry==26.2.16`.
+- `npm run build` failed on a half-written `.next/dev/types/routes.d.ts` (two Next processes writing at once). Stop `npm run dev` before building; delete `.next/dev` if it happens.
+- A burst of 401s on every endpoint (including `/token/refresh/`) means the browser has no valid login, not a missing header.
+- Backend edits restart the dev server and can drop an upload or save in flight.
+- `FamilyNominationStep` calls `scrollIntoView`, which jsdom lacks: stubbed in its test.
+- Existing lint error (not from this work): `react-hooks/refs` on `flushAutosaveRef.current = ...` in `HireWizardClient`.

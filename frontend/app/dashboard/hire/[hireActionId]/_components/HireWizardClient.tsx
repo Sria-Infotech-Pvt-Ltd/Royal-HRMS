@@ -37,6 +37,7 @@ import EmergencyContactsList, { type EmergencyContactEntry } from "./EmergencyCo
 import AddressFields, { EMPTY_ADDRESS_EXTRAS, type AddressExtras } from "./AddressFields";
 import ScanFillModal, { type ScanSuggestions } from "./ScanFillModal";
 import { fieldsTheServerDidNotKeep } from "./savedDraftCheck";
+import { shrinkImageForUpload } from "@/lib/shrinkImage";
 import { changedDraftFields } from "./draftChanges";
 import EmployeePhotoUpload from "./EmployeePhotoUpload";
 import HireWizardSidebar from "./HireWizardSidebar";
@@ -133,7 +134,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       const formData = new FormData();
       formData.append("document_type", documentType);
       if (entryRef) formData.append("entry_ref", entryRef);
-      formData.append("file", file, file.name);
+      // A big phone photo is shrunk first: on a slow upload line a 2 MB file took over the server's 60 seconds.
+      const toSend = await shrinkImageForUpload(file);
+      formData.append("file", toSend, toSend.name);
       const res = await clientApi.post<{ data: HireDocument }>(
         API.hireActions.documents(hireActionId), formData,
       );
@@ -324,7 +327,14 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       setAssetEntries(repairTempIds((d.asset_entries as AssetEntry[]) ?? []));
       setCoreSkills(String(d.core_skills ?? ""));
       setCertifications(String(d.certifications ?? ""));
-      setVerification(v => ({ ...v, ...(d as Partial<VerificationDraft>) }));
+      // ONLY the three verification fields. This used to spread the whole saved draft into `verification`, and every save ends with
+      // `...verification`, so a reopened draft's load-time values (family, company code, PAN, education ...) were written back over
+      // whatever had been typed since: edits to a resumed draft silently never saved.
+      setVerification(v => ({
+        verification_status: String(d.verification_status ?? v.verification_status),
+        verification_completed_on: String(d.verification_completed_on ?? v.verification_completed_on),
+        verification_provider: String(d.verification_provider ?? v.verification_provider),
+      }));
     }).finally(() => setLoading(false));
   }, [hireActionId]); // eslint-disable-line react-hooks/exhaustive-deps -- repairTempIds is redefined every render; only load once per hireActionId, same as the rest of this effect
 
@@ -501,8 +511,13 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   // lastAttemptedRef starts at null so the very first run (right after the
   // initial GET finishes loading) primes the baseline instead of firing a
   // spurious save of data that was just loaded from the server, untouched.
-  const AUTOSAVE_DELAY_MS = 1200;
-  const AUTOSAVE_MAX_WAIT_MS = 5000;
+  // Short on purpose: the wait after the last keystroke, and the longest a person typing without a pause waits. Leaving a field
+  // saves at once (see the focusout listener below), so these only matter while typing.
+  const AUTOSAVE_DELAY_MS = 400;
+  const AUTOSAVE_MAX_WAIT_MS = 1500;
+  // Saves go one after another, never side by side: two requests in flight can land out of order and a stale full-form snapshot
+  // would overwrite a newer one on the server.
+  const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The last snapshot an autosave was SENT for, whether or not it succeeded. A snapshot is never re-sent on its own: this
   // effect re-runs on every render, so without this a refused save re-rendered, re-sent and looped (it filled the log with
@@ -521,7 +536,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     lastAttemptedRef.current = serialized;
     setAutosaveStatus("saving");
     setAutosaveMessage("");
-    patchAction(payload)
+    const attempt = saveChainRef.current.catch(() => undefined).then(() => patchAction(payload));
+    saveChainRef.current = attempt;
+    attempt
       .then(result => {
         // Duplicate email/mobile: the draft IS saved, but the person must hear about it (and cannot move on until fixed).
         const blocking = result.warnings?.find(w => w.severity === "error");
@@ -584,10 +601,12 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       }
     };
     document.addEventListener("visibilitychange", flushWhenHidden);
+    document.addEventListener("focusout", flushNow);   // leaving a field (Tab or click elsewhere) saves right away
     window.addEventListener("pagehide", flushNow);
     window.addEventListener("beforeunload", warnIfUnsaved);
     return () => {
       document.removeEventListener("visibilitychange", flushWhenHidden);
+      document.removeEventListener("focusout", flushNow);
       window.removeEventListener("pagehide", flushNow);
       window.removeEventListener("beforeunload", warnIfUnsaved);
       flushNow();
@@ -671,6 +690,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       // A failed save is NEVER ignored here: hiring from a draft the server does not hold would be refused anyway,
       // with a message that blames the wrong thing.
       try {
+        await saveChainRef.current.catch(() => undefined);   // let any autosave already on its way finish first, so it cannot land after this one
         const payload = buildFullDraftPayload();
         const held = await patchAction(payload);
         // The server answered "saved", but is its copy really what is on screen? If not, say which fields, and do not hire.

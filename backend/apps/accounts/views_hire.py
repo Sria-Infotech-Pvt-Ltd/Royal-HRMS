@@ -29,7 +29,9 @@ from apps.accounts.serializers import HireActionDocumentSerializer
 from apps.accounts.serializers_profile_photo import ProfilePhotoUploadSerializer
 from apps.accounts.services_hire_drafts import discard_draft, existing_employee_match
 from apps.accounts.services_hire_draft_fields import validate_draft_fields
+from apps.accounts.services_hire_documents import DraftNoLongerOpen, store_document
 from apps.accounts.services_hire_duplicates import check_hire_duplicates
+from core.storage import StorageUnavailable
 from apps.accounts.services_placement import assign_position
 from apps.accounts.views.shared import _get_document_type_config
 
@@ -382,23 +384,22 @@ class HireActionDocumentListCreateView(APIView):
                 f'Upload the correct document for {type_config.label} instead.',
             )
 
-        with transaction.atomic():
-            doc = serializer.save(
-                hire_action=action, file_name=file_obj.name[:255], file_size=file_obj.size,
-                content_hash=content_hash, entry_ref=entry_ref,
+        # A per-entry attachment (one certificate per education entry) replaces only that entry's file; a one-slot type replaces
+        # its previous file; a multi-file type keeps all. The rules and the concurrency guarantees live in the service.
+        try:
+            doc, created = store_document(
+                action, serializer, document_type=doc_type, entry_ref=entry_ref, allow_multiple=type_config.allow_multiple,
+                file_name=file_obj.name, file_size=file_obj.size, content_hash=content_hash,
             )
-            if entry_ref:
-                # Per-entry attachment (e.g. one certificate per education
-                # entry) — a re-upload replaces just that entry's file, never
-                # touches another entry's file of the same document_type.
-                HireActionDocument.objects.filter(
-                    hire_action=action, document_type=doc_type, entry_ref=entry_ref,
-                ).exclude(pk=doc.pk).delete()
-            elif not type_config.allow_multiple:
-                HireActionDocument.objects.filter(
-                    hire_action=action, document_type=doc_type, entry_ref='',
-                ).exclude(pk=doc.pk).delete()
+        except StorageUnavailable:
+            return error('The file storage did not respond in time, so nothing was saved. Please upload the file again.',
+                         http_status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except DraftNoLongerOpen:
+            return error('Hire action not found or already completed.', http_status=status.HTTP_404_NOT_FOUND)
 
+        if not created:
+            logger.info('Hire action document %s already stored for %s; retry answered without a second upload', doc_type, action.id)
+            return success('Document already uploaded.', HireActionDocumentSerializer(doc, context={'request': request}).data)
         logger.info('Hire action document %s uploaded for %s by %s', doc_type, action.id, request.user.email)
         return success(
             'Document uploaded.',

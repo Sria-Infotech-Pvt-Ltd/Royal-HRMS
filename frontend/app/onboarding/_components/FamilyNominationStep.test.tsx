@@ -39,7 +39,8 @@ const click = (name: string | RegExp) => fireEvent.click(screen.getByRole("butto
 const lane = (label: string) => screen.getByRole("region", { name: `${label} nomination` });
 const bar = (label: string) => screen.getByRole("progressbar", { name: `${label} shares assigned` });
 
-beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(2026, 10, 17)); });
+// jsdom has no scrollIntoView; the step calls it when "Add nominee" is pressed before any family member exists.
+beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(2026, 10, 17)); Element.prototype.scrollIntoView = vi.fn(); });
 afterEach(() => { vi.useRealTimers(); cleanup(); });
 
 describe("Family & nomination: family members", () => {

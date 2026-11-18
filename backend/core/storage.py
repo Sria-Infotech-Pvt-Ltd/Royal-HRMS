@@ -23,7 +23,8 @@ import time
 from django.conf import settings
 from django.core.files.storage import Storage
 from django.utils.deconstruct import deconstructible
-from imagekitio import ImageKit
+import httpx
+from imagekitio import APIConnectionError, APITimeoutError, ImageKit
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +39,22 @@ _RESOLVE_RETRY_DELAYS = (0, 0.5, 1.5)
 
 _client: ImageKit | None = None
 
+# The SDK default is a 60 s timeout with 2 retries, so ONE stalled connection could hold a request open for up to 3 minutes while the
+# browser had long since given up (Daphne then logged "took too long to shut down and was killed"). Bounded instead: a connection that
+# cannot be made in 5 s fails fast, and an upload that makes NO progress for 30 s fails. These are per-chunk inactivity limits, not a
+# cap on the whole transfer, so a slow-but-moving upload of a 5 MB file is not cut off. One retry covers a dropped connection.
+STORAGE_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0)
+STORAGE_MAX_RETRIES = 1
+
+
+class StorageUnavailable(Exception):
+    """Storage did not answer in time or could not be reached. Safe to retry: nothing was stored."""
+
 
 def _get_client() -> ImageKit:
     global _client
     if _client is None:
-        _client = ImageKit(private_key=settings.IMAGEKIT_PRIVATE_KEY)
+        _client = ImageKit(private_key=settings.IMAGEKIT_PRIVATE_KEY, timeout=STORAGE_TIMEOUT, max_retries=STORAGE_MAX_RETRIES)
     return _client
 
 
@@ -100,12 +112,17 @@ class ImageKitStorage(Storage):
         folder = os.path.dirname(name)
         file_name = os.path.basename(name)
         content.seek(0)
-        response = _get_client().files.upload(
-            file=content.read(),
-            file_name=file_name,
-            folder=f'/{folder}' if folder else '/',
-            is_private_file=self.is_private_file,
-        )
+        try:
+            response = _get_client().files.upload(
+                file=content.read(),
+                file_name=file_name,
+                folder=f'/{folder}' if folder else '/',
+                is_private_file=self.is_private_file,
+            )
+        except (APITimeoutError, APIConnectionError) as exc:
+            # Logged with the type only (never the file name or content); callers turn this into a clear "try again" answer.
+            logger.warning('ImageKit upload did not complete (%s); nothing was stored.', type(exc).__name__)
+            raise StorageUnavailable('The file storage did not respond in time.') from exc
         return response.file_path.lstrip('/')
 
     def exists(self, name):
