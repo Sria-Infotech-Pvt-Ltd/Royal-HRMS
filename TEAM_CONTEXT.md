@@ -6297,3 +6297,25 @@ Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend 
 - `hrms/tests_project_sync_queue` (2): sync failures are written in plain language (ee830ba2, c8673060): a time-out reads `MSG_STOPPED_TOO_LONG`, and the exception name `SoftTimeLimitExceeded` must NOT appear in the message. Both tests now assert that.
 - `attendance/tests_face_id_policy.WelcomeEmailTemplateTests` (2): `hire_welcome_credentials` is seeded by migrations (name is unique), so the test replaces its content with `update_or_create` instead of creating a second row.
 - The earlier "still failing" list in the section above is now empty. The logged `No active SMTP configuration found` during the lifecycle tests is still not covered by the SMTP mock there (it does not fail anything).
+
+## Global Search phases 1-2, Permissions screens, bank corrections (2026-11-18)
+
+**Global Search (backend only; `apps/global_search`, no database tables yet).**
+- Endpoints: `GET /api/search/?q=` (grouped), `GET|POST /api/search/<module>/` (text + filter tree + page), `GET /api/search/registry/` (what the viewer may use). Modules live: employees, branches, org_units, positions, attendance, leave, work_from_home, announcements, assets.
+- `registry.py` is the ONE allow-list: each module declares its scoped queryset, permission, and FieldSpecs. The browser sends field KEYS and operator CODES only; `filters.py` validates type, operator and value, depth 3, 20 conditions. Never accept ORM paths from the browser.
+- Scope mirrors each existing page (see `scope.py`, and `modules/leave.py` which reuses the approval-queue filters). Default-deny where pages fall back to "everyone" (no branch, no team). A bare `Q()` is an identity under `|`: use `all_rows()` for "all".
+- Sensitive: personal employee fields need `employees.view_sensitive`; encrypted fields (bank, PAN, Aadhaar, UAN, passport), passwords, login data and free-text leave / WFH reasons are never searchable or returned.
+- Not built yet: search UI (phase 4), saved filters, history, export, payroll / recruitment / performance / documents modules, trigram indexes (needs `CREATE EXTENSION pg_trgm`, a decision for the product owner). The old header `GlobalSearch.tsx` is unchanged.
+- Tests: `apps/global_search/tests_*.py`, 68 passing. `platform_core` scope / field-security is NOT wired to live modules and cannot be reused.
+- `org_chart.view` is a company baseline permission in this database (everyone may see the org chart); tests that check the gate delete the baseline row first.
+
+**Permissions settings (`/dashboard/settings/access`).** Everyone / One person / Bulk apply tabs rebuilt: summary cards, search and filter chips, column "switch all" checkboxes with a mixed state, quick presets (View only / Everything with confirm / Nothing), compact rows, unsaved-changes bar with Review changes, per-person tiles with "Add all" per module, template cards with details, Duplicate, sort and filters. Shared pieces: `PermissionChip`, `TriStateCheckbox`, `StatCardGrid`, `lib/permissionMatrixView.ts`, `lib/permissionTemplatesView.ts`, `lib/accessListView.ts`. The matrix is still plain for the position and template editors (`isAdvanced` is page-only).
+
+**Bank corrections.** HR can apply the six bank fields from a Profile correction ticket (`services_profile_change.py`); numbers are masked in the audit log and on decided tickets; `HRHelpRequest.change_new_value` is encrypted (migration 0057). Blocked while a self-service bank change is pending.
+
+**Gotchas found.**
+- Tailwind here is v2: `bg-[var(--x)]` classes on new elements did not render; use inline `style` for backgrounds.
+- The dev server's style watcher can wedge on a file another session created and deleted (e.g. `settings/audit/_view.test.ts`); restart `npm run dev`.
+- The shared test database `test_hrms_dev` can be left half-migrated by another session; run tests with `TEST_DB_SUFFIX=<name> ... --keepdb` for a private one. Editing a test file while it runs makes tracebacks point at the wrong line.
+- A minted test session is signed out while the real user is using the same account.
+- Not verified in a browser: the One person and Bulk apply tabs and the global search API (unit and API tests only).
