@@ -69,7 +69,7 @@ export default function OnboardingHistoryModal({ employeeUuid, employeeName, onC
             {history.invite_expires_at && history.state.code !== "active" && <> · link valid until {formatDateTime(history.invite_expires_at)}</>}
           </div>
 
-          {state.can_resend && (
+          {state.code !== "active" && (
             <div style={{ display: "grid", gap: 8 }}>
               {isCorrecting && (
                 <label style={{ display: "grid", gap: 4, fontSize: 13 }}>

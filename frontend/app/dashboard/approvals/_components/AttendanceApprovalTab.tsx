@@ -7,6 +7,9 @@ import { API } from "@/lib/api/endpoints";
 import type { ManagerApproval } from "@/types/payroll";
 import EmployeeAttendanceRow, { type EmployeeRow } from "./EmployeeAttendanceRow";
 import { formatDate } from "@/lib/formatDate";
+import AttendanceCycleSteps from "./AttendanceCycleSteps";
+import AttendanceTotals from "./AttendanceTotals";
+import { AttendanceApprovalStyles } from "./attendanceApprovalStyles";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -51,8 +54,8 @@ const fmtDate = (d: string) => formatDate(d);
 const fmtMonth = (d: string) =>
   new Date(d).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
-const fmtDateTime = (d: string) =>
-  new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+/** Employees who deserve a second look before sign-off: any absence or loss-of-pay day. */
+const needsAttention = (employee: EmployeeRow) => employee.absent_days > 0 || employee.lop_days > 0;
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -63,6 +66,8 @@ export default function AttendanceApprovalTab() {
   const [approving,   setApproving]   = useState(false);
   const [apiErr,      setApiErr]      = useState<string | null>(null);
   const [successMsg,  setSuccessMsg]  = useState<string | null>(null);
+  const [query,        setQuery]        = useState("");
+  const [isAttentionOnly, setIsAttentionOnly] = useState(false);
 
   const { data: cycles, loading: cyclesLoading, error: cyclesError, refetch: refetchCycles } =
     useFetch<PendingCycle[]>(API.payroll.pendingApprovalCycles);
@@ -72,10 +77,16 @@ export default function AttendanceApprovalTab() {
 
   const selected = cycles?.find(c => c.id === selectedId) ?? null;
 
+  const allEmployees = summary?.employees ?? [];
+  const attentionCount = allEmployees.filter(needsAttention).length;
+  const needle = query.trim().toLowerCase();
+  const visibleEmployees = allEmployees.filter(employee =>
+    (!isAttentionOnly || needsAttention(employee)) &&
+    (!needle || `${employee.full_name} ${employee.employee_id} ${employee.department}`.toLowerCase().includes(needle)));
+
   const l1Done            = !!summary?.cycle.l1_approver;
   const l2Done            = !!summary?.cycle.l2_approver;
   const currentUserPending = summary?.cycle.current_user_pending ?? false;
-  const mgrAllApproved    = summary?.cycle.mgr_all_approved ?? false;
   const mgrApprovals      = summary?.cycle.manager_approvals ?? [];
   const mgrApprovedCount  = summary?.cycle.mgr_approved_count ?? 0;
   const mgrTotalCount     = summary?.cycle.mgr_total_count ?? 0;
@@ -144,29 +155,30 @@ export default function AttendanceApprovalTab() {
       {successMsg && <div className="alert alert-success"><i className="ti ti-circle-check" /> {successMsg}</div>}
       {apiErr     && <div className="alert alert-error"><i className="ti ti-alert-circle" /> {apiErr}</div>}
 
+      <AttendanceApprovalStyles />
+
       {/* Cycle selector */}
       <div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
-          Select Payroll Period
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+          Select payroll period
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="aa-cycles">
           {cycles.map(c => (
             <button
               key={c.id}
-              onClick={() => { setSelectedId(c.id); setApiErr(null); }}
-              style={{
-                padding: "10px 18px", borderRadius: 10, border: "1.5px solid",
-                borderColor: selectedId === c.id ? "var(--primary)" : "var(--outline-v)",
-                background: selectedId === c.id ? "rgba(124,58,237,0.07)" : "var(--bg)",
-                color: selectedId === c.id ? "var(--primary)" : "var(--on-bg)",
-                cursor: "pointer", fontSize: 13, fontWeight: selectedId === c.id ? 700 : 500,
-                transition: "all 0.12s",
-              }}
+              type="button"
+              className={`aa-cycle${selectedId === c.id ? " is-on" : ""}`}
+              aria-pressed={selectedId === c.id}
+              onClick={() => { setSelectedId(c.id); setApiErr(null); setQuery(""); setIsAttentionOnly(false); }}
             >
-              <div>{fmtMonth(c.cycle_start)}</div>
-              <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>
-                Pay date: {fmtDate(c.pay_date)}
-              </div>
+              <b>{fmtMonth(c.cycle_start)}</b>
+              <small>{fmtDate(c.cycle_start)} → {fmtDate(c.cycle_end)}</small>
+              <small>Pay date: {fmtDate(c.pay_date)}</small>
+              <span className="aa-cycle-chips">
+                <span className={`aa-chip ${c.attendance_l1_approved_at ? "is-done" : "is-open"}`}>L1 {c.attendance_l1_approved_at ? "done" : "open"}</span>
+                <span className={`aa-chip ${c.attendance_l2_approved_at ? "is-done" : "is-open"}`}>L2 {c.attendance_l2_approved_at ? "done" : "open"}</span>
+                <span className="aa-chip">{c.payslip_count} payslip{c.payslip_count === 1 ? "" : "s"}</span>
+              </span>
             </button>
           ))}
         </div>
@@ -188,94 +200,21 @@ export default function AttendanceApprovalTab() {
                 </div>
               )}
             </div>
-
-            {/* Approval status pills */}
-            {!summaryLoading && summary && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {/* L1: per-manager count */}
-                <span style={{
-                  padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
-                  background: l1Done ? "rgba(34,197,94,0.12)" : mgrApprovedCount > 0 ? "rgba(234,179,8,0.12)" : "rgba(100,116,139,0.10)",
-                  color: l1Done ? "#15803d" : mgrApprovedCount > 0 ? "#92400e" : "var(--on-variant)",
-                }}>
-                  {mgrTotalCount > 0
-                    ? l1Done
-                      ? `L1 ✓ All managers (${mgrTotalCount})`
-                      : `L1 ${mgrApprovedCount}/${mgrTotalCount} managers`
-                    : l1Done
-                      ? "L1 ✓ Approved"
-                      : "L1 Pending"
-                  }
-                </span>
-                {/* L2 */}
-                <span style={{
-                  padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
-                  background: l2Done ? "rgba(34,197,94,0.12)" : "rgba(100,116,139,0.10)",
-                  color: l2Done ? "#15803d" : "var(--on-variant)",
-                }}>
-                  {l2Done ? `L2 ✓ ${summary.cycle.l2_approver}` : "L2 Waiting"}
-                </span>
-                {summary.cycle.hr_self_approved_at && (
-                  <span style={{
-                    padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
-                    background: "rgba(217,119,6,0.12)", color: "#b45309",
-                  }}>
-                    HR Self-Approved
-                  </span>
-                )}
-              </div>
-            )}
           </div>
 
-          {/* Per-manager approval breakdown — shown when there are manager rows */}
-          {!summaryLoading && mgrTotalCount > 0 && (
-            <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--outline-v)", display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
-                Manager Sign-offs ({mgrApprovedCount}/{mgrTotalCount} approved)
-              </div>
-              {/* Progress bar */}
-              <div style={{ height: 4, borderRadius: 99, background: "var(--bg-high)", overflow: "hidden", marginBottom: 4 }}>
-                <div style={{
-                  height: "100%", borderRadius: 99,
-                  width: mgrTotalCount > 0 ? `${(mgrApprovedCount / mgrTotalCount) * 100}%` : "0%",
-                  background: mgrAllApproved ? "var(--success)" : "var(--primary)",
-                  transition: "width 0.4s ease",
-                }} />
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {mgrApprovals.map(row => (
-                  <div
-                    key={row.id}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 7,
-                      padding: "5px 12px", borderRadius: 20,
-                      border: `1.5px solid ${row.approved_at ? "var(--success)" : "var(--outline-v)"}`,
-                      background: row.approved_at ? "rgba(34,197,94,0.07)" : "var(--bg-low)",
-                      fontSize: 12,
-                    }}
-                  >
-                    <i
-                      className={`ti ${row.approved_at ? "ti-circle-check" : "ti-clock"}`}
-                      style={{ color: row.approved_at ? "var(--success)" : "var(--on-variant)", fontSize: 13 }}
-                    />
-                    <span style={{ fontWeight: 600 }}>{row.manager_name}</span>
-                    {row.approved_at && (
-                      <span style={{ color: "var(--on-variant)", fontSize: 11 }}>
-                        {fmtDateTime(row.approved_at)}
-                      </span>
-                    )}
-                    {row.self_approved_at && (
-                      <span style={{
-                        padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 700,
-                        background: "rgba(217,119,6,0.12)", color: "#b45309",
-                      }}>
-                        Self-Approved
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+          {!summaryLoading && summary && (
+            <>
+              <AttendanceCycleSteps
+                managers={mgrApprovals}
+                managersApproved={mgrApprovedCount}
+                managersTotal={mgrTotalCount}
+                isL1Done={l1Done}
+                isL2Done={l2Done}
+                l2Name={summary.cycle.l2_approver}
+                isHrSelfApproved={Boolean(summary.cycle.hr_self_approved_at)}
+              />
+              {allEmployees.length > 0 && <AttendanceTotals employees={allEmployees} />}
+            </>
           )}
 
           {/* Attendance table */}
@@ -288,6 +227,20 @@ export default function AttendanceApprovalTab() {
               No attendance records found for this period.
             </div>
           ) : (
+            <>
+            <div className="aa-find">
+              <div className="aa-find-box">
+                <i className="ti ti-search" />
+                <input type="search" placeholder="Search name, ID or department…" aria-label="Search employees" value={query} onChange={e => setQuery(e.target.value)} />
+              </div>
+              <button type="button" className={`aa-filter${isAttentionOnly ? " is-on" : ""}`} aria-pressed={isAttentionOnly} onClick={() => setIsAttentionOnly(v => !v)}>
+                <i className="ti ti-alert-triangle" /> Needs a look ({attentionCount})
+              </button>
+              <span className="aa-find-count">Showing {visibleEmployees.length} of {allEmployees.length}</span>
+            </div>
+            {visibleEmployees.length === 0 ? (
+              <div className="aa-empty"><i className="ti ti-mood-check" />Nobody matches. Clear the search or the filter.</div>
+            ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
@@ -300,7 +253,7 @@ export default function AttendanceApprovalTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {summary.employees.map(emp => (
+                  {visibleEmployees.map(emp => (
                     <EmployeeAttendanceRow
                       key={emp.employee_id}
                       emp={emp}
@@ -311,6 +264,8 @@ export default function AttendanceApprovalTab() {
                 </tbody>
               </table>
             </div>
+            )}
+            </>
           )}
 
           {/* Approval footer */}

@@ -6,33 +6,19 @@ import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import { formatDateTime } from "@/lib/formatDate";
 import DateInput from "@/components/shared/DateInput";
+import { shiftISODate } from "@/app/dashboard/attendance/_components/attendanceDates";
+import { localISODate } from "@/app/dashboard/attendance/_components/monthView";
+import EmailLogRow, { type EmailLogEntry } from "./_components/EmailLogRow";
+import { EmailLogStyles } from "./_components/emailLogStyles";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type EmailLogRow = {
-  id:                     string;
-  recipient_email:        string;
-  subject:                string;
-  status:                 "sent" | "failed";
-  module:                 string;
-  template_name:          string;
-  triggered_by_name:      string;
-  smtp_settings_name:     string;
-  is_resend:              boolean;
-  had_attachments:        boolean;
-  has_sensitive_context:  boolean;
-  /** Why Resend is not offered (a one-time link must be re-issued by the action that made it), or null when a replay is fine. */
-  resend_blocked_reason:  string | null;
-  error_message:          string;
-  created_at:             string;
-};
 
 type PageData = {
   count:       number;
   page:        number;
   page_size:   number;
   total_pages: number;
-  results:     EmailLogRow[];
+  results:     EmailLogEntry[];
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -64,13 +50,11 @@ function moduleClass(module: string): string {
 }
 
 function isoToday(): string {
-  return new Date().toISOString().split("T")[0];
+  return localISODate();
 }
 
 function iso30DaysAgo(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 30);
-  return d.toISOString().split("T")[0];
+  return shiftISODate(localISODate(), -30);
 }
 
 function fmtDateTime(iso: string): string {
@@ -133,7 +117,7 @@ export default function EmailLogsPage() {
     fetchLogs(1);
   }
 
-  async function handleResend(row: EmailLogRow) {
+  async function handleResend(row: EmailLogEntry) {
     setResendingId(row.id);
     setResendMsg(null);
     setResendErr(null);
@@ -164,9 +148,11 @@ export default function EmailLogsPage() {
   }
 
   const rows = pageData?.results ?? [];
+  const failedOnPage = rows.filter(row => row.status === "failed").length;
 
   return (
     <>
+      <EmailLogStyles />
       <div className="page-header">
         <div>
           <div className="page-title">Email Logs</div>
@@ -175,43 +161,56 @@ export default function EmailLogsPage() {
       </div>
 
       {/* ── Filters ─────────────────────────────────────────────────────── */}
-      {/* Explicit minWidth:0/flexWrap/maxWidth here rather than relying only
-          on globals.css's .filter-bar shrink rules — those only kick in
-          under the 768px mobile breakpoint, leaving a gap at ordinary laptop
-          widths where this row (one more field than the pattern it's based
-          on) could force the whole page to scroll horizontally instead of
-          wrapping onto a second line. */}
-      <form onSubmit={handleSearchSubmit} className="filter-bar" style={{ maxWidth: "100%", flexWrap: "wrap", rowGap: 10 }}>
-        <div className="search-bar" style={{ flex: "1 1 180px", minWidth: 0 }}>
-          <i className="ti ti-search" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by recipient or subject…"
-            suppressHydrationWarning
-          />
+      <form onSubmit={handleSearchSubmit} className="el-filters card">
+        <div className="el-filter-row">
+          <label className="el-f el-f-grow">
+            <span>Recipient or subject</span>
+            <div className="el-search">
+              <i className="ti ti-search" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by recipient or subject…" suppressHydrationWarning />
+            </div>
+          </label>
+          <label className="el-f">
+            <span>Module</span>
+            <select className="field-input field-select" value={module} onChange={e => setModule(e.target.value)} suppressHydrationWarning>
+              <option value="">All modules</option>
+              {MODULES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </label>
+          <div className="el-dates">
+            <div className="el-f"><span>From</span><DateInput className="field-input" value={dateFrom} onChange={isoDate => setDateFrom(isoDate)} title="From" /></div>
+            <b>to</b>
+            <div className="el-f"><span>To</span><DateInput className="field-input" value={dateTo} onChange={isoDate => setDateTo(isoDate)} title="To" /></div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="submit" className="btn btn-filled" style={{ height: 42 }}><i className="ti ti-search" /> Search</button>
+            {hasActiveFilters && (
+              <button type="button" className="btn btn-ghost" style={{ height: 42 }} onClick={clearFilters}><i className="ti ti-x" /> Clear</button>
+            )}
+          </div>
         </div>
 
-        <select className="field-input field-select" style={{ width: 120, flexShrink: 0 }} value={status} onChange={e => setStatus(e.target.value)} suppressHydrationWarning>
-          <option value="">All statuses</option>
-          <option value="sent">Sent</option>
-          <option value="failed">Failed</option>
-        </select>
-
-        <select className="field-input field-select" style={{ width: 150, flexShrink: 0 }} value={module} onChange={e => setModule(e.target.value)} suppressHydrationWarning>
-          <option value="">All modules</option>
-          {MODULES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-        </select>
-
-        <DateInput className="field-input" style={{ width: 140, flexShrink: 0 }} value={dateFrom} onChange={isoDate => setDateFrom(isoDate)} title="From" />
-        <span style={{ fontSize: 12, color: "var(--on-variant)", flexShrink: 0 }}>to</span>
-        <DateInput className="field-input" style={{ width: 140, flexShrink: 0 }} value={dateTo} onChange={isoDate => setDateTo(isoDate)} title="To" />
-
-        {hasActiveFilters && (
-          <button type="button" className="btn btn-ghost" onClick={clearFilters} style={{ flexShrink: 0 }}>
-            <i className="ti ti-x" /> Clear
-          </button>
-        )}
+        <div className="el-chips" role="group" aria-label="Delivery status">
+          {([
+            { key: "", label: "All emails", icon: "ti-mail", accent: "#7c3aed" },
+            { key: "sent", label: "Sent", icon: "ti-mail-check", accent: "#16a34a" },
+            { key: "failed", label: "Failed", icon: "ti-mail-exclamation", accent: "#dc2626" },
+          ] as const).map(chip => (
+            <button
+              key={chip.key || "all"} type="button" aria-pressed={status === chip.key}
+              className={`el-chip${status === chip.key ? " is-on" : ""}`} style={{ "--el-accent": chip.accent } as React.CSSProperties}
+              onClick={() => setStatus(chip.key)}
+            >
+              <i className={`ti ${chip.icon}`} /> {chip.label}
+            </button>
+          ))}
+          {pageData && (
+            <div className="el-strip">
+              <span className="el-stat" style={{ "--el-stat": "#7c3aed" } as React.CSSProperties}><i className="ti ti-mails" /> Total <b>{pageData.count}</b></span>
+              <span className={`el-stat${failedOnPage > 0 ? " is-urgent" : ""}`} style={{ "--el-stat": "#dc2626" } as React.CSSProperties}><i className="ti ti-alert-triangle" /> Failed on this page <b>{failedOnPage}</b></span>
+            </div>
+          )}
+        </div>
       </form>
 
       {/* ── Resend feedback ─────────────────────────────────────────────── */}
@@ -248,10 +247,10 @@ export default function EmailLogsPage() {
               <tr>
                 <th>To</th>
                 <th>Subject</th>
-                <th>Module</th>
-                <th>Template</th>
+                <th className="el-hide-md">Module</th>
+                <th className="el-hide-md">Template</th>
                 <th>Status</th>
-                <th>Sent By</th>
+                <th className="el-hide-md">Sent By</th>
                 <th>Sent At</th>
                 <th>Actions</th>
               </tr>
@@ -261,55 +260,13 @@ export default function EmailLogsPage() {
                 <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>Loading…</td></tr>
               )}
               {!loading && rows.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>No emails found.</td></tr>
+                <tr><td colSpan={8}><div className="el-empty"><i className="ti ti-mail-off" />No emails found for these filters.</div></td></tr>
               )}
               {rows.map(row => (
-                <tr key={row.id}>
-                  <td style={{ fontSize: 12 }}>{row.recipient_email}</td>
-                  <td>{row.subject || "—"}</td>
-                  <td>
-                    <span className={`badge ${moduleClass(row.module)}`} style={{ textTransform: "capitalize" }}>
-                      {row.module || "—"}
-                    </span>
-                  </td>
-                  <td style={{ color: "var(--on-variant)", fontSize: 12 }}>{row.template_name || "—"}</td>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <span className={`badge ${row.status === "sent" ? "badge-success" : "badge-error"}`}>
-                        {row.status === "sent" ? "Sent" : "Failed"}
-                      </span>
-                      {row.is_resend && (
-                        <span className="badge badge-neutral" style={{ fontSize: 10 }}>Resend</span>
-                      )}
-                    </div>
-                  </td>
-                  <td>{row.triggered_by_name || "—"}</td>
-                  <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtDateTime(row.created_at)}</td>
-                  <td>
-                    {row.status === "failed" && canResend && row.resend_blocked_reason && (
-                      <span
-                        title={row.resend_blocked_reason}
-                        style={{ fontSize: 11, color: "var(--on-variant)", cursor: "help" }}
-                      >
-                        <i className="ti ti-info-circle" /> Re-issue from the employee
-                      </span>
-                    )}
-                    {row.status === "failed" && canResend && !row.resend_blocked_reason && (
-                      <button
-                        className="btn btn-filled btn-sm"
-                        style={{ fontSize: ".78rem" }}
-                        onClick={() => handleResend(row)}
-                        disabled={resendingId === row.id}
-                        suppressHydrationWarning
-                      >
-                        {resendingId === row.id
-                          ? <><i className="ti ti-loader-2 animate-spin" /> Resending…</>
-                          : <><i className="ti ti-repeat" /> Resend</>
-                        }
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                <EmailLogRow
+                  key={row.id} row={row} moduleClass={moduleClass(row.module)} sentAt={fmtDateTime(row.created_at)}
+                  canResend={canResend} isResending={resendingId === row.id} onResend={handleResend}
+                />
               ))}
             </tbody>
           </table>

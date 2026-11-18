@@ -101,20 +101,12 @@ export default function TeamCoverageCard() {
             <i className="ti ti-loader-2" style={{ fontSize: 24, color: "var(--outline-v)" }} />
           </div>
         ) : (
-          rows.map((row, idx) => (
-            <div
-              key={row.start.toISOString()}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "12px 20px",
-                borderTop: idx === 0 ? "none" : "1px solid var(--outline-v)",
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
-                  {fmtRangeLabel(row.start, row.end)}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
+          rows.map(row => (
+            <div key={row.start.toISOString()} className={`lv-row ${row.isAway ? "lv-st-pending" : "lv-st-approved"}`}>
+              <span className="lv-dot" />
+              <div className="lv-row-main">
+                <div className="lv-row-title">{fmtRangeLabel(row.start, row.end)}</div>
+                <div className="lv-row-meta">
                   {row.isAway
                     ? `${row.maxCount} team member${row.maxCount === 1 ? "" : "s"} already away · Manager review required`
                     : "No scheduled team overlap"}

@@ -5,6 +5,9 @@ import clientApi from "@/lib/clientApi";
 import { usePermission } from "@/hooks/usePermission";
 import DocPreviewBody from "./_components/DocPreviewBody";
 import DocumentTile from "./_components/DocumentTile";
+import DocumentRow from "./_components/DocumentRow";
+import { DocStyles } from "./_components/docStyles";
+import { SORT_OPTIONS, sortDocuments, type DocSort } from "./_view";
 import {
   DOCUMENTS_BASE, DOCUMENTS_STATS, documentDetail,
   DOC_ACCEPT, EMPTY_UPLOAD_FORM, formatUploadedAt,
@@ -43,6 +46,8 @@ export default function DocumentCenterPage() {
   // ── UI state ───────────────────────────────────────────────────────────────
   const [filter,       setFilter]       = useState<Filter>("All Documents");
   const [search,       setSearch]       = useState("");
+  const [view,         setView]         = useState<"grid" | "list">("grid");
+  const [sort,         setSort]         = useState<DocSort>("newest");
   const [debouncedQ,   setDebouncedQ]   = useState("");
   const [selected,     setSelected]     = useState<ApiDocument | null>(null);
   const [showUpload,   setShowUpload]   = useState(false);
@@ -266,6 +271,7 @@ export default function DocumentCenterPage() {
 
   return (
     <>
+      <DocStyles />
       {/* Toast */}
       {toast && (
         <div className="dc-toast" style={{ position: "fixed", top: 16, right: 20, zIndex: 9999, display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", background: toast.ok ? "var(--success-c)" : "var(--error-c)", border: `1px solid ${toast.ok ? "var(--success)" : "var(--error)"}`, borderRadius: "var(--radius)", boxShadow: "var(--shadow-md)", fontSize: 13, color: toast.ok ? "var(--success)" : "var(--error)", animation: "dcSlideIn 0.2s ease", maxWidth: "calc(100vw - 40px)" }}>
@@ -292,12 +298,19 @@ export default function DocumentCenterPage() {
       {/* Stats row */}
       <div className="dc-stats-row" style={{ display: "grid", gap: 12, marginBottom: 24 }}>
         {([
-          { label: "Total Documents", value: statsLoading ? "—" : total,         icon: "ti-copy",             color: "var(--primary)", bg: "rgba(124,58,237,0.08)"  },
-          { label: "Policies",        value: statsLoading ? "—" : policyCount,   icon: "ti-shield-check",     color: "#c28b00",        bg: "rgba(194,139,0,0.10)"  },
-          { label: "Forms",           value: statsLoading ? "—" : formCount,     icon: "ti-file-description", color: "var(--info)",    bg: "rgba(37,99,235,0.10)" },
-          { label: "Templates",       value: statsLoading ? "—" : templateCount, icon: "ti-table",            color: "var(--success)", bg: "rgba(23,144,90,0.10)" },
+          { filter: "All Documents" as Filter, label: "Total Documents", value: statsLoading ? "—" : total,         icon: "ti-copy",             color: "var(--primary)", bg: "rgba(124,58,237,0.08)"  },
+          { filter: "Policies" as Filter,      label: "Policies",        value: statsLoading ? "—" : policyCount,   icon: "ti-shield-check",     color: "#c28b00",        bg: "rgba(194,139,0,0.10)"  },
+          { filter: "Forms" as Filter,         label: "Forms",           value: statsLoading ? "—" : formCount,     icon: "ti-file-description", color: "var(--info)",    bg: "rgba(37,99,235,0.10)" },
+          { filter: "Templates" as Filter,     label: "Templates",       value: statsLoading ? "—" : templateCount, icon: "ti-table",            color: "var(--success)", bg: "rgba(23,144,90,0.10)" },
         ] as const).map(stat => (
-          <div key={stat.label} style={{ background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <button
+            key={stat.label} type="button"
+            className={`dx-stat${filter === stat.filter ? " is-on" : ""}`}
+            style={{ "--dx-accent": stat.color, background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" } as React.CSSProperties}
+            aria-pressed={filter === stat.filter}
+            onClick={() => setFilter(stat.filter)}
+            suppressHydrationWarning
+          >
             <div>
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 6 }}>{stat.label}</div>
               <div style={{ fontSize: 26, fontWeight: 700, color: "var(--on-bg)", lineHeight: 1 }}>{stat.value}</div>
@@ -305,7 +318,7 @@ export default function DocumentCenterPage() {
             <div style={{ width: 44, height: 44, borderRadius: 10, background: stat.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <i className={`ti ${stat.icon}`} style={{ fontSize: 20, color: stat.color }} />
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -327,11 +340,20 @@ export default function DocumentCenterPage() {
             </button>
           ))}
         </div>
-        <div style={{ position: "relative", marginLeft: "auto" }} className="dc-search-wrap">
+        <div className="dx-tools">
+        <select className="dx-select" aria-label="Sort documents" value={sort} onChange={e => setSort(e.target.value as DocSort)} suppressHydrationWarning>
+          {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <div className="dx-views" role="group" aria-label="Layout">
+          <button type="button" className={view === "grid" ? "is-on" : ""} aria-pressed={view === "grid"} aria-label="Grid view" title="Grid" onClick={() => setView("grid")} suppressHydrationWarning><i className="ti ti-layout-grid" /></button>
+          <button type="button" className={view === "list" ? "is-on" : ""} aria-pressed={view === "list"} aria-label="List view" title="List" onClick={() => setView("list")} suppressHydrationWarning><i className="ti ti-list" /></button>
+        </div>
+        <div style={{ position: "relative" }} className="dc-search-wrap">
           <i className="ti ti-search" style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "var(--outline)", pointerEvents: "none" }} />
           <input className="field-input" placeholder="Search documents…" value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ paddingLeft: 34, width: 220 }} suppressHydrationWarning />
+            style={{ paddingLeft: 34, width: 220, maxWidth: "100%" }} suppressHydrationWarning />
+        </div>
         </div>
       </div>
 
@@ -359,24 +381,33 @@ export default function DocumentCenterPage() {
 
       {/* Empty state */}
       {!loading && !error && documents.length === 0 && (
-        <div style={{ textAlign: "center", padding: "52px 0", color: "var(--on-variant)" }}>
-          <i className="ti ti-folder-off" style={{ fontSize: 40, opacity: 0.25, display: "block", marginBottom: 12 }} />
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No documents found</div>
-          {(search || filter !== "All Documents") && (
-            <div style={{ fontSize: 13, color: "var(--outline)" }}>
-              Try a different filter or search term
-            </div>
+        <div className="dx-empty">
+          <span className="dx-empty-icon"><i className="ti ti-folder-off" /></span>
+          <b>No documents found</b>
+          <p>{search || filter !== "All Documents" ? "Try a different filter or search term." : "Policies, forms and templates your company shares will appear here."}</p>
+          {canUpload && !search && filter === "All Documents" && (
+            <button type="button" className="btn btn-filled btn-sm" style={{ marginTop: 14 }} onClick={() => setShowUpload(true)} suppressHydrationWarning>
+              <i className="ti ti-upload" /> Upload the first document
+            </button>
           )}
         </div>
       )}
 
       {/* Document grid */}
       {!loading && !error && documents.length > 0 && (
-        <div className="doc-grid">
-          {documents.map(doc => (
-            <DocumentTile key={doc.id} doc={doc} onOpen={setSelected} />
-          ))}
-        </div>
+        view === "grid" ? (
+          <div className="doc-grid">
+            {sortDocuments(documents, sort).map(doc => (
+              <DocumentTile key={doc.id} doc={doc} onOpen={setSelected} />
+            ))}
+          </div>
+        ) : (
+          <div className="dx-list">
+            {sortDocuments(documents, sort).map(doc => (
+              <DocumentRow key={doc.id} doc={doc} onOpen={setSelected} />
+            ))}
+          </div>
+        )
       )}
 
       {/* ── Document detail modal ── */}

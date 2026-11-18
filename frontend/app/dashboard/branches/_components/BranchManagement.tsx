@@ -7,18 +7,16 @@ import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
-import ToggleSwitch from "@/components/ToggleSwitch";
 import type { GSTRegistration } from "@/types/company";
 import {
   type StateObj, type CityObj, type Branch, type BranchStats, type BranchDistribution,
   type Envelope, type Paginated, type BranchAdminSeat, type ApiEmployeeOption, type LeaderForm, type BranchForm, type CurrentBranchAdmin,
   EMPTY_LEADER, EMPTY_BRANCH_FORM, branchToForm, isLeaderActive, EMAIL_RE, OTHER_CITY, BRANCH_NAME_RE, CITY_NAME_RE,
 } from "./_data";
-import LeaderFields from "./LeaderFields";
+import BranchFormBody from "./BranchFormBody";
 import { loadBranchAdminOptions } from "./branchAdminOptions";
 import BranchCard from "./BranchCard";
 import EmployeeDistributionChart from "./EmployeeDistributionChart";
-import BranchLocationPreview from "./BranchLocationPreview";
 import { TransferConfirmModal, HqConfirmModal, DeleteConfirmModal, type TransferConfirmState } from "./BranchConfirmModals";
 
 export default function BranchManagement() {
@@ -43,6 +41,10 @@ export default function BranchManagement() {
   const [error,         setError]         = useState<string | null>(null);
   const [saveError,     setSaveError]     = useState<string | null>(null);
   const [fieldErrors,   setFieldErrors]   = useState<Record<string, string>>({});
+  // Clears the messages for just these fields (the form sections call this as the person edits them).
+  const clearFieldErrors = useCallback((...keys: string[]) => {
+    setFieldErrors(previous => { const next = { ...previous }; keys.forEach(key => { delete next[key]; }); return next; });
+  }, []);
   const [codeLoading,   setCodeLoading]   = useState(false);
   const [citiesLoading, setCitiesLoading] = useState(false);
   const [saving,        setSaving]        = useState(false);
@@ -368,9 +370,9 @@ export default function BranchManagement() {
     if (Object.keys(errs).length > 0 || Object.keys(leaderErrs).length > 0) {
       setFieldErrors(errs);
       setLeaderErrors(leaderErrs);
-      // The admin fields sit below the fold, so say why Save did nothing.
+      // The admin section can be folded away; it opens by itself when it has a problem, and this says why Save did nothing.
       if (Object.keys(leaderErrs).length > 0) {
-        setSaveError("Complete the Company Code Admin details below, or clear them to save without an admin.");
+        setSaveError("Complete the Company Code Admin details, or clear them to save without an admin.");
       }
       return;
     }
@@ -616,6 +618,8 @@ export default function BranchManagement() {
           }
           onClose={() => setModalMode(null)}
           size="lg"
+          maxWidth={1000}
+          scrollBody
           footer={
             <>
               <button className="btn btn-ghost" onClick={() => setModalMode(null)}>Cancel</button>
@@ -646,303 +650,23 @@ export default function BranchManagement() {
                   Loading saved details…
                 </div>
               ) : modalMode === "edit" && !editForm.branch_code ? null : (
-              <>
-              <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">State/Region *</label>
-                  <select
-                    className={`field-input field-select${fieldErrors.state ? " field-error" : ""}`}
-                    value={editForm.state}
-                    onChange={e => {
-                      setFieldErrors(prev => { const n = {...prev}; delete n.state; delete n.city; delete n.new_city_name; delete n.gst_registration; return n; });
-                      setNewCityName("");
-                      setEditForm({ ...editForm, state: e.target.value, city: "", gst_registration: "" });
-                    }}
-                  >
-                    <option value="">Select State</option>
-                    {states.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                  {fieldErrors.state && <p className="field-error-msg">{fieldErrors.state}</p>}
-                </div>
-                <div className="field-group">
-                  <label className="field-label">City *</label>
-                  <select
-                    className={`field-input field-select${fieldErrors.city ? " field-error" : ""}`}
-                    value={editForm.city}
-                    onChange={e => {
-                      setFieldErrors(prev => { const n = {...prev}; delete n.city; delete n.branch_code; delete n.new_city_name; return n; });
-                      if (e.target.value !== OTHER_CITY) setNewCityName("");
-                      setEditForm({ ...editForm, city: e.target.value });
-                    }}
-                    disabled={!editForm.state || citiesLoading}
-                  >
-                    <option value="">
-                      {!editForm.state ? "Select a state first" : citiesLoading ? "Loading cities…" : "Select City"}
-                    </option>
-                    {cities.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                    {editForm.state && <option value={OTHER_CITY}>Other (type city name)</option>}
-                  </select>
-                  {fieldErrors.city && <p className="field-error-msg">{fieldErrors.city}</p>}
-                  {editForm.city === OTHER_CITY && (
-                    <div style={{ marginTop: "8px" }}>
-                      <input
-                        type="text"
-                        className={`field-input${fieldErrors.new_city_name ? " field-error" : ""}`}
-                        value={newCityName}
-                        onChange={e => {
-                          setFieldErrors(prev => { const n = {...prev}; delete n.new_city_name; delete n.branch_code; return n; });
-                          setNewCityName(e.target.value.replace(/[^A-Za-z '-]/g, ""));
-                        }}
-                        placeholder="Enter new city name"
-                        maxLength={100}
-                      />
-                      {fieldErrors.new_city_name && <p className="field-error-msg">{fieldErrors.new_city_name}</p>}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {missingGstForState && (
-                <div className="alert alert-warn mb-16" style={{ alignItems: "flex-start" }}>
-                  <i className="ti ti-alert-triangle" />
-                  <div>
-                    No GST registration found for <strong>{selectedStateName}</strong> yet — GST registration is
-                    state-wise, so this branch will need one on file.{" "}
-                    <a href="/dashboard/settings/company" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
-                      Add one in Company Profile
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              {gstOptionsForState.length > 0 && (
-                <div className="field-group mb-16">
-                  <label className="field-label">
-                    GST Registration {gstChoiceRequired && <span style={{ color: "var(--error)" }}>*</span>}
-                  </label>
-                  {gstOptionsForState.length === 1 ? (
-                    <div style={{ fontSize: 13, color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 6 }}>
-                      <i className="ti ti-receipt-tax" style={{ fontSize: 14 }} />
-                      <span style={{ fontFamily: "monospace" }}>{gstOptionsForState[0].gstin}</span>
-                      <span>({selectedStateName}{gstOptionsForState[0].place_of_business ? ` — ${gstOptionsForState[0].place_of_business}` : ""}) — only one on file, used automatically</span>
-                    </div>
-                  ) : (
-                    <>
-                      <select
-                        className={`field-input field-select${fieldErrors.gst_registration ? " field-error" : ""}`}
-                        value={editForm.gst_registration}
-                        onChange={e => {
-                          setFieldErrors(prev => { const n = {...prev}; delete n.gst_registration; return n; });
-                          setEditForm({ ...editForm, gst_registration: e.target.value });
-                        }}
-                      >
-                        <option value="">Select which GST registration this Company Code uses…</option>
-                        {gstOptionsForState.map(r => (
-                          <option key={r.id} value={r.id}>
-                            {r.gstin}{r.place_of_business ? ` — ${r.place_of_business}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                      <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
-                        <i className="ti ti-info-circle" style={{ marginRight: 4 }} />
-                        {selectedStateName} has {gstOptionsForState.length} GST registrations on file — pick the one this branch&apos;s invoices/documents should use.
-                      </div>
-                      {fieldErrors.gst_registration && <p className="field-error-msg">{fieldErrors.gst_registration}</p>}
-                    </>
-                  )}
-                </div>
-              )}
-
-              <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Company Code <span style={{ fontSize: "11px", color: "var(--outline)", fontWeight: 400 }}>(auto-generated)</span></label>
-                  <div style={{ position: "relative" }}>
-                    <input
-                      type="text"
-                      className={`field-input${fieldErrors.branch_code ? " field-error" : ""}`}
-                      value={codeLoading ? "" : editForm.branch_code}
-                      readOnly
-                      placeholder={!editForm.city ? "Select a city first" : codeLoading ? "Generating…" : ""}
-                      style={{ background: "var(--bg-low)", cursor: "default", paddingRight: codeLoading ? "36px" : undefined }}
-                    />
-                    {codeLoading && (
-                      <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", fontSize: "15px", color: "var(--outline)" }}>
-                        <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />
-                      </span>
-                    )}
-                  </div>
-                  {fieldErrors.branch_code && <p className="field-error-msg">{fieldErrors.branch_code}</p>}
-                  {editForm.branch_code && !codeLoading && !fieldErrors.branch_code && (
-                    <div style={{ fontSize: "11px", color: "var(--on-variant)", marginTop: "4px" }}>
-                      <i className="ti ti-info-circle" style={{ marginRight: "4px" }} />
-                      Additional branches in the same city get suffixed automatically (e.g. MUM-01, MUM-02)
-                    </div>
-                  )}
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Company Code Name *</label>
-                  <input
-                    type="text"
-                    className={`field-input${fieldErrors.branch_name ? " field-error" : ""}`}
-                    value={editForm.branch_name}
-                    onChange={e => {
-                      setFieldErrors(prev => { const n = {...prev}; delete n.branch_name; return n; });
-                      setEditForm({ ...editForm, branch_name: e.target.value.replace(/[^A-Za-z0-9 &.-]/g, "") });
-                    }}
-                    placeholder="e.g. Bengaluru HQ"
-                    maxLength={200}
-                  />
-                  {fieldErrors.branch_name && <p className="field-error-msg">{fieldErrors.branch_name}</p>}
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="field-group">
-                  <label className="field-label">Address *</label>
-                  <textarea
-                    className={`field-input${fieldErrors.address ? " field-error" : ""}`}
-                    value={editForm.address}
-                    onChange={e => {
-                      setFieldErrors(prev => { const n = {...prev}; delete n.address; return n; });
-                      setEditForm({ ...editForm, address: e.target.value });
-                    }}
-                    placeholder="Full Company Code address"
-                  />
-                  {fieldErrors.address && <p className="field-error-msg">{fieldErrors.address}</p>}
-                </div>
-              </div>
-
-              {/* Shown on Add and Edit alike; Edit prefills the current admin (see loadEditDetails). */}
-              <div style={{ marginTop: "4px", marginBottom: "20px", paddingTop: "18px", paddingBottom: "4px", borderTop: "1px solid var(--outline-v)" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--on-bg)", marginBottom: "14px" }}>
-                  Assign Company Code Admin <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span>
-                </div>
-                <LeaderFields
-                  label="Company Code Admin" form={branchAdminForm} setForm={setBranchAdminForm}
-                  employees={leaderEmployees} seats={branchAdminSeats} errors={leaderErrors} prefix="branchAdmin"
-                  currentAdmin={modalMode === "edit" ? currentAdmin : null}
-                />
-              </div>
-
-              <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Status *</label>
-                  <select
-                    className="field-input field-select"
-                    value={editForm.status}
-                    onChange={e => setEditForm({ ...editForm, status: e.target.value })}
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-                <div className="field-group" style={{ display: "flex", alignItems: "flex-end", gap: 16, paddingBottom: "2px" }}>
-                  <label className="module-check">
-                    <input
-                      type="checkbox"
-                      checked={editForm.is_headquarter}
-                      onChange={e => setEditForm({ ...editForm, is_headquarter: e.target.checked })}
-                    />
-                    <span>Mark as Headquarter</span>
-                  </label>
-                  <label className="module-check" title="Metro classification for HRA — 50% of Basic instead of 40% for salary structures using the Metro HRA calculation.">
-                    <input
-                      type="checkbox"
-                      checked={editForm.is_metro}
-                      onChange={e => setEditForm({ ...editForm, is_metro: e.target.checked })}
-                    />
-                    <span>Metro City (HRA)</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="field-group" style={{ paddingBottom: "2px" }}>
-                  <ToggleSwitch
-                    label="Enable Geofencing"
-                    checked={editForm.geofencing_enabled}
-                    onChange={checked => {
-                      setFieldErrors(prev => { const n = {...prev}; delete n.latitude; delete n.longitude; delete n.allowed_radius_meters; return n; });
-                      setEditForm({ ...editForm, geofencing_enabled: checked });
-                    }}
-                  />
-                </div>
-              </div>
-
-              {editForm.geofencing_enabled && (
-                <>
-                  <div className="form-row cols-2">
-                    <div className="field-group">
-                      <label className="field-label">Latitude *</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className={`field-input${fieldErrors.latitude ? " field-error" : ""}`}
-                        value={editForm.latitude}
-                        onChange={e => {
-                          setFieldErrors(prev => { const n = {...prev}; delete n.latitude; return n; });
-                          setEditForm({ ...editForm, latitude: e.target.value });
-                        }}
-                        placeholder="Latitude of the office entrance"
-                      />
-                      {fieldErrors.latitude && <p className="field-error-msg">{fieldErrors.latitude}</p>}
-                    </div>
-                    <div className="field-group">
-                      <label className="field-label">Longitude *</label>
-                      <input
-                        type="number"
-                        step="any"
-                        className={`field-input${fieldErrors.longitude ? " field-error" : ""}`}
-                        value={editForm.longitude}
-                        onChange={e => {
-                          setFieldErrors(prev => { const n = {...prev}; delete n.longitude; return n; });
-                          setEditForm({ ...editForm, longitude: e.target.value });
-                        }}
-                        placeholder="Longitude of the office entrance"
-                      />
-                      {fieldErrors.longitude && <p className="field-error-msg">{fieldErrors.longitude}</p>}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: "11px", color: "var(--on-variant)", marginTop: "-8px", marginBottom: "16px" }}>
-                    <i className="ti ti-info-circle" style={{ marginRight: "4px" }} />
-                    Enter the GPS coordinates of the office entrance. Use Google Maps — right-click the location and copy the coordinates —
-                    or stand at the office and use &ldquo;Use my current location&rdquo;.
-                  </div>
-                  <BranchLocationPreview
-                    latitude={editForm.latitude}
-                    longitude={editForm.longitude}
-                    stateId={editForm.state}
-                    cityId={editForm.city}
-                    radiusMeters={editForm.allowed_radius_meters}
-                    onUseLocation={(latitude, longitude) => {
-                      setFieldErrors(prev => { const next = { ...prev }; delete next.latitude; delete next.longitude; return next; });
-                      setEditForm({ ...editForm, latitude, longitude });
-                    }}
-                  />
-
-                  <div className="form-row">
-                    <div className="field-group">
-                      <label className="field-label">Allowed Radius (metres) *</label>
-                      <input
-                        type="number"
-                        min={10}
-                        max={5000}
-                        className={`field-input${fieldErrors.allowed_radius_meters ? " field-error" : ""}`}
-                        value={editForm.allowed_radius_meters}
-                        onChange={e => {
-                          setFieldErrors(prev => { const n = {...prev}; delete n.allowed_radius_meters; return n; });
-                          setEditForm({ ...editForm, allowed_radius_meters: e.target.value });
-                        }}
-                      />
-                      {fieldErrors.allowed_radius_meters && <p className="field-error-msg">{fieldErrors.allowed_radius_meters}</p>}
-                    </div>
-                  </div>
-                </>
-              )}
-              </>
+              <BranchFormBody
+                form={editForm}
+                onChange={patch => setEditForm(previous => ({ ...previous, ...patch }))}
+                clearErrors={clearFieldErrors}
+                errors={fieldErrors}
+                states={states}
+                cities={cities}
+                citiesLoading={citiesLoading}
+                codeLoading={codeLoading}
+                newCityName={newCityName}
+                setNewCityName={setNewCityName}
+                gst={{ stateName: selectedStateName, options: gstOptionsForState, missing: missingGstForState, choiceRequired: gstChoiceRequired }}
+                admin={{
+                  form: branchAdminForm, setForm: setBranchAdminForm, employees: leaderEmployees, seats: branchAdminSeats,
+                  errors: leaderErrors, currentAdmin: modalMode === "edit" ? currentAdmin : null,
+                }}
+              />
               )}
         </Modal>
       )}

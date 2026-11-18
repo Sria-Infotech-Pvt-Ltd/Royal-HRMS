@@ -39,7 +39,11 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   // Anyone who can run at least one report. Each report still needs its own permission on the server, so this only
   // decides who may open the screen; a person with none of them sees an empty list.
   "/dashboard/reports": ["reports.view", "employees.export", "attendance.view", "leave.approve", "wfh.approve", "separation.approve", "facial_recognition.approve", "recruitment.view", "timesheet.report"],
-  "/dashboard/audit": "audit.view",
+  // The Audit Log page lives at /dashboard/settings/audit and its API needs audit.view. This used to be keyed as
+  // "/dashboard/audit" (a path that does not exist), so the page fell under "/dashboard/settings" and needed
+  // settings.view as well — anyone holding audit.view alone was sent back to the dashboard. The longest matching
+  // route wins, so this entry now decides.
+  "/dashboard/settings/audit": "audit.view",
   "/dashboard/performance": ["performance.manage_cycles", "performance.review_team"],
   "/dashboard/settings": "settings.view",
   "/dashboard/settings/leave-policy": "settings.view",

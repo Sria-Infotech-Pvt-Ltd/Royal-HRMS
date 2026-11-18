@@ -13,6 +13,9 @@ import BranchFilterSelect from "@/components/BranchFilterSelect";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import DateInput from "@/components/shared/DateInput";
+import { MONO, Notice, Pager, Pill, SectionCard, TableStates, PersonCell } from "./SectionCard";
+import { PALETTE } from "./attendancePalette";
+import { localISODate } from "./monthView";
 
 interface BranchOption { id: number; branch_name: string }
 
@@ -102,7 +105,7 @@ export default function WeeklyOffAssignmentTab() {
   function openAssign(row: AssignmentRow) {
     setAssignTarget(row);
     setAssignPattern(row.pattern_id ?? "");
-    setAssignDate(new Date().toISOString().slice(0, 10));
+    setAssignDate(localISODate());
     setAssignErr(null);
   }
 
@@ -150,78 +153,53 @@ export default function WeeklyOffAssignmentTab() {
     }
   }
 
+  const filters = (
+    <>
+      <BranchFilterSelect branches={branches} value={branchInput} onChange={value => { setBranchInput(value); setPage(1); }} locked={!unrestricted} lockedBranchName={effectiveBranch} />
+      <select className="field-input field-select" style={{ width: 180 }} value={department} onChange={e => { setDepartment(e.target.value); setPage(1); }}>
+        <option value="">All Org Units</option>
+        {departments.map(d => <option key={d} value={d}>{d}</option>)}
+      </select>
+      <select className="field-input field-select" style={{ width: 180 }} value={pattern} onChange={e => { setPattern(e.target.value); setPage(1); }}>
+        <option value="">All Patterns</option>
+        {patterns.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+      <select className="field-input field-select" style={{ width: 150 }} value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
+        {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      </select>
+    </>
+  );
+  const bulkButton = canAssign && (
+    <button className="btn btn-filled btn-sm" onClick={() => { setShowBulk(true); setBulkErr(null); setBulkDate(localISODate()); }} suppressHydrationWarning>
+      <i className="ti ti-users" /> Bulk Assign
+    </button>
+  );
+
   return (
     <>
-      <div className="filter-bar" style={{ marginBottom: 14, justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <BranchFilterSelect
-            branches={branches}
-            value={branchInput}
-            onChange={value => { setBranchInput(value); setPage(1); }}
-            locked={!unrestricted}
-            lockedBranchName={effectiveBranch}
-          />
-          <select className="field-input field-select" style={{ width: 180 }} value={department} onChange={e => { setDepartment(e.target.value); setPage(1); }}>
-            <option value="">All Org Units</option>
-            {departments.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <select className="field-input field-select" style={{ width: 180 }} value={pattern} onChange={e => { setPattern(e.target.value); setPage(1); }}>
-            <option value="">All Patterns</option>
-            {patterns.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <select className="field-input field-select" style={{ width: 150 }} value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
-            {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-          </select>
-        </div>
-        {canAssign && (
-          <button className="btn btn-filled btn-sm" onClick={() => { setShowBulk(true); setBulkErr(null); setBulkDate(new Date().toISOString().slice(0, 10)); }} suppressHydrationWarning>
-            <i className="ti ti-users" /> Bulk Assign
-          </button>
-        )}
-      </div>
-
-      {error && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {error}</div>}
-
-      <div className="card">
-        <div className="table-wrap">
+      <SectionCard icon="ti-moon" colour={PALETTE.on_leave} title="Weekly Off Assignment" count={data?.count ?? null} filters={filters} action={bulkButton} subtitle="Which weekly off pattern each employee follows. A new pattern applies from its effective date forward.">
+        {error && <Notice tone="error" icon="ti-alert-circle">{error}</Notice>}
+        <div className="table-wrap" style={{ marginTop: error ? 14 : 0 }}>
           <table>
             <thead>
-              <tr>
-                <th>Employee ID</th>
-                <th>Employee Name</th>
-                <th>Department</th>
-                <th>Company Code</th>
-                <th>Weekly Off Pattern</th>
-                <th>Effective From</th>
-                <th>Effective To</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
+              <tr><th>Employee</th><th>Department</th><th>Weekly Off Pattern</th><th>Effective From</th><th>Effective To</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {loading && (
-                <tr><td colSpan={9} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>Loading…</td></tr>
-              )}
-              {!loading && rows.length === 0 && (
-                <tr><td colSpan={9} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>No employees found.</td></tr>
-              )}
+              <TableStates columns={7} loading={loading} empty={rows.length === 0} icon="ti-users-off" title="No employees found." hint="Try clearing a filter above." />
               {rows.map(r => (
                 <tr key={r.employee_id}>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.employee_id}</td>
-                  <td>{r.employee_name}</td>
-                  <td>{r.department}</td>
-                  <td>{r.branch}</td>
-                  <td>{r.pattern_name ?? "—"}</td>
-                  <td>{r.effective_from ?? "—"}</td>
-                  <td>{r.effective_to ?? "-"}</td>
+                  <td><PersonCell name={r.employee_name} employeeId={r.employee_id} /></td>
                   <td>
-                    <span className={r.status === "Assigned" ? "badge badge-success" : "badge badge-neutral"}>
-                      {r.status}
-                    </span>
+                    <div style={{ fontSize: 13 }}>{r.department}</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{r.branch}</div>
                   </td>
+                  <td>{r.pattern_name ? <Pill colour={PALETTE.on_leave}>{r.pattern_name}</Pill> : "—"}</td>
+                  <td style={MONO}>{r.effective_from ?? "—"}</td>
+                  <td style={MONO}>{r.effective_to ?? "-"}</td>
+                  <td><Pill colour={r.status === "Assigned" ? PALETTE.present : PALETTE.not_marked}>{r.status}</Pill></td>
                   <td>
                     {canAssign && (
-                      <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11 }} onClick={() => openAssign(r)}>
+                      <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11, color: PALETTE.brand }} onClick={() => openAssign(r)}>
                         <i className="ti ti-edit" /> {r.status === "Assigned" ? "Change" : "Assign"}
                       </button>
                     )}
@@ -231,21 +209,8 @@ export default function WeeklyOffAssignmentTab() {
             </tbody>
           </table>
         </div>
-
-        {data && data.total_pages > 1 && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
-            <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Page {data.page} of {data.total_pages} · {data.count} employees</span>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(p - 1, 1))}>
-                <i className="ti ti-chevron-left" /> Prev
-              </button>
-              <button className="btn btn-ghost btn-sm" disabled={page >= data.total_pages} onClick={() => setPage(p => Math.min(p + 1, data.total_pages))}>
-                Next <i className="ti ti-chevron-right" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+        <Pager data={data} page={page} onPage={setPage} noun="employees" />
+      </SectionCard>
 
       {/* ── Single assign modal ──────────────────────────────────────────── */}
       {assignTarget && (

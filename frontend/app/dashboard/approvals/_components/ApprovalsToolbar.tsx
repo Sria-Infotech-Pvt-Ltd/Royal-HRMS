@@ -19,11 +19,37 @@ interface Props {
   refreshing:    boolean;
 }
 
+function toIso(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** Quick "submitted between" ranges: [label, from, to] for today, the last 7 days and this month. */
+function datePresets(): { label: string; from: string; to: string }[] {
+  const today = new Date();
+  const weekAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  return [
+    { label: "Today",        from: toIso(today),      to: toIso(today) },
+    { label: "Last 7 days",  from: toIso(weekAgo),    to: toIso(today) },
+    { label: "This month",   from: toIso(monthStart), to: toIso(today) },
+  ];
+}
+
 export default function ApprovalsToolbar({
   search, onSearch, status, onStatus, showTypeFilter, type, onType,
   dateFrom, onDateFrom, dateTo, onDateTo, onRefresh, refreshing,
 }: Props) {
+  const presets = datePresets();
+  const hasActiveFilters = search !== "" || status !== "pending" || type !== "all" || dateFrom !== "" || dateTo !== "";
+  function clearFilters() {
+    onSearch("");
+    onStatus("pending");
+    onType("all");
+    onDateFrom("");
+    onDateTo("");
+  }
   return (
+    <>
     <div className="ta-toolbar">
       <div className="ta-search-box">
         <i className="ti ti-search" />
@@ -68,5 +94,22 @@ export default function ApprovalsToolbar({
         Refresh
       </button>
     </div>
+    <div className="tv-chips">
+      <span className="tv-chips-label">Submitted:</span>
+      {presets.map(preset => (
+        <button
+          key={preset.label}
+          type="button"
+          className={`tv-chip${dateFrom === preset.from && dateTo === preset.to ? " is-on" : ""}`}
+          onClick={() => { onDateFrom(preset.from); onDateTo(preset.to); }}
+        >
+          {preset.label}
+        </button>
+      ))}
+      {hasActiveFilters && (
+        <button type="button" className="tv-chip is-clear" onClick={clearFilters}><i className="ti ti-filter-off" /> Clear filters</button>
+      )}
+    </div>
+    </>
   );
 }

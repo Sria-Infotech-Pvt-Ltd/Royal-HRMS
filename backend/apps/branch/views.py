@@ -13,6 +13,7 @@ from core.responses import error, first_error, get_client_ip, success
 from apps.accounts.models import AuditLog
 from apps.branch.models import Branch, City, State
 from apps.branch.serializers import BranchSerializer, CitySerializer, StateSerializer
+from apps.branch.services_cities import ensure_state_districts
 from apps.branch.geo import coordinate_errors, location_warnings
 from apps.branch.utils import (
     branch_assigned_employee_count, branch_employee_counts, generate_branch_code, sync_employee_branch_names,
@@ -54,6 +55,8 @@ class CityListView(APIView):
             state = State.objects.get(pk=state_id, is_active=True)
         except State.DoesNotExist:
             return error('State not found.', http_status=status.HTTP_404_NOT_FOUND)
+        # The City table holds only a short list of towns; add the state's other districts so every one can be chosen.
+        ensure_state_districts(state)
         cities = state.cities.filter(is_active=True)
         return success('Cities retrieved successfully.', data=CitySerializer(cities, many=True).data)
 

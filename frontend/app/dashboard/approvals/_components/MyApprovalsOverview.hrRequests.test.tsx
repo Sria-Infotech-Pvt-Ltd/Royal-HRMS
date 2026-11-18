@@ -32,7 +32,7 @@ describe("My Approvals overview: HR requests row", () => {
 
   it("has one Profile corrections row with the open count", () => {
     render(<MyApprovalsOverview {...base} canRespondHrHelp />);
-    expect(screen.getByText("Profile corrections").closest("tr")?.textContent).toContain("3");
+    expect(screen.getByText("Profile corrections").closest("article")?.textContent).toContain("3");
     expect(screen.queryByText("Other HR requests")).toBeNull();
   });
 

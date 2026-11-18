@@ -119,3 +119,43 @@ describe("Employees list > the status pill that opens the invitation email", () 
     expect(screen.queryByRole("button", { name: /Onboarding history/ })).toBeNull();
   });
 });
+
+describe("Employees list > the Resend invite button", () => {
+  it.each([
+    ["Awaiting activation", { awaitingActivation: true }],
+    ["Onboarding", { awaitingActivation: false }],
+  ])("is always there for someone still onboarding (%s), and opens the history to resend", (_label, over) => {
+    mount(person(over));
+    fireEvent.click(screen.getByRole("button", { name: "Resend invite to Asha Rao" }));
+    expect(screen.getByRole("dialog", { name: "onboarding-history" })).toBeTruthy();
+  });
+
+  it("does not also open the employee's detail panel when it is clicked", () => {
+    const { onOpen } = mount(person());
+    fireEvent.click(screen.getByRole("button", { name: "Resend invite to Asha Rao" }));
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("is shown but switched off, with the reason, for someone without the permission", () => {
+    allowed = false;
+    mount(person());
+    const button = screen.getByRole("button", { name: "Resend invite to Asha Rao" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("title")).toContain("You need permission");
+    fireEvent.click(button);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("is shown but switched off when the person cannot edit employees", () => {
+    mount(person(), { canEdit: false });
+    expect((screen.getByRole("button", { name: "Resend invite to Asha Rao" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("is not shown for an active employee or someone who has left", () => {
+    mount(person({ status: "active", awaitingActivation: false }));
+    expect(screen.queryByRole("button", { name: /Resend invite/ })).toBeNull();
+    cleanup();
+    mount(person({ status: "inactive", awaitingActivation: false }));
+    expect(screen.queryByRole("button", { name: /Resend invite/ })).toBeNull();
+  });
+});

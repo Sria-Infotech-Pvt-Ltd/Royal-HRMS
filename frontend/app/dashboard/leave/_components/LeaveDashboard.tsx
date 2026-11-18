@@ -3,7 +3,7 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { getLeaveYear } from "@/lib/fiscalYear";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useToast } from "@/components/ToastProvider";
 import clientApi from "@/lib/clientApi";
 import {
@@ -26,10 +26,17 @@ const SHORT_STATUS_LABEL: Record<ReqStatus, string> = {
 
 const RECENT_COUNT = 5;
 
+const STATUS_TONE: Record<ReqStatus, string> = {
+  pending: "lv-st-pending", l2_pending: "lv-st-pending", approved: "lv-st-approved", rejected: "lv-st-rejected", cancelled: "lv-st-cancelled",
+};
+const STATUS_ICON: Record<ReqStatus, string> = {
+  pending: "ti-hourglass", l2_pending: "ti-hourglass", approved: "ti-circle-check", rejected: "ti-circle-x", cancelled: "ti-ban",
+};
+
 const BALANCE_DISPLAY = [
-  { key: "casual" as const, label: "Casual Leave" },
-  { key: "sick"   as const, label: "Sick Leave"   },
-  { key: "earned" as const, label: "Earned Leave" },
+  { key: "casual" as const, label: "Casual Leave", icon: "ti-beach",      accent: "#7c3aed" },
+  { key: "sick"   as const, label: "Sick Leave",   icon: "ti-heartbeat",  accent: "#e11d48" },
+  { key: "earned" as const, label: "Earned Leave", icon: "ti-award",      accent: "#16a34a" },
 ];
 
 // Everyone — employee, manager, or HR — sees the same thing here: their own
@@ -71,18 +78,25 @@ export function LeaveBalanceStats() {
     : balances.reduce((sum, b) => sum + Number(b.used_days), 0);
 
   return (
-    <div className="stats-grid" style={{ marginBottom: 0 }}>
-      {BALANCE_DISPLAY.map(({ key, label }) => {
+    <div className="lv-tiles">
+      {BALANCE_DISPLAY.map(({ key, label, icon, accent }) => {
         const b = balanceMap[key];
         // available_days is entitlement - used - pending (days already asked for are spoken for)
         const available = loading || !balances ? null : (b ? Number(b.available_days) : 0);
         const pending = b ? Number(b.pending_days ?? 0) : 0;
+        const entitled = b ? Number(b.total_days) + Number(b.carried_forward ?? 0) : 0;
+        const percentLeft = available === null || entitled <= 0 ? 0 : Math.max(0, Math.min(100, (available / entitled) * 100));
         return (
-          <div key={key} className="stat-card">
-            <div className="stat-label">{label.toUpperCase()}</div>
-            <div className="stat-value">{fmtDays(available)}</div>
-            <div className="stat-sub">
-              days available{pending > 0 ? ` · Pending: ${pending.toFixed(1)} day${pending === 1 ? "" : "s"}` : ""}
+          <div key={key} className="lv-tile" style={{ "--lv-accent": accent } as CSSProperties}>
+            <div className="lv-tile-top">
+              <div className="lv-tile-label">{label.toUpperCase()}</div>
+              <span className="lv-icon"><i className={`ti ${icon}`} /></span>
+            </div>
+            <div className="lv-tile-value"><b>{fmtDays(available)}</b><span>days available</span></div>
+            <div className="lv-bar" role="img" aria-label={`${Math.round(percentLeft)} percent of ${label} left`}><i style={{ width: `${percentLeft}%` }} /></div>
+            <div className="lv-tile-sub">
+              <span>{entitled > 0 ? `of ${entitled.toFixed(1)} days` : "No entitlement"}</span>
+              {pending > 0 && <span className="lv-pending">{pending.toFixed(1)} pending</span>}
             </div>
           </div>
         );
@@ -92,10 +106,13 @@ export function LeaveBalanceStats() {
           leave type this calendar year, summed from the same real balance
           rows the accrued cards above read from (not a separate fabricated
           count). */}
-      <div className="stat-card">
-        <div className="stat-label">USED THIS YEAR</div>
-        <div className="stat-value">{fmtDays(usedThisYear)}</div>
-        <div className="stat-sub">days approved</div>
+      <div className="lv-tile" style={{ "--lv-accent": "#0ea5e9" } as CSSProperties}>
+        <div className="lv-tile-top">
+          <div className="lv-tile-label">USED THIS YEAR</div>
+          <span className="lv-icon"><i className="ti ti-calendar-check" /></span>
+        </div>
+        <div className="lv-tile-value"><b>{fmtDays(usedThisYear)}</b><span>days approved</span></div>
+        <div className="lv-tile-sub"><span>Across all leave types</span></div>
       </div>
     </div>
   );
@@ -149,31 +166,23 @@ export default function LeaveDashboard() {
             No leave requests yet.
           </div>
         ) : (
-          recentRequests.map((r, idx) => {
+          recentRequests.map(r => {
             const dateLabel = r.start_date === r.end_date
               ? fmtShortDate(r.start_date)
               : `${fmtShortDate(r.start_date)} - ${fmtShortDate(r.end_date)}`;
             const approver = r.l2_approver_name || r.l1_approver_name || r.approved_by || null;
             return (
-              <div
-                key={r.id}
-                onClick={() => setDetailRequest(r)}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  padding: "12px 20px", cursor: "pointer",
-                  borderTop: idx === 0 ? "none" : "1px solid var(--outline-v)",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
-                    {r.leave_type_display} · {dateLabel}
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
+              <div key={r.id} className={`lv-row is-click ${STATUS_TONE[r.status]}`} onClick={() => setDetailRequest(r)}>
+                <span className="lv-glyph"><i className={`ti ${STATUS_ICON[r.status]}`} /></span>
+                <div className="lv-row-main">
+                  <div className="lv-row-title">{r.leave_type_display} · {dateLabel}</div>
+                  <div className="lv-row-meta">
                     {r.total_days} day{r.total_days === 1 ? "" : "s"} · {r.reason || approver || "—"}
                     <LopBadge request={r} />
                   </div>
                 </div>
                 <span className={STATUS_BADGE[r.status]}>{SHORT_STATUS_LABEL[r.status]}</span>
+                <i className="ti ti-chevron-right lv-chevron" />
               </div>
             );
           })

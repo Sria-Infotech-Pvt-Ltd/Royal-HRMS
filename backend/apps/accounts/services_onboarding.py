@@ -149,7 +149,7 @@ def current_state(user: User) -> dict:
     if invite is not None and invite.status == PasswordResetToken.STATUS_EXPIRED:
         return {'code': 'link_expired', 'message': 'Link expired. Please resend the onboarding email.', 'can_resend': True}
     if invite is not None and invite.is_used:
-        return {'code': 'awaiting_login', 'message': 'Password is set. Waiting for the first login.', 'can_resend': False}
+        return {'code': 'awaiting_login', 'message': 'Password is set. Waiting for the first login. You can still send a fresh invite.', 'can_resend': True}
     if invite is not None and invite.opened_at:
         return {'code': 'link_opened', 'message': 'User opened the link but has not set a password yet.', 'can_resend': True}
     return {'code': 'not_logged_in', 'message': 'User has not logged in yet.', 'can_resend': True}

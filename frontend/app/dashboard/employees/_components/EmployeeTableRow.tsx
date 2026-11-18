@@ -105,18 +105,31 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
         {e.location || <span style={{ color: "var(--faint)" }}>—</span>}
       </div>
       <div>
-        {canResendOnboardingEmail(rowStatus) && canManageOnboarding && e.uuid ? (
+        {canResendOnboardingEmail(rowStatus) && e.uuid ? (
           // Its own click area: a click on the pill, or anywhere inside the dialog it opens (React hands portal clicks up to
           // the row), must not also open the employee's detail panel, which the whole row does on click.
           <div onClick={ev => ev.stopPropagation()}>
-            <button
-              type="button" onClick={() => setIsHistoryOpen(true)} aria-label={`Onboarding history for ${fullName(e)}`}
-              title="Onboarding history, and resend the invitation email"
-              style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }}
-            >
+            {canManageOnboarding ? (
+              <button
+                type="button" onClick={() => setIsHistoryOpen(true)} aria-label={`Onboarding history for ${fullName(e)}`}
+                title="Onboarding history, and resend the invitation email"
+                style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }}
+              >
+                <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
+              </button>
+            ) : (
               <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
+            )}
+            {/* Always there for someone who is still onboarding, whether the email was sent, opened, expired or failed. Without
+                the permission it is shown but switched off, with the reason, instead of silently missing. */}
+            <button
+              type="button" disabled={!canManageOnboarding} onClick={() => setIsHistoryOpen(true)} aria-label={`Resend invite to ${fullName(e)}`}
+              title={canManageOnboarding ? "Send this person a fresh onboarding email" : "You need permission to manage onboarding invites (Employees: reset password and edit)."}
+              style={{ display: "block", marginTop: 3, padding: 0, border: 0, background: "none", fontSize: 11.5, fontWeight: 700, color: canManageOnboarding ? "var(--primary)" : "var(--faint)", cursor: canManageOnboarding ? "pointer" : "not-allowed" }}
+            >
+              <i className="ti ti-mail-forward" aria-hidden="true" /> Resend invite
             </button>
-            {isHistoryOpen && (
+            {isHistoryOpen && canManageOnboarding && (
               <OnboardingHistoryModal employeeUuid={e.uuid} employeeName={fullName(e)} onClose={() => setIsHistoryOpen(false)} onChanged={onActionApplied} />
             )}
           </div>

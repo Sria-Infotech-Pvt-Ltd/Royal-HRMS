@@ -4,11 +4,14 @@
 // It only counts what each workflow's own API returns for the signed-in user; it does not approve anything itself, and
 // every action stays in its own tab under that workflow's own authorization. Workflows keep different assignment
 // rules (see KIND_SCOPE_NOTES), which is why each line says how it is scoped.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useApprovalOverview } from "@/hooks/useApprovalOverview";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import HrRequestsTab from "./HrRequestsTab";
+import ApprovalWorkflowCard from "./ApprovalWorkflowCard";
+import ApprovalWorkflowRow from "./ApprovalWorkflowRow";
+import { ApprovalOverviewStyles } from "./approvalOverviewStyles";
 import { PROFILE_CORRECTION_TOPIC } from "@/app/dashboard/ess/_components/ProfileCorrectionModal";
 import { useTimesheetPending } from "@/hooks/useTimesheetQueue";
 import { KIND_LABELS, KIND_SCOPE_NOTES } from "@/lib/approvalOverview";
@@ -38,10 +41,24 @@ interface Row {
   open?: () => void;
 }
 
+type LayoutKey = "cards" | "list";
+const LAYOUT_STORAGE_KEY = "approvals-overview-layout";
+
+/** The chosen layout is a per-person convenience kept in the browser; the page works without it. */
+function readLayout(): LayoutKey {
+  try { return window.localStorage.getItem(LAYOUT_STORAGE_KEY) === "list" ? "list" : "cards"; } catch { return "cards"; }
+}
+
 export default function MyApprovalsOverview({
   canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace, canRespondHrHelp = false, openHrRequestsInitially = false, onOpen,
 }: MyApprovalsOverviewProps) {
   const [isMineOnly, setIsMineOnly] = useState(false);
+  const [layout, setLayout] = useState<LayoutKey>("cards");
+  useEffect(() => { setLayout(readLayout()); }, []);
+  function chooseLayout(next: LayoutKey) {
+    setLayout(next);
+    try { window.localStorage.setItem(LAYOUT_STORAGE_KEY, next); } catch { /* a blocked store only means the choice is not remembered */ }
+  }
   const [isCorrectionsOpen, setIsCorrectionsOpen] = useState(openHrRequestsInitially);
   // Anyone who answers HR Help tickets sees every ticket, so what is waiting is also theirs to act on.
   const openCorrections = useFetch<{ count: number }>(
@@ -84,44 +101,81 @@ export default function MyApprovalsOverview({
   ];
 
   const shown = isMineOnly ? rows.filter(row => row.mine === null || row.mine > 0) : rows;
+  const actionLabelOf = (row: Row) => (row.key === "profile_corrections" && isCorrectionsOpen ? "Hide" : "Open");
+  const runAction = (row: Row) => (row.open ? row.open() : onOpen(row.section));
+  const totalWaiting = rows.reduce((sum, row) => sum + (row.pending ?? 0), 0);
+  const totalMine = rows.reduce((sum, row) => sum + (row.mine ?? 0), 0);
+  const workflowsWithWork = rows.filter(row => (row.mine ?? 0) > 0).length;
+  const summary = [
+    { label: "Waiting in total",     value: totalWaiting,      icon: "ti-hourglass",      accent: "#d97706" },
+    { label: "Needs your action",    value: totalMine,         icon: "ti-bolt",           accent: "#7c3aed" },
+    { label: "Workflows with work",  value: workflowsWithWork, icon: "ti-layout-list",    accent: "#0ea5e9" },
+  ];
 
   return (
-    <div className="card">
-      <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div className="card-title"><i className="ti ti-inbox" /> My Approvals</div>
-        <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
-          <input type="checkbox" checked={isMineOnly} onChange={event => setIsMineOnly(event.target.checked)} />
-          Only what I can act on
-        </label>
+    <div>
+      <ApprovalOverviewStyles />
+
+      {!overview.isLoading && (
+        <div className="ap-summary">
+          {summary.map(item => (
+            <div key={item.label} className="ap-tile" style={{ "--ap-accent": item.accent } as CSSProperties}>
+              <span className="ap-icon"><i className={`ti ${item.icon}`} /></span>
+              <div><b>{item.value}</b><span className="ap-tile-label">{item.label}</span></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="ap-bar">
+        <h2><i className="ti ti-inbox" /> My Approvals</h2>
+        <div className="ap-tools">
+          <div className="ap-views" role="group" aria-label="Layout">
+            <button type="button" className={layout === "cards" ? "is-on" : ""} aria-pressed={layout === "cards"} onClick={() => chooseLayout("cards")}><i className="ti ti-layout-grid" /> Cards</button>
+            <button type="button" className={layout === "list" ? "is-on" : ""} aria-pressed={layout === "list"} onClick={() => chooseLayout("list")}><i className="ti ti-list" /> List</button>
+          </div>
+          <label className={`ap-switch${isMineOnly ? " is-on" : ""}`}>
+            <input type="checkbox" checked={isMineOnly} onChange={event => setIsMineOnly(event.target.checked)} />
+            Only what I can act on
+          </label>
+        </div>
       </div>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Workflow</th><th>Waiting</th><th>For me to act on</th><th>Who sees it</th><th /></tr>
-          </thead>
-          <tbody>
-            {overview.isLoading && <tr><td colSpan={5} style={{ textAlign: "center", padding: 24 }}>Loading…</td></tr>}
-            {!overview.isLoading && shown.length === 0 && (
-              <tr><td colSpan={5} style={{ textAlign: "center", padding: 24 }}>Nothing is waiting for you.</td></tr>
-            )}
-            {!overview.isLoading && shown.map(row => (
-              <tr key={row.key}>
-                <td style={{ fontWeight: 500 }}>{row.label}</td>
-                <td>{row.pending ?? "—"}</td>
-                <td>{row.mine ?? "—"}</td>
-                <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{row.scope}</td>
-                <td><button className="btn btn-outline btn-sm" onClick={() => (row.open ? row.open() : onOpen(row.section))}>{row.key === "profile_corrections" && isCorrectionsOpen ? "Hide" : "Open"}</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+
+      {overview.isLoading && <div className="ap-empty">Loading…</div>}
+      {!overview.isLoading && shown.length === 0 && (
+        <div className="ap-empty"><i className="ti ti-circle-check" />Nothing is waiting for you.</div>
+      )}
+      {!overview.isLoading && shown.length > 0 && layout === "cards" && (
+        <div className="ap-grid">
+          {shown.map(row => (
+            <ApprovalWorkflowCard key={row.key} row={row} actionLabel={actionLabelOf(row)} onAction={() => runAction(row)} />
+          ))}
+        </div>
+      )}
+      {!overview.isLoading && shown.length > 0 && layout === "list" && (
+        <>
+          {[
+            { title: "Needs your action", items: shown.filter(row => (row.mine ?? 0) > 0) },
+            { title: "Everything else", items: shown.filter(row => (row.mine ?? 0) === 0) },
+          ].filter(group => group.items.length > 0).map(group => (
+            <section key={group.title} className="ap-group" aria-label={group.title}>
+              <h3 className="ap-group-head">{group.title} <span>{group.items.length}</span></h3>
+              <div className="ap-lines">
+                {group.items.map(row => (
+                  <ApprovalWorkflowRow key={row.key} row={row} actionLabel={actionLabelOf(row)} onAction={() => runAction(row)} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </>
+      )}
+
       {canRespondHrHelp && isCorrectionsOpen && (
-        <div style={{ padding: "0 16px 16px" }}>
+        <div className="card" style={{ marginTop: 16, padding: 16 }}>
           <HrRequestsTab title="Profile corrections" topic={PROFILE_CORRECTION_TOPIC} onChanged={openCorrections.refetch} />
         </div>
       )}
-      <p style={{ fontSize: 11, color: "var(--on-variant)", padding: "8px 16px 14px", margin: 0 }}>
+      <p className="ap-note">
         Counts show only what the server lets you see. Onboarding approvals are in Review &amp; Onboarding, and bank-change
         requests are in the employee record; they are not part of this list.
       </p>

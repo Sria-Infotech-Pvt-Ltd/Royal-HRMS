@@ -8,15 +8,17 @@ import type { InvalidPunch, PaginatedInvalidPunches } from "@/types/attendance";
 import AssignPunchModal from "./AssignPunchModal";
 import DiscardPunchModal from "./DiscardPunchModal";
 import ConvertPunchModal from "./ConvertPunchModal";
+import { MONO, Notice, Pager, Pill, SectionCard, TableStates } from "./SectionCard";
+import { PALETTE } from "./attendancePalette";
 
 interface Props {
   onMutated?: () => void;
 }
 
-const ISSUE_BADGE: Record<string, string> = {
-  "no-match":  "badge badge-error",
-  duplicate:   "badge badge-warn",
-  future:      "badge badge-error",
+const ISSUE_COLOUR: Record<string, string> = {
+  "no-match":  PALETTE.absent,
+  duplicate:   PALETTE.late,
+  future:      PALETTE.absent,
 };
 
 type ModalState =
@@ -42,73 +44,30 @@ export default function InvalidPunchesTab({ onMutated }: Props) {
 
   return (
     <>
-      <div className="alert alert-info mb-16">
-        <i className="ti ti-alert-circle" />
-        <span>
-          These punches could not be matched to an employee or contain data errors.
-          Review and fix each record before it affects payroll.
-        </span>
-      </div>
-
-      {error && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {error}</div>}
-
-      <div className="card">
-        <div className="table-wrap">
+      <SectionCard icon="ti-alert-triangle" colour={PALETTE.absent} title="Invalid Punches" count={data?.count ?? null} subtitle="Punches that could not be matched to an employee or contain data errors.">
+        <Notice tone="info" icon="ti-info-circle">Review and fix each record before it affects payroll.</Notice>
+        {error && <Notice tone="error" icon="ti-alert-circle">{error}</Notice>}
+        <div className="table-wrap" style={{ marginTop: 14 }}>
           <table>
             <thead>
-              <tr>
-                <th>Device ID</th>
-                <th>Raw Punch Time</th>
-                <th>Card / Bio ID</th>
-                <th>Issue</th>
-                <th>Suggested Match</th>
-                <th>Company Code</th>
-                <th>Action</th>
-              </tr>
+              <tr><th>Device ID</th><th>Raw Punch Time</th><th>Card / Bio ID</th><th>Issue</th><th>Suggested Match</th><th>Company Code</th><th>Action</th></tr>
             </thead>
             <tbody>
-              {loading && (
-                <tr><td colSpan={7} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>Loading…</td></tr>
-              )}
-              {!loading && rows.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>No invalid punches found.</td></tr>
-              )}
+              <TableStates columns={7} loading={loading} empty={rows.length === 0} icon="ti-circle-check" title="No invalid punches found." hint="Every punch has been matched to an employee." />
               {rows.map(p => (
                 <tr key={p.id}>
-                  <td>
-                    <span style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12, color: "var(--on-bg)", fontWeight: 600 }}>
-                      {p.device_id}
-                    </span>
-                  </td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{p.raw_time}</td>
-                  <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{p.biometric_id}</td>
-                  <td><span className={ISSUE_BADGE[p.issue_type] ?? "badge badge-neutral"}>{p.issue}</span></td>
+                  <td style={{ ...MONO, color: "var(--on-bg)", fontWeight: 700 }}>{p.device_id}</td>
+                  <td style={MONO}>{p.raw_time}</td>
+                  <td style={MONO}>{p.biometric_id}</td>
+                  <td><Pill colour={ISSUE_COLOUR[p.issue_type] ?? PALETTE.not_marked}>{p.issue}</Pill></td>
                   <td style={{ color: "var(--on-variant)", fontSize: 12 }}>{p.suggested_match}</td>
                   <td>{p.branch}</td>
                   <td>
                     {canEdit && (
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button
-                          className="btn btn-outline btn-sm"
-                          style={{ padding: "3px 10px", fontSize: 11 }}
-                          onClick={() => setModal({ type: "assign", punch: p })}
-                        >
-                          <i className="ti ti-user-check" /> Assign
-                        </button>
-                        <button
-                          className="btn btn-outline btn-sm"
-                          style={{ padding: "3px 10px", fontSize: 11 }}
-                          onClick={() => setModal({ type: "convert", punch: p })}
-                        >
-                          <i className="ti ti-replace" /> Convert
-                        </button>
-                        <button
-                          className="btn btn-outline btn-sm"
-                          style={{ padding: "3px 10px", fontSize: 11, color: "var(--error)" }}
-                          onClick={() => setModal({ type: "discard", punch: p })}
-                        >
-                          <i className="ti ti-trash" /> Discard
-                        </button>
+                        <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11, color: PALETTE.present }} onClick={() => setModal({ type: "assign", punch: p })}><i className="ti ti-user-check" /> Assign</button>
+                        <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11, color: PALETTE.brand }} onClick={() => setModal({ type: "convert", punch: p })}><i className="ti ti-replace" /> Convert</button>
+                        <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11, color: PALETTE.absent }} onClick={() => setModal({ type: "discard", punch: p })}><i className="ti ti-trash" /> Discard</button>
                       </div>
                     )}
                   </td>
@@ -117,21 +76,8 @@ export default function InvalidPunchesTab({ onMutated }: Props) {
             </tbody>
           </table>
         </div>
-
-        {data && data.total_pages > 1 && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
-            <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Page {data.page} of {data.total_pages}</span>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(p - 1, 1))}>
-                <i className="ti ti-chevron-left" /> Prev
-              </button>
-              <button className="btn btn-ghost btn-sm" disabled={page >= data.total_pages} onClick={() => setPage(p => Math.min(p + 1, data.total_pages))}>
-                Next <i className="ti ti-chevron-right" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+        <Pager data={data} page={page} onPage={setPage} />
+      </SectionCard>
 
       {modal?.type === "assign" && (
         <AssignPunchModal punch={modal.punch} onClose={() => setModal(null)} onAssigned={handleResolved} />

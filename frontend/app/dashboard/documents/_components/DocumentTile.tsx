@@ -1,6 +1,7 @@
 "use client";
 
 import { CATEGORY_META, formatUploadedAt, getFileTypeMeta, type ApiDocument } from "../_data";
+import { isNewDocument } from "../_view";
 
 export default function DocumentTile({ doc, onOpen }: { doc: ApiDocument; onOpen: (doc: ApiDocument) => void }) {
   const fm = getFileTypeMeta(doc.file_type);
@@ -9,8 +10,16 @@ export default function DocumentTile({ doc, onOpen }: { doc: ApiDocument; onOpen
   return (
     <div className="doc-tile" onClick={() => onOpen(doc)}>
       {/* Icon */}
-      <div className={`doc-icon ${fm.iconClass}`}>
-        <i className={`ti ${fm.icon}`} />
+      <div className="dx-tile-top">
+        <div className={`doc-icon ${fm.iconClass}`}>
+          <i className={`ti ${fm.icon}`} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {isNewDocument(doc) && <span className="dx-new">NEW</span>}
+          <div className="dx-quick" onClick={event => event.stopPropagation()}>
+            <a href={doc.file_url} download={doc.file_name} title="Download" aria-label={`Download ${doc.title}`}><i className="ti ti-download" /></a>
+          </div>
+        </div>
       </div>
 
       {/* Name */}

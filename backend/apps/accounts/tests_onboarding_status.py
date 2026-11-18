@@ -16,7 +16,7 @@ from rest_framework.test import APIClient
 import apps.accounts.tests_hire_wizard as wizard
 from apps.accounts import services_onboarding as onboarding
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import OnboardingEvent, PasswordResetToken, User
+from apps.accounts.models import Company, OnboardingEvent, PasswordResetToken, User
 from apps.accounts.services_headcount import get_headcount
 
 def _events(user):
@@ -26,6 +26,7 @@ def _events(user):
 class OnboardingTestBase(TestCase):
     def setUp(self):
         cache.clear()
+        Company.objects.create(company_name='Test Co', portal_url='https://aira.nxsys.in')     # invitation links are only built from a valid portal address
         # Own patchers, stopped one by one: patch.stopall() would also stop patches other test classes started.
         smtp_patcher = patch('apps.accounts.utils._get_smtp_connection', return_value=(None, 'noreply@test.com', None))
         build_patcher = patch('apps.accounts.utils._build_message')
@@ -182,12 +183,14 @@ class FailedEmailAndResendTests(OnboardingTestBase):
         OnboardingEvent.objects.filter(employee=self.hire, event='email_resent').update(created_at=timezone.now() - timedelta(hours=2))
         self.assertEqual(self.client.post(url).status_code, 200)
 
-    def test_resend_is_not_offered_once_the_password_is_set(self):
+    def test_resend_is_still_offered_after_the_password_is_set_until_the_first_login(self):
         self._start()
         self._activate_via_link()
         data = self._history()
         self.assertEqual(data['state']['code'], 'awaiting_login')
-        self.assertFalse(data['state']['can_resend'])
+        self.assertTrue(data['state']['can_resend'])
+        resp = self.client.post(reverse('employee-resend-invite', args=[self.hire.id]))
+        self.assertEqual(resp.status_code, 200, resp.data)
 
 
 class ExpiredLinkTests(OnboardingTestBase):
@@ -288,3 +291,56 @@ class HireStartsOnboardingTests(wizard.HireWizardTestCase):
         employee = User.objects.get(employee_id=resp.data['data']['reserved_employee_id'])
         self.assertEqual(_events(employee), ['initiated', 'email_failed'])
         self.assertEqual(onboarding.current_state(employee)['code'], 'email_failed')
+
+
+class EmailLogInvitationResendTests(OnboardingTestBase):
+    """Email Logs -> Resend on an onboarding_invite row issues the person a fresh link (the saved copy holds a dead one)."""
+
+    def setUp(self):
+        super().setUp()
+        from apps.accounts.models import EmailLog
+        role = make_role('onb_log_admin', permission_codenames=['employees.reset_password', 'employees.edit', 'employees.view', 'email_logs.view', 'email_logs.resend'])
+        self.log_admin = make_user('onb-log-admin@test.com', role=role, password='TestPass123!')
+        self.client.force_authenticate(user=self.log_admin)
+        self.log = EmailLog.objects.create(
+            recipient_email=self.hire.email, subject='Welcome', body_html='[one-time link not stored]', template_name='onboarding_invite',
+            module='accounts', status=EmailLog.STATUS_SENT, has_sensitive_context=True,
+        )
+
+    def _resend(self):
+        return self.client.post(reverse('email-log-resend', args=[self.log.id]))
+
+    def test_a_sent_invitation_row_can_be_resent_and_it_makes_a_fresh_link(self):
+        self._start()
+        old = onboarding.latest_invite(self.hire)
+        resp = self._resend()
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertIn('fresh link', resp.data['message'])
+        self.assertIn('email_resent', _events(self.hire))
+        self.assertNotEqual(onboarding.latest_invite(self.hire).id, old.id)
+
+    def test_a_failed_invitation_row_can_be_resent_too(self):
+        from apps.accounts.models import EmailLog
+        EmailLog.objects.filter(pk=self.log.pk).update(status=EmailLog.STATUS_FAILED, error_message='550 mailbox unavailable')
+        self._start()
+        self.assertEqual(self._resend().status_code, 200)
+
+    def test_it_is_refused_once_the_person_has_activated(self):
+        self._start()
+        self._activate_via_link()
+        User.objects.filter(pk=self.hire.pk).update(activation_pending=False, must_change_password=False)
+        resp = self._resend()
+        self.assertEqual(resp.status_code, 409)
+        self.assertIn('already activated', resp.data['message'])
+
+    def test_it_needs_the_right_to_manage_invites_not_only_the_right_to_resend_emails(self):
+        role = make_role('onb_resend_only', permission_codenames=['email_logs.view', 'email_logs.resend'])
+        self.client.force_authenticate(user=make_user('onb-resend-only@test.com', role=role, password='TestPass123!'))
+        self._start()
+        self.assertEqual(self._resend().status_code, 403)
+
+    def test_the_hourly_limit_still_applies(self):
+        self._start()
+        with override_settings(ONBOARDING_RESEND_MAX_PER_HOUR=1):
+            self.assertEqual(self._resend().status_code, 200)
+            self.assertEqual(self._resend().status_code, 429)

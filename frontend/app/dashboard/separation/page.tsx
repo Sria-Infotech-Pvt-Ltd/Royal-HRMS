@@ -9,6 +9,9 @@ import { useToast } from "@/components/ToastProvider";
 import type { PaginatedResponse, SeparationRequest } from "@/types/separation";
 import { useSeparationAccess } from "./_access";
 import { toQuery } from "./_workflow";
+import { countSeparations, statusGroup, type StatusGroup } from "./_view";
+import SeparationSummary from "./_components/SeparationSummary";
+import { SeparationStyles } from "./_components/separationStyles";
 import SeparationTable from "./_components/SeparationTable";
 import SeparationFormModal from "./_components/SeparationFormModal";
 import ConfirmModal from "./_components/ConfirmModal";
@@ -22,6 +25,7 @@ export default function SeparationPage() {
   const [scope,       setScope]     = useState<"" | "team">("");
   const [employeeId,  setEmployeeId] = useState("");
   const [page,         setPage]     = useState(1);
+  const [group,        setGroup]    = useState<"all" | StatusGroup>("all");
 
   const [showCreate, setShowCreate] = useState(false);
   const [editing,    setEditing]    = useState<SeparationRequest | null>(null);
@@ -33,7 +37,10 @@ export default function SeparationPage() {
     page, page_size: 20, scope, employee_id: employeeId.trim(),
   })}`;
   const { data, loading, error, refetch } = useFetch<PaginatedResponse<SeparationRequest>>(listUrl);
-  const rows = data?.results ?? [];
+  const allRows = data?.results ?? [];
+  const counts = countSeparations(allRows);
+  // The status chips narrow the page already loaded; the server still decides what you may see at all.
+  const rows = group === "all" ? allRows : allRows.filter(row => statusGroup(row.status) === group);
 
   function extractError(err: unknown, fallback: string): string {
     return (err as { response?: { data?: { message?: string } }; message?: string })
@@ -90,32 +97,39 @@ export default function SeparationPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap mb-4">
+      <SeparationStyles />
+      {!loading && <SeparationSummary counts={counts} isTeam={scope === "team"} />}
+
+      <div className="sp-bar">
         {access.canApprove && (
-          <div style={{ display: "flex", gap: 6 }}>
-            <button
-              className={`btn btn-sm ${scope === "" ? "btn-filled" : "btn-outline"}`}
-              onClick={() => { setScope(""); setPage(1); }} suppressHydrationWarning
-            >
-              My Requests
-            </button>
-            <button
-              className={`btn btn-sm ${scope === "team" ? "btn-filled" : "btn-outline"}`}
-              onClick={() => { setScope("team"); setPage(1); }} suppressHydrationWarning
-            >
-              Team Requests
-            </button>
+          <div className="sp-seg" role="group" aria-label="Whose requests">
+            <button type="button" className={scope === "" ? "is-on" : ""} aria-pressed={scope === ""} onClick={() => { setScope(""); setPage(1); }} suppressHydrationWarning>My Requests</button>
+            <button type="button" className={scope === "team" ? "is-on" : ""} aria-pressed={scope === "team"} onClick={() => { setScope("team"); setPage(1); }} suppressHydrationWarning>Team Requests</button>
           </div>
         )}
 
+        {([
+          { key: "all" as const, label: "All", count: counts.all },
+          { key: "waiting" as const, label: "Waiting", count: counts.waiting },
+          { key: "approved" as const, label: "Approved", count: counts.approved },
+          { key: "closed" as const, label: "Closed", count: counts.closed },
+        ]).map(chip => (
+          <button key={chip.key} type="button" className={`sp-chip${group === chip.key ? " is-on" : ""}`} aria-pressed={group === chip.key} onClick={() => setGroup(chip.key)}>
+            {chip.label} <small>{chip.count}</small>
+          </button>
+        ))}
+
         {(access.canPickEmployee || access.canApprove) && (
-          <input
-            className="field-input" style={{ width: 200 }}
-            placeholder="Filter by employee code…"
-            value={employeeId}
-            onChange={e => { setEmployeeId(e.target.value); setPage(1); }}
-            suppressHydrationWarning
-          />
+          <div className="sp-find" style={{ marginLeft: "auto" }}>
+            <i className="ti ti-search" />
+            <input
+              placeholder="Filter by employee code…"
+              aria-label="Filter by employee code"
+              value={employeeId}
+              onChange={e => { setEmployeeId(e.target.value); setPage(1); }}
+              suppressHydrationWarning
+            />
+          </div>
         )}
       </div>
 
@@ -133,6 +147,8 @@ export default function SeparationPage() {
             onEdit={r => setEditing(r)}
             onCancel={r => setCancelling(r)}
             onReject={r => setRejecting(r)}
+            onRequest={() => setShowCreate(true)}
+            isFiltered={group !== "all" || employeeId.trim() !== "" || scope === "team"}
           />
         )}
 

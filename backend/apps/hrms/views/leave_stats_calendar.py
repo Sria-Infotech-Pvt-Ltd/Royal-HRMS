@@ -107,7 +107,23 @@ class LeaveStatsView(APIView):
                 for b in balances
             ]
 
+        # Chart data for the analytics screen: requests and approved days per month, and approved days per leave type.
+        monthly = [{'month': m, 'requests': 0, 'approved_days': 0.0} for m in range(1, 13)]
+        for row in qs.values('start_date__month').annotate(
+            requests=Count('id'),
+            approved_days=Sum('total_days', filter=Q(status=REQ_APPROVED)),
+        ):
+            slot = monthly[row['start_date__month'] - 1]
+            slot['requests'] = row['requests']
+            slot['approved_days'] = float(row['approved_days'] or 0)
+        by_type = [
+            {'leave_type': row['leave_type'], 'days': float(row['days'] or 0)}
+            for row in qs.filter(status=REQ_APPROVED).values('leave_type').annotate(days=Sum('total_days')).order_by('-days')
+        ]
+
         return success('Stats retrieved.', {
+            'monthly':   monthly,
+            'by_type':   by_type,
             'total':     agg['total']     or 0,
             'pending':   agg['pending']   or 0,
             'approved':  agg['approved']  or 0,

@@ -1,5 +1,5 @@
 """
-System-wide Email Log — view, and resend-a-failed-email.
+System-wide Email Log — view, and resend an email (sent or failed).
 
 Deliberately its own file, not views.py (already far past the 300-line
 convention, 6800+ lines) — mirrors the split pattern used for
@@ -24,12 +24,14 @@ from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
 from core.permissions import has_perm
-from core.responses import error, success
+from core.responses import error, get_client_ip, success
 
-from apps.accounts.models import EmailLog
+from apps.accounts import services_onboarding as onboarding
+from apps.accounts.models import AuditLog, EmailLog, User
 from apps.accounts.serializers_email_log import EmailLogDetailSerializer, EmailLogSerializer
-from apps.accounts.services_email_resend import resend_blocked_reason
+from apps.accounts.services_email_resend import INVITE_TEMPLATE, resend_blocked_reason
 from apps.accounts.utils import resend_logged_email
+from apps.accounts.views_reset_password import _can_manage_accounts
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +109,32 @@ class EmailLogDetailView(APIView):
         return success('Email log retrieved.', data=EmailLogDetailSerializer(log).data)
 
 
+def _reissue_invitation(request: Request, log: EmailLog) -> Response:
+    """Resend of an onboarding invitation: the saved copy holds a dead one-time link, so issue the person a fresh one instead."""
+    if not _can_manage_accounts(request.user):
+        return error('You do not have permission to manage onboarding invites.', http_status=status.HTTP_403_FORBIDDEN)
+    target = User.objects.filter(email__iexact=log.recipient_email, is_active=True).first()
+    if target is None:
+        return error('No active employee uses this address any more, so there is nobody to invite.', http_status=status.HTTP_404_NOT_FOUND)
+    if not (target.must_change_password or target.activation_pending):
+        return error('This employee has already activated their account and set a password.', http_status=status.HTTP_409_CONFLICT)
+    try:
+        sent = onboarding.send_onboarding_email(target, actor=request.user, is_resend=True)
+    except onboarding.ResendLimitError as exc:
+        return error(str(exc), http_status=status.HTTP_429_TOO_MANY_REQUESTS)
+    AuditLog.objects.create(
+        user=request.user, action='invite_resent', module='accounts', object_id=str(target.pk),
+        changes={'employee': target.email, 'sent': sent, 'from': 'email_log'}, branch=target.branch, ip_address=get_client_ip(request),
+    )
+    newest = EmailLog.objects.filter(recipient_email__iexact=target.email, template_name=INVITE_TEMPLATE).order_by('-created_at').first()
+    data = EmailLogSerializer(newest).data if newest else None
+    if not sent:
+        return error('The invitation could not be sent. The reason is in the onboarding history.', data=data, http_status=status.HTTP_502_BAD_GATEWAY)
+    return success('Invitation sent again with a fresh link. The previous link no longer works.', data=data)
+
+
 class EmailLogResendView(APIView):
-    """POST /api/settings/email-logs/<uuid:pk>/resend/ — replay a failed email verbatim."""
+    """POST /api/settings/email-logs/<uuid:pk>/resend/ — send an email again (sent or failed): a plain replay, or a fresh invitation."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, pk) -> Response:
@@ -120,8 +146,8 @@ class EmailLogResendView(APIView):
         except EmailLog.DoesNotExist:
             return error('Email log not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        if log.status != EmailLog.STATUS_FAILED:
-            return error('Only failed emails can be resent.', http_status=status.HTTP_409_CONFLICT)
+        if log.template_name == INVITE_TEMPLATE:
+            return _reissue_invitation(request, log)
 
         # An email whose point is a one-time link must be re-issued by the action that made it (a fresh link), never replayed:
         # the saved copy holds the old link, which has expired or been cancelled.

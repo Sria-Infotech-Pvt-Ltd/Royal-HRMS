@@ -45,7 +45,7 @@ export default function ReportsPage() {
           <p>Reports appear here when your role gives you access to the data they cover.</p></div>
       )}
 
-      <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))" }}>
+      <div className="rp-grid">
         {limits && reports.map(report => <ReportCard key={report.key} report={report} limits={limits} />)}
       </div>
 

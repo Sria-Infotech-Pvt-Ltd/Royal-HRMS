@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { LeaveTypeKey, LEAVE_TYPE_CONFIG } from "../_data";
+import { LeaveStyles } from "./leaveStyles";
 
 interface CalEvent {
   id:                  string;
@@ -18,190 +19,172 @@ interface CalEvent {
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAY_NAMES   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const PILLS_PER_DAY = 2;
 
 function eventColor(leaveType: LeaveTypeKey): string {
   return LEAVE_TYPE_CONFIG[leaveType]?.color ?? "var(--primary)";
 }
 
-function dayEvents(events: CalEvent[], year: number, month: number, day: number): CalEvent[] {
-  const date = new Date(year, month, day);
-  return events.filter(e => {
-    const start = new Date(e.start_date + "T00:00:00");
-    const end   = new Date(e.end_date   + "T00:00:00");
-    return date >= start && date <= end;
-  });
+function isoDay(year: number, month: number, day: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** Leaves covering one calendar day. ISO dates compare correctly as plain strings. */
+function dayEvents(events: CalEvent[], iso: string): CalEvent[] {
+  return events.filter(e => e.start_date <= iso && iso <= e.end_date);
+}
+
+function initialsOf(name: string): string {
+  return name.split(" ").filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase() ?? "").join("") || "?";
+}
+
+function shortDate(iso: string): string {
+  return new Date(iso + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+function LeaveRow({ event }: { event: CalEvent }) {
+  return (
+    <div className="lv-row" style={{ "--lv-accent": eventColor(event.leave_type) } as CSSProperties}>
+      <span className="lv-avatar">{initialsOf(event.employee_name)}</span>
+      <div className="lv-row-main">
+        <div className="lv-row-title">{event.employee_name}</div>
+        <div className="lv-row-meta">{event.leave_type_display} · {shortDate(event.start_date)}{event.start_date === event.end_date ? "" : ` - ${shortDate(event.end_date)}`}</div>
+      </div>
+      <span className="lv-chip">{event.total_days} day{event.total_days === 1 ? "" : "s"}</span>
+    </div>
+  );
 }
 
 export default function TeamCalendar() {
   const now = new Date();
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
+  const [selected, setSelected] = useState<string | null>(null);
 
   const { data: events, loading } = useFetch<CalEvent[]>(
     API.leave.calendar + `?year=${year}&month=${month + 1}`
   );
 
   const allEvents = events ?? [];
-
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-
   const cells: Array<number | null> = [
     ...Array<null>(firstDay).fill(null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const today          = now.getDate();
-  const isCurrentMonth = now.getFullYear() === year && now.getMonth() === month;
+  const todayIso = isoDay(now.getFullYear(), now.getMonth(), now.getDate());
+  const peopleAway = new Set(allEvents.map(e => e.employee_code || e.employee_name)).size;
+  const leaveDays = allEvents.reduce((sum, e) => sum + Number(e.total_days), 0);
+  const usedTypes = [...new Set(allEvents.map(e => e.leave_type))];
+  const selectedEvents = selected ? dayEvents(allEvents, selected) : [];
 
+  function goTo(nextYear: number, nextMonth: number) {
+    setYear(nextYear);
+    setMonth(nextMonth);
+    setSelected(null);
+  }
   function prev() {
-    if (month === 0) { setMonth(11); setYear(y => y - 1); }
-    else setMonth(m => m - 1);
+    if (month === 0) goTo(year - 1, 11);
+    else goTo(year, month - 1);
   }
   function next() {
-    if (month === 11) { setMonth(0); setYear(y => y + 1); }
-    else setMonth(m => m + 1);
+    if (month === 11) goTo(year + 1, 0);
+    else goTo(year, month + 1);
   }
 
-  const usedTypes = [...new Set(allEvents.map(e => e.leave_type))];
-
   return (
-    <div className="w-full flex flex-col gap-5">
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <LeaveStyles />
 
-      {/* Legend */}
-      {usedTypes.length > 0 && (
-        <div className="flex gap-4 flex-wrap">
-          {usedTypes.map(type => (
-            <div key={type} className="flex items-center gap-2 text-xs text-[var(--on-variant)]">
-              <div className="w-3 h-3 rounded" style={{ background: eventColor(type) }} />
-              {LEAVE_TYPE_CONFIG[type]?.label ?? type}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Calendar card */}
-      <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--outline-v)]">
-          <button onClick={prev} className="w-8 h-8 rounded-lg border border-[var(--outline-v)] flex items-center justify-center text-[var(--on-variant)] hover:bg-[var(--bg-low)] transition-colors" aria-label="Previous">
-            <i className="ti ti-chevron-left text-sm" />
-          </button>
-          <span className="text-sm font-bold text-[var(--on-bg)]">{MONTH_NAMES[month]} {year}</span>
-          <button onClick={next} className="w-8 h-8 rounded-lg border border-[var(--outline-v)] flex items-center justify-center text-[var(--on-variant)] hover:bg-[var(--bg-low)] transition-colors" aria-label="Next">
-            <i className="ti ti-chevron-right text-sm" />
-          </button>
-        </div>
-
-        {/* Day name headers */}
-        <div className="grid grid-cols-7 border-b border-[var(--outline-v)] bg-[var(--bg-low)]">
-          {DAY_NAMES.map(d => (
-            <div key={d} className="py-2.5 text-center text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wider">{d}</div>
-          ))}
-        </div>
-
-        {/* Grid */}
-        {loading ? (
-          <div style={{ padding: "60px 20px", textAlign: "center" }}>
-            <i className="ti ti-loader-2" style={{ fontSize: 28, color: "var(--outline-v)" }} />
+      <div className="lv-panel">
+        <div className="lv-panel-head">
+          <div className="lv-cal-nav">
+            <button className="lv-cal-btn" onClick={prev} aria-label="Previous month"><i className="ti ti-chevron-left" /></button>
+            <span className="lv-cal-title">{MONTH_NAMES[month]} {year}</span>
+            <button className="lv-cal-btn" onClick={next} aria-label="Next month"><i className="ti ti-chevron-right" /></button>
+            <button className="lv-cal-btn" onClick={() => goTo(now.getFullYear(), now.getMonth())}>Today</button>
           </div>
-        ) : (
-          <div className="grid grid-cols-7">
-            {cells.map((day, idx) => {
-              const ev        = day ? dayEvents(allEvents, year, month, day) : [];
-              const isToday   = isCurrentMonth && day === today;
-              const isWeekend = idx % 7 === 0 || idx % 7 === 6;
-              const showRight = idx % 7 !== 6;
-              const showBot   = idx < cells.length - 7;
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span className="lv-chip" style={{ "--lv-accent": "#7c3aed" } as CSSProperties}><i className="ti ti-users" /> {peopleAway} away</span>
+            <span className="lv-chip" style={{ "--lv-accent": "#0ea5e9" } as CSSProperties}><i className="ti ti-calendar-stats" /> {leaveDays} leave day{leaveDays === 1 ? "" : "s"}</span>
+          </div>
+        </div>
 
+        <div className="lv-cal-grid">
+          {DAY_NAMES.map(d => <div key={d} className="lv-cal-dow">{d.toUpperCase()}</div>)}
+        </div>
+
+        {loading ? (
+          <div className="lv-empty"><i className="ti ti-loader-2" /></div>
+        ) : (
+          <div className="lv-cal-grid">
+            {cells.map((day, idx) => {
+              if (!day) return <div key={idx} className="lv-cal-cell is-empty" />;
+              const iso = isoDay(year, month, day);
+              const ev = dayEvents(allEvents, iso);
+              const classes = [
+                "lv-cal-cell",
+                idx % 7 === 0 || idx % 7 === 6 ? "is-weekend" : "",
+                iso === todayIso ? "is-today" : "",
+                iso < todayIso ? "is-past" : "",
+                ev.length > 0 ? "has-leave" : "",
+                iso === selected ? "is-selected" : "",
+              ].filter(Boolean).join(" ");
               return (
-                <div
+                <button
                   key={idx}
-                  className={[
-                    "min-h-[90px] p-2",
-                    showRight ? "border-r border-[var(--outline-v)]" : "",
-                    showBot   ? "border-b border-[var(--outline-v)]" : "",
-                    !day         ? "bg-[var(--bg-low)]"   :
-                    isWeekend    ? "bg-[var(--bg-low)]/50" : "bg-[var(--surface)]",
-                  ].join(" ")}
+                  type="button"
+                  className={classes}
+                  disabled={ev.length === 0}
+                  aria-label={`${day} ${MONTH_NAMES[month]}${ev.length ? `, ${ev.length} on leave` : ""}`}
+                  onClick={() => setSelected(iso === selected ? null : iso)}
                 >
-                  {day && (
-                    <>
-                      <div className={[
-                        "w-6 h-6 rounded-full flex items-center justify-center text-xs mb-1 font-medium",
-                        isToday ? "bg-[var(--primary)] text-[var(--on-primary)] font-bold" : isWeekend ? "text-[var(--on-variant)]" : "text-[var(--on-variant)]",
-                      ].join(" ")}>
-                        {day}
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        {ev.slice(0, 2).map((e, i) => (
-                          <div
-                            key={i}
-                            title={`${e.employee_name} – ${e.leave_type_display}`}
-                            className="text-white text-[10px] font-medium px-1.5 py-0.5 rounded truncate"
-                            style={{ background: eventColor(e.leave_type) }}
-                          >
-                            {e.employee_name.split(" ")[0]}
-                          </div>
-                        ))}
-                        {ev.length > 2 && <div className="text-[10px] text-[var(--on-variant)] pl-1">+{ev.length - 2}</div>}
-                      </div>
-                    </>
-                  )}
-                </div>
+                  <span className="lv-cal-num">{day}</span>
+                  {ev.slice(0, PILLS_PER_DAY).map(e => (
+                    <span key={e.id} className="lv-cal-pill" title={`${e.employee_name} – ${e.leave_type_display}`} style={{ background: eventColor(e.leave_type) }}>
+                      {e.employee_name.split(" ")[0]}
+                    </span>
+                  ))}
+                  {ev.length > PILLS_PER_DAY && <span className="lv-cal-more">+{ev.length - PILLS_PER_DAY} more</span>}
+                </button>
               );
             })}
           </div>
         )}
+
+        {usedTypes.length > 0 && (
+          <div className="lv-panel-body" style={{ borderTop: "1px solid var(--outline-v)" }}>
+            <div className="lv-legend">
+              {usedTypes.map(type => (
+                <span key={type}><i style={{ background: eventColor(type) }} />{LEAVE_TYPE_CONFIG[type]?.label ?? type}</span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Event list */}
+      {selected && (
+        <div className="lv-panel">
+          <div className="lv-panel-head">
+            <span><i className="ti ti-user-off" /> Away on {shortDate(selected)}</span>
+            <button className="lv-cal-btn" onClick={() => setSelected(null)} aria-label="Close day details"><i className="ti ti-x" /></button>
+          </div>
+          {selectedEvents.map(e => <LeaveRow key={e.id} event={e} />)}
+        </div>
+      )}
+
       {allEvents.length > 0 && (
-        <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-6 py-4 border-b border-[var(--outline-v)] text-sm font-semibold text-[var(--on-bg)]">
-            <i className="ti ti-calendar-event text-[var(--primary)]" /> Leaves this month
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[var(--bg-low)] border-b border-[var(--outline-v)]">
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-[var(--on-variant)] uppercase">Employee</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--on-variant)] uppercase">Type</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[var(--on-variant)] uppercase">From</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[var(--on-variant)] uppercase">To</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[var(--on-variant)] uppercase">Days</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--outline-v)]">
-                {allEvents.map(e => (
-                  <tr key={e.id} className="hover:bg-[var(--bg-low)]">
-                    <td className="px-6 py-3.5 font-semibold text-[var(--on-bg)]">{e.employee_name}</td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ background: eventColor(e.leave_type) }} />
-                        <span className="text-[var(--on-variant)]">{e.leave_type_display}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 text-center text-[var(--on-variant)]">
-                      {new Date(e.start_date + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                    </td>
-                    <td className="px-4 py-3.5 text-center text-[var(--on-variant)]">
-                      {new Date(e.end_date + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                    </td>
-                    <td className="px-4 py-3.5 text-center font-bold text-[var(--primary)]">{e.total_days}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="lv-panel">
+          <div className="lv-panel-head"><span><i className="ti ti-calendar-event" /> Leaves this month</span><span className="lv-chip">{allEvents.length}</span></div>
+          {allEvents.map(e => <LeaveRow key={e.id} event={e} />)}
         </div>
       )}
 
       {!loading && allEvents.length === 0 && (
-        <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm p-10 text-center">
-          <i className="ti ti-calendar-off" style={{ fontSize: 32, color: "var(--outline-v)", display: "block", marginBottom: 8 }} />
-          <p style={{ color: "var(--on-variant)", fontSize: 13 }}>No approved leaves for {MONTH_NAMES[month]} {year}.</p>
+        <div className="lv-panel">
+          <div className="lv-empty"><i className="ti ti-calendar-off" />No approved leaves for {MONTH_NAMES[month]} {year}.</div>
         </div>
       )}
     </div>

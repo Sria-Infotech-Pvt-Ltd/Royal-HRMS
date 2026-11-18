@@ -9,6 +9,7 @@ import LeaveAnalytics from "./_components/LeaveAnalytics";
 import UpcomingHolidaysCard from "./_components/UpcomingHolidaysCard";
 import TeamCoverageCard from "./_components/TeamCoverageCard";
 import LeavePolicyGuidanceCard from "./_components/LeavePolicyGuidanceCard";
+import { LeaveStyles } from "./_components/leaveStyles";
 
 type DetailTab = "dashboard" | "apply" | "calendar" | "analytics";
 
@@ -35,6 +36,7 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
 
   return (
     <div>
+      <LeaveStyles />
       <div className="page-header">
         <div>
           {onBack && (
@@ -48,7 +50,13 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
           <div className="page-title">Leave</div>
           <div className="page-sub">Balances, requests, holidays and team coverage.</div>
         </div>
-        <div className="page-actions" style={{ display: "flex", gap: 8 }}>
+        <div className="page-actions lv-actions">
+          <button className="btn btn-ghost" onClick={() => setShowCalendar(true)}>
+            <i className="ti ti-calendar-event" /> Team calendar
+          </button>
+          <button className="btn btn-ghost" onClick={() => setShowAnalytics(true)}>
+            <i className="ti ti-chart-bar" /> Analytics
+          </button>
           <button className="btn btn-filled" onClick={() => setShowApply(true)} suppressHydrationWarning>
             Request leave
           </button>

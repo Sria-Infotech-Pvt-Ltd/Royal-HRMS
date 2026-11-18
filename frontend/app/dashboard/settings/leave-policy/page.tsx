@@ -9,6 +9,7 @@ import CreditTab from "./_components/CreditTab";
 import LeavePoliciesTab from "./_components/LeavePoliciesTab";
 import CarryForwardTab from "./_components/CarryForwardTab";
 import OpeningBalanceImportModal from "./_components/OpeningBalanceImportModal";
+import AttendancePageTabs from "@/app/dashboard/attendance/_components/AttendancePageTabs";
 
 type Tab = "types" | "policies" | "credit" | "carryForward";
 
@@ -49,26 +50,7 @@ export default function LeavePolicyPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: "1px solid var(--outline-v)", paddingBottom: 0 }}>
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            style={{
-              display: "flex", alignItems: "center", gap: 7,
-              padding: "10px 18px", fontSize: 13, fontWeight: 600,
-              background: "none", border: "none", cursor: "pointer",
-              borderBottom: tab === t.id ? "2px solid var(--primary)" : "2px solid transparent",
-              color: tab === t.id ? "var(--primary)" : "var(--on-variant)",
-              marginBottom: -1, transition: "color 0.15s",
-            }}
-          >
-            <i className={`ti ${t.icon}`} style={{ fontSize: 15 }} />
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <AttendancePageTabs tabs={TABS} active={tab} onSelect={id => setTab(id as Tab)} />
 
       {tab === "types"        && <PolicyTab />}
       {tab === "policies"     && <LeavePoliciesTab />}

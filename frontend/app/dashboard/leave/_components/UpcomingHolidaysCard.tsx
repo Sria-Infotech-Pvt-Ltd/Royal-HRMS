@@ -27,6 +27,20 @@ function fmtHolidayDate(iso: string): string {
   return new Date(iso + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
+function monthShort(iso: string): string {
+  return new Date(iso + "T12:00:00").toLocaleDateString("en-GB", { month: "short" });
+}
+
+/** "Today", "Tomorrow" or "in N days" for holidays within the next month; nothing further out. */
+function daysUntil(iso: string): string | null {
+  const start = new Date();
+  start.setHours(12, 0, 0, 0);
+  const days = Math.round((new Date(iso + "T12:00:00").getTime() - start.getTime()) / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return days > 1 && days <= 31 ? `in ${days} days` : null;
+}
+
 export default function UpcomingHolidaysCard() {
   const currentUser = useCurrentUser();
   const year = new Date().getFullYear();
@@ -61,24 +75,23 @@ export default function UpcomingHolidaysCard() {
             No upcoming holidays scheduled.
           </div>
         ) : (
-          upcoming.map((h, idx) => (
-            <div
-              key={h.id}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "12px 20px",
-                borderTop: idx === 0 ? "none" : "1px solid var(--outline-v)",
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>{h.name}</div>
-                <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                  {h.day} · {fmtHolidayDate(h.date)}
+          upcoming.map(h => {
+            const when = daysUntil(h.date);
+            return (
+              <div key={h.id} className="lv-row">
+                <div className="lv-date">
+                  <small>{monthShort(h.date)}</small>
+                  <b>{Number(h.date.slice(8, 10))}</b>
                 </div>
+                <div className="lv-row-main">
+                  <div className="lv-row-title">{h.name}</div>
+                  <div className="lv-row-meta">{h.day} · {fmtHolidayDate(h.date)}</div>
+                </div>
+                {when && <span className="lv-soon">{when}</span>}
+                <span className="badge badge-success">HOLIDAY</span>
               </div>
-              <span className="badge badge-success">HOLIDAY</span>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

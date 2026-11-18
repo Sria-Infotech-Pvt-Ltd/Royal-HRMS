@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
@@ -8,8 +8,11 @@ import { formatDateSlash } from "@/lib/formatDate";
 import { currentFinancialYearStart, financialYearLabel } from "@/app/dashboard/my-payslip/_components/types";
 import RequestModal from "@/components/RequestModal";
 import DateInput from "@/components/shared/DateInput";
-
-type ExpenseCategory = "travel" | "meals" | "equipment" | "other";
+import ExpenseCategoryPicker, { CATEGORIES, type ExpenseCategory } from "./ExpenseCategoryPicker";
+import ExpenseReceiptPicker from "./ExpenseReceiptPicker";
+import { ExpenseFormStyles } from "./expenseFormStyles";
+import ExpenseFormStep from "./ExpenseFormStep";
+import ExpenseClaimPreview from "./ExpenseClaimPreview";
 
 interface FormState {
   amount:      string;
@@ -23,13 +26,6 @@ interface Props {
   onSaved: () => void;
 }
 
-const CATEGORIES: { value: ExpenseCategory; label: string; icon: string }[] = [
-  { value: "travel",    label: "Travel",    icon: "ti-plane-departure"        },
-  { value: "meals",     label: "Meals",     icon: "ti-tools-kitchen-2"        },
-  { value: "equipment", label: "Equipment", icon: "ti-device-desktop"         },
-  { value: "other",     label: "Other",     icon: "ti-dots-circle-horizontal" },
-];
-
 const CATEGORY_LABEL: Record<ExpenseCategory, string> = Object.fromEntries(
   CATEGORIES.map(c => [c.value, c.label]),
 ) as Record<ExpenseCategory, string>;
@@ -37,7 +33,6 @@ const CATEGORY_LABEL: Record<ExpenseCategory, string> = Object.fromEntries(
 // A bill may be dated up to this many months before the current financial year starts
 // (the backend enforces the same window — EXPENSE_BACKDATE_MONTHS in hrms/serializers.py).
 const BACKDATE_MONTHS = 4;
-const RECEIPT_PREVIEW_LIFETIME_MS = 60_000;
 
 function toIsoDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -51,10 +46,15 @@ function getExpenseDateWindow(startMonthName: string) {
   return { min: toIsoDate(earliest), max: toIsoDate(latest), fyLabel: financialYearLabel(fyStart), earliest, latest };
 }
 
-function openReceiptPreview(file: File) {
-  const url = URL.createObjectURL(file);
-  window.open(url, "_blank", "noopener");
-  setTimeout(() => URL.revokeObjectURL(url), RECEIPT_PREVIEW_LIFETIME_MS);
+/** "Today" / "Yesterday" shortcuts, only when they fall inside the allowed window. */
+function buildQuickDates(min: string, max: string): { label: string; iso: string }[] {
+  const today = new Date();
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  return [{ label: "Today", iso: toIsoDate(today) }, { label: "Yesterday", iso: toIsoDate(yesterday) }].filter(quick => quick.iso >= min && quick.iso <= max);
+}
+
+function formatRupees(value: number): string {
+  return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 const EMPTY: FormState = { amount: "", category: "", date: "", description: "" };
@@ -66,36 +66,15 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
   const [errors,       setErrors]       = useState<FormErrors>({});
   const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const [submitting,   setSubmitting]   = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: fyConfig } = useFetch<{ financial_year_start_month: string }>(API.settings.financialYear);
   const dateWindow = fyConfig ? getExpenseDateWindow(fyConfig.financial_year_start_month) : null;
+
+  const amount = Number(form.amount) > 0 ? Number(form.amount) : 0;
+  const quickDates = dateWindow ? buildQuickDates(dateWindow.min, dateWindow.max) : [];
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
     setErrors(prev => ({ ...prev, [key]: undefined }));
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const selected = Array.from(e.target.files ?? []);
-    if (!selected.length) return;
-    const allowed = ["image/jpeg", "image/png", "application/pdf"];
-    for (const file of selected) {
-      if (file.size > 5 * 1024 * 1024) {
-        setErrors(prev => ({ ...prev, receipt: `"${file.name}" exceeds 5 MB.` }));
-        return;
-      }
-      if (!allowed.includes(file.type)) {
-        setErrors(prev => ({ ...prev, receipt: `"${file.name}" must be PDF, JPG, or PNG.` }));
-        return;
-      }
-    }
-    setReceiptFiles(prev => [...prev, ...selected]);
-    setErrors(prev => ({ ...prev, receipt: undefined }));
-    e.target.value = "";
-  }
-
-  function removeReceipt(index: number) {
-    setReceiptFiles(prev => prev.filter((_, i) => i !== index));
   }
 
   function validate(): boolean {
@@ -156,145 +135,92 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
       onSubmit={handleSubmit}
       submitting={submitting}
       error={errors.submit}
+      maxWidth={980}
     >
-          {/* Category + Date */}
-          <div className="form-row cols-2 mb-16">
-            <div className="field-group">
-              <label className="field-label">
-                Expense Category <span style={{ color: "var(--error)" }}>*</span>
-              </label>
-              <select
-                className={`field-input field-select${errors.category ? " field-error" : ""}`}
-                value={form.category}
-                onChange={e => setField("category", e.target.value as ExpenseCategory | "")}
-              >
-                <option value="">Select category…</option>
-                {CATEGORIES.map(c => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
-              </select>
-              {errors.category && <p className="field-error-msg">{errors.category}</p>}
-            </div>
-            <div className="field-group">
-              <label className="field-label">
-                Expense Date <span style={{ color: "var(--error)" }}>*</span>
-              </label>
-              <DateInput
-                className={`field-input${errors.date ? " field-error" : ""}`}
-                value={form.date}
-                min={dateWindow?.min}
-                max={dateWindow?.max}
-                onChange={isoDate => setField("date", isoDate)}
-              />
-              {errors.date
-                ? <p className="field-error-msg">{errors.date}</p>
-                : dateWindow && (
-                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--on-variant)" }}>
-                    {dateWindow.fyLabel}: allowed {formatDateSlash(dateWindow.earliest)} – {formatDateSlash(dateWindow.latest)}
-                  </p>
-                )}
-            </div>
-          </div>
+          <ExpenseFormStyles />
+          <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ flex: "2 1 420px", minWidth: 0 }}>
+              <ExpenseFormStep number={1} title="What was it for?" hint="Pick the kind of expense." done={Boolean(form.category)}>
+                <ExpenseCategoryPicker value={form.category} hasError={Boolean(errors.category)} onChange={category => setField("category", category)} />
+                {errors.category && <p className="field-error-msg">{errors.category}</p>}
+              </ExpenseFormStep>
 
-          {/* Amount + Business purpose */}
-          <div className="form-row cols-2 mb-16">
-            <div className="field-group">
-              <label className="field-label">
-                Amount (₹) <span style={{ color: "var(--error)" }}>*</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                className={`field-input${errors.amount ? " field-error" : ""}`}
-                placeholder="Amount"
-                value={form.amount}
-                onChange={e => setField("amount", e.target.value)}
-              />
-              {errors.amount && <p className="field-error-msg">{errors.amount}</p>}
-            </div>
-            <div className="field-group">
-              <label className="field-label">Business purpose</label>
-              <textarea
-                className="field-input"
-                rows={1}
-                placeholder="Describe the business purpose"
-                value={form.description}
-                onChange={e => setField("description", e.target.value)}
-                style={{ resize: "vertical" }}
-              />
-            </div>
-          </div>
-
-          {/* Receipt upload — mandatory, multiple */}
-          <div className="field-group mb-16">
-            <label className="field-label">
-              Receipts <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-
-            {/* Selected files list */}
-            {receiptFiles.length > 0 && (
-              <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                {receiptFiles.map((file, idx) => (
-                  <div key={idx} style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    padding: "6px 10px", borderRadius: 6,
-                    background: "var(--bg-high)", fontSize: 13,
-                  }}>
-                    <i className="ti ti-file" style={{ color: "var(--primary)" }} />
-                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {file.name}
-                    </span>
-                    <span style={{ color: "var(--on-variant)", fontSize: 11 }}>
-                      {(file.size / 1024).toFixed(0)} KB
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => openReceiptPreview(file)}
-                      title="View receipt"
-                      aria-label={`View receipt ${file.name}`}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--on-variant)", padding: 2 }}
-                    >
-                      <i className="ti ti-eye" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeReceipt(idx)}
-                      aria-label={`Remove receipt ${file.name}`}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--error)", padding: 2 }}
-                    >
-                      <i className="ti ti-x" />
-                    </button>
+              <ExpenseFormStep number={2} title="When and how much?" hint="The date on the bill and the amount you paid." done={Boolean(form.date) && amount > 0}>
+                <div className="form-row cols-2">
+                  <div className="field-group">
+                    <label className="field-label">Expense Date <span style={{ color: "var(--error)" }}>*</span></label>
+                    <DateInput
+                      className={`field-input${errors.date ? " field-error" : ""}`}
+                      value={form.date}
+                      min={dateWindow?.min}
+                      max={dateWindow?.max}
+                      onChange={isoDate => setField("date", isoDate)}
+                    />
+                    <div className="xf-quick">
+                      {quickDates.map(quick => (
+                        <button key={quick.label} type="button" onClick={() => setField("date", quick.iso)}>{quick.label}</button>
+                      ))}
+                    </div>
+                    {errors.date
+                      ? <p className="field-error-msg">{errors.date}</p>
+                      : dateWindow && (
+                        <p className="xf-words">
+                          {dateWindow.fyLabel}: allowed {formatDateSlash(dateWindow.earliest)} – {formatDateSlash(dateWindow.latest)}
+                        </p>
+                      )}
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="field-group">
+                    <label className="field-label">Amount <span style={{ color: "var(--error)" }}>*</span></label>
+                    <div className="xf-money">
+                      <b>₹</b>
+                      <input
+                        type="number"
+                        min="1"
+                        inputMode="decimal"
+                        className={`field-input${errors.amount ? " field-error" : ""}`}
+                        placeholder="0"
+                        value={form.amount}
+                        onChange={e => setField("amount", e.target.value)}
+                      />
+                    </div>
+                    {errors.amount
+                      ? <p className="field-error-msg">{errors.amount}</p>
+                      : amount > 0 && <p className="xf-words">{formatRupees(amount)}</p>}
+                  </div>
+                </div>
+              </ExpenseFormStep>
 
-            <div
-              className={`upload-zone${errors.receipt ? " field-error" : ""}`}
-              style={{ cursor: "pointer" }}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <i className="ti ti-file-plus" />
-              <p>{receiptFiles.length > 0 ? "Add more receipts" : "Click to upload receipts"}</p>
-              <small>PDF, JPG, PNG up to 5 MB each — at least one required</small>
+              <ExpenseFormStep number={3} title="Why was it needed?" hint="Optional, but it helps your approver decide faster.">
+                <textarea
+                  className="field-input"
+                  rows={3}
+                  placeholder="Describe the business purpose"
+                  value={form.description}
+                  onChange={e => setField("description", e.target.value)}
+                  style={{ resize: "vertical", width: "100%" }}
+                />
+              </ExpenseFormStep>
+
+              <ExpenseFormStep number={4} title="Attach your receipts" hint="PDF, JPG or PNG, up to 5 MB each. At least one is required." done={receiptFiles.length > 0}>
+                <ExpenseReceiptPicker
+                  files={receiptFiles}
+                  error={errors.receipt}
+                  onChange={setReceiptFiles}
+                  onError={message => setErrors(prev => ({ ...prev, receipt: message }))}
+                />
+              </ExpenseFormStep>
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              multiple
-              style={{ display: "none" }}
-              onChange={handleFileChange}
-            />
-            {errors.receipt && <p className="field-error-msg">{errors.receipt}</p>}
-          </div>
 
-          {/* Info banner */}
-          <div className="alert alert-info" style={{ marginBottom: 0 }}>
-            <i className="ti ti-info-circle" />
-            <span>
-              Your expense will be sent for approval. Approved expenses are reimbursed in the next payroll cycle.
-            </span>
+            <div style={{ flex: "1 1 260px", minWidth: 0, position: "sticky", top: 0 }}>
+              <ExpenseClaimPreview
+                category={form.category}
+                categoryLabel={form.category ? CATEGORY_LABEL[form.category] : null}
+                amount={amount}
+                dateLabel={form.date ? formatDateSlash(new Date(`${form.date}T00:00:00`)) : null}
+                purpose={form.description}
+                receiptCount={receiptFiles.length}
+              />
+            </div>
           </div>
     </RequestModal>
   );

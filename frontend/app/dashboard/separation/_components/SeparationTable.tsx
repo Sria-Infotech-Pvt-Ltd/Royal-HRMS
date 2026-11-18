@@ -2,6 +2,12 @@
 
 import type { SeparationRequest } from "@/types/separation";
 import { fmtDate, statusBadgeClass } from "../_workflow";
+import { lastDayCountdown } from "../_view";
+import { SeparationStyles } from "./separationStyles";
+
+function initialsOf(name: string): string {
+  return name.split(" ").filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase() ?? "").join("") || "?";
+}
 
 interface Props {
   requests: SeparationRequest[];
@@ -9,21 +15,28 @@ interface Props {
   onEdit:   (r: SeparationRequest) => void;
   onCancel: (r: SeparationRequest) => void;
   onReject: (r: SeparationRequest) => void;
+  /** Empty-state shortcut; omitted when the list is empty only because of a filter. */
+  onRequest?: () => void;
+  isFiltered?: boolean;
 }
 
-export default function SeparationTable({ requests, onView, onEdit, onCancel, onReject }: Props) {
+export default function SeparationTable({ requests, onView, onEdit, onCancel, onReject, onRequest, isFiltered = false }: Props) {
   if (requests.length === 0) {
     return (
-      <div style={{ padding: "48px 20px", textAlign: "center" }}>
-        <i className="ti ti-logout" style={{ fontSize: 32, color: "var(--outline)", display: "block", marginBottom: 10 }} />
-        <p style={{ fontSize: 13, color: "var(--on-variant)" }}>No separation requests match your filters.</p>
+      <div className="sp-empty">
+        <SeparationStyles />
+        <span className="sp-empty-icon"><i className="ti ti-logout" /></span>
+        <b>{isFiltered ? "No separation requests match your filters." : "No separation requests yet."}</b>
+        <p>{isFiltered ? "Try another status or clear the search." : "When someone resigns or an exit is raised, it shows up here with its approval progress."}</p>
+        {!isFiltered && onRequest && <button type="button" className="btn btn-filled btn-sm" style={{ marginTop: 14 }} onClick={onRequest}><i className="ti ti-plus" /> Request Separation</button>}
       </div>
     );
   }
 
   return (
     <div className="table-wrap">
-      <table>
+      <SeparationStyles />
+      <table className="sp-table">
         <thead>
           <tr>
             <th>Request</th>
@@ -40,18 +53,28 @@ export default function SeparationTable({ requests, onView, onEdit, onCancel, on
           </tr>
         </thead>
         <tbody>
-          {requests.map(r => (
-            <tr key={r.id} onClick={() => onView(r)} style={{ cursor: "pointer" }}>
+          {requests.map(r => {
+            const countdown = lastDayCountdown(r.proposed_last_working_day);
+            return (
+            <tr key={r.id} onClick={() => onView(r)} style={{ cursor: "pointer" }} className={r.can_approve ? "needs-me" : ""}>
               <td style={{ color: "var(--on-variant)" }}>
                 {r.request_ref}
                 {r.can_approve && <span className="badge badge-error" style={{ marginLeft: 6, fontSize: 10 }}>Action needed</span>}
               </td>
-              <td style={{ fontWeight: 600 }}>{r.employee_name}</td>
+              <td>
+                <div className="sp-person">
+                  <span className="sp-avatar" aria-hidden="true">{initialsOf(r.employee_name)}</span>
+                  <span style={{ fontWeight: 600 }}>{r.employee_name}</span>
+                </div>
+              </td>
               <td style={{ color: "var(--on-variant)" }}>{r.employee_code}</td>
-              <td>{r.separation_type_display}</td>
+              <td><span className="sp-type">{r.separation_type_display}</span></td>
               <td>{r.reason_display}</td>
               <td>{fmtDate(r.request_date)}</td>
-              <td>{fmtDate(r.proposed_last_working_day)}</td>
+              <td>
+                {fmtDate(r.proposed_last_working_day)}
+                {countdown && <div><span className={`sp-left is-${countdown.tone}`}><i className="ti ti-calendar-time" /> {countdown.label}</span></div>}
+              </td>
               <td>{r.notice_period_days} days</td>
               <td>
                 <span className={`badge ${statusBadgeClass(r.status)}`}>{r.status_display}</span>
@@ -81,7 +104,8 @@ export default function SeparationTable({ requests, onView, onEdit, onCancel, on
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

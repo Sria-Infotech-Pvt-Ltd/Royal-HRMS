@@ -14,10 +14,9 @@ LINK = 'https://hrms.example.com/activate/11111111-1111-1111-1111-111111111111/'
 
 
 class PolicyTests(SimpleTestCase):
-    def test_an_invitation_may_not_be_replayed_and_the_advice_names_the_right_button_and_the_validity(self):
-        reason = resend_blocked_reason('onboarding_invite', False)
-        self.assertIn('Resend invitation', reason)
-        self.assertIn(f'{utils.INVITE_VALIDITY_HOURS} hours', reason)
+    def test_an_invitation_is_not_blocked_because_resend_issues_a_fresh_link(self):
+        self.assertIsNone(resend_blocked_reason('onboarding_invite', False))
+        self.assertIsNone(resend_blocked_reason('onboarding_invite', True))     # an invitation is always flagged sensitive
 
     def test_an_admin_password_reset_may_not_be_replayed(self):
         self.assertIn('Reset password', resend_blocked_reason('password_reset_by_admin', False))
@@ -30,7 +29,8 @@ class PolicyTests(SimpleTestCase):
 
     def test_the_serializer_exposes_the_reason_to_the_page(self):
         serializer = EmailLogSerializer()
-        self.assertIn('Resend invitation', serializer.get_resend_blocked_reason(SimpleNamespace(template_name='onboarding_invite', has_sensitive_context=True)))
+        self.assertIn('Reset password', serializer.get_resend_blocked_reason(SimpleNamespace(template_name='password_reset_by_admin', has_sensitive_context=True)))
+        self.assertIsNone(serializer.get_resend_blocked_reason(SimpleNamespace(template_name='onboarding_invite', has_sensitive_context=True)))
         self.assertIsNone(serializer.get_resend_blocked_reason(SimpleNamespace(template_name='leave_approved', has_sensitive_context=False)))
 
 
@@ -92,8 +92,8 @@ class ActivationInviteLoggingTests(SimpleTestCase):
 
 class ResendEndpointTests(SimpleTestCase):
     @staticmethod
-    def post(template_name, has_sensitive_context=False):
-        log = SimpleNamespace(status=EmailLog.STATUS_FAILED, template_name=template_name, has_sensitive_context=has_sensitive_context, had_attachments=False)
+    def post(template_name, has_sensitive_context=False, log_status=EmailLog.STATUS_FAILED):
+        log = SimpleNamespace(status=log_status, template_name=template_name, has_sensitive_context=has_sensitive_context, had_attachments=False)
         request = SimpleNamespace(user=SimpleNamespace(pk=1))
         with mock.patch('apps.accounts.views_email_log.has_perm', return_value=True), \
                 mock.patch('apps.accounts.views_email_log.EmailLog') as email_log, \
@@ -106,11 +106,17 @@ class ResendEndpointTests(SimpleTestCase):
             response = EmailLogResendView().post(request, 'log-id')
         return response, replay
 
-    def test_resending_an_invitation_is_refused_with_advice_and_nothing_is_sent(self):
-        response, replay = self.post('onboarding_invite')
-        self.assertEqual(response.status_code, 409)
-        self.assertIn('Resend invitation', response.data['message'])
+    def test_resending_an_invitation_never_replays_the_saved_copy_with_its_dead_link(self):
+        with mock.patch('apps.accounts.views_email_log._reissue_invitation', return_value=SimpleNamespace(status_code=200)) as reissue:
+            response, replay = self.post('onboarding_invite', has_sensitive_context=True)
+        self.assertEqual(response.status_code, 200)
+        reissue.assert_called_once()
         replay.assert_not_called()
+
+    def test_an_email_that_was_sent_fine_can_be_sent_again_too(self):
+        response, replay = self.post('leave_approved', log_status=EmailLog.STATUS_SENT)
+        self.assertEqual(response.status_code, 200)
+        replay.assert_called_once()
 
     def test_resending_an_admin_password_reset_is_refused(self):
         response, replay = self.post('password_reset_by_admin')

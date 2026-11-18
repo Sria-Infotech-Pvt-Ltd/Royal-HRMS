@@ -8,6 +8,18 @@ type SortKey = "employeeName" | "submittedAt" | "status";
 type SortDir = "asc" | "desc";
 
 const PAGE_SIZE = 10;
+const AGING_AFTER_DAYS = 3;
+const LATE_AFTER_DAYS = 7;
+const MS_PER_DAY = 86_400_000;
+
+/** How long a pending request has been waiting: whole days, and a tone (fresh / aging / late) for the colour. */
+function waitingFor(item: ApprovalItem): { days: number; tone: "fresh" | "aging" | "late" } | null {
+  if (item.displayStatus !== "pending") return null;
+  const submitted = toSortableTime(item.submittedAt);
+  if (!submitted) return null;
+  const days = Math.max(0, Math.floor((Date.now() - submitted) / MS_PER_DAY));
+  return { days, tone: days >= LATE_AFTER_DAYS ? "late" : days >= AGING_AFTER_DAYS ? "aging" : "fresh" };
+}
 
 interface Props {
   items:      ApprovalItem[]; // filtered, not yet sorted/paginated
@@ -22,6 +34,9 @@ interface Props {
   onBulkApprove: () => void;
   onBulkReject:  () => void;
   bulkBusy:   boolean;
+  /** Empty-state shortcut: drop the "pending only" filter to look at past decisions. */
+  onShowAll?: () => void;
+  onRefresh?: () => void;
 }
 
 function SortHeader({
@@ -54,7 +69,7 @@ function SkeletonRows({ cols }: { cols: number }) {
 export default function ApprovalsTable({
   items, loading, resetKey, selected,
   onToggleSelect, onToggleSelectMany, onView, onApprove, onReject,
-  onBulkApprove, onBulkReject, bulkBusy,
+  onBulkApprove, onBulkReject, bulkBusy, onShowAll, onRefresh,
 }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("submittedAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -124,6 +139,14 @@ export default function ApprovalsTable({
             <div className="ta-empty-icon"><i className="ti ti-check" /></div>
             <div className="ta-empty-title">You&rsquo;re all caught up!</div>
             <div className="ta-empty-sub">No approval requests are waiting for your action.</div>
+            <div className="tv-empty-actions">
+              {onRefresh && <button type="button" className="btn btn-outline btn-sm" onClick={onRefresh}><i className="ti ti-refresh" /> Check again</button>}
+              {onShowAll && <button type="button" className="btn btn-ghost btn-sm" onClick={onShowAll}><i className="ti ti-history" /> See past decisions</button>}
+            </div>
+            <div className="tv-empty-tips">
+              <span><i className="ti ti-bell" />New requests show up here and in your notifications.</span>
+              <span><i className="ti ti-checks" />Tick several rows to approve or reject in one go.</span>
+            </div>
           </div>
         ) : (
           <>
@@ -153,8 +176,11 @@ export default function ApprovalsTable({
                   {loading && items.length === 0 ? (
                     <SkeletonRows cols={colCount} />
                   ) : (
-                    pageItems.map(item => (
-                      <tr key={item.key} className={selected.has(item.key) ? "selected" : ""} style={{ cursor: "pointer" }} onClick={() => onView(item)}>
+                    pageItems.map(item => {
+                      const waiting = waitingFor(item);
+                      const rowClasses = [selected.has(item.key) ? "selected" : "", waiting?.tone === "late" ? "tv-late-row" : "", waiting?.tone === "aging" ? "tv-aging-row" : ""].filter(Boolean).join(" ");
+                      return (
+                      <tr key={item.key} className={rowClasses} style={{ cursor: "pointer" }} onClick={() => onView(item)}>
                         <td onClick={e => e.stopPropagation()}>
                           {item.kind !== "separation" && (
                             <input
@@ -182,7 +208,14 @@ export default function ApprovalsTable({
                           {item.detailSecondary && <div className="ta-detail-secondary">{item.detailSecondary}</div>}
                           {item.detailTertiary && <div className="ta-detail-secondary">{item.detailTertiary}</div>}
                         </td>
-                        <td className="ta-mono">{fmtSubmitted(item.submittedAt)}</td>
+                        <td>
+                          <div className="ta-mono">{fmtSubmitted(item.submittedAt)}</div>
+                          {waiting && (
+                            <span className={`tv-wait is-${waiting.tone}`} title="How long this request has been waiting">
+                              <i className="ti ti-hourglass" /> {waiting.days === 0 ? "Today" : `${waiting.days} day${waiting.days === 1 ? "" : "s"}`}
+                            </span>
+                          )}
+                        </td>
                         <td><StatusChip status={item.displayStatus} /></td>
                         <td onClick={e => e.stopPropagation()}>
                           <div className="ta-actions" style={{ justifyContent: "flex-end" }}>
@@ -210,7 +243,8 @@ export default function ApprovalsTable({
                           </div>
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>

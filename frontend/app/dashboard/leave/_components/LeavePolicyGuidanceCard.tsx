@@ -7,6 +7,7 @@
 // is still pending, from the same /leave/requests/ list every other card
 // on this page reads.
 
+import type { CSSProperties } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { DOCUMENTS_BASE, type ApiDocument } from "../../documents/_data";
@@ -35,30 +36,32 @@ export default function LeavePolicyGuidanceCard() {
           </div>
         </div>
       </div>
-      <div className="card-body" style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: 20 }}>
-        {policyDoc ? (
-          <a href={policyDoc.file_url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm" style={{ justifyContent: "flex-start" }}>
-            <i className="ti ti-file-text" /> Read leave policy
-          </a>
-        ) : (
-          <span style={{ fontSize: 12.5, color: "var(--on-variant)" }}>
-            No leave policy document has been uploaded yet.
-          </span>
-        )}
+      <div className="card-body">
+        <div className="lv-links">
+          {policyDoc ? (
+            <a href={policyDoc.file_url} target="_blank" rel="noopener noreferrer" className="lv-link">
+              <span className="lv-icon"><i className="ti ti-file-text" /></span>
+              <span>Read leave policy<small>Opens the policy document</small></span>
+            </a>
+          ) : (
+            <div className="lv-link is-muted">
+              <span className="lv-icon" style={{ "--lv-accent": "#6b7280" } as CSSProperties}><i className="ti ti-file-off" /></span>
+              <span>No leave policy document has been uploaded yet.</span>
+            </div>
+          )}
 
-        {pending ? (
-          <a
-            href={`/dashboard/my-requests?tab=leave&request=${pending.id}`}
-            className="btn btn-ghost btn-sm"
-            style={{ justifyContent: "flex-start" }}
-          >
-            <i className="ti ti-progress" /> Track {fmtShortDate(pending.start_date)} request
-          </a>
-        ) : (
-          <span style={{ fontSize: 12.5, color: "var(--on-variant)" }}>
-            No pending leave request to track right now.
-          </span>
-        )}
+          {pending ? (
+            <a href={`/dashboard/my-requests?tab=leave&request=${pending.id}`} className="lv-link">
+              <span className="lv-icon"><i className="ti ti-progress" /></span>
+              <span>Track {fmtShortDate(pending.start_date)} request<small>See who still has to approve it</small></span>
+            </a>
+          ) : (
+            <div className="lv-link is-muted">
+              <span className="lv-icon" style={{ "--lv-accent": "#6b7280" } as CSSProperties}><i className="ti ti-progress-check" /></span>
+              <span>No pending leave request to track right now.</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -7,19 +7,9 @@ import clientApi from "@/lib/clientApi";
 import { LEAVE_NAME_RE, sanitizeLeaveName } from "@/lib/leaveValidation";
 import Modal from "@/components/Modal";
 import { confirmDialog } from "@/components/DialogProvider";
-
-interface LeavePolicy {
-  id: number;
-  leave_type: string;
-  leave_type_display: string;
-  annual_days: number;
-  accrual_frequency: "annual" | "monthly";
-  can_carry_forward: boolean;
-  max_carry_forward_days: number;
-  policy_note: string;
-  is_active: boolean;
-  updated_at: string;
-}
+import LeaveTypeStats from "./LeaveTypeStats";
+import LeaveTypesTable from "./LeaveTypesTable";
+import type { LeavePolicy } from "./leaveTypeView";
 
 interface EditForm {
   annual_days: number;
@@ -39,19 +29,6 @@ interface CreateForm {
   policy_note: string;
   is_active: boolean;
 }
-
-const TYPE_COLORS: Record<string, string> = {
-  casual:    "#7c3aed",
-  earned:    "#17905a",
-  sick:      "#a2620c",
-  lwp:       "#6b7280",
-  maternity: "#a78bfa",
-  paternity: "#2563eb",
-};
-
-// Built-in leave types can be deactivated but never deleted — mirrors the
-// _BUILTIN set enforced server-side in LeavePolicyView.delete().
-const BUILTIN_TYPES = new Set(["casual", "earned", "sick", "lwp", "maternity", "paternity"]);
 
 function Spin() {
   return <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />;
@@ -198,124 +175,11 @@ export default function PolicyTab() {
 
   return (
     <>
-      {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 1, background: "var(--outline-v)", borderRadius: "var(--radius-lg)", overflow: "hidden", marginBottom: 24 }}>
-        {[
-          { icon: "ti-beach",        color: "var(--primary)", bg: "rgba(124,58,237,0.08)",  label: "Total Types",   value: list.length },
-          { icon: "ti-circle-check", color: "var(--success)", bg: "rgba(23,144,90,0.08)", label: "Active",        value: list.filter(t => t.is_active).length },
-          { icon: "ti-repeat",       color: "var(--warn)",    bg: "rgba(162,98,12,0.08)", label: "Carry Forward", value: list.filter(t => t.can_carry_forward).length },
-        ].map((s, i) => (
-          <div key={i} style={{ background: "var(--surface)", padding: "18px 22px", display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 11, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", color: s.color, flexShrink: 0 }}>
-              <i className={`ti ${s.icon}`} style={{ fontSize: 20 }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: "var(--on-bg)", lineHeight: 1 }}>{s.value}</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>{s.label}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Table */}
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-beach" /> Leave Types</div>
-          <button className="btn btn-filled btn-sm" onClick={openCreate}>
-            <i className="ti ti-plus" /> Add Leave Type
-          </button>
-        </div>
-
-        {loading && <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--on-variant)" }}><Spin /> &nbsp;Loading policies…</div>}
-        {error   && <div style={{ padding: "24px", color: "var(--error)", fontSize: 14 }}>{error}</div>}
-        {rowError && (
-          <div style={{ margin: "0 24px 16px", padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>{rowError}</div>
-        )}
-
-        {!loading && !error && (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th style={{ textAlign: "center" }}>Annual Days</th>
-                  <th style={{ textAlign: "center" }}>Accrual</th>
-                  <th style={{ textAlign: "center" }}>Carry Fwd</th>
-                  <th style={{ textAlign: "center" }}>Max Carry Fwd</th>
-                  <th style={{ textAlign: "center" }}>Status</th>
-                  <th>Policy Note</th>
-                  <th style={{ textAlign: "center" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map(p => (
-                  <tr key={p.leave_type}>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: TYPE_COLORS[p.leave_type] ?? "#6b7280", flexShrink: 0 }} />
-                        <span style={{ fontWeight: 600, fontSize: 13 }}>{p.leave_type_display}</span>
-                      </div>
-                    </td>
-                    <td style={{ textAlign: "center", fontWeight: 700, fontSize: 15, color: "var(--primary)" }}>{Number(p.annual_days)}</td>
-                    <td style={{ textAlign: "center" }}>
-                      <span className="badge badge-neutral">{p.accrual_frequency === "monthly" ? "Monthly" : "Annual"}</span>
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      {p.can_carry_forward ? <span className="badge badge-info">Yes</span> : <span className="badge badge-neutral">No</span>}
-                    </td>
-                    <td style={{ textAlign: "center", fontWeight: 600 }}>
-                      {p.can_carry_forward ? `${p.max_carry_forward_days}d` : <span style={{ color: "var(--outline)" }}>—</span>}
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <span className={`badge ${p.is_active ? "badge-success" : "badge-neutral"}`}>
-                        {p.is_active ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12, color: "var(--on-variant)", maxWidth: 220 }}>
-                      {p.policy_note || <span style={{ color: "var(--outline)" }}>—</span>}
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                        <button
-                          className="btn btn-ghost"
-                          style={{ width: 28, height: 28, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6 }}
-                          onClick={() => openEdit(p)}
-                          title="Edit"
-                         aria-label="Edit">
-                          <i className="ti ti-edit" style={{ fontSize: 13 }} />
-                        </button>
-                        <button
-                          className="btn btn-ghost"
-                          style={{ width: 28, height: 28, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6 }}
-                          onClick={() => toggleActive(p)}
-                          disabled={busyType === p.leave_type}
-                          title={p.is_active ? "Deactivate" : "Activate"}
-                        >
-                          <i className={`ti ${p.is_active ? "ti-toggle-right" : "ti-toggle-left"}`} style={{ fontSize: 13 }} />
-                        </button>
-                        <button
-                          className="btn btn-ghost"
-                          style={{
-                            width: 28, height: 28, padding: 0, justifyContent: "center",
-                            border: "1px solid var(--outline-v)", borderRadius: 6,
-                            color: BUILTIN_TYPES.has(p.leave_type) ? "var(--outline)" : "var(--error)",
-                            cursor: BUILTIN_TYPES.has(p.leave_type) ? "not-allowed" : "pointer",
-                          }}
-                          onClick={() => deletePolicy(p)}
-                          disabled={busyType === p.leave_type || BUILTIN_TYPES.has(p.leave_type)}
-                          title={BUILTIN_TYPES.has(p.leave_type) ? "Built-in leave types cannot be deleted" : "Delete"}
-                         aria-label="Delete">
-                          <i className="ti ti-trash" style={{ fontSize: 13 }} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <LeaveTypeStats list={list} loading={loading} />
+      <LeaveTypesTable
+        list={list} loading={loading} error={error} rowError={rowError} busyType={busyType}
+        onCreate={openCreate} onEdit={openEdit} onToggle={toggleActive} onDelete={deletePolicy}
+      />
 
       {/* Edit Modal */}
       {editing && (

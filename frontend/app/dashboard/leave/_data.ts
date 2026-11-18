@@ -127,6 +127,10 @@ export interface LeaveStats {
   lop_requests: number;
   year:         number;
   balances:     BalanceSummary[];
+  /** Requests and approved days for each month of the year (always 12 entries). */
+  monthly?:     { month: number; requests: number; approved_days: number }[];
+  /** Approved days per leave type, largest first. */
+  by_type?:     { leave_type: LeaveTypeKey; days: number }[];
 }
 
 export interface BalanceSummary {

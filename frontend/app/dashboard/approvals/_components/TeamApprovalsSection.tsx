@@ -337,6 +337,8 @@ export default function TeamApprovalsSection() {
         onBulkApprove={() => setBulkAction("approve")}
         onBulkReject={() => setBulkAction("reject")}
         bulkBusy={bulkSaving}
+        onShowAll={statusFilter === "pending" ? () => setStatusFilter("all") : undefined}
+        onRefresh={refetchAll}
       />
 
       <RequestDetailDrawer

@@ -3,10 +3,8 @@
 import { useRouter } from "next/navigation";
 import EmployeeCodeSeriesCard from "./_components/EmployeeCodeSeriesCard";
 
-// Employee IDs are now 8-digit, purely numeric, one disjoint range per
-// worker type (see EmployeeCodeSeriesCard) — there is no global
-// prefix/padding format to configure any more, so this page just hosts
-// that one card.
+// Employee IDs are 8-digit, purely numeric, one disjoint range per worker type (see EmployeeCodeSeriesCard). There is no global
+// prefix/padding format to configure any more, so this page just hosts the ranges.
 export default function EmployeeCodeSettingsPage() {
   const router = useRouter();
 

@@ -23,6 +23,7 @@ import { canOpenTeamDashboard, hasHrDashboardAccess, resolveDashboard } from "@/
 import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
 import FaceModelPreloader from "@/components/FaceModelPreloader";
 import FaceRegistrationBanner from "@/components/FaceRegistrationBanner";
+import PageBackButton from "@/components/dashboard/PageBackButton";
 
 export default function DashboardShell({
   session,
@@ -161,6 +162,7 @@ export default function DashboardShell({
           {/* Face ID: warm the models in the background, and nudge anyone who still needs to register. */}
           <FaceModelPreloader />
           <FaceRegistrationBanner />
+          <PageBackButton />
           {children}
         </div>
       </main>
