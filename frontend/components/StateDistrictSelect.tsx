@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { INDIA_STATE_NAMES, canonicalName, districtsForState } from "@/lib/indiaStatesDistricts";
+import { useEffect, useRef, useState } from "react";
+import { canonicalName } from "@/lib/placeNames";
+import { useDistricts, useStates } from "@/hooks/useLocationOptions";
 
 interface BaseProps {
   value: string;
@@ -13,7 +14,7 @@ interface BaseProps {
 /** Shared dropdown shell for State/District — same searchable single-select
  * pattern as CountrySelect.tsx (this app's existing convention), kept as its
  * own small component here rather than reusing CountrySelect directly since
- * these two read from lib/indiaStatesDistricts.ts, not lib/countries.ts, and
+ * these two read live server lists (hooks/useLocationOptions.ts), and
  * District additionally depends on whichever State is currently selected. */
 function SearchableSelect({ value, onChange, options, placeholder, inputClassName = "field-input", disabled }: BaseProps & { options: string[]; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -37,7 +38,8 @@ function SearchableSelect({ value, onChange, options, placeholder, inputClassNam
   // itself follows.
   // A saved value that differs only in capitals or spacing (a PIN-code lookup answers in capitals) is the listed one, not unknown.
   const listedValue = canonicalName(options, value);
-  const isKnownValue = value === "" || listedValue !== null;
+  // While the live list is still arriving nothing can be called "not in the list".
+  const isKnownValue = value === "" || listedValue !== null || options.length === 0;
 
   function select(option: string) {
     onChange(option);
@@ -106,13 +108,14 @@ function SearchableSelect({ value, onChange, options, placeholder, inputClassNam
 }
 
 /** Single-select searchable dropdown for Indian states/UTs, backed by
- * lib/indiaStatesDistricts.ts instead of a free-text box. */
+ * the live server list instead of a free-text box. */
 export function StateSelect({ value, onChange, placeholder, inputClassName }: BaseProps) {
+  const { options, isLoading } = useStates();
   return (
     <SearchableSelect
       value={value} onChange={onChange}
-      options={INDIA_STATE_NAMES}
-      placeholder={placeholder ?? "Select state"}
+      options={options}
+      placeholder={isLoading ? "Loading states…" : (placeholder ?? "Select state")}
       inputClassName={inputClassName}
     />
   );
@@ -130,13 +133,13 @@ interface DistrictSelectProps extends BaseProps {
  * clearing the District value when the State changes to a different one
  * (a stale district for the previous state is worse than an empty field). */
 export function DistrictSelect({ value, onChange, state, placeholder, inputClassName }: DistrictSelectProps) {
-  const options = useMemo(() => districtsForState(state), [state]);
+  const { options, isLoading } = useDistricts(state);
   const disabled = !state;
   return (
     <SearchableSelect
       value={value} onChange={onChange}
       options={options}
-      placeholder={disabled ? "Select state first" : (placeholder ?? "Select district")}
+      placeholder={disabled ? "Select state first" : isLoading ? "Loading districts…" : (placeholder ?? "Select district")}
       inputClassName={inputClassName}
       disabled={disabled}
     />

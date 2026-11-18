@@ -36,6 +36,8 @@ import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/Assets
 import EmergencyContactsList, { type EmergencyContactEntry } from "./EmergencyContactsList";
 import AddressFields, { EMPTY_ADDRESS_EXTRAS, type AddressExtras } from "./AddressFields";
 import ScanFillModal, { type ScanSuggestions } from "./ScanFillModal";
+import { fieldsTheServerDidNotKeep } from "./savedDraftCheck";
+import { changedDraftFields } from "./draftChanges";
 import EmployeePhotoUpload from "./EmployeePhotoUpload";
 import HireWizardSidebar from "./HireWizardSidebar";
 import StepIssuesPanel from "./StepIssuesPanel";
@@ -265,6 +267,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     ]).then(([a, fc, efc, docs]) => {
       const data = a.data.data;
       setAction(data);
+      knownDraftRef.current = (data.draft_data as Record<string, unknown> | undefined) ?? {};
       setPhotoUrl(data.photo_url);
       setFieldConfig(fc.data?.data ?? {});
       setEduExpFieldConfig(efc.data?.data ?? { education: [], experience: [] });
@@ -382,8 +385,15 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     setEmergencyContacts(p => p.map(c => ({ ...c, is_primary: c.id === id })));
   }
 
+  // The draft as the server last told us it holds it. A save sends only what DIFFERS from this, never the whole form: a whole-form
+  // save from a second open copy of the same draft (another tab, a stale window) used to overwrite newer typing with its own
+  // empty boxes, which is how values "disappeared" and Hire then refused with "first name, last name ... are required".
+  const knownDraftRef = useRef<Record<string, unknown>>({});
   async function patchAction(payload: Record<string, unknown>) {
-    const { data } = await clientApi.patch<{ data: HireActionData }>(API.hireActions.detail(hireActionId), payload);
+    const known = knownDraftRef.current;
+    const changed = changedDraftFields(payload, known);
+    const { data } = await clientApi.patch<{ data: HireActionData }>(API.hireActions.detail(hireActionId), changed);
+    knownDraftRef.current = (data.data.draft_data as Record<string, unknown> | undefined) ?? known;
     setAction(data.data);
     return data.data;
   }
@@ -491,48 +501,98 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   // lastAttemptedRef starts at null so the very first run (right after the
   // initial GET finishes loading) primes the baseline instead of firing a
   // spurious save of data that was just loaded from the server, untouched.
+  const AUTOSAVE_DELAY_MS = 1200;
+  const AUTOSAVE_MAX_WAIT_MS = 5000;
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The last snapshot an autosave was SENT for, whether or not it succeeded. A snapshot is never re-sent on its own: this
   // effect re-runs on every render, so without this a refused save re-rendered, re-sent and looped (it filled the log with
   // identical 400s). The next edit, or the Retry button, sends again.
   const lastAttemptedRef = useRef<string | null>(null);
+  // The newest snapshot of the form, kept so a save can be forced at any moment (closing the wizard, hiding the tab).
+  const latestPayloadRef = useRef<Record<string, unknown> | null>(null);
+  // When the form first became unsaved; a person typing without a pause must still be saved every few seconds.
+  const dirtySinceRef = useRef<number | null>(null);
+  const flushAutosaveRef = useRef<() => void>(() => {});
+
+  function sendAutosave(payload: Record<string, unknown>, serialized: string) {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = null;
+    dirtySinceRef.current = null;
+    lastAttemptedRef.current = serialized;
+    setAutosaveStatus("saving");
+    setAutosaveMessage("");
+    patchAction(payload)
+      .then(result => {
+        // Duplicate email/mobile: the draft IS saved, but the person must hear about it (and cannot move on until fixed).
+        const blocking = result.warnings?.find(w => w.severity === "error");
+        setApproverErrors({});
+        setAutosaveStatus(blocking ? "warning" : "saved");
+        setAutosaveMessage(blocking ? `${blocking.message} Your changes are saved.` : "");
+      })
+      .catch((e: unknown) => {
+        const parsed = parseApiError(e, "Could not reach the server.");
+        // A 400 means the server refused only the fields named in the message and still saved the rest of the form.
+        const partlySaved = parsed.status === 400 && Object.keys(parsed.fieldErrors).length > 0;
+        setApproverErrors(approverErrorsOf(parsed.fieldErrors));
+        setAutosaveStatus("error");
+        setAutosaveMessage(partlySaved
+          ? `Not saved: ${parsed.message} Everything else was saved.`
+          : `${parsed.message} Your entries are still on this screen but are not saved yet.`);
+      });
+  }
+
+  // Send anything not yet sent, right now (no waiting for the pause in typing).
+  flushAutosaveRef.current = () => {
+    const payload = latestPayloadRef.current;
+    if (!payload || lastAttemptedRef.current === null) return;
+    const serialized = JSON.stringify(payload);
+    if (serialized !== lastAttemptedRef.current) sendAutosave(payload, serialized);
+  };
+
   useEffect(() => {
     if (loading) return;
     const payload = buildFullDraftPayload();
+    latestPayloadRef.current = payload;
     const serialized = JSON.stringify(payload);
     if (lastAttemptedRef.current === null) {
       lastAttemptedRef.current = serialized;
       return;
     }
-    if (serialized === lastAttemptedRef.current) return;
+    if (serialized === lastAttemptedRef.current) {
+      dirtySinceRef.current = null;
+      return;
+    }
 
+    // No cleanup on purpose: a timer cancelled by every re-render could be cancelled forever while someone types or while
+    // the screen keeps updating. The wait is capped (AUTOSAVE_MAX_WAIT_MS) and the pending save is flushed on leaving.
+    const now = Date.now();
+    if (dirtySinceRef.current === null) dirtySinceRef.current = now;
+    const delay = Math.max(0, Math.min(AUTOSAVE_DELAY_MS, AUTOSAVE_MAX_WAIT_MS - (now - dirtySinceRef.current)));
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => {
-      lastAttemptedRef.current = serialized;
-      setAutosaveStatus("saving");
-      setAutosaveMessage("");
-      patchAction(payload)
-        .then(result => {
-          // Duplicate email/mobile: the draft IS saved, but the person must hear about it (and cannot move on until fixed).
-          const blocking = result.warnings?.find(w => w.severity === "error");
-          setApproverErrors({});
-          setAutosaveStatus(blocking ? "warning" : "saved");
-          setAutosaveMessage(blocking ? `${blocking.message} Your changes are saved.` : "");
-        })
-        .catch((e: unknown) => {
-          const parsed = parseApiError(e, "Could not reach the server.");
-          // A 400 means the server refused only the fields named in the message and still saved the rest of the form.
-          const partlySaved = parsed.status === 400 && Object.keys(parsed.fieldErrors).length > 0;
-          setApproverErrors(approverErrorsOf(parsed.fieldErrors));
-          setAutosaveStatus("error");
-          setAutosaveMessage(partlySaved
-            ? `Not saved: ${parsed.message} Everything else was saved.`
-            : `${parsed.message} Your entries are still on this screen but are not saved yet.`);
-        });
-    }, 1200);
-
-    return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
+    autosaveTimerRef.current = setTimeout(() => sendAutosave(payload, serialized), delay);
   });
+
+  // Leaving (closing the wizard, hiding or closing the tab) must never lose what was typed in the last moment.
+  useEffect(() => {
+    const flushNow = () => flushAutosaveRef.current();
+    const flushWhenHidden = () => { if (document.visibilityState === "hidden") flushNow(); };
+    const warnIfUnsaved = (event: BeforeUnloadEvent) => {
+      const payload = latestPayloadRef.current;
+      if (payload && lastAttemptedRef.current !== null && JSON.stringify(payload) !== lastAttemptedRef.current) {
+        flushNow();
+        event.preventDefault();
+      }
+    };
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    window.addEventListener("pagehide", flushNow);
+    window.addEventListener("beforeunload", warnIfUnsaved);
+    return () => {
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+      window.removeEventListener("pagehide", flushNow);
+      window.removeEventListener("beforeunload", warnIfUnsaved);
+      flushNow();
+    };
+  }, []);
 
   function retryAutosave() {
     lastAttemptedRef.current = null;  // forget the failed snapshot so the effect above sends the current form again
@@ -608,7 +668,22 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       // one more time right before completing, in case the last edit
       // happened without going through handleNext/goToStep (e.g. the last
       // real save site missed in some future change to this file).
-      await patchAction(buildFullDraftPayload()).catch(() => {});
+      // A failed save is NEVER ignored here: hiring from a draft the server does not hold would be refused anyway,
+      // with a message that blames the wrong thing.
+      try {
+        const payload = buildFullDraftPayload();
+        const held = await patchAction(payload);
+        // The server answered "saved", but is its copy really what is on screen? If not, say which fields, and do not hire.
+        const notKept = fieldsTheServerDidNotKeep(payload, held.draft_data);
+        if (notKept.length > 0) {
+          setHireError(`The server did not keep: ${notKept.join(", ")}. Nothing was hired. Open that step, re-enter it, wait for "Saved", and press Hire again.`);
+          return;
+        }
+      } catch (saveError) {
+        const parsed = parseApiError(saveError, "Could not reach the server.");
+        setHireError(`Your entries could not be saved, so nothing was hired. ${parsed.message}`);
+        return;
+      }
       const response = await clientApi.post<{ data?: { face_id?: FaceIdHireSummary; reserved_employee_id?: string; reporting_manager?: { name: string | null; source: string } } }>(API.hireActions.complete(hireActionId));
       const faceId = response.data?.data?.face_id;
       // Show the completion screen (with the Face ID next step); closing the wizard happens from there.

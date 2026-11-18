@@ -53,7 +53,7 @@ def _smart_title(text: str) -> str:
     """Title-case, but keep small connector words lowercase (except as the
     first word) — plain str.title() would turn "Jammu and Kashmir" into
     "Jammu And Kashmir"."""
-    words = text.strip().split()
+    words = (text or '').strip().split()  # the dataset has PIN codes with no district at all
     return ' '.join(
         w.lower() if i > 0 and w.lower() in _LOWERCASE_WORDS else w.capitalize()
         for i, w in enumerate(words)

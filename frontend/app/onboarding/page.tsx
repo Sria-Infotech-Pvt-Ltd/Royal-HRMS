@@ -769,8 +769,11 @@ export default function OnboardingPage() {
   // click), and any failure is swallowed silently rather than shown as an
   // error — Save & Continue remains the one place that actually blocks
   // navigation or reports a problem.
-  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True from an edit until its save was sent, so leaving the step, hiding the tab or closing the page can send it at once.
+  const hasPendingAutosaveRef = useRef(false);
+  const flushAutosaveRef = useRef<() => void>(() => {});
   // Suppresses the autosave that would otherwise fire the moment a step's
   // existing data finishes loading into `form`/`customValues` — only a
   // genuine subsequent edit should schedule a save.
@@ -787,24 +790,46 @@ export default function OnboardingPage() {
     const customForStep = Object.fromEntries(
       stepConfigs.filter(c => c.is_custom && c.field_type !== "file").map(c => [c.field_key, customValues[c.field_key] ?? ""]),
     );
+    hasPendingAutosaveRef.current = false;
     setAutosaveStatus("saving");
     try {
       await clientApi.patch(API.onboarding.profileStep(currentStep.step), { ...form, ...customForStep });
       setAutosaveStatus("saved");
       setTimeout(() => setAutosaveStatus(s => (s === "saved" ? "idle" : s)), 3000);
     } catch {
-      setAutosaveStatus("idle");
+      // Never silent: the person must know this step is not saved yet (Save & Continue will report the exact reason).
+      setAutosaveStatus("error");
     }
   }
+
+  flushAutosaveRef.current = () => {
+    if (!hasPendingAutosaveRef.current) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    void silentAutosave();
+  };
 
   useEffect(() => {
     if (steps[tab]?.kind !== "fields") return;
     if (skipAutosaveRef.current) { skipAutosaveRef.current = false; return; }
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    hasPendingAutosaveRef.current = true;
     autosaveTimerRef.current = setTimeout(() => { void silentAutosave(); }, 2000);
+    // Hiding the tab or closing the page sends the pending save at once (listener below); changing step goes through
+    // Save & Continue, which saves the step itself.
     return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- silentAutosave is recreated every render (reads current form/customValues/tab via closure) and isn't itself a dependency; including it would just restart the debounce timer on every render instead of only on real form/customValues edits
   }, [form, customValues, tab, steps, fieldConfig]);
+
+  useEffect(() => {
+    const flushNow = () => flushAutosaveRef.current();
+    const flushWhenHidden = () => { if (document.visibilityState === "hidden") flushNow(); };
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    window.addEventListener("pagehide", flushNow);
+    return () => {
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+      window.removeEventListener("pagehide", flushNow);
+    };
+  }, []);
 
   async function next() {
     const ok = await saveSection();
@@ -1048,9 +1073,11 @@ export default function OnboardingPage() {
               <p>Step {tab + 1} of {steps.length}</p>
             </div>
             {steps[tab].kind === "fields" && autosaveStatus !== "idle" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".78rem", color: autosaveStatus === "saved" ? "var(--success)" : "var(--on-variant)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".78rem", color: autosaveStatus === "saved" ? "var(--success)" : autosaveStatus === "error" ? "var(--error)" : "var(--on-variant)" }}>
                 {autosaveStatus === "saving"
                   ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 13 }} /> Saving…</>
+                  : autosaveStatus === "error"
+                  ? <><i className="ti ti-alert-triangle" style={{ fontSize: 13 }} /> Not saved yet. Check your connection; Save &amp; Continue will retry</>
                   : <><i className="ti ti-cloud-check" style={{ fontSize: 13 }} /> All changes saved</>
                 }
               </div>

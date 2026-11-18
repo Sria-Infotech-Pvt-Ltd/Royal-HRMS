@@ -9,7 +9,7 @@ the sequence EmployeeListCreateView.post already runs today.
 """
 import hashlib
 import logging
-from datetime import datetime
+from datetime import date, datetime
 
 import requests as http_req
 from django.db import transaction
@@ -36,6 +36,7 @@ from apps.accounts.views.shared import _get_document_type_config
 logger = logging.getLogger(__name__)
 
 _DENIED = 'You do not have permission to perform this action.'
+MIN_JOINING_DATE = date(1990, 1, 1)   # earliest joining date a hire can be back-dated to
 
 # first_error() prefixes every message with its field name so callers know
 # which field is invalid (e.g. "employee_id: ..."), which is genuinely
@@ -131,8 +132,10 @@ class HireActionListCreateView(APIView):
             effective_from = datetime.strptime(effective_from, '%Y-%m-%d').date()
         except ValueError:
             return error('Effective from must be a valid date.')
-        if effective_from < timezone.localdate():
-            return error('Effective from cannot be in the past.')
+        # Past dates are allowed on purpose: HR can onboard someone who joined months or years ago (back-dated hire).
+        # Only an unreasonable date is refused, so a typo like year 0202 is caught.
+        if effective_from < MIN_JOINING_DATE:
+            return error(f'Effective from cannot be before {MIN_JOINING_DATE:%d-%m-%Y}.')
         if not position_id:
             return error('Select a position.')
         position = Position.objects.filter(pk=position_id, is_active=True).first()

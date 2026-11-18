@@ -316,8 +316,16 @@ class HireActionCompleteView(APIView):
         last_name  = (draft.get('last_name')  or '').strip()
         email      = (draft.get('email')      or '').strip().lower()
         branch     = (draft.get('branch')     or '').strip()
-        if not all([first_name, last_name, email, branch]):
-            return error('First name, last name, email and company code are required before hiring.')
+        # Name each missing field: one generic sentence hid which of the four the server had not kept (a draft whose company
+        # code never reached the server looked identical to one missing a name).
+        missing = [label for label, value in (
+            ('First name', first_name), ('Last name', last_name), ('Personal email', email), ('Company code', branch),
+        ) if not value]
+        if missing:
+            return error(
+                f"The server does not have these yet: {', '.join(missing)}. Fill them in on their step, wait for \"Saved\", and press Hire again.",
+                data={'missing_fields': missing},
+            )
 
         message, field_errors = blocking_message(check_hire_duplicates(email, str(draft.get('phone') or ''), exclude_action=action))
         if message:

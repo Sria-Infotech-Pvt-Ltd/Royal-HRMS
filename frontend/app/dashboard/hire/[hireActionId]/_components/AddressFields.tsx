@@ -19,7 +19,6 @@ import { usePincodesInDistrict } from "@/hooks/usePincodesInDistrict";
 import PincodeSelect from "@/components/PincodeSelect";
 import CountrySelect from "@/components/CountrySelect";
 import { StateSelect, DistrictSelect } from "@/components/StateDistrictSelect";
-import { INDIA_STATE_NAMES, canonicalName, closestName, districtsForState } from "@/lib/indiaStatesDistricts";
 import type { ProfileForm } from "@/app/onboarding/_types";
 
 export type AddressFormFields = Pick<
@@ -88,8 +87,8 @@ function useAddressSuggest(prefix: Prefix, form: AddressFormFields, onFieldChang
   useEffect(() => { latest.current = { form, onFieldChange }; });
 
   const settle = (found: PincodeLocation): PlaceFromPincode => {
-    const state = canonicalName(INDIA_STATE_NAMES, found.state) ?? found.state;
-    return { pincode, state, district: closestName(districtsForState(state), found.district) ?? found.district, locality: found.locality };
+    // The PIN answer and the State / District lists come from the same server data, spelled identically: no matching needed.
+    return { pincode, state: found.state, district: found.district, locality: found.locality };
   };
 
   // Complete PIN code: look it up and fill what is empty.

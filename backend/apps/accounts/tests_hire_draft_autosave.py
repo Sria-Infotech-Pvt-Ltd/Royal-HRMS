@@ -17,7 +17,7 @@ from apps.accounts.tests_hire_wizard import HireWizardTestCase
 
 SHARED_EMAIL = 'shared.person@test.com'
 DUPLICATE_DRAFT = 'Another open hire draft already uses this email.'
-COMPANY_CODE_MESSAGE = 'First name, last name, email and company code are required before hiring.'
+MISSING_LABEL = {'first_name': 'First name', 'last_name': 'Last name', 'email': 'Personal email', 'branch': 'Company code'}
 
 
 class TwoDraftsSharingAnEmailTests(HireWizardTestCase):
@@ -123,7 +123,9 @@ class CompletionStillEnforcesTheRulesTests(HireWizardTestCase):
                 self.assertEqual(self._patch(draft, fields).status_code, 200)
                 refused = self._complete(draft)
                 self.assertEqual(refused.status_code, 400)
-                self.assertEqual(refused.json()['message'], COMPANY_CODE_MESSAGE)
+                # The refusal names exactly the field the server does not have, not a generic list of four.
+                self.assertIn(MISSING_LABEL[missing], refused.json()['message'])
+                self.assertEqual(refused.json()['data']['missing_fields'], [MISSING_LABEL[missing]])
                 draft.refresh_from_db()
                 self.assertEqual(draft.status, HireAction.STATUS_DRAFT)
 

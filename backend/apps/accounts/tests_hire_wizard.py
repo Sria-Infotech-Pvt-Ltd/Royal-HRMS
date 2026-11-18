@@ -144,12 +144,19 @@ class Stage1CreateTests(HireWizardTestCase):
         }, format='json')
         self.assertEqual(resp.status_code, 400)
 
-    def test_create_rejects_past_effective_date(self):
+    def test_create_allows_past_effective_date(self):
+        # A back-dated hire (joined years ago) is allowed.
         resp = self.client.post(reverse('hire-action-list'), {
             'reason': 'new_position', 'effective_from': '2020-01-01', 'position': str(self.position.id),
         }, format='json')
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(str(resp.data['data']['effective_from']), '2020-01-01')
+
+    def test_create_rejects_absurdly_old_effective_date(self):
+        resp = self.client.post(reverse('hire-action-list'), {
+            'reason': 'new_position', 'effective_from': '1899-01-01', 'position': str(self.position.id),
+        }, format='json')
         self.assertEqual(resp.status_code, 400)
-        self.assertIn('past', resp.data['message'].lower())
 
     def test_create_rejects_unknown_position(self):
         resp = self.client.post(reverse('hire-action-list'), {
@@ -549,6 +556,51 @@ class HireCompletionSideEffectTests(HireWizardTestCase):
             self.assertEqual(document.verification_status, EmployeeDocument.VERIFICATION_VERIFIED)
             self.assertIsNotNone(document.verified_by_id)
             self.assertIsNotNone(document.verified_at)
+
+    def test_back_dated_hire_completes_and_keeps_the_past_joining_date(self):
+        # A hire dated two years and three months ago must complete and carry that date everywhere it is written.
+        from apps.accounts.models import Placement
+        past = datetime.date.today() - datetime.timedelta(days=2 * 365 + 90)
+        action = self._create_draft(effective_from=past.isoformat(), position=str(self._second_position().id))
+        self._set_employment_type(action, 'Permanent')
+        draft = self._valid_full_draft()
+        draft.update({
+            'email': 'backdated@test.com', 'phone': '+91 9123456780', 'pan_number': 'ZYXWV9876K',
+            'aadhaar_number': '210987654321', 'account_number': '9876543210',
+        })
+        self._patch(action, draft)
+        self._upload_all_required_docs(action)
+        resp = self._complete(action)
+        self.assertEqual(resp.status_code, 201, resp.data)
+        action.refresh_from_db()
+        employee = action.created_employee
+        self.assertEqual(employee.date_of_joining, past)
+        placement = Placement.objects.get(employee=employee)
+        self.assertEqual(placement.effective_from, past)
+        self.assertIsNone(placement.effective_to)
+
+    def test_back_dated_hire_onto_a_seat_someone_else_took_later_is_refused_cleanly(self):
+        # Seat already held by someone who started AFTER the back-dated date: must be a clear 400, never a 500 or bad data.
+        from apps.accounts.models import User
+        from apps.accounts.services_placement import assign_position
+        seat = self._second_position()
+        holder = make_user('holder@test.com', role=self.plain_role, password='TestPass123!')
+        assign_position(holder, seat, effective_from=datetime.date.today() - datetime.timedelta(days=30))
+        past = datetime.date.today() - datetime.timedelta(days=400)
+        action = self._create_draft(effective_from=past.isoformat(), position=str(seat.id))
+        self._set_employment_type(action, 'Permanent')
+        draft = self._valid_full_draft()
+        draft.update({'email': 'late@test.com', 'phone': '+91 9123456781', 'pan_number': 'QRSTU1234P',
+                      'aadhaar_number': '312987654321', 'account_number': '5555500000'})
+        self._patch(action, draft)
+        self._upload_all_required_docs(action)
+        before = User.objects.count()
+        resp = self._complete(action)
+        self.assertIn(resp.status_code, (400, 409))
+        self.assertEqual(User.objects.count(), before)
+
+    def _second_position(self):
+        return Position.objects.create(org_unit=self.unit, title='Back-dated Engineer', grade='L2')
 
     def test_created_employee_has_reserved_employee_id(self):
         resp = self._complete(self.action)

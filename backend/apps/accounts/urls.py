@@ -170,6 +170,7 @@ from apps.accounts.views_lifecycle import EmployeeAsOfView, EmployeeLifecycleTim
 from apps.accounts.views_profile_photo import ProfilePhotoView
 from apps.accounts.views_employee_photo import EmployeePhotoView
 from apps.accounts.views_pincode import PincodeLookupView, PincodesInDistrictView
+from apps.accounts.views_location import CountryListView, DistrictListView, StateListView
 from apps.accounts.views_ifsc import IfscLookupView
 
 urlpatterns = [
@@ -285,6 +286,9 @@ urlpatterns = [
     # 0 of both wizards (see views_pincode.py).
     path('onboarding/pincode-lookup/<str:pincode>/', PincodeLookupView.as_view(),      name='onboarding-pincode-lookup'),
     path('onboarding/pincodes/',                    PincodesInDistrictView.as_view(),  name='onboarding-pincodes-in-district'),
+    path('onboarding/location/states/',             StateListView.as_view(),           name='onboarding-location-states'),
+    path('onboarding/location/districts/',          DistrictListView.as_view(),        name='onboarding-location-districts'),
+    path('onboarding/location/countries/',          CountryListView.as_view(),         name='onboarding-location-countries'),
     path('onboarding/ifsc-lookup/<str:ifsc>/',       IfscLookupView.as_view(),         name='onboarding-ifsc-lookup'),
 
     # Onboarding — HR/Admin completes the wizard on an employee's behalf

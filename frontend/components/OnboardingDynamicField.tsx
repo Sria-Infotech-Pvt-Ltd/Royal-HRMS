@@ -66,7 +66,7 @@ const NATIONALITY_FIELDS = new Set(['nationality']);
 
 // current_state/permanent_state and current_district/permanent_district get
 // the same real India state/district dropdowns the Hire wizard's own
-// AddressFields.tsx already uses (lib/indiaStatesDistricts.ts) instead of a
+// AddressFields.tsx already uses (live server lists) instead of a
 // free-text box — same reasoning as NATIONALITY_FIELDS above: visually and
 // functionally consistent with what HR already sees at hire time for the
 // exact same fields.

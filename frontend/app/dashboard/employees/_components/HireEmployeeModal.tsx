@@ -28,6 +28,8 @@ const REASONS = [
   { value: "rehire",             label: "Rehire" },
 ];
 
+const MIN_JOINING_DATE = "1990-01-01"; // earliest date a hire can be back-dated to (same limit as the backend)
+
 export default function HireEmployeeModal({ onClose, onHired, initialHireActionId }: {
   onClose: () => void; onHired?: () => void; initialHireActionId?: string;
 }) {
@@ -106,7 +108,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
     const found: typeof fieldErrors = {};
     if (!reason) found.reason = "Select a reason.";
     if (!effectiveFrom) found.effectiveFrom = "Effective from is required.";
-    else if (effectiveFrom < todayStr) found.effectiveFrom = "Effective from cannot be in the past.";
+    else if (effectiveFrom < MIN_JOINING_DATE) found.effectiveFrom = "Effective from cannot be before 01-01-1990."; // past dates are allowed for back-dated hires
     if (!orgUnitId) found.orgUnit = "Select an org unit.";
     if (!positionId) found.position = "Select a position.";
     setFieldErrors(found);
@@ -176,7 +178,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
           </div>
           <div className="f">
             <label id="hire-field-effectiveFrom">Effective from <span className="req">*</span></label>
-            <DateInput min={todayStr} value={effectiveFrom} onChange={value => { setEffectiveFrom(value); clearFieldError("effectiveFrom"); }} className="finput" separator="-" />
+            <DateInput min={MIN_JOINING_DATE} value={effectiveFrom} onChange={value => { setEffectiveFrom(value); clearFieldError("effectiveFrom"); }} className="finput" separator="-" />
             <FieldError message={fieldErrors.effectiveFrom} />
             <p className="hint">This becomes the date of joining.</p>
           </div>

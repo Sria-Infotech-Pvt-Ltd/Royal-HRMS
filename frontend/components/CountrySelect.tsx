@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRIES } from "@/lib/countries";
+import { useCountries } from "@/hooks/useLocationOptions";
 
 const COLLATOR = new Intl.Collator("en", { sensitivity: "base" });
 
@@ -43,14 +44,18 @@ export default function CountrySelect({ value, onChange, mode, placeholder, inpu
   // both "Dominican") — deduped here so the dropdown never shows the same
   // label twice. Nationality is stored as plain text either way, so picking
   // the single "Congolese" entry behaves exactly as it always has.
+  // Country names are live from the server (ISO 3166). Nationalities ("Indian") are adjectives that no live source provides, so
+  // that mode alone reads the bundled list in lib/countries.ts.
+  const { options: liveCountries } = useCountries();
   const options = useMemo(() => {
-    const raw = COUNTRIES.map(c => (mode === "demonym" ? c.demonym : c.name));
-    // A to Z by what is shown. The source list is ordered by country name with India first, which is not the order of the
-    // nationalities ("Emirati" belongs under E, not under United Arab Emirates).
+    // Safety net only: if the server's country list cannot be loaded, the bundled names keep the field usable.
+    const countryNames = liveCountries.length > 0 ? liveCountries : COUNTRIES.map(c => c.name);
+    const raw = mode === "demonym" ? COUNTRIES.map(c => c.demonym) : countryNames;
+    // A to Z by what is shown ("Emirati" belongs under E, not under United Arab Emirates).
     return Array.from(new Set(raw)).sort(COLLATOR.compare);
-  }, [mode]);
+  }, [mode, liveCountries]);
   const filtered = options.filter(o => o.toLowerCase().includes(search.trim().toLowerCase()));
-  const isKnownValue = value === "" || options.includes(value);
+  const isKnownValue = value === "" || options.includes(value) || options.length === 0;
 
   function select(option: string) {
     onChange(option);

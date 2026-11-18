@@ -76,12 +76,12 @@ describe("Suggest buttons in the current address", () => {
     expect(held.form.current_district).toBe("Hyderabad")
   })
 
-  it("writes names the way this form lists them: capitals fixed, and the PIN data's own spelling of a district matched", async () => {
-    lookupAnswer = { locality: "Jangaon", district: "Jangoan", state: "TELANGANA" }
+  it("writes the state and district exactly as the server's PIN lookup spells them (the State / District lists use the same data)", async () => {
+    lookupAnswer = { locality: "Jangaon", district: "Jangoan", state: "Telangana" }
     render(<Parent start={{ current_pin_code: "506167" }} />)
     await click(suggestIn("District"))
     expect(held.form.current_state).toBe("Telangana")
-    expect(held.form.current_district).toBe("Jangaon")
+    expect(held.form.current_district).toBe("Jangoan")
   })
 
   it("replaces a district that belongs to another state, because the PIN code decides", async () => {
