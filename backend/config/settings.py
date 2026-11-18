@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'apps.payroll',
     'apps.voice_commands',
     'apps.performance',
+    'apps.global_search',
 ]
 
 MIDDLEWARE = [
@@ -519,6 +520,8 @@ EMPLOYEE_IMPORT_JOB_MAX_ROWS         = 5000      # the whole workbook is read in
 EMPLOYEE_IMPORT_JOB_LEASE_SECONDS    = 600       # a worker owns a job this long; if it dies the lease expires and the job resumes
 
 OTP_EXPIRY_MINUTES = 10
+# Asking for another code inside this window does not issue one (it would cancel the code still on its way to the person).
+OTP_RESEND_COOLDOWN_SECONDS = 60
 OTP_MAX_ATTEMPTS = 5
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 30

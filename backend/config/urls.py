@@ -20,6 +20,7 @@ urlpatterns = [
     path('api/payroll/',       include('apps.payroll.urls')),
     path('api/voice/',         include('apps.voice_commands.urls')),
     path('api/performance/',   include('apps.performance.urls')),
+    path('api/search/',        include('apps.global_search.urls')),
     path('api/v1/platform/', include('apps.platform_core.urls')),
 ]
  
