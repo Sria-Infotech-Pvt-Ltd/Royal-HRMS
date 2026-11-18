@@ -11,7 +11,7 @@ from rest_framework.test import APIClient
 from apps.accounts.factories import make_role, make_user
 from apps.accounts.models import AuditLog, EmployeeProfile, User
 from apps.hrms.models import HRHelpRequest
-from apps.hrms.profile_change_fields import CHANGE_FIELDS, KIND_CHOICE, KIND_DATE, KIND_PHONE, KIND_PIN
+from apps.hrms.profile_change_fields import CHANGE_FIELDS, KIND_ACCOUNT, KIND_CHOICE, KIND_DATE, KIND_IFSC, KIND_PHONE, KIND_PIN
 from apps.notifications.models import Notification
 
 REASON = 'The name on my documents is different'
@@ -27,6 +27,10 @@ def sample_value(spec) -> str:
         return '500081'
     if spec.kind == KIND_CHOICE:
         return spec.choices[0][0]
+    if spec.kind == KIND_ACCOUNT:
+        return '123456789012'
+    if spec.kind == KIND_IFSC:
+        return 'SBIN0001234'
     return 'Sample value'
 
 
@@ -95,7 +99,7 @@ class ProfileChangeApplyTests(TestCase):
         self.assertEqual(self._ask(section='Contact & address', field='Mobile number', value='9111111111').status_code, 400)
 
     def test_fields_without_a_structured_flow_stay_plain_tickets(self):
-        ticket = self._ticket(section='Bank details', field='IFSC code', value=None)
+        ticket = self._ticket(section='Family & nomination', field='Dependent status', value=None)
         self.assertEqual((ticket.change_field, ticket.change_new_value), ('', ''))
         ticket = self._ticket(section='Other', field='Other (describe in the reason)', value='ignored')
         self.assertEqual((ticket.change_field, ticket.change_new_value), ('', ''))
@@ -162,7 +166,7 @@ class ProfileChangeApplyTests(TestCase):
         self.assertEqual(self.employee.date_of_joining, datetime.date(2025, 3, 2))
 
     def test_a_ticket_without_a_value_cannot_be_applied(self):
-        ticket = self._ticket(section='Bank details', field='IFSC code', value=None)
+        ticket = self._ticket(section='Family & nomination', field='Dependent status', value=None)
         self.assertEqual(self._decide(self.hr, ticket, 'approve').status_code, 400)
 
     def test_the_change_fields_list_describes_each_input(self):
@@ -191,3 +195,87 @@ class ChangeFieldsRegistryCurrentValueTests(TestCase):
         self.assertEqual(rows['place_of_birth']['current_value'], 'Warangal')
         self.assertEqual(rows['gender']['current_value'], gender_label)
         self.assertNotIn('current_value', public_registry()[0])
+
+
+class BankChangeApplyTests(TestCase):
+    """Bank details: validated, applied by HR in one step, never logged or kept on the ticket in full."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.hr = make_user('bank-hr@test.com', role=make_role('bank_hr', permission_codenames=['hr_help.respond']))
+        self.employee = make_user(
+            'bank-emp@test.com', role=make_role('bank_emp', permission_codenames=[]), full_name='Bank Emp',
+            onboarding_status=User.ONBOARDING_COMPLETE,
+        )
+        EmployeeProfile.objects.update_or_create(
+            user=self.employee, defaults={'account_number': '111122223333', 'ifsc_code': 'HDFC0000001', 'bank_name': 'Old Bank'},
+        )
+
+    def _ask(self, field, value):
+        self.client.force_authenticate(user=self.employee)
+        body = {'topic': 'profile_correction', 'priority': 'normal', 'message': message('Bank details', field), 'change_new_value': value}
+        return self.client.post(reverse('hr-help-request-list'), body, format='json')
+
+    def _decide(self, ticket, decision='approve', note=''):
+        self.client.force_authenticate(user=self.hr)
+        return self.client.post(reverse('hr-help-decide-change', args=[ticket.id]), {'decision': decision, 'note': note}, format='json')
+
+    def _ticket(self, field, value) -> HRHelpRequest:
+        response = self._ask(field, value)
+        self.assertEqual(response.status_code, 201, response.data)
+        return HRHelpRequest.objects.get(pk=response.data['data']['id'])
+
+    def test_bad_account_numbers_and_ifsc_codes_are_refused(self):
+        for value in ('12345678', '1234567890123456789', '1234 5678 9012', 'ABCDEFGHIJK'):
+            self.assertEqual(self._ask('Account number', value).status_code, 400, value)
+        for value in ('SBIN1001234', 'SBI0001234', 'sbin00012', 'SBIN000123456'):
+            self.assertEqual(self._ask('IFSC code', value).status_code, 400, value)
+        self.assertEqual(self._ask('Account type', 'fixed deposit').status_code, 400)
+
+    def test_ifsc_is_stored_in_capitals(self):
+        ticket = self._ticket('IFSC code', 'sbin0001234')
+        self.assertEqual(ticket.change_new_value, 'SBIN0001234')
+
+    def test_the_ticket_shows_the_old_number_masked(self):
+        ticket = self._ticket('Account number', '999988887777')
+        self.assertEqual(ticket.change_old_value, '\u2022' * 8 + '3333')
+
+    def test_approval_writes_the_bank_detail_and_keeps_numbers_out_of_the_audit_log_and_ticket(self):
+        ticket = self._ticket('Account number', '999988887777')
+        self.assertEqual(self._decide(ticket).status_code, 200)
+        self.assertEqual(EmployeeProfile.objects.get(user=self.employee).account_number, '999988887777')
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.change_new_value, '\u2022' * 8 + '7777')
+        self.assertEqual(ticket.change_decision, 'applied')
+        entry = AuditLog.objects.get(action='employee_profile_corrected', object_id=str(self.employee.id))
+        self.assertNotIn('999988887777', str(entry.changes))
+        self.assertNotIn('111122223333', str(entry.changes))
+        self.assertEqual(entry.changes['account_number']['to'], '\u2022' * 8 + '7777')
+
+    def test_a_declined_bank_number_is_kept_masked_and_the_record_is_unchanged(self):
+        ticket = self._ticket('Account number', '999988887777')
+        self.assertEqual(self._decide(ticket, 'reject', 'Please send a cancelled cheque').status_code, 200)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.change_new_value, '\u2022' * 8 + '7777')
+        self.assertEqual(EmployeeProfile.objects.get(user=self.employee).account_number, '111122223333')
+
+    def test_plain_bank_fields_are_applied_too(self):
+        self.assertEqual(self._decide(self._ticket('Bank name', 'New Bank')).status_code, 200)
+        self.assertEqual(EmployeeProfile.objects.get(user=self.employee).bank_name, 'New Bank')
+
+    def test_it_cannot_be_applied_while_a_self_service_bank_change_is_waiting(self):
+        ticket = self._ticket('Account number', '999988887777')
+        EmployeeProfile.objects.filter(user=self.employee).update(bank_change_status=EmployeeProfile.BANK_CHANGE_PENDING)
+        response = self._decide(ticket)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(EmployeeProfile.objects.get(user=self.employee).account_number, '111122223333')
+
+    def test_the_form_list_shows_the_current_bank_number_masked_and_flags_it_sensitive(self):
+        self.client.force_authenticate(user=self.employee)
+        rows = {row['key']: row for row in self.client.get(reverse('hr-help-change-fields')).data['data']}
+        self.assertEqual(rows['account_number']['current_value'], '\u2022' * 8 + '3333')
+        self.assertTrue(rows['account_number']['is_sensitive'])
+        self.assertTrue(rows['ifsc_code']['is_sensitive'])
+        self.assertFalse(rows['bank_name']['is_sensitive'])
+        self.assertEqual(rows['bank_name']['current_value'], 'Old Bank')

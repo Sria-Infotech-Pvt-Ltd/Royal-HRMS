@@ -3,11 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { API } from "@/lib/api/endpoints";
 import ProfileCorrectionModal from "./ProfileCorrectionModal";
+import type { ProfileChangeField } from "@/types/hrHelp";
 import { CORRECTION_SECTIONS, OTHER_FIELD, OTHER_SECTION, fieldsForSection } from "./profileCorrectionFields";
 
 const post = vi.fn();
 vi.mock("@/lib/clientApi", () => ({ default: { post: (...args: unknown[]) => post(...args) } }));
-const changeFields = [
+const changeFields: ProfileChangeField[] = [
   { key: "full_name", section: "Personal details", label: "Full name", kind: "text", max_length: 150, choices: [], full_access_only: false, current_value: "Gadde Durga" },
 ];
 vi.mock("@/hooks/useFetch", () => ({ useFetch: () => ({ data: changeFields, loading: false, error: null, refetch: vi.fn() }) }));
@@ -94,5 +95,28 @@ describe("ProfileCorrectionModal", () => {
       const element = screen.getByText((_, node) => node?.tagName === "LABEL" && node.textContent === `${label} *`);
       expect(element).toBeTruthy();
     }
+  });
+});
+
+describe("ProfileCorrectionModal: bank details", () => {
+  it("accepts only digits for an account number and capitals for an IFSC code, and explains the check", () => {
+    // The mocked field list is replaced for these cases through the shared array the mock returns.
+    changeFields.push(
+      { key: "account_number", section: "Bank details", label: "Account number", kind: "account", max_length: 18, choices: [], full_access_only: false, is_sensitive: true, current_value: "••••••••3333" },
+      { key: "ifsc_code", section: "Bank details", label: "IFSC code", kind: "ifsc", max_length: 11, choices: [], full_access_only: false, is_sensitive: true, current_value: "•••••••0001" },
+    );
+    render(<ProfileCorrectionModal onClose={vi.fn()} onSubmitted={vi.fn()} />);
+    fireEvent.change(selects()[0], { target: { value: "Bank details" } });
+    fireEvent.change(selects()[1], { target: { value: "Account number" } });
+    expect(screen.getByDisplayValue("••••••••3333")).toBeTruthy();   // the number on record is masked
+    const account = screen.getByPlaceholderText("9 to 18 digits") as HTMLInputElement;
+    fireEvent.change(account, { target: { value: "12 34-ab5678" } });
+    expect(account.value).toBe("12345678");
+    expect(screen.getByText(/passbook or a cancelled cheque/)).toBeTruthy();
+
+    fireEvent.change(selects()[1], { target: { value: "IFSC code" } });
+    const ifsc = screen.getByPlaceholderText("e.g. SBIN0001234") as HTMLInputElement;
+    fireEvent.change(ifsc, { target: { value: "sbin 0001234!" } });
+    expect(ifsc.value).toBe("SBIN0001234");
   });
 });

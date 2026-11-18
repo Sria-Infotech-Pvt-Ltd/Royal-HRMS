@@ -66,7 +66,7 @@ class LegacyProfileCorrectionTests(TestCase):
     def test_an_older_ticket_about_an_unsupported_field_cannot_be_applied(self):
         other = HRHelpRequest.objects.create(
             submitted_by=self.employee, topic='profile_correction', request_number=2,
-            message='Section: Bank details. Field to change: IFSC code. Reason: the branch merged',
+            message='Section: Family & nomination. Field to change: Dependent status. Reason: my child was born',
         )
         self.client.force_authenticate(user=self.hr)
         response = self.client.post(reverse('hr-help-decide-change', args=[other.id]), {'decision': 'approve', 'new_value': 'X'}, format='json')

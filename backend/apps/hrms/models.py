@@ -3,6 +3,8 @@ import logging
 
 from django.db import models
 
+from core.encrypted_fields import EncryptedCharField
+
 from core.storage import (
     AuthenticatedImageKitStorage,
     employee_document_submission_upload_path,
@@ -1031,7 +1033,8 @@ class HRHelpRequest(models.Model):
     # key of the profile field; empty for every other ticket. change_decision is '' until HR approves ('applied') or declines.
     change_field      = models.CharField(max_length=40, blank=True, default='')
     change_old_value  = models.TextField(blank=True, default='')
-    change_new_value  = models.TextField(blank=True, default='')
+    # Encrypted at rest: while a request waits, this can hold a bank account number. Sized for ciphertext (profile fields allow 500 characters).
+    change_new_value  = EncryptedCharField(max_length=1500, blank=True, default='')
     change_decision   = models.CharField(max_length=10, blank=True, default='')
     change_applied_at = models.DateTimeField(null=True, blank=True)
     created_at     = models.DateTimeField(auto_now_add=True)

@@ -95,7 +95,9 @@ export default function ProfileCorrectionModal({ onClose, onSubmitted }: Props) 
         <div className="field-group mb-16">
           <label className="field-label">New {spec.label.toLowerCase()}<span style={{ color: "var(--error)" }}> *</span></label>
           <ProfileChangeValueInput spec={spec} value={newValue} onChange={setNewValue} />
-          <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "4px 0 0" }}>HR reviews this before your record is updated.</p>
+          <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "4px 0 0" }}>
+            {spec.is_sensitive ? "Bank details are checked by HR against your passbook or a cancelled cheque before your record is updated." : "HR reviews this before your record is updated."}
+          </p>
         </div>
       )}
       <div className="field-group">

@@ -10,7 +10,7 @@ from core.file_validation import validate_file_content as _validate_file_content
 from core.permissions import has_perm as _has_perm
 
 from .profile_change_fields import spec_for_key, spec_for_label
-from .services_profile_change import ProfileChangeError, clean_new_value, current_value, suggested_spec
+from .services_profile_change import ProfileChangeError, clean_new_value, display_current, suggested_spec
 from .services_profile_correction import parse_profile_correction, profile_correction_problem
 from .models import (
     APPROVAL_PENDING,
@@ -1299,6 +1299,7 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
     assigned_to_name     = serializers.SerializerMethodField()
     change_label         = serializers.SerializerMethodField()
     change_needs_system_admin = serializers.SerializerMethodField()
+    change_is_sensitive  = serializers.SerializerMethodField()
     submitted_by_code    = serializers.SerializerMethodField()
     change_suggested_key = serializers.SerializerMethodField()
 
@@ -1309,7 +1310,7 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
             'message', 'status', 'status_display', 'response',
             'submitted_by_name', 'assigned_to_name', 'created_at', 'updated_at', 'resolved_at',
             'change_field', 'change_label', 'change_old_value', 'change_new_value', 'change_decision', 'change_applied_at',
-            'change_needs_system_admin', 'submitted_by_code', 'change_suggested_key',
+            'change_needs_system_admin', 'change_is_sensitive', 'submitted_by_code', 'change_suggested_key',
         ]
 
     def get_change_suggested_key(self, obj: HRHelpRequest) -> str:
@@ -1325,6 +1326,10 @@ class HRHelpRequestSerializer(serializers.ModelSerializer):
     def get_change_label(self, obj: HRHelpRequest) -> str:
         spec = spec_for_key(obj.change_field)
         return spec.label if spec else ''
+
+    def get_change_is_sensitive(self, obj: HRHelpRequest) -> bool:
+        spec = spec_for_key(obj.change_field)
+        return bool(spec and spec.is_sensitive)
 
     def get_change_needs_system_admin(self, obj: HRHelpRequest) -> bool:
         spec = spec_for_key(obj.change_field)
@@ -1377,7 +1382,7 @@ class HRHelpRequestCreateSerializer(serializers.ModelSerializer):
             new_value = clean_new_value(request.user, spec, attrs.get('change_new_value', ''))
         except ProfileChangeError as exc:
             raise serializers.ValidationError({'change_new_value': exc.message}) from None
-        return {'change_field': spec.key, 'change_old_value': current_value(request.user, spec), 'change_new_value': new_value}
+        return {'change_field': spec.key, 'change_old_value': display_current(request.user, spec), 'change_new_value': new_value}
 
 
 class HRHelpRequestRespondSerializer(serializers.ModelSerializer):

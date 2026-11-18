@@ -28,6 +28,7 @@ export interface HrHelpRequest {
   change_applied_at:  string | null;
   /** The joining date: only a System Admin may apply it. */
   change_needs_system_admin: boolean;
+  change_is_sensitive?: boolean;
   /** An older, still open profile correction without a stored value: the field it is about, so HR can type the new value. */
   change_suggested_key: string;
 }
@@ -37,10 +38,12 @@ export interface ProfileChangeField {
   key:        string;
   section:    string;
   label:      string;
-  kind:       "text" | "date" | "phone" | "pin" | "choice";
+  kind:       "text" | "date" | "phone" | "pin" | "choice" | "account" | "ifsc";
   max_length: number;
   choices:    { value: string; label: string }[];
   full_access_only: boolean;
+  /** Bank-grade data (account number, IFSC): shown masked, and HR is asked to verify it against a document first. */
+  is_sensitive?: boolean;
   /** The signed-in person's own value on record now, as they read it (empty if none); only on GET /hr-help/change-fields/. */
   current_value?: string;
 }

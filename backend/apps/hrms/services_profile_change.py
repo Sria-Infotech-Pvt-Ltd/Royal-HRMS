@@ -20,7 +20,8 @@ from core.permissions import has_perm
 
 from .models import HR_HELP_RESOLVED, HRHelpRequest
 from .profile_change_fields import (
-    KIND_CHOICE, KIND_DATE, KIND_PHONE, KIND_PIN, TARGET_PROFILE, ChangeField, spec_for_key, spec_for_label,
+    KIND_ACCOUNT, KIND_CHOICE, KIND_DATE, KIND_IFSC, KIND_PHONE, KIND_PIN, TARGET_PROFILE, ChangeField, display_value,
+    mask_sensitive, spec_for_key, spec_for_label,
 )
 from .services_profile_correction import parse_profile_correction
 
@@ -29,6 +30,8 @@ logger = logging.getLogger(__name__)
 DECISION_APPLIED = 'applied'
 DECISION_REJECTED = 'rejected'
 _PIN_RE = re.compile(r'^\d{6}$')
+_IFSC_RE = re.compile(r'^[A-Z]{4}0[A-Z0-9]{6}$')   # the same rule as the bank-details serializer
+BANK_CHANGE_PENDING_MESSAGE = 'A bank-detail change from the employee is already waiting for HR review. Decide that one first.'
 
 
 class ProfileChangeError(Exception):
@@ -51,6 +54,11 @@ def current_value(employee: User, spec: ChangeField) -> str:
     return '' if value is None else str(value)
 
 
+def display_current(employee: User, spec: ChangeField) -> str:
+    """The current value for showing (a ticket's "was"): the same as current_value, but bank numbers masked."""
+    return display_value(spec, current_value(employee, spec))
+
+
 def clean_new_value(employee: User, spec: ChangeField, raw: str) -> str:
     """The value to store, or ProfileChangeError saying what is wrong with it."""
     value = (raw or '').strip()
@@ -66,6 +74,12 @@ def clean_new_value(employee: User, spec: ChangeField, raw: str) -> str:
         raise ProfileChangeError('Enter a 6-digit PIN code.')
     elif spec.kind == KIND_CHOICE and value not in {choice for choice, _label in spec.choices}:
         raise ProfileChangeError(f'Choose a valid {spec.label.lower()}.')
+    elif spec.kind == KIND_ACCOUNT and not (value.isdigit() and 9 <= len(value) <= 18):
+        raise ProfileChangeError('Account number must be 9 to 18 digits, with no spaces or letters.')
+    elif spec.kind == KIND_IFSC:
+        value = value.upper()
+        if not _IFSC_RE.match(value):
+            raise ProfileChangeError('Enter a valid IFSC code (for example SBIN0001234): 4 letters, the digit 0, then 6 letters or digits.')
     if value == current_value(employee, spec):
         raise ProfileChangeError(f'That is already the {spec.label.lower()} on the record.')
     return value
@@ -119,14 +133,23 @@ def apply_change(ticket: HRHelpRequest, decided_by: User, note: str = '', new_va
     old_value = current_value(employee, spec)
     with transaction.atomic():
         target = _target(employee, spec)
+        _refuse_if_bank_change_pending(target, spec)
         setattr(target, spec.attr, new_value)
+        target._changed_by = decided_by
         target.save()
+        # Bank numbers never go into the audit log or onto the ticket in full: the record itself now holds the value.
         AuditLog.objects.create(
             user=decided_by, action='employee_profile_corrected', module='employees', object_id=str(employee.id),
-            changes={'employee_id': employee.employee_id, spec.key: {'from': old_value, 'to': new_value}, 'ticket': ticket.request_number},
+            changes={
+                'employee_id': employee.employee_id,
+                spec.key: {'from': display_value(spec, old_value), 'to': display_value(spec, new_value)},
+                'ticket': ticket.request_number,
+            },
             branch=employee.branch,
         )
-        _close(ticket, DECISION_APPLIED, decided_by, note.strip() or 'Approved and updated on your record.', old_value)
+        if spec.is_sensitive:
+            ticket.change_new_value = display_value(spec, new_value)
+        _close(ticket, DECISION_APPLIED, decided_by, note.strip() or 'Approved and updated on your record.', display_value(spec, old_value))
     logger.info('Profile change %s (%s) applied for employee %s by %s', ticket.request_number, spec.key, employee.pk, decided_by.pk)
     _tell_employee(ticket, f'Your {spec.label.lower()} was updated', 'HR approved your correction and updated your record.')
     return ticket
@@ -137,9 +160,16 @@ def reject_change(ticket: HRHelpRequest, decided_by: User, note: str) -> HRHelpR
     if not (note or '').strip():
         raise ProfileChangeError('Write a short reason before declining, so the employee knows why.')
     with transaction.atomic():
-        _close(ticket, DECISION_REJECTED, decided_by, note.strip(), current_value(employee, spec))
+        if spec.is_sensitive:
+            ticket.change_new_value = mask_sensitive(ticket.change_new_value)   # a declined bank number is not kept in full
+        _close(ticket, DECISION_REJECTED, decided_by, note.strip(), display_current(employee, spec))
     _tell_employee(ticket, f'Your {spec.label.lower()} correction was declined', note.strip())
     return ticket
+
+
+def _refuse_if_bank_change_pending(profile: EmployeeProfile, spec: ChangeField) -> None:
+    if spec.section == 'Bank details' and profile.bank_change_status == EmployeeProfile.BANK_CHANGE_PENDING:
+        raise ProfileChangeError(BANK_CHANGE_PENDING_MESSAGE)
 
 
 def _open_change(ticket: HRHelpRequest, decided_by: User) -> tuple[ChangeField, User]:

@@ -22,6 +22,23 @@ export default function ProfileChangeValueInput({ spec, value, onChange }: Profi
       </select>
     );
   }
+  if (spec.kind === "account") {
+    // Digits only, as typed: a bank account number never contains spaces or letters.
+    return (
+      <input
+        className="field-input" value={value} maxLength={spec.max_length} inputMode="numeric" autoComplete="off"
+        onChange={event => onChange(event.target.value.replace(/\D/g, ""))} placeholder="9 to 18 digits"
+      />
+    );
+  }
+  if (spec.kind === "ifsc") {
+    return (
+      <input
+        className="field-input" value={value} maxLength={spec.max_length} autoCapitalize="characters" autoComplete="off"
+        onChange={event => onChange(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} placeholder="e.g. SBIN0001234"
+      />
+    );
+  }
   return (
     <input
       className="field-input" value={value} maxLength={spec.max_length} onChange={event => onChange(event.target.value)}
