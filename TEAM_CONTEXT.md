@@ -6256,3 +6256,17 @@ Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend 
 - Attendance query-efficiency work (WFH request passed through the punch path, holiday cache, a face-verification index): a performance change, not a fix, and the punch path has changed too much for the patch to apply. Worth redoing separately with `tests_query_efficiency.py` as the guard.
 
 **Checks:** payroll suite 261 passed; frontend 1,291 passed, `tsc` clean. The wider recruitment + attendance + hrms run had 9 failures in files this work does not touch (`tests_leave_pending_reservation`, `tests_project_sync_queue`, `tests_late_forgiveness`, `WelcomeEmailTemplateTests`; the last is a duplicate `hrms_email_templates_name_key` in the shared kept test database). Not proven pre-existing with a clean checkout.
+
+
+## Back-dated hire tested end to end; leave balance fixed (2026-11-18)
+
+**By:** New-AI session - **Branch:** New-AI. Tested the whole Hire flow (create, autosave the full form, upload the required documents, complete) at joining dates of today, earlier this year, last year and 2 years 3 months ago (`accounts/tests_hire_back_dated.py`, 6 tests).
+
+**Carried correctly by the past date:** `date_of_joining`, the position start (`Placement`), the weekly-off assignment, the salary config `effective_from`, and onboarding status (complete).
+
+**Bug found and fixed:** `_allocate_leaves_for_employee` (`hrms/views/leave_shared.py`) created a leave balance for the JOINING year only. Someone who joined in an earlier year therefore had no balance for the current year: the yearly reset (`reset_annual_leave_balances`) ran on 1 January and the monthly accrual only touches monthly-accrual policies, so they could not apply for leave. Now a joiner from an earlier year also gets the current year at the full annual entitlement (joining year is still pro-rated as before; calling it twice changes nothing). A normal or future-dated hire is unchanged. Tests fail on the old code (2 of the 6).
+
+**Decisions still open (not done):**
+- Years between the joining year and this year get no balance (history is not rebuilt), and no carry-forward from earlier years is computed.
+- Nothing creates attendance records, leave history or payslips for the past months. Payroll for a past cycle would use the default working days (26 unless changed in Payroll settings) with no LOP. Confirm with payroll before running a past cycle for a back-dated employee.
+- `tests_lifecycle_mvp` (12 problems) and `tests_approver_route` fail identically with and without this change: they were already failing, not caused here.

@@ -229,8 +229,12 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
     elif isinstance(joining_date, str):
         joining_date = _dt.strptime(joining_date, '%Y-%m-%d').date() if joining_date else today
 
-    year             = joining_date.year
-    remaining_months = 13 - joining_date.month  # Jan→12, Jul→6, Dec→1
+    # Balance years to create: the joining year (pro-rated from the joining month) and, for someone who joined in an EARLIER
+    # year (a back-dated hire), also the current year at its full entitlement. Without the second one a back-dated employee has
+    # no balance for this year at all: the yearly reset ran on 1 January and the monthly accrual only touches monthly policies.
+    years_and_months = [(joining_date.year, 13 - joining_date.month)]  # Jan→12, Jul→6, Dec→1
+    if joining_date.year < today.year:
+        years_and_months.append((today.year, 12))
 
     from apps.accounts.services_approval import resolve_employee_department_name
     emp_dept_name = resolve_employee_department_name(employee)
@@ -261,23 +265,24 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
         if policy.grant_mode == 'on_request':
             continue   # maternity / paternity are granted per case when the employee applies, never at joining
 
-        # Round to nearest 0.5 — standard HRMS display precision
-        raw     = float(policy.annual_days) * remaining_months / 12
-        prorata = Decimal(str(round(raw * 2) / 2))
+        for year, remaining_months in years_and_months:
+            # Round to nearest 0.5 — standard HRMS display precision
+            raw     = float(policy.annual_days) * remaining_months / 12
+            prorata = Decimal(str(round(raw * 2) / 2))
 
-        _, created = LeaveBalance.objects.get_or_create(
-            employee=employee,
-            leave_type=policy.leave_type,
-            year=year,
-            defaults={'total_days': prorata, 'carried_forward': Decimal('0')},
-        )
-        if created:
-            created_count += 1
+            _, created = LeaveBalance.objects.get_or_create(
+                employee=employee,
+                leave_type=policy.leave_type,
+                year=year,
+                defaults={'total_days': prorata, 'carried_forward': Decimal('0')},
+            )
+            if created:
+                created_count += 1
 
     if created_count:
         logger.info(
-            'Auto-allocated %d leave balance(s) for %s (joining %s, year %d)',
-            created_count, employee.email, joining_date, year,
+            'Auto-allocated %d leave balance(s) for %s (joining %s, years %s)',
+            created_count, employee.email, joining_date, [year for year, _ in years_and_months],
         )
     return created_count
 
