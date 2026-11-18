@@ -287,8 +287,15 @@ class ForgotPasswordView(APIView):
             # within a company they've already correctly identified.
             return success('OTP sent to your email address. It is valid for 10 minutes.')
 
+        # A code asked for a moment ago is still on its way. Issuing another would cancel it, and the person would then type the
+        # code from the email they are looking at into a form that now expects a different one. Answer the same as a fresh send.
+        cooldown = timedelta(seconds=getattr(settings, 'OTP_RESEND_COOLDOWN_SECONDS', 60))
+        if OTPVerification.objects.filter(user=user, is_used=False, created_at__gte=timezone.now() - cooldown).exists():
+            logger.info('OTP requested again within the cooldown for %s: keeping the code already sent', user.email)
+            return success('OTP sent to your email address. It is valid for 10 minutes.')
+
         try:
-            _, plain_otp = OTPVerification.create_for_user(user)
+            otp_record, plain_otp = OTPVerification.create_for_user(user)
         except Exception as exc:
             logger.exception('Failed to create OTP for %s: %s', user.email, exc)
             return error(
@@ -299,6 +306,8 @@ class ForgotPasswordView(APIView):
         try:
             send_otp_email(user.email, plain_otp, user.full_name)
         except Exception as exc:
+            # No email went out, so this code is useless: free the cooldown so the person's next try sends a fresh one.
+            OTPVerification.objects.filter(pk=otp_record.pk).update(is_used=True)
             logger.exception('Failed to send OTP email to %s: %s', user.email, exc)
             return error(
                 'Failed to send OTP email. Please check your SMTP settings or try again later.',
@@ -349,6 +358,8 @@ class VerifyOTPView(APIView):
             return error('OTP has expired or maximum attempts exceeded. Please request a new OTP.')
 
         if not otp_obj.check_otp(otp_input):
+            if self._is_replaced_code(user, otp_input, otp_obj):
+                return error('That code was replaced when a newer one was sent. Please use the code from your most recent email.')
             return error('Invalid OTP. Please try again.')
 
         with transaction.atomic():
@@ -358,6 +369,14 @@ class VerifyOTPView(APIView):
 
         logger.info('OTP verified for %s', email)
         return success('OTP verified successfully.', data={'reset_token': str(reset_token.id)})
+
+
+    @staticmethod
+    def _is_replaced_code(user, otp_input: str, current) -> bool:
+        """True when `otp_input` is one of this person's last few codes that a newer request cancelled (a mix-up, not a guess)."""
+        since = timezone.now() - timedelta(minutes=getattr(settings, 'OTP_EXPIRY_MINUTES', 10))
+        recent = OTPVerification.objects.filter(user=user, is_used=True, created_at__gte=since).exclude(pk=current.pk).order_by('-created_at')[:3]
+        return any(older.check_otp(otp_input) for older in recent)
 
 
 class ResetPasswordView(APIView):

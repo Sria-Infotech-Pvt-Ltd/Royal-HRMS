@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 
 type ForgotStep = "email" | "otp" | "reset" | "done";
+
+// Matches the server (OTP_RESEND_COOLDOWN_SECONDS): a second request inside this window is answered without sending a new code.
+const RESEND_COOLDOWN_SECONDS = 60;
 
 function Spinner() {
   return (
@@ -64,6 +67,14 @@ export default function ForgotPasswordForm({
   const [showConf,    setShowConf]    = useState(false);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState("");
+  // Seconds before "Resend code" works again: a second request would cancel the code already on its way.
+  const [resendIn,    setResendIn]    = useState(0);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = window.setTimeout(() => setResendIn(seconds => seconds - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendIn]);
 
   async function sendForgot(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -72,6 +83,7 @@ export default function ForgotPasswordForm({
     try {
       await clientApi.post(API.auth.forgotPassword, { email: emailVal.trim() });
       setStep("otp");
+      setResendIn(RESEND_COOLDOWN_SECONDS);
     } catch (err) {
       const { message } = err as { message: string };
       setError(message || "Unable to send OTP. Please try again.");
@@ -83,6 +95,7 @@ export default function ForgotPasswordForm({
     try {
       await clientApi.post(API.auth.forgotPassword, { email: emailVal.trim() });
       setOtp("");
+      setResendIn(RESEND_COOLDOWN_SECONDS);
     } catch (err) {
       const { message } = err as { message: string };
       setError(message || "Unable to resend OTP. Please try again.");
@@ -214,12 +227,12 @@ export default function ForgotPasswordForm({
             </button>
             <button
               type="button"
-              disabled={loading}
-              style={{ display: "block", marginTop: "10px", fontSize: "13px", color: "var(--primary)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}
+              disabled={loading || resendIn > 0}
+              style={{ display: "block", marginTop: "10px", fontSize: "13px", color: resendIn > 0 ? "var(--on-variant)" : "var(--primary)", background: "none", border: "none", cursor: resendIn > 0 ? "not-allowed" : "pointer", fontFamily: "inherit", padding: 0 }}
               onClick={resendOtp}
               suppressHydrationWarning
             >
-              Resend code
+              {resendIn > 0 ? `Resend code in ${resendIn}s (use the latest email)` : "Resend code"}
             </button>
             <button
               type="button"
