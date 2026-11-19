@@ -34,9 +34,11 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
   const { showToast } = useToast();
 
   const [formDate,        setFormDate]        = useState(date ?? todayString());
-  const [punchType,       setPunchType]       = useState<CorrectionPunchType>("IN");
-  const [correctInTime,   setCorrectInTime]   = useState("09:05");
-  const [correctOutTime,  setCorrectOutTime]  = useState("18:10");
+  // No pre-selected type and no pre-filled times: a form that opened on "Clock In" with 09:05 / 18:10 filled in let people ask for the
+  // wrong punch, and an approved wrong punch (an extra IN after the day's OUT) leaves the day with no punch-out time.
+  const [punchType,       setPunchType]       = useState<CorrectionPunchType | "">("");
+  const [correctInTime,   setCorrectInTime]   = useState("");
+  const [correctOutTime,  setCorrectOutTime]  = useState("");
   const [reason,          setReason]          = useState<CorrectionReason>("biometric_error");
   const [notes,           setNotes]           = useState("");
   const [submitting,      setSubmitting]      = useState(false);
@@ -46,6 +48,7 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
 
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
+    if (!punchType) { showToast("Choose which punch was missed.", "error"); return; }
     setSubmitting(true);
 
     const body: CorrectionRequest = {
@@ -122,11 +125,13 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
             <select
               className="field-input field-select"
               value={punchType}
-              onChange={e => setPunchType(e.target.value as CorrectionPunchType)}
+              onChange={e => setPunchType(e.target.value as CorrectionPunchType | "")}
+              required
             >
-              <option value="IN">Clock In (IN)</option>
-              <option value="OUT">Clock Out (OUT)</option>
-              <option value="BOTH">Both IN &amp; OUT</option>
+              <option value="">Select what was missed…</option>
+              <option value="IN">Missed clock-in (adds a punch-in)</option>
+              <option value="OUT">Missed clock-out (adds a punch-out)</option>
+              <option value="BOTH">Both clock-in and clock-out</option>
             </select>
           </div>
         </div>
@@ -154,6 +159,7 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
                 onChange={e => setCorrectOutTime(e.target.value)}
                 required={showOut}
               />
+              {punchType === "OUT" && <small style={{ color: "var(--on-variant)" }}>Adds a punch-out at this time. Your punch-in for the day stays as it is.</small>}
             </div>
           )}
         </div>
