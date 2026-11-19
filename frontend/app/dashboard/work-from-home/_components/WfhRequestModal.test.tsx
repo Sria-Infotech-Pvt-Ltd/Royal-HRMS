@@ -28,10 +28,14 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-async function fillDates(start = "20/11/2026", end = "22/11/2026") {
+const reasonBox = () => screen.getByPlaceholderText(/Why do you need to work from home/);
+
+/** Fills the dates and (unless told not to) the reason, which every request must have. */
+async function fillDates(start = "20/11/2026", end = "22/11/2026", reason: string | null = "Internet repair") {
   const [startBox, endBox] = screen.getAllByPlaceholderText("DD-MM-YYYY");
   fireEvent.change(startBox, { target: { value: start } });
   fireEvent.change(endBox, { target: { value: end } });
+  if (reason !== null) fireEvent.change(reasonBox(), { target: { value: reason } });
   await screen.findByText("Latitude");   // the saved location has been applied
 }
 
@@ -50,8 +54,43 @@ describe("WfhRequestModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit Request" }));
     expect(await screen.findByText("Start date is required.")).toBeTruthy();
     expect(screen.getByText("End date is required.")).toBeTruthy();
+    expect(screen.getByText("Reason is required.")).toBeTruthy();
     expect(post).not.toHaveBeenCalled();
     expect(onCreated).not.toHaveBeenCalled();
+  });
+
+  it("marks the reason as required, and will not submit without one even when everything else is filled", async () => {
+    render(<WfhRequestModal onClose={vi.fn()} onCreated={vi.fn()} />);
+    await fillDates("20/11/2026", "22/11/2026", null);
+    expect(reasonBox().getAttribute("aria-required")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Submit Request" }));
+    expect(await screen.findByText("Reason is required.")).toBeTruthy();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("treats a reason of only spaces as missing", async () => {
+    render(<WfhRequestModal onClose={vi.fn()} onCreated={vi.fn()} />);
+    await fillDates("20/11/2026", "22/11/2026", "     ");
+    fireEvent.click(screen.getByRole("button", { name: "Submit Request" }));
+    expect(await screen.findByText("Reason is required.")).toBeTruthy();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("clears the reason message as soon as the person starts typing one", async () => {
+    render(<WfhRequestModal onClose={vi.fn()} onCreated={vi.fn()} />);
+    await fillDates("20/11/2026", "22/11/2026", null);
+    fireEvent.click(screen.getByRole("button", { name: "Submit Request" }));
+    await screen.findByText("Reason is required.");
+    fireEvent.change(reasonBox(), { target: { value: "Doctor visit" } });
+    expect(screen.queryByText("Reason is required.")).toBeNull();
+  });
+
+  it("sends the reason trimmed", async () => {
+    render(<WfhRequestModal onClose={vi.fn()} onCreated={vi.fn()} />);
+    await fillDates("20/11/2026", "22/11/2026", "  Plumber visiting  ");
+    fireEvent.click(screen.getByRole("button", { name: "Submit Request" }));
+    await screen.findByText("Request Submitted!");
+    expect(post.mock.calls[0][1].reason).toBe("Plumber visiting");
   });
 
   it("rejects an end date before the start date without calling the API", async () => {
@@ -73,7 +112,7 @@ describe("WfhRequestModal", () => {
     expect(await screen.findByText("Request Submitted!")).toBeTruthy();
     expect(post).toHaveBeenCalledTimes(1);
     expect(post).toHaveBeenCalledWith(API.workFromHome.requests, {
-      start_date: "2026-11-20", end_date: "2026-11-22", reason: "", location_label: "Home", latitude: 17.462542, longitude: 78.369547,
+      start_date: "2026-11-20", end_date: "2026-11-22", reason: "Internet repair", location_label: "Home", latitude: 17.462542, longitude: 78.369547,
       location_source: "gps", saved_location_id: "loc-1",
     });
     expect(onCreated).toHaveBeenCalledTimes(1);          // the host is told as soon as it is saved ...

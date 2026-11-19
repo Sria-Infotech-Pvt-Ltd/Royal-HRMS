@@ -589,6 +589,11 @@ class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
     # Optional: the employee's saved location this request was made from. When given, its location_source is copied onto the
     # request (the saved record is the authority on how that point was obtained), whatever the client sent.
     saved_location_id = serializers.UUIDField(required=False, write_only=True)
+    # The approver reads this to decide, so it is required (the stored column stays blank-able for requests made before this rule).
+    reason = serializers.CharField(
+        required=True, allow_blank=False, trim_whitespace=True,
+        error_messages={'required': 'Reason is required.', 'blank': 'Reason is required.', 'null': 'Reason is required.'},
+    )
 
     class Meta:
         model  = WorkFromHomeRequest

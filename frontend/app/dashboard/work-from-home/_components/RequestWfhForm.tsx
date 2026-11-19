@@ -199,6 +199,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
     if (!startDate) e.startDate = "Start date is required.";
     if (!endDate) e.endDate = "End date is required.";
     if (startDate && endDate && endDate < startDate) e.endDate = "End date must be on or after start date.";
+    if (!reason.trim()) e.reason = "Reason is required.";
     if (!coords) e.coords = "Select a saved location, capture your current one, or search an address before submitting — this is what your clock-in will be checked against on WFH days.";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -213,7 +214,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
       const res = await clientApi.post(API.workFromHome.requests, {
         start_date: startDate,
         end_date: endDate,
-        reason,
+        reason: reason.trim(),
         location_label: locationLabel,
         latitude: coords.latitude,
         longitude: coords.longitude,
@@ -297,9 +298,11 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
           </div>
 
           <div>
-            <Lbl text="Reason" />
-            <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
-              placeholder="Optional — add context for your approver" className={INPUT} />
+            <Lbl text="Reason" required />
+            <textarea value={reason} rows={3} aria-required="true"
+              onChange={e => { setReason(e.target.value); setErrors(prev => { const next = { ...prev }; delete next.reason; return next; }); }}
+              placeholder="Why do you need to work from home? Your approver will read this." className={errors.reason ? INPUT_ERR : INPUT} />
+            <Err msg={errors.reason} />
           </div>
 
           <div>

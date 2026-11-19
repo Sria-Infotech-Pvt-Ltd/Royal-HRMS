@@ -210,6 +210,24 @@ def _calendar_scope_filter(user) -> 'Q':
     return Q()  # employee: see all approved leaves to plan around absences
 
 
+def new_joiner_skip_reason(employee, policy, dept_name) -> str | None:
+    """Why a new joiner gets NO balance under this policy, in plain words, or None when they do. One definition, used both to
+    allocate (below) and by the diagnose_leave_balance command, so the explanation can never drift from what really happens."""
+    if policy.minimum_service_period > 0:
+        return f'needs {policy.minimum_service_period} month(s) of service first (a new joiner has none)'
+    if policy.applicable_branches and (not employee.branch or employee.branch not in policy.applicable_branches):
+        return f'only for branches {list(policy.applicable_branches)}; this employee\'s branch is "{employee.branch or ""}"'
+    if policy.applicable_departments and (not dept_name or dept_name not in policy.applicable_departments):
+        return f'only for departments {list(policy.applicable_departments)}; this employee\'s department is "{dept_name or ""}"'
+    if policy.applicable_designations and (not employee.designation or employee.designation not in policy.applicable_designations):
+        return f'only for designations {list(policy.applicable_designations)}; this employee\'s designation is "{employee.designation or ""}"'
+    if not employee_matches_policy_gender(employee, policy):
+        return 'the policy is limited to a gender that does not match this employee'
+    if policy.grant_mode == 'on_request':
+        return 'granted per case when the employee applies (maternity / paternity), never at joining'
+    return None
+
+
 def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
     """
     Auto-allocate leave balances for a new employee based on active LeavePolicy records.
@@ -242,28 +260,8 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
     created_count = 0
 
     for policy in LeavePolicy.objects.filter(is_active=True):
-        if policy.minimum_service_period > 0:
+        if new_joiner_skip_reason(employee, policy, emp_dept_name):
             continue
-
-        if policy.applicable_branches and (
-            not employee.branch or employee.branch not in policy.applicable_branches
-        ):
-            continue
-
-        if policy.applicable_departments and (
-            not emp_dept_name or emp_dept_name not in policy.applicable_departments
-        ):
-            continue
-
-        if policy.applicable_designations and (
-            not employee.designation or employee.designation not in policy.applicable_designations
-        ):
-            continue
-
-        if not employee_matches_policy_gender(employee, policy):
-            continue
-        if policy.grant_mode == 'on_request':
-            continue   # maternity / paternity are granted per case when the employee applies, never at joining
 
         for year, remaining_months in years_and_months:
             # Round to nearest 0.5 — standard HRMS display precision
