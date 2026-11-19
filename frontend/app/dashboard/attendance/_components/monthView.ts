@@ -20,6 +20,9 @@ export interface DayRecord {
   clock_out: string | null;
   total_hours: number;
   is_flagged: boolean;
+  /** Punched in after the grace time; with `late_forgiven` the full hours were worked, so the day is Present and gets a "Late login" tag. */
+  is_late?: boolean;
+  late_forgiven?: boolean;
   record_id: string | null;
 }
 

@@ -149,6 +149,9 @@ class HREmployeeMonthView(APIView):
                 'total_hours':    round(minutes / 60, 1),
                 'overtime_hours': round(ot_mins / 60, 1),
                 'is_flagged':     status in LOP_STATUSES,
+                # Arrived late but worked the full hours: stored as Present, shown with a "Late login" tag.
+                'is_late':        bool(rec and rec.is_late),
+                'late_forgiven':  bool(rec and rec.is_late and status == 'present'),
                 'record_id':      str(rec.id) if rec else None,
             })
             current += datetime.timedelta(days=1)

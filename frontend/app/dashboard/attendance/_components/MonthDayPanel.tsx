@@ -5,6 +5,7 @@
 // record) or mark attendance (a past day with no record).
 
 import { PALETTE, tint } from "./attendancePalette";
+import { LATE_LOGIN_LABEL } from "@/lib/lateLogin";
 import { dateCaption, longDate } from "./detailView";
 import { STATUS_META, canMark, daySentence, effectiveStatus, type DayRecord } from "./monthView";
 
@@ -66,6 +67,12 @@ export default function MonthDayPanel({ day, todayISO, mayMark, onViewDetail, on
           <div role="note" style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, padding: "9px 12px", borderRadius: 12, background: tint(PALETTE.late, 0.1), border: `1px solid ${tint(PALETTE.late, 0.3)}`, marginBottom: 12 }}>
             <i className="ti ti-clock-exclamation" aria-hidden="true" style={{ color: PALETTE.late, fontSize: 18 }} />
             <span><strong>Late arrival</strong>{day.clock_in ? `: clocked in at ${day.clock_in}.` : "."}</span>
+          </div>
+        )}
+        {day.late_forgiven && (
+          <div role="note" style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, padding: "9px 12px", borderRadius: 12, background: tint(PALETTE.late, 0.1), border: `1px solid ${tint(PALETTE.late, 0.3)}`, marginBottom: 12 }}>
+            <i className="ti ti-clock-exclamation" aria-hidden="true" style={{ color: PALETTE.late, fontSize: 18 }} />
+            <span><strong>{LATE_LOGIN_LABEL}</strong>{day.clock_in ? `: clocked in at ${day.clock_in}, after the grace time.` : "."} Full hours were completed, so the day counts as Present.</span>
           </div>
         )}
         {day.is_flagged && (

@@ -42,7 +42,7 @@ class CalendarWorkModeTests(SimpleTestCase):
         day = build(16, record(AttendanceRecord.STATUS_LATE, AttendanceRecord.WORK_MODE_WFH))
         self.assertEqual(day['clockIn'], '13:04')
         self.assertEqual({'date', 'status', 'color', 'clockIn', 'clockOut', 'hours', 'note', 'holiday_name', 'canRegularize',
-                          'regularization_required', 'work_mode', 'short_minutes', 'short_display'}, set(day))
+                          'regularization_required', 'work_mode', 'short_minutes', 'short_display', 'is_late', 'late_forgiven', 'late_after'}, set(day))
 
 
 class CalendarApiResponseTests(SimpleTestCase):

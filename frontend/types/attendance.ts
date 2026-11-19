@@ -54,6 +54,12 @@ export interface DayRecord {
   short_minutes?:          number;
   /** The same as text, "1h 20m"; null when there is no shortfall. */
   short_display?:          string | null;
+  /** Punched in after the grace time. */
+  is_late?:                boolean;
+  /** Late, but the full hours were worked, so the day counts as Present: shown as a "Late login" tag. */
+  late_forgiven?:          boolean;
+  /** The time after which a punch-in is late, "09:15" (shift start plus grace). */
+  late_after?:             string | null;
 }
 
 export interface CalendarResponse {

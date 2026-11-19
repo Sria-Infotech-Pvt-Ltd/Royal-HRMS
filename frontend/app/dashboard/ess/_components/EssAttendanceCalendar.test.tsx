@@ -227,4 +227,26 @@ describe("EssAttendanceCalendar legend", () => {
   it("adds no tags block to a day without tags", () => {
     expect(render(2026, 11, { "10": record("Present") })).not.toContain("ess-cal-tags");
   });
+
+  it("tags a day that was Present only because the full hours were worked, with who and when, and explains it in the legend", () => {
+    const html = render(2026, 11, {
+      "10": record("Present", { clockIn: "10:14", clockOut: "19:20", is_late: true, late_forgiven: true, late_after: "09:15" }),
+      "11": record("Present", { clockIn: "09:05", clockOut: "18:10" }),
+      "12": record("Late", { clockIn: "10:30", is_late: true }),
+    });
+    expect(html.match(/class="ess-cal-late"/g)?.length).toBeGreaterThanOrEqual(3);   // cell tag + legend + key (once each)
+    expect(html).toContain("Late login");
+    expect(html).toContain("Punched in 10:14 (after 09:15). Full hours were completed, so the day counts as Present.");
+    // The on-time Present day and the day that is simply Late get no tag.
+    const cellFor = (day: string) => html.split('role="cell"').find(cell => cell.includes(`class="ess-cal-date"`) && new RegExp(`class="ess-cal-date"[^>]*>${day}<`).test(cell)) ?? "";
+    expect(cellFor("10")).toContain("ess-cal-late");
+    expect(cellFor("11")).not.toContain("ess-cal-late");
+    expect(cellFor("12")).not.toContain("ess-cal-late");
+  });
+
+  it("shows no late-login tag or legend entry in a month with none", () => {
+    const html = render(2026, 11, { "10": record("Present", { clockIn: "09:00", clockOut: "18:00" }) });
+    expect(html).not.toContain("Arrived late, full day worked");              // the legend lists only what the month has
+    expect(html.match(/class="ess-cal-late"/g)?.length).toBe(1);               // only the always-present "What do these mean?" row
+  });
 });

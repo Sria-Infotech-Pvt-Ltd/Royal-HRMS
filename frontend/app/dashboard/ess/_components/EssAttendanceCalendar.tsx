@@ -9,6 +9,7 @@ import { useState, type SyntheticEvent } from "react";
 import { buildMonthGrid, isoDate, WEEKDAY_SHORT } from "@/lib/attendanceCalendarGrid";
 import { isWorkFromHome } from "@/lib/workMode";
 import { shortHoursText } from "@/lib/shortHours";
+import { LATE_LOGIN_LABEL, LATE_LOGIN_MEANING, isLateLogin, lateLoginText } from "@/lib/lateLogin";
 import type { DayRecord } from "@/types/attendance";
 
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -34,17 +35,19 @@ function legendClassFor(statusClass: string): string {
 }
 
 /** What the month actually contains, so the legend lists only that. */
-function usedInMonth(calendar: Record<string, DayRecord>): { classes: Set<string>; hasWfh: boolean; hasShort: boolean } {
+function usedInMonth(calendar: Record<string, DayRecord>): { classes: Set<string>; hasWfh: boolean; hasShort: boolean; hasLateLogin: boolean } {
   const classes = new Set<string>();
   let hasWfh = false;
   let hasShort = false;
+  let hasLateLogin = false;
   for (const record of Object.values(calendar)) {
     const statusClass = dayClass(record.status);
     if (statusClass !== "not-joined") classes.add(legendClassFor(statusClass));
     hasWfh = hasWfh || isWorkFromHome(record);
     hasShort = hasShort || shortHoursText(record) !== null;
+    hasLateLogin = hasLateLogin || isLateLogin(record);
   }
-  return { classes, hasWfh, hasShort };
+  return { classes, hasWfh, hasShort, hasLateLogin };
 }
 
 /** Maps the backend's display status to the colour class used by .ess-status-dot. */
@@ -85,6 +88,7 @@ function dayTitle(day: number, monthName: string, year: number, record: DayRecor
   if (isWorkFromHome(record)) parts.push("Work from home");
   const short = shortHoursText(record);
   if (short) parts.push(`Hours not completed (short by ${short})`);
+  if (isLateLogin(record)) parts.push(LATE_LOGIN_LABEL);
   if (record?.clockIn) parts.push(`In ${record.clockIn}${record.clockOut ? ` · Out ${record.clockOut}` : ""}`);
   return parts.join(" — ");
 }
@@ -105,6 +109,9 @@ function DayTip({ heading, record, position }: { heading: string; record: DayRec
       {isWorkFromHome(record) && <span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /> Work from home</span>}
       {shortHoursText(record) && (
         <span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /> Hours not completed: short by {shortHoursText(record)}</span>
+      )}
+      {lateLoginText(record) && (
+        <span className="ess-cal-late"><i className="ti ti-clock-exclamation" aria-hidden="true" /> {LATE_LOGIN_LABEL}: {lateLoginText(record)}</span>
       )}
       {hasPunch ? (
         <dl>
@@ -156,7 +163,7 @@ function DayCell({ day, year, month, record: rawRecord, isToday }: {
           <span className="ess-cal-label">{label}</span>
         </span>
       )}
-      {(isWorkFromHome(record) || shortHoursText(record)) && (
+      {(isWorkFromHome(record) || shortHoursText(record) || isLateLogin(record)) && (
         <div className="ess-cal-tags">
           {isWorkFromHome(record) && (
             <span className="ess-cal-wfh" title="Work from home">
@@ -166,6 +173,11 @@ function DayCell({ day, year, month, record: rawRecord, isToday }: {
           {shortHoursText(record) && (
             <span className="ess-cal-short" title={`Hours not completed: short by ${shortHoursText(record)}`}>
               <i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">Short {shortHoursText(record)}</span>
+            </span>
+          )}
+          {isLateLogin(record) && (
+            <span className="ess-cal-late" title={lateLoginText(record) ?? LATE_LOGIN_LABEL}>
+              <i className="ti ti-clock-exclamation" aria-hidden="true" /><span className="ess-cal-tag-text">{LATE_LOGIN_LABEL}</span>
             </span>
           )}
         </div>
@@ -212,6 +224,11 @@ export default function EssAttendanceCalendar({
             <span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">WFH</span></span>Work from home
           </span>
         )}
+        {used.hasLateLogin && (
+          <span title={LATE_LOGIN_MEANING}>
+            <span className="ess-cal-late"><i className="ti ti-clock-exclamation" aria-hidden="true" /><span className="ess-cal-tag-text">{LATE_LOGIN_LABEL}</span></span>Arrived late, full day worked
+          </span>
+        )}
         {used.hasShort && (
           <span title={SHORT_MEANING}>
             <span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">Short</span></span>Hours not completed
@@ -230,6 +247,10 @@ export default function EssAttendanceCalendar({
           <div className="ess-cal-key-row">
             <dt><span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">WFH</span></span>Work from home</dt>
             <dd>{WFH_MEANING}</dd>
+          </div>
+          <div className="ess-cal-key-row">
+            <dt><span className="ess-cal-late"><i className="ti ti-clock-exclamation" aria-hidden="true" /><span className="ess-cal-tag-text">{LATE_LOGIN_LABEL}</span></span>Arrived late</dt>
+            <dd>{LATE_LOGIN_MEANING}</dd>
           </div>
           <div className="ess-cal-key-row">
             <dt><span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">Short</span></span>Hours not completed</dt>

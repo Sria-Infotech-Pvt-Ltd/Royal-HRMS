@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PALETTE, tint } from "./attendancePalette";
+import { LATE_LOGIN_LABEL, LATE_LOGIN_MEANING } from "@/lib/lateLogin";
 import {
   STATUS_META, buildGrid, dayTiming, effectiveStatus, formatMonthLabel, hoursBarPercent, timeRangeLabel, type DayRecord,
 } from "./monthView";
@@ -98,6 +99,11 @@ function Cell({ day, month, todayISO, highlight, selectedDate, onSelect, weekend
           alignSelf: "flex-start", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: compact ? 9.5 : 10.5, fontWeight: 700, padding: compact ? "0 5px" : "1px 8px", borderRadius: 999,
           ...(status === "no_record" ? { background: "transparent", color: meta.colour, border: `1px dashed ${tint(meta.colour, 0.7)}` } : { background: meta.colour, color: "#fff", border: "1px solid transparent" }),
         }}>{compact ? meta.short : meta.label}</span>
+      )}
+      {day.late_forgiven && (
+        <span title={LATE_LOGIN_MEANING} style={{ alignSelf: "flex-start", fontSize: compact ? 9 : 10, fontWeight: 700, color: PALETTE.late, whiteSpace: "nowrap" }}>
+          <i className="ti ti-clock-exclamation" aria-hidden="true" /> {compact ? "Late" : LATE_LOGIN_LABEL}
+        </span>
       )}
       {!compact && times && <div style={{ fontSize: 10.5, color: "var(--on-variant)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{times}</div>}
       {day.total_hours > 0 && (

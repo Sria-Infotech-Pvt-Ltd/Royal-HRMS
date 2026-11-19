@@ -226,6 +226,10 @@ class DayRecordSerializer(serializers.Serializer):
     # "Hours not completed": minutes short of a full day on a Present / Late day, and the same as text ("1h 20m").
     short_minutes           = serializers.IntegerField(required=False, default=0)
     short_display           = serializers.CharField(allow_null=True, required=False)
+    # Arrived after the grace time; `late_forgiven` = the full hours were worked so the day counts as Present (shown as "Late login").
+    is_late                 = serializers.BooleanField(required=False, default=False)
+    late_forgiven           = serializers.BooleanField(required=False, default=False)
+    late_after              = serializers.CharField(allow_null=True, required=False)
 
 
 class CalendarSerializer(serializers.Serializer):

@@ -118,12 +118,15 @@
 /* "Short" tag: a finished day that stayed Present / Late but did not complete the full-day hours ("hours not completed") */
 .ess-cal-short{display:inline-flex;align-items:center;gap:3px;width:fit-content;margin-top:2px;padding:1px 6px;border-radius:5px;font-size:9px;font-weight:700;font-style:normal;letter-spacing:.02em;color:var(--warn,#a2620c);background:color-mix(in srgb,var(--warn,#a2620c) 14%,transparent)}
 .ess-cal-short .ti{font-size:10px}
+.ess-cal-late{display:inline-flex;align-items:center;gap:3px;width:fit-content;margin-top:2px;padding:1px 6px;border-radius:5px;font-size:9px;font-weight:700;font-style:normal;letter-spacing:.02em;color:var(--warn,#a2620c);background:color-mix(in srgb,var(--warn,#a2620c) 14%,transparent)}
+.ess-cal-late .ti{font-size:10px}
+.ess-calendar-legend .ess-cal-late{margin:0 4px 0 0;font-size:9px}
 /* The legend styles every span inside it (muted, 9px); restate the chips so they keep their own colours. */
 .ess-calendar-legend .ess-cal-wfh{margin:0 4px 0 0;color:var(--info,#2563eb);font-size:9px}
 .ess-calendar-legend .ess-cal-short{margin:0 4px 0 0;color:var(--warn,#a2620c);font-size:9px}
 /* Tags under a day's status: stacked tightly instead of one flex gap apart */
 .ess-cal-tags{display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin-top:-2px}
-.ess-cal-tags .ess-cal-wfh,.ess-cal-tags .ess-cal-short{margin-top:0}
+.ess-cal-tags .ess-cal-wfh,.ess-cal-tags .ess-cal-short,.ess-cal-tags .ess-cal-late{margin-top:0}
 /* "What do these mean?" key under the legend */
 .ess-cal-key{margin:0 0 10px;font-size:11px;color:var(--muted)}
 .ess-cal-key summary{cursor:pointer;width:fit-content;font-weight:600;color:var(--brand-ink)}

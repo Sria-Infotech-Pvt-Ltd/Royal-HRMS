@@ -886,13 +886,14 @@ class AttendanceDashboardService:
         pending_dates = cls._pending_correction_dates(employee, year, month)
         date_of_joining, last_working_day = cls._employment_window(employee)
         shift_end     = cls._today_shift_end()
+        late_after    = cls._late_after_text()
 
         days: dict[int, dict] = {}
         for day_num in range(1, days_in_month + 1):
             entry = cls._build_day(
                 day_num, year, month, records, leave_dates, off_dates,
                 pending_dates, today, holiday_dates, holiday_names,
-                date_of_joining, last_working_day, shift_end,
+                date_of_joining, last_working_day, shift_end, late_after,
             )
             if entry is not None:
                 days[day_num] = entry
@@ -1063,6 +1064,16 @@ class AttendanceDashboardService:
         return date_of_joining, last_working_day
 
     @staticmethod
+    def _late_after_text() -> Optional[str]:
+        """The time after which a punch-in is late ("09:15": shift start plus the grace period), or None with no settings saved."""
+        cfg = _get_settings()
+        working_hours = getattr(cfg, 'working_hours', None) if cfg else None
+        if working_hours is None:
+            return None
+        grace_end = datetime.combine(date.today(), working_hours.shift_start) + timedelta(minutes=working_hours.grace_period_minutes)
+        return grace_end.strftime('%H:%M')
+
+    @staticmethod
     def _today_shift_end() -> Optional[time]:
         """The configured shift end time, used only to decide whether
         *today* can reasonably be marked Absent yet (a day with a punch
@@ -1133,6 +1144,7 @@ class AttendanceDashboardService:
         date_of_joining: date = None,
         last_working_day: date = None,
         shift_end: time = None,
+        late_after: Optional[str] = None,
     ) -> dict | None:
         """Builds the response dict for one calendar day; returns None for blank future/post-exit days."""
         cur           = date(year, month, day_num)
@@ -1166,6 +1178,7 @@ class AttendanceDashboardService:
         holiday_name = None
         if key == AttendanceRecord.STATUS_HOLIDAY:
             holiday_name = holiday_names.get(cur) or (rec.note if rec and rec.note else 'Holiday')
+        is_late = bool(getattr(rec, 'is_late', False)) if rec else False
         return {
             'date':                    cur.strftime('%Y-%m-%d'),
             'status':                  label,
@@ -1184,6 +1197,12 @@ class AttendanceDashboardService:
             # Hours not completed on a finished day that stayed Present / Late (a Half Day already says so by its status).
             'short_minutes':           _calendar_short_minutes(key, rec),
             'short_display':           _short_display(_calendar_short_minutes(key, rec)),
+            # Arrived after the grace time. When the full hours were still worked the day counts as Present (the company's "forgive
+            # late when full hours" rule), so the status alone no longer says the person was late: `late_forgiven` lets the calendar
+            # show a "Late login" tag. Display only: the stored status, and everything that reads it (payroll late marks), is unchanged.
+            'is_late':                 is_late,
+            'late_forgiven':           is_late and key == AttendanceRecord.STATUS_PRESENT,
+            'late_after':              late_after if is_late else None,
         }
 
 

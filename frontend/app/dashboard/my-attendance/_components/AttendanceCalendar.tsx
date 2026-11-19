@@ -3,6 +3,7 @@
 import type { DayRecord } from "@/types/attendance";
 import { isWorkFromHome } from "@/lib/workMode";
 import { shortHoursText } from "@/lib/shortHours";
+import { LATE_LOGIN_LABEL, isLateLogin, lateLoginText } from "@/lib/lateLogin";
 
 interface Props {
   year:         number;
@@ -116,6 +117,12 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                   {isWorkFromHome(record) && (
                     <div title="Work from home" style={{ fontSize: 8, fontWeight: 800, color: "var(--info, #2563eb)", letterSpacing: "0.04em" }}>
                       <i className="ti ti-home" aria-hidden="true" /> WFH
+                    </div>
+                  )}
+
+                  {isLateLogin(record) && (
+                    <div title={lateLoginText(record) ?? LATE_LOGIN_LABEL} style={{ fontSize: 8, fontWeight: 800, color: "var(--warn, #b45309)" }}>
+                      <i className="ti ti-clock-exclamation" aria-hidden="true" /> {LATE_LOGIN_LABEL}
                     </div>
                   )}
 
