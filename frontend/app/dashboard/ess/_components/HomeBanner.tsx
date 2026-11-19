@@ -61,10 +61,12 @@ export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false 
 
   // The moment the employee punches out (they were in, now they are not), say so once.
   const wasClockedIn = useRef<boolean | null>(null);
+  const [isCelebrating, setIsCelebrating] = useState(false);
   useEffect(() => {
     const isIn = status?.clocked_in ?? null;
     if (wasClockedIn.current === true && isIn === false && isDayComplete(status)) {
       showToast(tr("Today completed · {time} worked", { time: formatWorked(status?.working_hours) }), "success");
+      setIsCelebrating(true);
     }
     if (isIn !== null) wasClockedIn.current = isIn;
   }, [status, showToast]);
@@ -122,11 +124,8 @@ export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false 
         </div>
         {isComplete && status ? (
           <HomeDayComplete
-            clockInTime={status.clock_in_time}
-            clockOutTime={status.clock_out_time}
-            workedHours={status.working_hours}
-            nextShift={shift?.start_time ? tr("shift starts {time}", { time: shift.start_time }) : null}
-            punchAgain={isReadOnly ? undefined : <ClockInButton variant="ess-again" onPunchSuccess={onPunchSuccess} />}
+            summary={`${status.clock_in_time} → ${status.clock_out_time} · ${formatWorked(status.working_hours)}`}
+            celebrate={isCelebrating}
           />
         ) : (
           !isReadOnly && <ClockInButton variant="ess" onPunchSuccess={onPunchSuccess} />

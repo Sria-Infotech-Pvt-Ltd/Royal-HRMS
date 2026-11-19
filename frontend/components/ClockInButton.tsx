@@ -20,8 +20,7 @@ interface Props {
   onPunchSuccess?: () => void;
   /** "ess" renders the Employee Self Service hero's single white "Punch in / Punch out" button
    *  (same punch + geofence + face-verification flow underneath). */
-  /** "ess-again" is the small link shown once the day is completed ("Punch in again"); same punch flow underneath. */
-  variant?: "default" | "ess" | "ess-again";
+  variant?: "default" | "ess";
 }
 
 export default function ClockInButton({ onPunchSuccess, variant = "default" }: Props) {
@@ -62,21 +61,6 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
     setShowFaceModal(false);
     const ok = await punch(isClockedIn ? "OUT" : "IN", MODE, pendingLocation, embedding, livenessScore, captureSessionId);
     if (ok) onPunchSuccess?.();
-  }
-
-  if (variant === "ess-again") {
-    return (
-      <>
-        <button type="button" className="ess-done-again" onClick={handlePunch} disabled={isBusy} suppressHydrationWarning>
-          {isLockedOut ? waitLabel : isPunching ? tr("Please wait…") : tr("Punched out by mistake? Punch in again")}
-        </button>
-        <FaceVerificationModal
-          isOpen={showFaceModal}
-          onCaptured={handleFaceCaptured}
-          onClose={() => setShowFaceModal(false)}
-        />
-      </>
-    );
   }
 
   if (variant === "ess") {

@@ -474,9 +474,7 @@ export const HINDI: Readonly<Record<string, string>> = {
   "Punched in after the grace time, but the full hours were worked, so the day counts as Present.": "ग्रेस समय के बाद पंच इन किया, लेकिन पूरे घंटे काम किए, इसलिए दिन उपस्थित गिना जाता है।",
   "Today completed": "आज का दिन पूरा",
   "Today completed · {time} worked": "आज का दिन पूरा · {time} काम किया",
-  "In {in} · Out {out}": "इन {in} · आउट {out}",
   "worked today": "आज काम किया",
-  "See you tomorrow": "कल मिलते हैं",
-  "shift starts {time}": "शिफ्ट {time} पर शुरू होगी",
-  "Punched out by mistake? Punch in again": "गलती से पंच आउट हो गया? फिर से पंच इन करें",
+  "The counts could not be loaded.": "गिनती लोड नहीं हो सकी।",
+  "Day Complete": "दिन पूरा",
 };

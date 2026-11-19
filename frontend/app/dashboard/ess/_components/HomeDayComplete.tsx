@@ -1,54 +1,52 @@
 "use client";
 
-// The right-hand side of the Home hero once the day is finished: a "Today completed" panel with the day's summary,
-// instead of a big Punch in button. Punching in again (back from a break, a late shift) stays one small link away.
-import type { ReactNode } from "react";
+// The right-hand side of the Home hero once the day is finished: a "Day Complete" button in the same white style as the Punch button,
+// and one quiet line with the day's times. Just after a punch-out a small sparkle plays once. There is one punch in and one
+// punch out a day, so nothing here offers another punch.
+import type { CSSProperties } from "react";
 import { tr } from "@/lib/i18n/tr";
-import { formatWorked } from "./dayComplete";
 
 interface Props {
-  clockInTime: string | null;
-  clockOutTime: string | null;
-  /** Worked time as the server sends it, "HH:MM". */
-  workedHours: string;
-  /** "Next shift starts 09:00", or null when no shift is configured. */
-  nextShift: string | null;
-  /** The small "Punch in again" control; omitted when someone else is viewing this workspace. */
-  punchAgain?: ReactNode;
+  /** "09:02 → 18:10 · 8h 52m", shown as a muted line; omitted when the times are not known. */
+  summary?: string | null;
+  /** True only right after the employee punched out in this visit: plays the sparkle once. */
+  celebrate?: boolean;
 }
 
+// Ten sparks flying out of the pill: [x, y] end offsets in px and a colour each.
+const SPARKS: { x: number; y: number; colour: string }[] = [
+  { x: -70, y: -34, colour: "#a7f3d0" }, { x: -40, y: -52, colour: "#ddd6fe" }, { x: -8, y: -58, colour: "#ffffff" },
+  { x: 30, y: -54, colour: "#a7f3d0" }, { x: 66, y: -38, colour: "#ddd6fe" }, { x: 84, y: -6, colour: "#ffffff" },
+  { x: -86, y: -4, colour: "#ddd6fe" }, { x: 52, y: 40, colour: "#a7f3d0" }, { x: -52, y: 42, colour: "#ffffff" },
+  { x: 8, y: 52, colour: "#ddd6fe" },
+];
+
 const DONE_CSS = `
-.ess-done{display:flex;flex-direction:column;align-items:flex-end;gap:8px;text-align:right}
-.ess-done-card{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);animation:essDonePop .45s cubic-bezier(.2,.9,.3,1.2)}
-.ess-done-tick{flex:none;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;font-size:20px;color:#fff;background:#16a34a;box-shadow:0 0 0 4px rgba(22,163,74,.28)}
-.ess-done-card b{display:block;font-size:15px;color:#fff}
-.ess-done-card span{display:block;margin-top:2px;font-size:11.5px;color:#ddd6fe;white-space:nowrap}
-.ess-done-total{font-size:20px!important;font-weight:800;color:#fff!important;margin-top:0!important}
-.ess-done-note{font-size:11px;color:#ddd6fe}
-.ess-done-again{border:none;background:none;padding:0;font:inherit;font-size:11px;color:#ddd6fe;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
-.ess-done-again:hover{color:#fff}
+.ess-done{display:flex;flex-direction:column;align-items:flex-end;gap:9px}
+.ess-done-stage{position:relative}
+.ess-done .ess-done-btn{cursor:default;animation:essDonePop .4s cubic-bezier(.2,.9,.3,1.2)}
+.ess-done .ess-done-btn:active{transform:none}
+.ess-done-btn i{font-size:18px;color:#16a34a;animation:essTickPop .5s cubic-bezier(.2,1.4,.4,1) .15s both}
+.ess-done-summary{font-size:11px;color:#c4b5fd;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.ess-spark{position:absolute;left:50%;top:50%;width:7px;height:7px;margin:-3px 0 0 -3px;border-radius:50%;background:var(--spark);pointer-events:none;opacity:0;animation:essSpark .95s ease-out forwards}
 @keyframes essDonePop{0%{transform:scale(.92);opacity:0}100%{transform:scale(1);opacity:1}}
-@media(prefers-reduced-motion:reduce){.ess-done-card{animation:none}}
-@media(max-width:700px){.ess-done{align-items:flex-start;text-align:left}.ess-done-card span{white-space:normal}}
+@keyframes essTickPop{0%{transform:scale(0) rotate(-40deg)}100%{transform:scale(1) rotate(0)}}
+@keyframes essSpark{0%{transform:translate(0,0) scale(.4);opacity:1}100%{transform:translate(var(--sx),var(--sy)) scale(1);opacity:0}}
+@media(prefers-reduced-motion:reduce){.ess-done .ess-done-btn,.ess-done-btn i{animation:none}.ess-spark{display:none}}
+@media(max-width:900px){.ess-done{align-items:flex-start}}
 `;
 
-export default function HomeDayComplete({ clockInTime, clockOutTime, workedHours, nextShift, punchAgain }: Props) {
+export default function HomeDayComplete({ summary, celebrate = false }: Props) {
   return (
     <div className="ess-done" role="status">
       <style>{DONE_CSS}</style>
-      <div className="ess-done-card">
-        <span className="ess-done-tick" aria-hidden="true"><i className="ti ti-check" /></span>
-        <div>
-          <b>{tr("Today completed")}</b>
-          <span>{tr("In {in} · Out {out}", { in: clockInTime ?? "—", out: clockOutTime ?? "—" })}</span>
-        </div>
-        <div style={{ paddingLeft: 6 }}>
-          <span className="ess-done-total">{formatWorked(workedHours)}</span>
-          <span>{tr("worked today")}</span>
-        </div>
+      <div className="ess-done-stage">
+        <div className="btn ess-done-btn" title={summary ?? undefined}><i className="ti ti-circle-check-filled" aria-hidden="true" /> {tr("Day Complete")}</div>
+        {celebrate && SPARKS.map((spark, index) => (
+          <span key={index} className="ess-spark" aria-hidden="true" style={{ "--spark": spark.colour, "--sx": `${spark.x}px`, "--sy": `${spark.y}px`, animationDelay: `${index * 25}ms` } as CSSProperties} />
+        ))}
       </div>
-      <div className="ess-done-note">{nextShift ? `${tr("See you tomorrow")} · ${nextShift}` : tr("See you tomorrow")}</div>
-      {punchAgain}
+      {summary && <div className="ess-done-summary">{summary}</div>}
     </div>
   );
 }
