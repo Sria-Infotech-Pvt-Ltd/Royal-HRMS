@@ -11,10 +11,13 @@
 // layout — photo + greeting/subtitle on the left, date/shift + a single plain
 // "Punch in" button on the right, no extra correction-request link.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import ClockInButton from "@/components/ClockInButton";
+import { useToast } from "@/components/ToastProvider";
+import HomeDayComplete from "./HomeDayComplete";
+import { formatWorked, isDayComplete } from "./dayComplete";
 import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
 import type { AttendanceStatus } from "@/types/employeeDashboard";
 import { getActiveLanguage, tr } from "@/lib/i18n/tr";
@@ -53,6 +56,18 @@ interface Props {
 export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false }: Props) {
   const { data: profile, refetch: refetchProfile } = useFetch<HomeProfile>(API.employees.me);
   const { data: shift } = useFetch<Shift | null>(API.attendance.myShift);
+  const { showToast } = useToast();
+  const isComplete = isDayComplete(status);
+
+  // The moment the employee punches out (they were in, now they are not), say so once.
+  const wasClockedIn = useRef<boolean | null>(null);
+  useEffect(() => {
+    const isIn = status?.clocked_in ?? null;
+    if (wasClockedIn.current === true && isIn === false && isDayComplete(status)) {
+      showToast(tr("Today completed · {time} worked", { time: formatWorked(status?.working_hours) }), "success");
+    }
+    if (isIn !== null) wasClockedIn.current = isIn;
+  }, [status, showToast]);
 
   useEffect(() => {
     function onPhotoUpdated() { refetchProfile(); }
@@ -105,7 +120,17 @@ export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false 
           <b>{now ? now.toLocaleDateString(LANGUAGE_LOCALES[getActiveLanguage()], { weekday: "long", day: "numeric", month: "long" }) : " "}</b>
           <span>{shiftLabel}</span>
         </div>
-        {!isReadOnly && <ClockInButton variant="ess" onPunchSuccess={onPunchSuccess} />}
+        {isComplete && status ? (
+          <HomeDayComplete
+            clockInTime={status.clock_in_time}
+            clockOutTime={status.clock_out_time}
+            workedHours={status.working_hours}
+            nextShift={shift?.start_time ? tr("shift starts {time}", { time: shift.start_time }) : null}
+            punchAgain={isReadOnly ? undefined : <ClockInButton variant="ess-again" onPunchSuccess={onPunchSuccess} />}
+          />
+        ) : (
+          !isReadOnly && <ClockInButton variant="ess" onPunchSuccess={onPunchSuccess} />
+        )}
       </div>
     </section>
   );

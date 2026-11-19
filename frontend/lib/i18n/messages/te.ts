@@ -472,4 +472,11 @@ export const TELUGU: Readonly<Record<string, string>> = {
   "Punched in{at}{after}. Full hours were completed, so the day counts as Present.": "పంచ్ ఇన్{at}{after}. పూర్తి గంటలు పూర్తయ్యాయి, కాబట్టి ఆ రోజు హాజరుగా లెక్కించబడుతుంది.",
   "Late login": "ఆలస్య లాగిన్",
   "Punched in after the grace time, but the full hours were worked, so the day counts as Present.": "గ్రేస్ సమయం తర్వాత పంచ్ ఇన్ చేశారు, కానీ పూర్తి గంటలు పని చేశారు, కాబట్టి ఆ రోజు హాజరుగా లెక్కించబడుతుంది.",
+  "Today completed": "ఈ రోజు పూర్తయింది",
+  "Today completed · {time} worked": "ఈ రోజు పూర్తయింది · {time} పని చేశారు",
+  "In {in} · Out {out}": "ఇన్ {in} · అవుట్ {out}",
+  "worked today": "ఈ రోజు పని చేశారు",
+  "See you tomorrow": "రేపు కలుద్దాం",
+  "shift starts {time}": "షిఫ్ట్ {time} కి మొదలవుతుంది",
+  "Punched out by mistake? Punch in again": "పొరపాటున పంచ్ అవుట్ అయ్యారా? మళ్లీ పంచ్ ఇన్ చేయండి",
 };
