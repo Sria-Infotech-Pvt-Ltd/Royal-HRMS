@@ -28,9 +28,9 @@ export default function VariablesSidebar({ active, variables, newTags, onInsert,
               <button key={v} type="button" suppressHydrationWarning
                 onClick={() => onInsert(tag)}
                 title={`Insert ${tag}`}
-                style={{ textAlign: "left", padding: "5px 9px", background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.12)", borderRadius: 4, fontSize: 11, fontFamily: "ui-monospace, monospace", color: "var(--primary)", cursor: "pointer" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "rgba(124,58,237,0.14)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "rgba(124,58,237,0.06)")}>
+                style={{ textAlign: "left", padding: "5px 9px", background: "color-mix(in srgb, var(--brand) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--brand) 12%, transparent)", borderRadius: 4, fontSize: 11, fontFamily: "ui-monospace, monospace", color: "var(--primary)", cursor: "pointer" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "color-mix(in srgb, var(--brand) 14%, transparent)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "color-mix(in srgb, var(--brand) 6%, transparent)")}>
                 {tag}
               </button>
             );

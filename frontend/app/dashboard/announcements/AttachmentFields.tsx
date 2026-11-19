@@ -123,7 +123,7 @@ export default function AttachmentFields({ draft, onChange, showLinkErrors = fal
       onDrop={onDrop}
       style={{
         marginTop: 6, borderRadius: 8, padding: isDragging ? 6 : 0,
-        outline: isDragging ? "2px dashed var(--primary)" : "none", background: isDragging ? "rgba(124,58,237,0.06)" : "transparent",
+        outline: isDragging ? "2px dashed var(--primary)" : "none", background: isDragging ? "color-mix(in srgb, var(--brand) 6%, transparent)" : "transparent",
       }}
     >
       {/* ── Toolbar ───────────────────────────────────────────── */}

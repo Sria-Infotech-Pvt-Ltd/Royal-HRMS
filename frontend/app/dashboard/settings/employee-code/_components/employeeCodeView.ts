@@ -1,3 +1,4 @@
+import { tint } from "@/lib/colour";
 // Types, rules, colours and totals for the Employee ID Ranges screen, kept apart so they can be tested alone.
 
 export interface SeriesRow {
@@ -15,7 +16,7 @@ export type NumericField = "range_start" | "range_end" | "next_sequence";
 export type RowErrors = Partial<Record<NumericField, string>>;
 export type NumberDraft = Pick<SeriesRow, NumericField>;
 
-export const BRAND = "#7C3AED";
+export const BRAND = "var(--brand)";
 export const MONO_FONT = "Menlo, Consolas, monospace";
 
 /** Checks one worker type's three numbers, in the same words as before. `text` is what was typed; `form` is its parsed numbers. */
@@ -88,8 +89,4 @@ export function sortRows(rows: SeriesRow[], key: SortKey, direction: SortDirecti
   });
 }
 
-export function tint(hex: string, alpha: number): string {
-  const value = hex.replace("#", "");
-  const [red, green, blue] = [0, 2, 4].map(start => parseInt(value.slice(start, start + 2), 16));
-  return `rgba(${red},${green},${blue},${alpha})`;
-}
+export { tint };

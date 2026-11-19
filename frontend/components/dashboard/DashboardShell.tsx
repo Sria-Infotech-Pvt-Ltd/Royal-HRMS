@@ -12,7 +12,7 @@ import {
 } from "@/lib/navConfig";
 import { NotificationBell } from "@/components/NotificationBell";
 import GlobalSearch from "@/components/dashboard/GlobalSearch";
-import DarkModeToggle from "@/components/dashboard/DarkModeToggle";
+import ThemePicker from "@/components/dashboard/ThemePicker";
 import DashboardFooter from "@/components/dashboard/DashboardFooter";
 import { useFetch } from "@/hooks/useFetch";
 import TopNavLinks from "@/components/dashboard/TopNavLinks";
@@ -137,7 +137,7 @@ export default function DashboardShell({
           {!isEssPage && (
             <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
           )}
-          <DarkModeToggle />
+          <ThemePicker />
           <NotificationBell />
           <ProfileMenu
             name={session.name}

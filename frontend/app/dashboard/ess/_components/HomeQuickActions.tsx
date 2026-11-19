@@ -10,7 +10,7 @@ interface Props {
 // Reference spec: one 3-column grid (column-gap 8px, row-gap 14px), every
 // tile at least 90px tall, "light border, 8px radius, 10px/8px padding...
 // hover = violet border + light violet bg... 26px rounded-square icon chip
-// (bg #F3EEFE, violet icon)". No divider between the two source lists
+// (bg var(--brand-tint), violet icon)". No divider between the two source lists
 // (primary/secondary) — the reference treats all 9 as one sequential grid.
 // Colors use the app's theme tokens (color-mix against --primary) rather
 // than the spec's literal hex so this still works in dark mode too.

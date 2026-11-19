@@ -91,7 +91,7 @@ export default function HrAttendanceCard() {
                 </div>
                 <span style={{
                   fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap",
-                  background: "rgba(124,58,237,0.10)", color: "var(--primary)",
+                  background: "color-mix(in srgb, var(--brand) 10%, transparent)", color: "var(--primary)",
                 }}>
                   {modeLabel(punch.attendance_mode)}
                 </span>

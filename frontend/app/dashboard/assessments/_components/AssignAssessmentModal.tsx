@@ -108,7 +108,7 @@ export default function AssignAssessmentModal({
                     display: "flex", alignItems: "center", gap: 10,
                     padding: "9px 12px", cursor: "pointer",
                     borderTop: idx === 0 ? "none" : "1px solid var(--outline-v)",
-                    background: checked ? "var(--primary-c, rgba(124,58,237,0.07))" : "transparent",
+                    background: checked ? "var(--primary-c, color-mix(in srgb, var(--brand) 7%, transparent))" : "transparent",
                   }}
                 >
                   <input

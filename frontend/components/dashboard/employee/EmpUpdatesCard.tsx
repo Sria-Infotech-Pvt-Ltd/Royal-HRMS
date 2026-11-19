@@ -49,7 +49,7 @@ export default function EmpUpdatesCard() {
             // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed storage address, not a static asset
             <img src={announcement.image_url} alt="" style={{ width: 44, height: 44, borderRadius: 8, flexShrink: 0, objectFit: "cover" }} />
           ) : (
-            <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: "rgba(124,58,237,0.12)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: "color-mix(in srgb, var(--brand) 12%, transparent)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
               <i className={announcement.is_pinned ? "ti ti-pin" : "ti ti-speakerphone"} />
             </div>
           )}
@@ -65,7 +65,7 @@ export default function EmpUpdatesCard() {
                 </span>
               )}
               {announcement.category && announcement.category !== "general" && (
-                <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 10, background: "rgba(124,58,237,0.12)", color: "var(--primary)" }}>
+                <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 10, background: "color-mix(in srgb, var(--brand) 12%, transparent)", color: "var(--primary)" }}>
                   {categoryLabel(announcement.category)}
                 </span>
               )}

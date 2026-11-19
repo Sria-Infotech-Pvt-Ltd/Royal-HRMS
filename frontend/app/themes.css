@@ -1,0 +1,21 @@
+/*
+  Themes. Two independent choices, both stored on <html>:
+    data-theme   = "light" | "dark"        (absent = follow the device setting)
+    data-accent  = "royal" | "ocean" | "forest" | "sunset"   (absent / royal = the original purple)
+  An accent only re-points the brand colour family, in both colour systems the app uses (aira-theme.css: --brand*, globals.css:
+  --primary*, --secondary, --sec-c). Status colours (present / late / absent ...) are deliberately NOT themed: they carry meaning.
+  Every accent colour used behind white text is at least 4.5:1 against white in light mode, and its dark-mode pair is light enough
+  to read on the dark surfaces. Keep this file last in the import order so it wins over the base palettes.
+*/
+/* ---- ocean ---- */
+:root[data-accent="ocean"]{--brand:#0369a1;--brand-2:#075985;--brand-tint:#e6f3fb;--brand-ink:#075985;--primary:#0369a1;--primary-c:#075985;--secondary:#075985;--sec-c:#e6f3fb;--chart-1:#0369a1;--purple:#0369a1;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"])[data-accent="ocean"]{--brand:#7dd3fc;--brand-2:#bae6fd;--brand-tint:#0f2a3a;--brand-ink:#bae6fd;--primary:#7dd3fc;--primary-c:#bae6fd;--secondary:#bae6fd;--sec-c:#0f2a3a;--chart-1:#7dd3fc;--purple:#7dd3fc;}}
+:root[data-theme="dark"][data-accent="ocean"]{--brand:#7dd3fc;--brand-2:#bae6fd;--brand-tint:#0f2a3a;--brand-ink:#bae6fd;--primary:#7dd3fc;--primary-c:#bae6fd;--secondary:#bae6fd;--sec-c:#0f2a3a;--chart-1:#7dd3fc;--purple:#7dd3fc;}
+/* ---- forest ---- */
+:root[data-accent="forest"]{--brand:#15803d;--brand-2:#166534;--brand-tint:#e8f6ec;--brand-ink:#166534;--primary:#15803d;--primary-c:#166534;--secondary:#166534;--sec-c:#e8f6ec;--chart-1:#15803d;--purple:#15803d;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"])[data-accent="forest"]{--brand:#86efac;--brand-2:#bbf7d0;--brand-tint:#12301f;--brand-ink:#bbf7d0;--primary:#86efac;--primary-c:#bbf7d0;--secondary:#bbf7d0;--sec-c:#12301f;--chart-1:#86efac;--purple:#86efac;}}
+:root[data-theme="dark"][data-accent="forest"]{--brand:#86efac;--brand-2:#bbf7d0;--brand-tint:#12301f;--brand-ink:#bbf7d0;--primary:#86efac;--primary-c:#bbf7d0;--secondary:#bbf7d0;--sec-c:#12301f;--chart-1:#86efac;--purple:#86efac;}
+/* ---- sunset ---- */
+:root[data-accent="sunset"]{--brand:#c2410c;--brand-2:#9a3412;--brand-tint:#fdeee6;--brand-ink:#9a3412;--primary:#c2410c;--primary-c:#9a3412;--secondary:#9a3412;--sec-c:#fdeee6;--chart-1:#c2410c;--purple:#c2410c;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"])[data-accent="sunset"]{--brand:#fdba74;--brand-2:#fed7aa;--brand-tint:#3a2010;--brand-ink:#fed7aa;--primary:#fdba74;--primary-c:#fed7aa;--secondary:#fed7aa;--sec-c:#3a2010;--chart-1:#fdba74;--purple:#fdba74;}}
+:root[data-theme="dark"][data-accent="sunset"]{--brand:#fdba74;--brand-2:#fed7aa;--brand-tint:#3a2010;--brand-ink:#fed7aa;--primary:#fdba74;--primary-c:#fed7aa;--secondary:#fed7aa;--sec-c:#3a2010;--chart-1:#fdba74;--purple:#fdba74;}

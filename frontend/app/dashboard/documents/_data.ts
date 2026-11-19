@@ -100,7 +100,7 @@ export function getFileTypeMeta(fileType: string): FileTypeMeta {
 // ─── Category metadata ────────────────────────────────────────────────────────
 
 export const CATEGORY_META: Record<DocCategory, { label: string; color: string; bg: string; icon: string }> = {
-  policy:   { label: "Policy",   color: "var(--primary)", bg: "rgba(124,58,237,0.10)",  icon: "ti-shield-check"    },
+  policy:   { label: "Policy",   color: "var(--primary)", bg: "color-mix(in srgb, var(--brand) 10%, transparent)",  icon: "ti-shield-check"    },
   form:     { label: "Form",     color: "var(--info)",    bg: "rgba(37,99,235,0.10)", icon: "ti-file-description" },
   template: { label: "Template", color: "var(--success)", bg: "rgba(23,144,90,0.10)", icon: "ti-table"            },
   other:    { label: "Other",    color: "var(--outline)", bg: "var(--bg-low)",          icon: "ti-file"             },

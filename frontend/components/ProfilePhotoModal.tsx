@@ -159,7 +159,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
           {mode === "choose" && (
             <>
               <FaceStatusPanel
-                icon="ti-user-circle" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)"
+                icon="ti-user-circle" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)"
                 title="Add a profile photo"
                 message="JPG, JPEG, or PNG — resized automatically to fit. Choose one photo, or capture a new one with your camera."
                 action={{ label: "Capture Photo", onClick: handleChooseCamera }}
@@ -184,7 +184,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
 
           {mode === "camera" && cameraPhase === "requesting_camera" && (
             <FaceStatusPanel
-              icon="ti-camera" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
+              icon="ti-camera" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
               title="Requesting camera access" message="Please allow camera access in the browser prompt."
             />
           )}
@@ -255,7 +255,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
             <FaceStatusPanel
               icon={validationError ? "ti-alert-circle" : "ti-photo"}
               iconColor={validationError ? "var(--error)" : "var(--primary)"}
-              iconBg={validationError ? "rgba(239,68,68,0.08)" : "rgba(124,58,237,0.08)"}
+              iconBg={validationError ? "rgba(239,68,68,0.08)" : "color-mix(in srgb, var(--brand) 8%, transparent)"}
               title={validationError ? "That photo won't work" : "No photo selected"}
               message={validationError ?? "Choose a JPG or PNG from your device to continue."}
               action={{ label: "Choose Another", onClick: handleChooseDevice }}

@@ -77,7 +77,7 @@ export default function ReferralTable({
                   </td>
                   <td>
                     {c.referral_by_name
-                      ? <span style={{ fontSize: 12, color: "#7c3aed", display: "flex", alignItems: "center", gap: 4 }}>
+                      ? <span style={{ fontSize: 12, color: "var(--brand)", display: "flex", alignItems: "center", gap: 4 }}>
                           <i className="ti ti-user-plus" style={{ fontSize: 11 }} />{c.referral_by_name}
                         </span>
                       : <span className="text-xs text-[var(--on-variant)]">—</span>}

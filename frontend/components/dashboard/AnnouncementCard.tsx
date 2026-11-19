@@ -56,7 +56,7 @@ export default function AnnouncementCard() {
             <span style={{
               display: "inline-block", fontSize: 10, fontWeight: 700,
               padding: "2px 8px", borderRadius: 4, marginBottom: 8,
-              background: "rgba(124,58,237,0.10)", color: "var(--primary)",
+              background: "color-mix(in srgb, var(--brand) 10%, transparent)", color: "var(--primary)",
               letterSpacing: "0.05em", textTransform: "uppercase",
             }}>
               {categoryLabel(announcement.category)}

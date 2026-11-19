@@ -144,12 +144,12 @@ export default function OrgDetail({
     return (
       <div key={unit.id}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 13, marginBottom: 6 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 11, flexShrink: 0, background: "rgba(124,58,237,0.1)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 750 }}>O</div>
+          <div style={{ width: 44, height: 44, borderRadius: 11, flexShrink: 0, background: "color-mix(in srgb, var(--brand) 10%, transparent)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 750 }}>O</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 18, fontWeight: 680 }}>{unit.name}</div>
             <div style={{ fontSize: 11, fontWeight: 650, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)", marginTop: 3, display: "flex", alignItems: "center", gap: 8 }}>
               Org unit
-              {unit.code && <span style={{ fontFamily: "monospace", color: "var(--primary)", background: "rgba(124,58,237,0.08)", borderRadius: 5, padding: "1px 6px", fontSize: 11 }}>{unit.code}</span>}
+              {unit.code && <span style={{ fontFamily: "monospace", color: "var(--primary)", background: "color-mix(in srgb, var(--brand) 8%, transparent)", borderRadius: 5, padding: "1px 6px", fontSize: 11 }}>{unit.code}</span>}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
@@ -231,7 +231,7 @@ export default function OrgDetail({
 
         <SectionTitle>
           Positions in this unit
-          {canEdit && <button className="linkbtn" onClick={() => onAddPosition(unit.id)} style={{ background: "var(--primary-c, rgba(124,58,237,0.1))", color: "var(--primary)", border: "1px solid rgba(124,58,237,0.2)", borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-plus" style={{ fontSize: 11 }} /> Add position</button>}
+          {canEdit && <button className="linkbtn" onClick={() => onAddPosition(unit.id)} style={{ background: "var(--primary-c, color-mix(in srgb, var(--brand) 10%, transparent))", color: "var(--primary)", border: "1px solid color-mix(in srgb, var(--brand) 20%, transparent)", borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-plus" style={{ fontSize: 11 }} /> Add position</button>}
         </SectionTitle>
         {poss.length === 0 && <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "6px 0" }}>No positions yet in this unit.</div>}
         {poss.map(p => <PositionRow key={p.id} p={p} onSelect={() => onSelect({ type: "position", id: p.id })} onAssign={() => onAssign(p.id)} />)}

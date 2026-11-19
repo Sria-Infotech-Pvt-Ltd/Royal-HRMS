@@ -4,15 +4,30 @@
 
 import type { StatCards } from "@/types/attendance";
 import { PALETTE } from "./attendancePalette";
+import { describeStatsFailure } from "./statsFailure";
 
 interface Props {
   cards: StatCards | undefined;
   onJump: (status: string) => void;
+  /** Set when the request for the numbers failed: the HTTP status (null = no answer). Shows the reason and a Try again button. */
+  failure?: { status: number | null; onRetry: () => void } | null;
 }
 
 interface Item { status: string; label: string; value: number | undefined; sub: string; colour: string }
 
-export default function AttendanceSummaryStrip({ cards, onJump }: Props) {
+export default function AttendanceSummaryStrip({ cards, onJump, failure }: Props) {
+  if (failure && !cards) {
+    return (
+      <div className="card" role="alert" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "14px 20px", marginBottom: 20 }}>
+        <i className="ti ti-alert-triangle" aria-hidden="true" style={{ color: PALETTE.late, fontSize: 20 }} />
+        <span style={{ flex: 1, minWidth: 220 }}>
+          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>Could not load today&apos;s numbers</span>
+          <span style={{ display: "block", fontSize: 12, color: "var(--on-variant)" }}>{describeStatsFailure(failure.status)}</span>
+        </span>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={failure.onRetry}>Try again</button>
+      </div>
+    );
+  }
   const total = cards?.total_employees ?? 0;
   const items: Item[] = [
     { status: "present", label: "Present", value: cards?.present_today, sub: `of ${total} employees, incl. late`, colour: PALETTE.present },

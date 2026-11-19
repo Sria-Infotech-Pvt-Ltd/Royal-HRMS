@@ -7,7 +7,7 @@ import { summarise, tint, type LeavePolicy } from "./leaveTypeView";
 export default function LeaveTypeStats({ list, loading }: { list: LeavePolicy[]; loading: boolean }) {
   const totals = summarise(list);
   const cards = [
-    { icon: "ti-beach", colour: "#7C3AED", label: "Total Types", value: totals.total, sub: "Configured" },
+    { icon: "ti-beach", colour: "var(--brand)", label: "Total Types", value: totals.total, sub: "Configured" },
     { icon: "ti-circle-check", colour: "#16A34A", label: "Active", value: totals.active, sub: totals.total - totals.active > 0 ? `${totals.total - totals.active} inactive` : "All in use" },
     { icon: "ti-repeat", colour: "#EA580C", label: "Carry Forward", value: totals.carryForward, sub: "Can roll over" },
     { icon: "ti-calendar-stats", colour: "#2563EB", label: "Days a Year", value: totals.annualDays, sub: "Across active types" },

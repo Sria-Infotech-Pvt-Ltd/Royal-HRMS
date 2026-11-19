@@ -93,7 +93,7 @@ export default function IdentityHeader({ form, onChange }: Props) {
             <button
               type="button"
               onClick={() => { displayNameTouchedRef.current = false; onChange("display_name", [form.salutation, me?.full_name].filter(Boolean).join(" ")); }}
-              className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}
+              className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "var(--brand)", color: "#ffffff", border: "none" }}
             >+ Suggest</button>
           </div>
           <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Shown across the app and in approvals.</p>

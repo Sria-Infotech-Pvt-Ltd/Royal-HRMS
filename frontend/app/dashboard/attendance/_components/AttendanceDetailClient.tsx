@@ -70,7 +70,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
   const dashboardUrl = user
     ? `${API.attendance.dashboard}${effectiveBranch ? `?branch=${encodeURIComponent(effectiveBranch)}` : ""}`
     : null;
-  const { data: dashboard, refetch: refetchDashboard } = useFetch<DashboardData>(dashboardUrl);
+  const { data: dashboard, error: dashboardError, status: dashboardStatus, refetch: refetchDashboard } = useFetch<DashboardData>(dashboardUrl);
 
   // Pending counts come from the caller's own review queue (the dashboard stats are cached per branch, not per user).
   const pendingUrl = user ? `${API.attendance.corrections}?status=pending&page_size=1` : null;
@@ -126,7 +126,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
       )}
 
       {/* Today at a glance: one slim strip; each number jumps to the matching rows */}
-      <AttendanceSummaryStrip cards={cards} onJump={jumpToStatus} />
+      <AttendanceSummaryStrip cards={cards} onJump={jumpToStatus} failure={dashboardError ? { status: dashboardStatus, onRetry: refetchDashboard } : null} />
 
       {/* Tab bar */}
       <AttendancePageTabs

@@ -192,7 +192,7 @@ export default function EmailLogsPage() {
 
         <div className="el-chips" role="group" aria-label="Delivery status">
           {([
-            { key: "", label: "All emails", icon: "ti-mail", accent: "#7c3aed" },
+            { key: "", label: "All emails", icon: "ti-mail", accent: "var(--brand)" },
             { key: "sent", label: "Sent", icon: "ti-mail-check", accent: "#16a34a" },
             { key: "failed", label: "Failed", icon: "ti-mail-exclamation", accent: "#dc2626" },
           ] as const).map(chip => (
@@ -206,7 +206,7 @@ export default function EmailLogsPage() {
           ))}
           {pageData && (
             <div className="el-strip">
-              <span className="el-stat" style={{ "--el-stat": "#7c3aed" } as React.CSSProperties}><i className="ti ti-mails" /> Total <b>{pageData.count}</b></span>
+              <span className="el-stat" style={{ "--el-stat": "var(--brand)" } as React.CSSProperties}><i className="ti ti-mails" /> Total <b>{pageData.count}</b></span>
               <span className={`el-stat${failedOnPage > 0 ? " is-urgent" : ""}`} style={{ "--el-stat": "#dc2626" } as React.CSSProperties}><i className="ti ti-alert-triangle" /> Failed on this page <b>{failedOnPage}</b></span>
             </div>
           )}

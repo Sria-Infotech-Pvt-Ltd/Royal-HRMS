@@ -1292,8 +1292,8 @@ const CARD_STYLE: React.CSSProperties = {
   background: "var(--surface)",
   borderRadius: 16,
   padding: "2rem",
-  boxShadow: "0 4px 24px rgba(124,58,237,0.08), 0 1px 4px rgba(0,0,0,0.04)",
-  border: "1px solid rgba(124,58,237,0.08)",
+  boxShadow: "0 4px 24px color-mix(in srgb, var(--brand) 8%, transparent), 0 1px 4px rgba(0,0,0,0.04)",
+  border: "1px solid color-mix(in srgb, var(--brand) 8%, transparent)",
 };
 
 // The wizard screen itself (not the "submitted" screen above, which keeps

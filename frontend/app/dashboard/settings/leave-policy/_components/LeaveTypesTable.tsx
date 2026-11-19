@@ -35,8 +35,8 @@ export default function LeaveTypesTable({ list, loading, error, rowError, busyTy
     <section aria-label="Leave types" className="card" style={{ padding: 0, overflow: "hidden" }}>
       <header style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderBottom: "1px solid var(--outline-v)" }}>
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "var(--on-bg)", display: "flex", alignItems: "center", gap: 8, flex: "1 1 160px" }}>
-          <i className="ti ti-beach" aria-hidden="true" style={{ color: "#7C3AED" }} /> Leave Types
-          {!loading && <span style={{ fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, background: tint("#7C3AED", 0.12), color: "#7C3AED" }}>{list.length}</span>}
+          <i className="ti ti-beach" aria-hidden="true" style={{ color: "var(--brand)" }} /> Leave Types
+          {!loading && <span style={{ fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, background: tint("var(--brand)", 0.12), color: "var(--brand)" }}>{list.length}</span>}
         </h3>
         <div style={{ position: "relative", flex: "0 1 260px" }}>
           <i className="ti ti-search" aria-hidden="true" style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--on-variant)" }} />
@@ -50,7 +50,7 @@ export default function LeaveTypesTable({ list, loading, error, rowError, busyTy
           const selected = status === option;
           return (
             <button key={option} type="button" aria-pressed={selected} onClick={() => setStatus(option)}
-              style={{ padding: "5px 13px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer", textTransform: "capitalize", border: `1.5px solid ${selected ? "#7C3AED" : "var(--outline-v)"}`, background: selected ? tint("#7C3AED", 0.12) : "var(--surface)", color: selected ? "#7C3AED" : "var(--on-variant)" }}>{option}</button>
+              style={{ padding: "5px 13px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer", textTransform: "capitalize", border: `1.5px solid ${selected ? "var(--brand)" : "var(--outline-v)"}`, background: selected ? tint("var(--brand)", 0.12) : "var(--surface)", color: selected ? "var(--brand)" : "var(--on-variant)" }}>{option}</button>
           );
         })}
       </div>
@@ -109,7 +109,7 @@ export default function LeaveTypesTable({ list, loading, error, rowError, busyTy
                     <td style={{ fontSize: 12.5, color: "var(--on-variant)", maxWidth: 280 }}>{policy.policy_note || <span style={{ color: "var(--outline)" }}>—</span>}</td>
                     <td style={{ textAlign: "center" }}>
                       <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                        <button className="btn btn-ghost" style={{ ...ICON_BUTTON, color: "#7C3AED" }} onClick={() => onEdit(policy)} title="Edit" aria-label={`Edit ${policy.leave_type_display}`}><i className="ti ti-edit" style={{ fontSize: 15 }} /></button>
+                        <button className="btn btn-ghost" style={{ ...ICON_BUTTON, color: "var(--brand)" }} onClick={() => onEdit(policy)} title="Edit" aria-label={`Edit ${policy.leave_type_display}`}><i className="ti ti-edit" style={{ fontSize: 15 }} /></button>
                         <button className="btn btn-ghost" style={{ ...ICON_BUTTON, color: builtIn ? "var(--outline)" : "#DC2626", cursor: builtIn ? "not-allowed" : "pointer" }} onClick={() => onDelete(policy)} disabled={busy || builtIn}
                           title={builtIn ? "Built-in leave types cannot be deleted" : "Delete"} aria-label={`Delete ${policy.leave_type_display}`}><i className="ti ti-trash" style={{ fontSize: 15 }} /></button>
                       </div>

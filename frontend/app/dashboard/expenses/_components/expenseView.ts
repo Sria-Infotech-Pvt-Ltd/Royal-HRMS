@@ -1,9 +1,10 @@
+import { tint } from "@/lib/colour";
 // Colours, icons and small helpers for the Expenses page, kept apart from the screens so they can be tested alone.
 
 export type ExpenseStatusKey = "pending" | "approved" | "rejected";
 
 export const EXPENSE_COLOUR = {
-  brand: "#7C3AED",
+  brand: "var(--brand)",
   pending: "#EA580C",
   approved: "#16A34A",
   rejected: "#DC2626",
@@ -13,18 +14,14 @@ export const EXPENSE_COLOUR = {
 export const CATEGORY_STYLE: Record<string, { icon: string; colour: string }> = {
   travel:    { icon: "ti-plane",        colour: "#2563EB" },
   meals:     { icon: "ti-tools-kitchen-2", colour: "#EA580C" },
-  equipment: { icon: "ti-device-laptop", colour: "#7C3AED" },
+  equipment: { icon: "ti-device-laptop", colour: "var(--brand)" },
   other:     { icon: "ti-receipt",      colour: "#64748B" },
 };
 
 export const categoryStyle = (category: string) => CATEGORY_STYLE[category] ?? CATEGORY_STYLE.other;
 
 /** "rgba" tint of a #RRGGBB colour. */
-export function tint(hex: string, alpha: number): string {
-  const value = hex.replace("#", "");
-  const [red, green, blue] = [0, 2, 4].map(start => parseInt(value.slice(start, start + 2), 16));
-  return `rgba(${red},${green},${blue},${alpha})`;
-}
+export { tint };
 
 /** Short money for the stat cards: 1,50,000 -> "₹1.5L", 2,500 -> "₹2.5K". */
 export function formatShortAmount(amount: number | string): string {

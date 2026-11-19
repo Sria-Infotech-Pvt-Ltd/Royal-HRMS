@@ -93,7 +93,7 @@ export default function CandidateTable({
                         <strong>{c.name}</strong>
                         <span>{c.email}</span>
                         {c.referral_by !== null && (
-                          <div style={{ fontSize: 11, color: "#7c3aed", display: "flex", alignItems: "center", gap: 3, marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: "var(--brand)", display: "flex", alignItems: "center", gap: 3, marginTop: 2 }}>
                             <i className="ti ti-user-plus" style={{ fontSize: 10 }} />
                             Referred by {c.referral_by_name || "Employee"}
                           </div>

@@ -70,6 +70,7 @@ export const API = {
     bulkAssignManager: "/employees/bulk-assign-manager/",
     me: "/employees/me/",
     myPhoto: "/employees/me/photo/",
+    myTheme: "/employees/me/theme/",
     myEmploymentLetterPdf: "/employees/me/employment-letter/",
     detail: (id: string) => `/employees/${id}/`,
     promotions: (id: string) => `/employees/${id}/promotions/`,

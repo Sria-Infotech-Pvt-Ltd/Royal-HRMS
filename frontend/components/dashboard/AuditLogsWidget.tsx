@@ -14,7 +14,7 @@ const ACTION_CHIP: Record<string, { bg: string; color: string }> = {
   DELETE:  { bg: "rgba(194,58,47,0.12)",   color: "var(--error)"   },
   LOGIN:   { bg: "rgba(37,99,235,0.12)",  color: "var(--info)"    },
   LOGOUT:  { bg: "rgba(37,99,235,0.08)",  color: "var(--info)"    },
-  EXPORT:  { bg: "rgba(124,58,237,0.12)",   color: "var(--primary)" },
+  EXPORT:  { bg: "color-mix(in srgb, var(--brand) 12%, transparent)",   color: "var(--primary)" },
   APPROVE: { bg: "rgba(23,144,90,0.12)",  color: "var(--success)" },
   REJECT:  { bg: "rgba(194,58,47,0.12)",   color: "var(--error)"   },
 };

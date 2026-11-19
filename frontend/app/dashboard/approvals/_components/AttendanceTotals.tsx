@@ -9,7 +9,7 @@ export default function AttendanceTotals({ employees }: { employees: EmployeeRow
   const lopDays = sum(row => row.lop_days);
   const absentDays = sum(row => row.absent_days);
   const tiles = [
-    { label: "Employees",   value: employees.length,                          icon: "ti-users",         accent: "#7c3aed" },
+    { label: "Employees",   value: employees.length,                          icon: "ti-users",         accent: "var(--brand)" },
     { label: "Present days", value: sum(row => row.present_days),             icon: "ti-circle-check",  accent: "#16a34a" },
     { label: "Late",         value: sum(row => row.late_days),                icon: "ti-clock-exclamation", accent: "#d97706" },
     { label: "Absent",       value: absentDays,                               icon: "ti-user-off",      accent: "#dc2626", isAlert: absentDays > 0 },

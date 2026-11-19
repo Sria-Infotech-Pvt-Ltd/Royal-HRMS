@@ -35,7 +35,7 @@ export const CHART_CSS = `
   .oc-vacant { border-top-color:var(--warn); }
   .oc-filled { border-top-color:var(--primary); }
   .oc-box:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
-  .oc-box-sel { border-color:var(--primary); box-shadow:0 0 0 3px rgba(124,58,237,.18); }
+  .oc-box-sel { border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent); }
   .oc-box-hit { border-color:#eab308; box-shadow:0 0 0 3px rgba(234,179,8,.3); }
   .oc-dim { opacity:.38; }
   .oc-name { font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

@@ -535,9 +535,9 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                                     setCatOpen(false);
                                     setErrors(p => ({ ...p, template_type: undefined }));
                                   }}
-                                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", background: isSelected ? "rgba(124,58,237,0.07)" : "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--on-bg)", textAlign: "left" }}
+                                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", background: isSelected ? "color-mix(in srgb, var(--brand) 7%, transparent)" : "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--on-bg)", textAlign: "left" }}
                                   onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--bg-low)"; }}
-                                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? "rgba(124,58,237,0.07)" : "none"; }}>
+                                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? "color-mix(in srgb, var(--brand) 7%, transparent)" : "none"; }}>
                                   <i className="ti ti-check" style={{ fontSize: 12, color: "var(--primary)", visibility: isSelected ? "visible" : "hidden", flexShrink: 0 }} />
                                   {cat.name}
                                 </button>
@@ -553,7 +553,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                                 onClick={handleCreateCategory}
                                 disabled={catCreating}
                                 style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", padding: "8px 12px", background: "none", border: "none", cursor: catCreating ? "default" : "pointer", fontSize: 13, color: "var(--primary)", textAlign: "left", opacity: catCreating ? 0.65 : 1 }}
-                                onMouseEnter={e => { if (!catCreating) e.currentTarget.style.background = "rgba(124,58,237,0.06)"; }}
+                                onMouseEnter={e => { if (!catCreating) e.currentTarget.style.background = "color-mix(in srgb, var(--brand) 6%, transparent)"; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
                                 {catCreating
                                   ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} /> Creating…</>
@@ -718,7 +718,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
           style={{
             flexShrink: 0,
             borderTop: `1.5px ${dragOver ? "dashed" : "solid"} ${dragOver ? "var(--primary)" : "var(--outline-v)"}`,
-            background: dragOver ? "rgba(124,58,237,0.03)" : "var(--bg-low)",
+            background: dragOver ? "color-mix(in srgb, var(--brand) 3%, transparent)" : "var(--bg-low)",
             padding: "10px 20px",
             display: "flex",
             alignItems: "center",
@@ -766,7 +766,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                   <div key={`saved-${att.id}`} title={`${att.filename} · ${formatBytes(att.size)}`} style={{
                     display: "flex", alignItems: "center", gap: 6,
                     padding: "4px 8px 4px 7px",
-                    background: "rgba(124,58,237,0.05)", border: "1px solid rgba(124,58,237,0.18)",
+                    background: "color-mix(in srgb, var(--brand) 5%, transparent)", border: "1px solid color-mix(in srgb, var(--brand) 18%, transparent)",
                     borderRadius: 20, flexShrink: 0, maxWidth: 200,
                   }}>
                     {isImg ? (
@@ -852,7 +852,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
         <style>{`
           [contenteditable]:focus { border-color: var(--primary) !important; }
           [contenteditable] img { max-width: 100%; height: auto; cursor: pointer; border-radius: 4px; transition: outline 0.1s; }
-          [contenteditable] img:hover { outline: 2px solid rgba(124,58,237,0.4); }
+          [contenteditable] img:hover { outline: 2px solid color-mix(in srgb, var(--brand) 40%, transparent); }
           [contenteditable] img:focus { outline: 2px solid var(--primary); }
           @keyframes spin { to { transform: rotate(360deg); } }
 

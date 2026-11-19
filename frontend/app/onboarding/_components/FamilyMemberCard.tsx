@@ -31,7 +31,7 @@ export default function FamilyMemberCard({ entry, isOpen, isNominee, roleNote, o
   return (
     <section aria-label={`Family member: ${name || "new"}`} style={{ border: "1px solid var(--line, #e5e7eb)", borderRadius: 12, background: "var(--surface, #fff)", padding: "12px 14px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <div aria-hidden="true" style={{ width: 38, height: 38, borderRadius: "50%", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13, background: "var(--brand-soft, #ede9fe)", color: "var(--brand, #6d28d9)" }}>
+        <div aria-hidden="true" style={{ width: 38, height: 38, borderRadius: "50%", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13, background: "var(--brand-soft, var(--brand-tint))", color: "var(--brand, var(--brand-2))" }}>
           {initialsOf(name)}
         </div>
         <div style={{ flex: "1 1 180px", minWidth: 0 }}>
@@ -40,7 +40,7 @@ export default function FamilyMemberCard({ entry, isOpen, isNominee, roleNote, o
             {entry.relationship && <span style={TAG}>{RELATIONSHIP_LABELS[entry.relationship] ?? entry.relationship}</span>}
             {age !== null && <span style={TAG}>{age} {age === 1 ? "yr" : "yrs"}</span>}
             {entry.is_dependent && <span style={TAG}>Dependent</span>}
-            {isNominee && <span style={{ ...TAG, background: "var(--brand-soft, #ede9fe)", color: "var(--brand, #6d28d9)" }}>Nominee</span>}
+            {isNominee && <span style={{ ...TAG, background: "var(--brand-soft, var(--brand-tint))", color: "var(--brand, var(--brand-2))" }}>Nominee</span>}
           </div>
           {roleNote && <div role="note" style={{ fontSize: 11.5, color: "var(--warn, #b45309)", marginTop: 4 }}>{roleNote}</div>}
         </div>

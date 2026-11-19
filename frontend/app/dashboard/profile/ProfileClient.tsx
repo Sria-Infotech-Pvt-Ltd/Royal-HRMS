@@ -139,7 +139,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           </div>
           <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
             {profile?.employee_id && (
-              <span style={{ fontSize: 11, background: "rgba(124,58,237,0.1)", color: "var(--primary)", padding: "2px 10px", borderRadius: 20, fontWeight: 600 }}>
+              <span style={{ fontSize: 11, background: "color-mix(in srgb, var(--brand) 10%, transparent)", color: "var(--primary)", padding: "2px 10px", borderRadius: 20, fontWeight: 600 }}>
                 {profile.employee_id}
               </span>
             )}

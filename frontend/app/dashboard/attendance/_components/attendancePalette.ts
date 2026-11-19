@@ -1,3 +1,4 @@
+import { tint } from "@/lib/colour";
 // The colours of the attendance screens, in one place so the summary strip, status tabs, table, month calendar, day panel and summary
 // cards all agree. Soft tinted backgrounds are made from these with tint(); text and indicators use the colour itself.
 
@@ -13,17 +14,13 @@ export const PALETTE = {
   holiday: "#0891B2",     // teal
   wfh: "#0D9488",         // deep teal: working from home
   future: "#CBD5E1",      // pale slate: a day that has not happened
-  brand: "#7C3AED",       // AIRA purple
+  brand: "var(--brand)",       // AIRA purple
 } as const;
 
 export type PaletteKey = keyof typeof PALETTE;
 
 /** "#16A34A", 0.16 -> "rgba(22,163,74,0.16)". */
-export function tint(hex: string, alpha: number): string {
-  const value = hex.replace("#", "");
-  const [red, green, blue] = [0, 2, 4].map(start => parseInt(value.slice(start, start + 2), 16));
-  return `rgba(${red},${green},${blue},${alpha})`;
-}
+export { tint };
 
 /** The colour for an attendance status key as the API sends it ("present", "late", "no_record" ...). Unknown keys are light gray. */
 export function statusColour(statusKey: string): string {

@@ -353,7 +353,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
             </div>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: "10px 16px", borderTop: "1px solid var(--outline-v)", background: "var(--bg-low)", fontSize: 11, color: "var(--on-variant)" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--primary-container, rgba(124,58,237,0.12))", color: "var(--primary)" }}>O</span> Org unit</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--primary-container, color-mix(in srgb, var(--brand) 12%, transparent))", color: "var(--primary)" }}>O</span> Org unit</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--info-c)", color: "var(--info)" }}>S</span> Position</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--success-c)", color: "var(--success)" }}>P</span> Employee</span>
             <span><i className="ti ti-crown" style={{ color: "var(--warn)" }} /> Chief</span>

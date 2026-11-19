@@ -123,4 +123,13 @@ describe("AttendanceSummaryStrip", () => {
     render(<AttendanceSummaryStrip cards={undefined} onJump={vi.fn()} />);
     expect(screen.getAllByText("—")).toHaveLength(5);
   });
+
+  it("says why the numbers could not load and lets the person try again", () => {
+    const onRetry = vi.fn();
+    render(<AttendanceSummaryStrip cards={undefined} onJump={vi.fn()} failure={{ status: 403, onRetry }} />);
+    expect(screen.getByRole("alert").textContent).toMatch(/permission/);
+    expect(screen.queryAllByText("—")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
 });

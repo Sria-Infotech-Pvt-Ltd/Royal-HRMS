@@ -108,7 +108,7 @@ export default function MyApprovalsOverview({
   const workflowsWithWork = rows.filter(row => (row.mine ?? 0) > 0).length;
   const summary = [
     { label: "Waiting in total",     value: totalWaiting,      icon: "ti-hourglass",      accent: "#d97706" },
-    { label: "Needs your action",    value: totalMine,         icon: "ti-bolt",           accent: "#7c3aed" },
+    { label: "Needs your action",    value: totalMine,         icon: "ti-bolt",           accent: "var(--brand)" },
     { label: "Workflows with work",  value: workflowsWithWork, icon: "ti-layout-list",    accent: "#0ea5e9" },
   ];
 

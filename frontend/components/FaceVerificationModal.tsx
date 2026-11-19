@@ -127,14 +127,14 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
 
           {(phase === "idle" || phase === "loading_models") && (
             <FaceStatusPanel
-              icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
+              icon="ti-loader-2" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
               title="Preparing face verification" message="Downloading face models (first time only)…" progress={modelProgress}
             />
           )}
 
           {phase === "requesting_camera" && (
             <FaceStatusPanel
-              icon="ti-camera" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
+              icon="ti-camera" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
               title="Requesting camera access" message="Please allow camera access in the browser prompt to punch in or out."
             />
           )}

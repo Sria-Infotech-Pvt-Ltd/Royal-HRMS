@@ -45,7 +45,7 @@ export function MonthlyBars({ data }: { data: MonthPoint[] }) {
         return (
           <g key={point.month}>
             <title>{`${MONTH_NAMES[point.month - 1]}: ${plural(point.requests, "request")}, ${plural(point.approved_days, "approved day")}`}</title>
-            <rect x={centre - barWidth - 1} y={y(point.requests)} width={barWidth} height={baseline - y(point.requests)} rx={3} fill="#7c3aed" fillOpacity={0.35} />
+            <rect x={centre - barWidth - 1} y={y(point.requests)} width={barWidth} height={baseline - y(point.requests)} rx={3} fill="var(--brand)" fillOpacity={0.35} />
             <rect x={centre + 1} y={y(point.approved_days)} width={barWidth} height={baseline - y(point.approved_days)} rx={3} fill="#16a34a" />
             <text x={centre} y={HEIGHT - 8} textAnchor="middle" fontSize={10} fill="currentColor" fillOpacity={0.65}>{MONTH_NAMES[point.month - 1]}</text>
           </g>

@@ -244,7 +244,7 @@ export default function SmtpSettingsPage() {
             }}>
               {/* Card header */}
               <div style={{ padding: "14px 20px", background: "var(--bg-low)", borderBottom: "1px solid var(--outline-v)", display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(124,58,237,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: "color-mix(in srgb, var(--brand) 10%, transparent)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <i className="ti ti-mail-cog" style={{ fontSize: 17, color: "var(--primary)" }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>

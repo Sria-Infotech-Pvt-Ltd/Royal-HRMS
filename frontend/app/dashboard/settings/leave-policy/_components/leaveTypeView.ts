@@ -1,3 +1,4 @@
+import { tint } from "@/lib/colour";
 // Types, colours and small helpers for the Leave Types screen, kept apart from the screens so they can be tested alone.
 
 export interface LeavePolicy {
@@ -37,11 +38,7 @@ export function leaveTypeColour(key: string): string {
 
 export const leaveTypeIcon = (key: string): string => TYPE_ICONS[key] ?? "ti-calendar-event";
 
-export function tint(hex: string, alpha: number): string {
-  const value = hex.replace("#", "");
-  const [red, green, blue] = [0, 2, 4].map(start => parseInt(value.slice(start, start + 2), 16));
-  return `rgba(${red},${green},${blue},${alpha})`;
-}
+export { tint };
 
 export type StatusFilter = "all" | "active" | "inactive";
 

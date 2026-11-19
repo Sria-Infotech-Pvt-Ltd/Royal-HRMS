@@ -72,7 +72,7 @@ export default function AttendanceTable({ rows, loading, sort, onSortChange, onO
             >
               <td>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div aria-hidden="true" style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(124,58,237,0.1)", color: "var(--primary)", fontSize: 11, fontWeight: 700, display: "grid", placeItems: "center", flexShrink: 0 }}>{row.initials}</div>
+                  <div aria-hidden="true" style={{ width: 34, height: 34, borderRadius: "50%", background: "color-mix(in srgb, var(--brand) 10%, transparent)", color: "var(--primary)", fontSize: 11, fontWeight: 700, display: "grid", placeItems: "center", flexShrink: 0 }}>{row.initials}</div>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>{row.name}</div>
                     <div style={{ fontSize: 11.5, color: "var(--on-variant)" }}>{row.employee_id}</div>

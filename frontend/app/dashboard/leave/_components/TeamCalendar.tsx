@@ -107,7 +107,7 @@ export default function TeamCalendar() {
             <button className="lv-cal-btn" onClick={() => goTo(now.getFullYear(), now.getMonth())}>Today</button>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span className="lv-chip" style={{ "--lv-accent": "#7c3aed" } as CSSProperties}><i className="ti ti-users" /> {peopleAway} away</span>
+            <span className="lv-chip" style={{ "--lv-accent": "var(--brand)" } as CSSProperties}><i className="ti ti-users" /> {peopleAway} away</span>
             <span className="lv-chip" style={{ "--lv-accent": "#0ea5e9" } as CSSProperties}><i className="ti ti-calendar-stats" /> {leaveDays} leave day{leaveDays === 1 ? "" : "s"}</span>
           </div>
         </div>

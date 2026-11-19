@@ -143,7 +143,7 @@ export default function AssessmentConfigPage() {
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <div style={{
                             width: 32, height: 32, borderRadius: 8,
-                            background: "var(--primary-c, rgba(124,58,237,0.10))",
+                            background: "var(--primary-c, color-mix(in srgb, var(--brand) 10%, transparent))",
                             display: "flex", alignItems: "center", justifyContent: "center",
                             flexShrink: 0,
                           }}>

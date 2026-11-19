@@ -16,10 +16,10 @@ interface Props { session: SessionPayload }
 
 const QUICK_ACTIONS = [
   { href: "/dashboard/leave",         icon: "ti-beach",       bg: "rgba(23,144,90,0.12)", color: "var(--success)", label: "Apply Leave"  },
-  { href: "/dashboard/my-payslip",    icon: "ti-receipt",     bg: "rgba(124,58,237,0.12)",  color: "var(--primary)", label: "My Payslips"  },
+  { href: "/dashboard/my-payslip",    icon: "ti-receipt",     bg: "color-mix(in srgb, var(--brand) 12%, transparent)",  color: "var(--primary)", label: "My Payslips"  },
   { href: "/dashboard/my-attendance", icon: "ti-clock",       bg: "rgba(37,99,235,0.12)", color: "var(--info)",    label: "Attendance"   },
   { href: "/dashboard/expenses",      icon: "ti-wallet",      bg: "rgba(162,98,12,0.12)", color: "var(--warn)",    label: "My Expenses"  },
-  { href: "/dashboard/ess?tab=documents", icon: "ti-folder",      bg: "rgba(124,58,237,0.12)",  color: "var(--primary)", label: "Documents"    },
+  { href: "/dashboard/ess?tab=documents", icon: "ti-folder",      bg: "color-mix(in srgb, var(--brand) 12%, transparent)",  color: "var(--primary)", label: "Documents"    },
   { href: "/dashboard/profile",       icon: "ti-user-circle", bg: "rgba(37,99,235,0.12)", color: "var(--info)",    label: "My Profile"   },
 ];
 

@@ -118,7 +118,7 @@ export default function EmployeeLifecycleTabs() {
             {!loading && (
               <span style={{
                 fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 10,
-                background: active === tab.key ? "rgba(124,58,237,0.12)" : "var(--bg-high)",
+                background: active === tab.key ? "color-mix(in srgb, var(--brand) 12%, transparent)" : "var(--bg-high)",
                 color: active === tab.key ? "var(--primary)" : "var(--on-variant)",
               }}>
                 {count(tab.key)}

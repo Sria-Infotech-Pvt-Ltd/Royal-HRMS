@@ -42,7 +42,7 @@ export default function EmpPromotionCelebration() {
       style={{
         padding: "16px 20px",
         borderRadius: 10,
-        background: "linear-gradient(135deg, rgba(23,144,90,0.10), rgba(124,58,237,0.06))",
+        background: "linear-gradient(135deg, rgba(23,144,90,0.10), color-mix(in srgb, var(--brand) 6%, transparent))",
         border: "1px solid rgba(23,144,90,0.25)",
       }}
     >

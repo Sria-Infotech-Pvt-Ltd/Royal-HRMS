@@ -35,7 +35,7 @@ export default function CreditTab() {
   }
 
   return (
-    <div className="card mb-20" style={{ border: "1.5px solid rgba(124,58,237,0.25)", background: "rgba(124,58,237,0.03)" }}>
+    <div className="card mb-20" style={{ border: "1.5px solid color-mix(in srgb, var(--brand) 25%, transparent)", background: "color-mix(in srgb, var(--brand) 3%, transparent)" }}>
       <div className="card-header" style={{ borderBottom: "1px solid var(--outline-v)" }}>
         <div className="card-title"><i className="ti ti-coin" /> Credit Leave Balances</div>
       </div>

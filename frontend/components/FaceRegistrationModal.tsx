@@ -88,7 +88,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
 
           {phase === "idle" && (
             <FaceStatusPanel
-              icon="ti-face-id" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)"
+              icon="ti-face-id" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)"
               title={idleTitle}
               message={idleMessage}
               action={{ label: "Start", onClick: () => start(true) }}
@@ -97,14 +97,14 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
 
           {phase === "loading_models" && (
             <FaceStatusPanel
-              icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
+              icon="ti-loader-2" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
               title="Preparing face recognition" message="Downloading face models (first time only)…" progress={modelProgress}
             />
           )}
 
           {phase === "requesting_camera" && (
             <FaceStatusPanel
-              icon="ti-camera" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
+              icon="ti-camera" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
               title="Requesting camera access" message="Please allow camera access in the browser prompt."
             />
           )}
@@ -144,7 +144,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
 
           {phase === "submitting" && (
             <FaceStatusPanel
-              icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
+              icon="ti-loader-2" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
               title="Submitting" message="Sending your registration for approval…"
             />
           )}

@@ -11,7 +11,7 @@ export interface WorkflowCardData {
 }
 
 export const LOOK: Record<string, { icon: string; colour: string }> = {
-  leave:                  { icon: "ti-beach",           colour: "#7c3aed" },
+  leave:                  { icon: "ti-beach",           colour: "var(--brand)" },
   wfh:                    { icon: "ti-home-2",          colour: "#0ea5e9" },
   expense:                { icon: "ti-wallet",          colour: "#16a34a" },
   attendance_correction:  { icon: "ti-clock-edit",      colour: "#d97706" },

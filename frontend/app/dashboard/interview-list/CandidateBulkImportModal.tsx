@@ -132,7 +132,7 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
       }
     >
           {/* Instructions */}
-          <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)", marginBottom: 20, fontSize: 12, color: "var(--on-variant)", lineHeight: 1.6 }}>
+          <div style={{ padding: "12px 14px", borderRadius: 8, background: "color-mix(in srgb, var(--brand) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--brand) 15%, transparent)", marginBottom: 20, fontSize: 12, color: "var(--on-variant)", lineHeight: 1.6 }}>
             <div style={{ fontWeight: 600, color: "var(--primary)", marginBottom: 4, fontSize: 12 }}>
               <i className="ti ti-info-circle" style={{ marginRight: 5 }} />File Requirements
             </div>
@@ -160,7 +160,7 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
             style={{
               border: `2px dashed ${file ? "var(--primary)" : "var(--outline-v)"}`,
               borderRadius: 10, padding: "28px 20px", textAlign: "center",
-              cursor: "pointer", background: file ? "rgba(124,58,237,0.04)" : "var(--bg-low)",
+              cursor: "pointer", background: file ? "color-mix(in srgb, var(--brand) 4%, transparent)" : "var(--bg-low)",
               transition: "border-color 0.15s, background 0.15s", marginBottom: 16,
             }}
           >

@@ -111,7 +111,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
               onClick={e => { e.stopPropagation(); toggle(`u${u.id}`); }}
             />
           ) : <span className="orgnode-caret" />}
-          <span className="orgnode-glyph" style={{ background: "var(--primary-container, rgba(124,58,237,0.12))", color: "var(--primary)" }}>O</span>
+          <span className="orgnode-glyph" style={{ background: "var(--primary-container, color-mix(in srgb, var(--brand) 12%, transparent))", color: "var(--primary)" }}>O</span>
           <span className="orgnode-name">{highlight(u.name, q)}</span>
           {rollup && rollup.total > 0 && (
             <span className="orgnode-count" title={`${rollup.filled} of ${rollup.total} seats filled, including sub-units`}>
@@ -182,7 +182,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
       <style>{`
         .orgnode { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:8px; cursor:pointer; }
         .orgnode:hover { background: var(--bg-low); }
-        .orgnode-sel { background: rgba(124,58,237,0.1); }
+        .orgnode-sel { background: color-mix(in srgb, var(--brand) 10%, transparent); }
         .orgnode-sel .orgnode-name { color: var(--primary); font-weight: 600; }
         .orgnode-caret { width:15px; height:15px; flex-shrink:0; font-size:13px; color: var(--outline); }
         .orgnode-glyph { width:21px; height:21px; border-radius:6px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:750; }

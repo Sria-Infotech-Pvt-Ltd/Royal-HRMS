@@ -14,15 +14,15 @@ const TABS: AttendanceTabItem[] = [
 ];
 
 describe("AttendancePageTabs", () => {
-  it("marks the active tab and shows brand purple, not the theme's black", () => {
+  it("marks the active tab and shows the brand colour (it follows the theme), not black", () => {
     render(<AttendancePageTabs tabs={TABS} active="ot" onSelect={vi.fn()} />);
     const active = screen.getByRole("tab", { name: /OT Entry/ });
     expect(active.getAttribute("aria-selected")).toBe("true");
-    expect(active.style.color).toMatch(/124,\s*58,\s*237|#7C3AED/i);
+    expect(active.style.color).toMatch(/var\(--brand\)/);
     expect(active.style.borderBottomWidth).toBe("0px");                         // no plain black underline on the tab itself: the purple indicator slides instead
     const other = screen.getByRole("tab", { name: /Attendance/ });
     expect(other.getAttribute("aria-selected")).toBe("false");
-    expect(other.style.color).not.toMatch(/124,\s*58,\s*237/);
+    expect(other.style.color).not.toMatch(/var\(--brand\)/);
     expect(other.tabIndex).toBe(-1);                                            // only the active tab is in the tab order
   });
 
@@ -63,7 +63,7 @@ describe("AttendancePageTabs", () => {
     expect(indicator.style.background).toContain("linear-gradient");
     const tab = screen.getByRole("tab", { name: /OT Entry/ });
     fireEvent.mouseEnter(tab);
-    expect(tab.style.background).toMatch(/124,\s*58,\s*237/);
+    expect(tab.style.background).toMatch(/var\(--brand\)/);
     fireEvent.mouseLeave(tab);
     expect(tab.style.background).toBe("transparent");
   });

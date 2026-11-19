@@ -115,7 +115,7 @@ export default function TabDocuments({
                 style={{
                   padding: "1rem 1.25rem", borderRadius: 12,
                   border: `1.5px dashed ${isDragOver ? "var(--primary)" : uploaded ? "var(--success)" : "var(--outline-v)"}`,
-                  background: isDragOver ? "rgba(124,58,237,0.06)" : uploaded ? "var(--success-c)" : "#fff",
+                  background: isDragOver ? "color-mix(in srgb, var(--brand) 6%, transparent)" : uploaded ? "var(--success-c)" : "#fff",
                   transition: "all 0.2s",
                 }}
               >

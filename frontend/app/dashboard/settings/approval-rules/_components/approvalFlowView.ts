@@ -1,8 +1,9 @@
 // What each step of an approval flow looks like and how a rule becomes steps, kept apart so it can be tested alone.
 
 import type { ApproverKind, GlobalApprovalRule } from "@/types/approvalMatrix";
+import { tint } from "@/lib/colour";
 
-export const BRAND = "#7C3AED";
+export const BRAND = "var(--brand)";
 
 export const WORKFLOW_ICONS: Record<string, string> = {
   leave: "ti-beach",
@@ -49,8 +50,4 @@ export function summarise(rules: GlobalApprovalRule[]) {
   };
 }
 
-export function tint(hex: string, alpha: number): string {
-  const value = hex.replace("#", "");
-  const [red, green, blue] = [0, 2, 4].map(start => parseInt(value.slice(start, start + 2), 16));
-  return `rgba(${red},${green},${blue},${alpha})`;
-}
+export { tint };

@@ -49,7 +49,7 @@ export default function FaceRegistrationBanner() {
       <div
         role="status"
         className="mb-4 flex items-center gap-3 rounded-lg px-4 py-2.5"
-        style={{ background: "var(--primary-c, rgba(124,58,237,0.08))", border: "1px solid var(--outline-v)" }}
+        style={{ background: "var(--primary-c, color-mix(in srgb, var(--brand) 8%, transparent))", border: "1px solid var(--outline-v)" }}
       >
         <i className="ti ti-face-id" style={{ fontSize: 20, color: "var(--primary)" }} />
         <div style={{ flex: 1, minWidth: 0 }}>

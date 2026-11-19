@@ -28,7 +28,7 @@ export function TeamOverviewCard({ breakdown, isLoading, onOpenTeam }: OverviewP
         <div className={styles.donutWrap}>
           <div className={styles.donut}>
             <svg viewBox="0 0 160 160" width="168" height="168" role="img" aria-label="Team attendance today">
-              <circle cx="80" cy="80" r={RADIUS} fill="none" stroke="rgba(124,58,237,0.08)" strokeWidth="18" />
+              <circle cx="80" cy="80" r={RADIUS} fill="none" stroke="color-mix(in srgb, var(--brand) 8%, transparent)" strokeWidth="18" />
               {arcs.map(arc => (
                 <circle key={arc.key} cx="80" cy="80" r={RADIUS} fill="none" stroke={arc.color} strokeWidth="18"
                   strokeDasharray={arc.dash} strokeDashoffset={arc.offset} transform="rotate(-90 80 80)" />

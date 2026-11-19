@@ -70,7 +70,7 @@ export default function LanguagesSelect({ value, onChange, placeholder, inputCla
               key={lang}
               style={{
                 fontSize: 11.5, fontWeight: 600, padding: "2px 8px", borderRadius: 20,
-                background: "rgba(124,58,237,0.10)", color: "var(--primary, #7c3aed)",
+                background: "color-mix(in srgb, var(--brand) 10%, transparent)", color: "var(--primary, var(--brand))",
                 display: "inline-flex", alignItems: "center", gap: 4,
               }}
             >

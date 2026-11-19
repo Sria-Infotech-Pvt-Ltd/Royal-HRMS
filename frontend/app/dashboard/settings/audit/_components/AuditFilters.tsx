@@ -9,7 +9,7 @@ import { MODULES, RANGES, matchingRange, rangeDates, tint } from "./auditView";
 
 interface Props { filters: Filters; todayISO: string; onChange: (change: Partial<Filters>) => void; onClear: () => void; isChanged: boolean }
 
-const BRAND = "#7C3AED";
+const BRAND = "var(--brand)";
 
 function Chip({ selected, colour, onClick, children }: { selected: boolean; colour: string; onClick: () => void; children: React.ReactNode }) {
   return (

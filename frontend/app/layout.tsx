@@ -5,6 +5,7 @@ import "./aira-theme.css";
 import "./ess-theme.css";
 import "./directory-theme.css";
 import "./new-ui-bridge.css";
+import "./themes.css";
 // Self-hosted (not an external CDN) so every icon in the app doesn't
 // depend on jsdelivr being reachable — imported (not a manual <link>) so
 // Next.js bundles it and resolves its font url()s itself.
@@ -13,6 +14,7 @@ import SessionExpiredOverlay from "@/components/SessionExpiredOverlay";
 import VoiceCommandButton from "@/components/VoiceCommandButton";
 import { ToastProvider } from "@/components/ToastProvider";
 import { DialogProvider } from "@/components/DialogProvider";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 // style: ["normal", "italic"] combined with 5 weights used to be here for a
 // real italic cut on the highlighted title word (em.hl) — combining multiple
@@ -44,6 +46,8 @@ export default function RootLayout({
   return (
     <html lang="en" style={{ height: "100%" }} suppressHydrationWarning>
       <head>
+        {/* Applies the saved theme before the first paint so there is no flash of the wrong colours. Kept in sync with lib/theme.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
         <link rel="icon" type="image/svg+xml" href="/logo.svg" />
         <link rel="icon" type="image/png" href="/logo-icon.png" sizes="any" />
         <link rel="shortcut icon" href="/logo.svg" />

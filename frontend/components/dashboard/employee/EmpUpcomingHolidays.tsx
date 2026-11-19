@@ -46,7 +46,7 @@ export default function EmpUpcomingHolidays() {
         <div style={{ padding: "4px 0 8px" }}>
           {upcoming.map(h => (
             <div key={h.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderBottom: "1px solid var(--border)" }}>
-              <div style={{ width: 38, height: 38, borderRadius: 8, flexShrink: 0, background: "rgba(124,58,237,0.12)", color: "#7c3aed", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: 38, height: 38, borderRadius: 8, flexShrink: 0, background: "color-mix(in srgb, var(--brand) 12%, transparent)", color: "var(--brand)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ fontSize: 13, fontWeight: 800, lineHeight: 1 }}>{fmtDate(h.date).split(" ")[0]}</span>
                 <span style={{ fontSize: 9, textTransform: "uppercase" }}>{fmtDate(h.date).split(" ")[1]}</span>
               </div>

@@ -37,7 +37,7 @@ export default function LeaveAnalytics() {
   const balances      = stats?.balances  ?? [];
   const lopRequests   = stats?.lop_requests ?? 0;
   const summary = [
-    { label: "Total requests",   value: totalAll,             icon: "ti-clipboard-list", accent: "#7c3aed", sub: `This year (${currentYear})` },
+    { label: "Total requests",   value: totalAll,             icon: "ti-clipboard-list", accent: "var(--brand)", sub: `This year (${currentYear})` },
     { label: "Approved",         value: totalApproved,        icon: "ti-circle-check",   accent: "#16a34a", sub: `This year (${currentYear})` },
     { label: "Pending approval", value: totalPending,         icon: "ti-clock",          accent: "#d97706", sub: `This year (${currentYear})` },
     { label: "Rejected",         value: stats?.rejected ?? 0, icon: "ti-circle-x",       accent: "#dc2626", sub: `This year (${currentYear})` },
@@ -72,7 +72,7 @@ export default function LeaveAnalytics() {
         <div className="lv-panel-head">
           <span><i className="ti ti-chart-bar" /> Month by month · {currentYear}</span>
           <div className="lv-legend">
-            <span><i style={{ background: "#7c3aed", opacity: 0.35 }} />Requests</span>
+            <span><i style={{ background: "var(--brand)", opacity: 0.35 }} />Requests</span>
             <span><i style={{ background: "#16a34a" }} />Approved days</span>
           </div>
         </div>

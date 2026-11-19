@@ -39,7 +39,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
       {hint && (
         <div style={{
           display: "flex", gap: 8, alignItems: "flex-start", padding: "10px 14px",
-          background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)",
+          background: "color-mix(in srgb, var(--brand) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--brand) 15%, transparent)",
           borderRadius: 8, marginBottom: 16, fontSize: 12, color: "var(--on-bg)",
         }}>
           <i className="ti ti-info-circle" style={{ fontSize: 14, color: "var(--primary)", marginTop: 1 }} />

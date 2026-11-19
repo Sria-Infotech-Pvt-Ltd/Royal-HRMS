@@ -92,7 +92,7 @@ export default function HRFaceCaptureModal({
 
           {phase === "idle" && (
             <FaceStatusPanel
-              icon="ti-face-id" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)"
+              icon="ti-face-id" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)"
               title={`${isUpdate ? "Update" : "Register"} ${employeeName}'s face`}
               message={
                 isUpdate
@@ -105,14 +105,14 @@ export default function HRFaceCaptureModal({
 
           {phase === "loading_models" && (
             <FaceStatusPanel
-              icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
+              icon="ti-loader-2" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
               title="Preparing face recognition" message="Downloading face models (first time only)…" progress={modelProgress}
             />
           )}
 
           {phase === "requesting_camera" && (
             <FaceStatusPanel
-              icon="ti-camera" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
+              icon="ti-camera" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
               title="Requesting camera access" message="Please allow camera access in the browser prompt."
             />
           )}
@@ -152,7 +152,7 @@ export default function HRFaceCaptureModal({
 
           {phase === "submitting" && (
             <FaceStatusPanel
-              icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
+              icon="ti-loader-2" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
               title="Saving" message="Registering face ID…"
             />
           )}

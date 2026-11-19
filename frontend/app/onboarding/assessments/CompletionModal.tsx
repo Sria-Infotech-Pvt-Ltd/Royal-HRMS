@@ -31,11 +31,11 @@ export default function CompletionModal({ result, title, attemptNumber, isLastPe
           <p style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>{pct}% Score</p>
           <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 24px" }}>{title} · Attempt #{attemptNumber}</p>
           {passed && isLastPending ? (
-            <button suppressHydrationWarning onClick={onDashboard} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#7c3aed", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <button suppressHydrationWarning onClick={onDashboard} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "var(--brand)", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               Go to Dashboard <i className="ti ti-arrow-right" />
             </button>
           ) : passed ? (
-            <button suppressHydrationWarning onClick={onContinue} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#7c3aed", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <button suppressHydrationWarning onClick={onContinue} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "var(--brand)", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               Continue to Next Assessment <i className="ti ti-arrow-right" />
             </button>
           ) : (

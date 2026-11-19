@@ -2,15 +2,16 @@
 
 import { shiftISODate } from "@/app/dashboard/attendance/_components/attendanceDates";
 import { localISODate } from "@/app/dashboard/attendance/_components/monthView";
+import { tint } from "@/lib/colour";
 
 export const MODULES = [
-  { value: "accounts",      label: "Accounts",      colour: "#7C3AED", icon: "ti-user-shield" },
-  { value: "settings",      label: "Settings",      colour: "#7C3AED", icon: "ti-settings" },
-  { value: "company",       label: "Company",       colour: "#7C3AED", icon: "ti-building" },
-  { value: "branch",        label: "Company Code",  colour: "#7C3AED", icon: "ti-map-pin" },
-  { value: "announcements", label: "Announcements", colour: "#7C3AED", icon: "ti-speakerphone" },
-  { value: "birthday",      label: "Birthday",      colour: "#7C3AED", icon: "ti-cake" },
-  { value: "timesheet",     label: "Timesheet",     colour: "#7C3AED", icon: "ti-clock" },
+  { value: "accounts",      label: "Accounts",      colour: "var(--brand)", icon: "ti-user-shield" },
+  { value: "settings",      label: "Settings",      colour: "var(--brand)", icon: "ti-settings" },
+  { value: "company",       label: "Company",       colour: "var(--brand)", icon: "ti-building" },
+  { value: "branch",        label: "Company Code",  colour: "var(--brand)", icon: "ti-map-pin" },
+  { value: "announcements", label: "Announcements", colour: "var(--brand)", icon: "ti-speakerphone" },
+  { value: "birthday",      label: "Birthday",      colour: "var(--brand)", icon: "ti-cake" },
+  { value: "timesheet",     label: "Timesheet",     colour: "var(--brand)", icon: "ti-clock" },
 ] as const;
 
 const NEUTRAL = "#64748B";
@@ -25,7 +26,7 @@ export function actionStyle(action: string): { colour: string; icon: string } {
   if (action.endsWith("_activated")) return { colour: "#2563EB", icon: "ti-toggle-right" };
   if (action === "login") return { colour: "#2563EB", icon: "ti-login" };
   if (action === "logout") return { colour: NEUTRAL, icon: "ti-logout" };
-  if (action.startsWith("password")) return { colour: "#7C3AED", icon: "ti-key" };
+  if (action.startsWith("password")) return { colour: "var(--brand)", icon: "ti-key" };
   return { colour: NEUTRAL, icon: "ti-point" };
 }
 
@@ -66,8 +67,4 @@ export function matchingRange(from: string, to: string, todayISO: string = local
   return RANGES.find(range => { const dates = rangeDates(range.key, todayISO); return dates.from === from && dates.to === to; })?.key ?? null;
 }
 
-export function tint(hex: string, alpha: number): string {
-  const value = hex.replace("#", "");
-  const [red, green, blue] = [0, 2, 4].map(start => parseInt(value.slice(start, start + 2), 16));
-  return `rgba(${red},${green},${blue},${alpha})`;
-}
+export { tint };

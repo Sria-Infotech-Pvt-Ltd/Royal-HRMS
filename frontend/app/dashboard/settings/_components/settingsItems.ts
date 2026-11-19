@@ -6,10 +6,10 @@ export type ItemCat = Exclude<CatId, "all">;
 export interface SettingsItem { id: string; cat: ItemCat; icon: string; label: string; desc: string; route: string }
 
 export const CATEGORY_INFO: Record<ItemCat, { label: string; icon: string; colour: string; blurb: string }> = {
-  company: { label: "Company", icon: "ti-building", colour: "#7C3AED", blurb: "Who you are and who can do what" },
-  modules: { label: "Modules", icon: "ti-stack-2",  colour: "#7C3AED", blurb: "Rules for leave, payroll, attendance and more" },
-  comm:    { label: "Communication", icon: "ti-mail", colour: "#7C3AED", blurb: "Emails and notifications" },
-  system:  { label: "System", icon: "ti-server",    colour: "#7C3AED", blurb: "Syncs and the audit trail" },
+  company: { label: "Company", icon: "ti-building", colour: "var(--brand)", blurb: "Who you are and who can do what" },
+  modules: { label: "Modules", icon: "ti-stack-2",  colour: "var(--brand)", blurb: "Rules for leave, payroll, attendance and more" },
+  comm:    { label: "Communication", icon: "ti-mail", colour: "var(--brand)", blurb: "Emails and notifications" },
+  system:  { label: "System", icon: "ti-server",    colour: "var(--brand)", blurb: "Syncs and the audit trail" },
 };
 
 export const CATEGORY_ORDER: ItemCat[] = ["company", "modules", "comm", "system"];

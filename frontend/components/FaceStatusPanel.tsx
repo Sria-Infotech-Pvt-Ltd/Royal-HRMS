@@ -38,7 +38,7 @@ export default function FaceStatusPanel({
       <p className="text-sm mb-5 leading-relaxed" style={{ color: "var(--on-variant)", maxWidth: 320 }}>{message}</p>
       {progress !== undefined && (
         <div className="mb-5 w-full" style={{ maxWidth: 260 }}>
-          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(124,58,237,0.12)" }}>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "color-mix(in srgb, var(--brand) 12%, transparent)" }}>
             <div
               className="h-full rounded-full transition-all duration-200"
               style={{ width: `${Math.round(progress * 100)}%`, background: "var(--primary)" }}

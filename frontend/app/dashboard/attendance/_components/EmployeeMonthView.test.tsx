@@ -54,7 +54,7 @@ function chooseEmployee(name = "Durga") {
   fireEvent.click(screen.getByText("Durga Gadde (EMP002)"));
 }
 
-const PURPLE = /124,\s*58,\s*237|#7C3AED/i;
+const PURPLE = /var\(--brand\)/;
 const GREEN = /22,\s*163,\s*74/;
 const RGB = {
   present: /22,\s*163,\s*74/, late: /234,\s*88,\s*12/, absent: /220,\s*38,\s*38/, notMarked: /100,\s*116,\s*139/, weekOff: /148,\s*163,\s*184/,

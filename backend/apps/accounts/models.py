@@ -370,6 +370,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     locked_until            = models.DateTimeField(null=True, blank=True)
     last_login_ip           = models.GenericIPAddressField(null=True, blank=True)
     profile_photo           = models.ImageField(upload_to=profile_photo_upload_path, null=True, blank=True)
+    # The person's own colour theme (see views_theme.py); blank = they never chose, so the browser's choice or the default applies.
+    theme_mode              = models.CharField(max_length=10, blank=True, default='')
+    theme_accent            = models.CharField(max_length=10, blank=True, default='')
     date_joined  = models.DateTimeField(auto_now_add=True)
     updated_at   = models.DateTimeField(auto_now=True)
 

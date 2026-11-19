@@ -12,8 +12,8 @@ const QA_META: Record<string, { icon: string; bg: string; color: string }> = {
   my_requests:      { icon: "ti-inbox",        bg: "rgba(162,98,12,0.12)", color: "var(--warn)"    },
   team_members:     { icon: "ti-users",        bg: "rgba(37,99,235,0.12)", color: "var(--info)"    },
   review_approvals: { icon: "ti-checks",       bg: "rgba(162,98,12,0.12)", color: "var(--warn)"    },
-  my_payslip:       { icon: "ti-receipt",      bg: "rgba(124,58,237,0.12)",  color: "var(--primary)" },
-  interviews:       { icon: "ti-user-search",  bg: "rgba(124,58,237,0.12)",  color: "var(--primary)" },
+  my_payslip:       { icon: "ti-receipt",      bg: "color-mix(in srgb, var(--brand) 12%, transparent)",  color: "var(--primary)" },
+  interviews:       { icon: "ti-user-search",  bg: "color-mix(in srgb, var(--brand) 12%, transparent)",  color: "var(--primary)" },
 };
 
 // The backend's quick_actions payload (_build_quick_actions in apps/dashboard/views/manager.py)
@@ -27,7 +27,7 @@ const QA_URL_OVERRIDE: Record<string, string> = {
 };
 
 const APPROVAL_META: Record<string, { icon: string; color: string; bg: string }> = {
-  leave:                 { icon: "ti-beach",   color: "var(--primary)", bg: "rgba(124,58,237,0.12)"  },
+  leave:                 { icon: "ti-beach",   color: "var(--primary)", bg: "color-mix(in srgb, var(--brand) 12%, transparent)"  },
   expense:               { icon: "ti-receipt", color: "var(--warn)",    bg: "rgba(162,98,12,0.12)" },
   attendance_correction: { icon: "ti-clock",   color: "#D97706",        bg: "rgba(217,119,6,0.12)"  },
 };
@@ -105,7 +105,7 @@ function ManagerDashboardInner({ session }: Props) {
   return (
     <>
       {/* Manager Console */}
-      <div className="mb-20" style={{ background: "linear-gradient(135deg, var(--primary) 0%, #6d28d9 100%)", borderRadius: 10, overflow: "hidden", position: "relative" }}>
+      <div className="mb-20" style={{ background: "linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)", borderRadius: 10, overflow: "hidden", position: "relative" }}>
         <div style={{ position: "absolute", top: -50, right: -50, width: 180, height: 180, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.06)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", top: -20, right: -20, width: 110, height: 110, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.04)", pointerEvents: "none" }} />
 

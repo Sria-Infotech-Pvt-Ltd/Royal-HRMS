@@ -1022,7 +1022,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                           type="button"
                           onClick={() => setPersonal(p => ({ ...p, displayName: [p.salutation, p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ") }))}
                           className="btn btn-sm"
-                          style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}
+                          style={{ whiteSpace: "nowrap", background: "var(--brand)", color: "#ffffff", border: "none" }}
                         >+ Suggest</button>
                       </div>
                       <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Shown across the app and in approvals.</p>
@@ -1078,7 +1078,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                           type="button"
                           onClick={() => setPersonal(p => ({ ...p, placeOfBirth: values.currentVillage || values.currentDistrict }))}
                           className="btn btn-sm"
-                          style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}
+                          style={{ whiteSpace: "nowrap", background: "var(--brand)", color: "#ffffff", border: "none" }}
                         >+ Suggest</button>
                       </div>
                     </div>
@@ -1344,7 +1344,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       <label>Guardian name <span className="tag">OPTIONAL</span></label>
                       <div style={{ display: "flex", gap: 8 }}>
                         <input className="finput" value={guardian.name} onChange={e => setGuardian(g => ({ ...g, name: e.target.value }))} />
-                        <button type="button" className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}
+                        <button type="button" className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "var(--brand)", color: "#ffffff", border: "none" }}
                           onClick={() => { const primary = emergencyContacts.find(c => c.is_primary) ?? emergencyContacts[0]; if (primary) setGuardian(g => ({ ...g, name: primary.name, relationship: primary.relationship })); }}>
                           + Suggest
                         </button>
@@ -1493,7 +1493,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       <label>Card number <span className="tag">OPTIONAL</span></label>
                       <div style={{ display: "flex", gap: 8 }}>
                         <input className="finput" placeholder="Auto-generated if left blank" value={accessCard.cardNumber} onChange={e => setAccessCard(c => ({ ...c, cardNumber: e.target.value }))} />
-                        <button type="button" className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}
+                        <button type="button" className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "var(--brand)", color: "#ffffff", border: "none" }}
                           onClick={() => setAccessCard(c => ({ ...c, cardNumber: `AC-${Math.floor(Math.random() * 90000 + 10000)}` }))}>
                           + Suggest
                         </button>

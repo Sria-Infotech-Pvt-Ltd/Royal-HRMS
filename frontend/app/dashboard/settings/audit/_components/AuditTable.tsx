@@ -29,9 +29,9 @@ export default function AuditTable({ data, loading, error, page, onPage }: Props
     <section aria-label="Activity" className="card" style={{ padding: 0, overflow: "hidden" }}>
       <header style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--outline-v)" }}>
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "var(--on-bg)", display: "flex", alignItems: "center", gap: 8 }}>
-          <i className="ti ti-history" aria-hidden="true" style={{ color: "#7C3AED" }} /> Activity
+          <i className="ti ti-history" aria-hidden="true" style={{ color: "var(--brand)" }} /> Activity
         </h3>
-        {data && <span style={{ fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, background: tint("#7C3AED", 0.12), color: "#7C3AED" }}>{data.count.toLocaleString()} entries</span>}
+        {data && <span style={{ fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, background: tint("var(--brand)", 0.12), color: "var(--brand)" }}>{data.count.toLocaleString()} entries</span>}
       </header>
 
       {error && <div role="alert" style={{ margin: 16, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 10, color: "var(--error)", fontSize: 13 }}>{error}</div>}
@@ -55,14 +55,14 @@ export default function AuditTable({ data, loading, error, page, onPage }: Props
               const isOpen = openId === log.id;
               return (
                 <Fragment key={log.id}>
-                  <tr onClick={() => setOpenId(isOpen ? null : log.id)} style={{ cursor: "pointer", background: isOpen ? tint("#7C3AED", 0.05) : undefined }}>
+                  <tr onClick={() => setOpenId(isOpen ? null : log.id)} style={{ cursor: "pointer", background: isOpen ? tint("var(--brand)", 0.05) : undefined }}>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <div style={{ fontWeight: 700, fontSize: 13, color: "var(--on-bg)" }}>{ago ?? formatDate(created)}</div>
                       <div style={{ fontSize: 11.5, color: "var(--on-variant)" }}>{ago ? formatDate(created) + " · " : ""}{created.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</div>
                     </td>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, color: "#fff", background: "linear-gradient(135deg, #7C3AED, #A78BFA)" }}>{initialsOf(log.actor_name)}</span>
+                        <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, color: "#fff", background: "linear-gradient(135deg, var(--brand), #A78BFA)" }}>{initialsOf(log.actor_name)}</span>
                         <div>
                           <div style={{ fontWeight: 700, fontSize: 13, color: "var(--on-bg)" }}>{log.actor_name}</div>
                           {log.actor_email && <div style={{ fontSize: 11.5, color: "var(--on-variant)" }}>{log.actor_email}</div>}
@@ -80,7 +80,7 @@ export default function AuditTable({ data, loading, error, page, onPage }: Props
                   </tr>
                   {isOpen && (
                     <tr>
-                      <td colSpan={6} style={{ background: tint("#7C3AED", 0.04), padding: "14px 20px" }}>
+                      <td colSpan={6} style={{ background: tint("var(--brand)", 0.04), padding: "14px 20px" }}>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 16 }}>
                           <Detail label="What happened">{log.description || fmtAction(log.action)}</Detail>
                           <Detail label="Record">{log.object_id ? <span style={MONO}>{log.object_id}</span> : "—"}</Detail>

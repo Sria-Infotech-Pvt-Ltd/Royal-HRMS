@@ -188,7 +188,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
               {myRowPending && !isL1Done && (
                 <div style={{
                   padding: "14px 16px", borderRadius: "var(--radius)",
-                  border: "1.5px solid var(--primary)", background: "rgba(124,58,237,0.06)",
+                  border: "1.5px solid var(--primary)", background: "color-mix(in srgb, var(--brand) 6%, transparent)",
                   marginTop: 4,
                 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>

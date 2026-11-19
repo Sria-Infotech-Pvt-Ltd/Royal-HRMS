@@ -8,7 +8,7 @@
 .ess-shell{display:flex;flex-direction:column;gap:14px}
 /* Only the tab bar is sticky: the welcome banner above it scrolls away, so a tall fixed block never covers the content under it. */
 .ess-sticky{position:sticky;top:0;z-index:25;padding:0 0 8px;background:var(--bg);box-shadow:0 8px 14px color-mix(in srgb,var(--bg) 88%,transparent)}
-.ess-hero{display:grid;grid-template-columns:1.35fr .65fr;gap:14px;padding:22px;border-radius:18px;background:linear-gradient(125deg,#312e81,#6d28d9 62%,#8b5cf6);color:#fff;box-shadow:0 12px 28px rgba(76,29,149,.2)}
+.ess-hero{display:grid;grid-template-columns:1.35fr .65fr;gap:14px;padding:22px;border-radius:18px;background:linear-gradient(125deg,#312e81,var(--brand-2) 62%,#8b5cf6);color:#fff;box-shadow:0 12px 28px rgba(76,29,149,.2)}
 .ess-person{display:flex;align-items:center;gap:15px}
 .ess-photo{width:64px;height:64px;border-radius:18px;background-image:url('/employee-headshots.png');background-size:700% 700%;background-position:0% 0%;border:3px solid rgba(255,255,255,.35)}
 .ess-hero h1{font-size:26px;margin:0}

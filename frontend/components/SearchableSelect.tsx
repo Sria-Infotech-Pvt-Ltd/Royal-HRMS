@@ -129,7 +129,7 @@ export default function SearchableSelect({
                 onClick={() => select(o)}
                 style={{
                   padding: "6px 12px", cursor: "pointer", fontSize: 12.5,
-                  background: o.value === value ? "rgba(124,58,237,0.08)" : "transparent",
+                  background: o.value === value ? "color-mix(in srgb, var(--brand) 8%, transparent)" : "transparent",
                 }}
               >
                 {o.label}

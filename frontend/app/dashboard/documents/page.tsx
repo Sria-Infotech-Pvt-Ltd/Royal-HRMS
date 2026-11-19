@@ -298,7 +298,7 @@ export default function DocumentCenterPage() {
       {/* Stats row */}
       <div className="dc-stats-row" style={{ display: "grid", gap: 12, marginBottom: 24 }}>
         {([
-          { filter: "All Documents" as Filter, label: "Total Documents", value: statsLoading ? "—" : total,         icon: "ti-copy",             color: "var(--primary)", bg: "rgba(124,58,237,0.08)"  },
+          { filter: "All Documents" as Filter, label: "Total Documents", value: statsLoading ? "—" : total,         icon: "ti-copy",             color: "var(--primary)", bg: "color-mix(in srgb, var(--brand) 8%, transparent)"  },
           { filter: "Policies" as Filter,      label: "Policies",        value: statsLoading ? "—" : policyCount,   icon: "ti-shield-check",     color: "#c28b00",        bg: "rgba(194,139,0,0.10)"  },
           { filter: "Forms" as Filter,         label: "Forms",           value: statsLoading ? "—" : formCount,     icon: "ti-file-description", color: "var(--info)",    bg: "rgba(37,99,235,0.10)" },
           { filter: "Templates" as Filter,     label: "Templates",       value: statsLoading ? "—" : templateCount, icon: "ti-table",            color: "var(--success)", bg: "rgba(23,144,90,0.10)" },
@@ -590,7 +590,7 @@ export default function DocumentCenterPage() {
                 style={{
                   border: `2px dashed ${dragOver ? "var(--primary)" : uploadErrors.file ? "var(--error)" : "var(--outline-v)"}`,
                   borderRadius: "var(--radius)",
-                  background: dragOver ? "rgba(124,58,237,0.04)" : "var(--bg-low)",
+                  background: dragOver ? "color-mix(in srgb, var(--brand) 4%, transparent)" : "var(--bg-low)",
                   padding: "28px 16px",
                   textAlign: "center",
                   cursor: "pointer",

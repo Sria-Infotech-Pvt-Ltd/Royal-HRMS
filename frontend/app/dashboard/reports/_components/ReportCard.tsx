@@ -23,7 +23,7 @@ function lookOf(report: ReportDefinition): { icon: string; accent: string } {
   if (text.includes("attendance")) return { icon: "ti-calendar-check", accent: "#2563eb" };
   if (text.includes("separation")) return { icon: "ti-door-exit", accent: "#dc2626" };
   if (text.includes("face")) return { icon: "ti-face-id", accent: "#0d9488" };
-  if (text.includes("employee") || text.includes("directory")) return { icon: "ti-users", accent: "#7c3aed" };
+  if (text.includes("employee") || text.includes("directory")) return { icon: "ti-users", accent: "var(--brand)" };
   return { icon: "ti-report", accent: "#6b7280" };
 }
 
