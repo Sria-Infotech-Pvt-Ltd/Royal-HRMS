@@ -3,7 +3,7 @@ import logging
 from django.conf import settings as django_settings
 from django.core.cache import cache
 from django.db import connection as db_connection
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -511,6 +511,7 @@ class HRAttendanceSummaryView(APIView):
             return success('Attendance summary retrieved.', data=cached)
 
         from apps.attendance.models import AttendanceRecord
+        from apps.attendance.services_hr import CAME_IN
 
         counts = dict(
             AttendanceRecord.objects
@@ -521,10 +522,15 @@ class HRAttendanceSummaryView(APIView):
         )
 
         data = {
+            # Present = everyone who came in, late people included; Late = arrived after the grace time (a late login that still worked
+            # the full day is stored as Present, so it is counted from is_late). Late people therefore show in both numbers.
             'present':    counts.get(AttendanceRecord.STATUS_PRESENT, 0) +
+                          counts.get(AttendanceRecord.STATUS_LATE, 0) +
+                          counts.get(AttendanceRecord.STATUS_HALF_DAY, 0) +
                           counts.get(AttendanceRecord.STATUS_INCOMPLETE, 0),
             'absent':     counts.get(AttendanceRecord.STATUS_ABSENT, 0),
-            'late':       counts.get(AttendanceRecord.STATUS_LATE, 0),
+            'late':       AttendanceRecord.objects.filter(date=today, status__in=CAME_IN).filter(
+                              Q(status=AttendanceRecord.STATUS_LATE) | Q(is_late=True)).count(),
             'leave':      counts.get(AttendanceRecord.STATUS_ON_LEAVE, 0),
             'weekly_off': counts.get(AttendanceRecord.STATUS_WEEKLY_OFF, 0),
             'holiday':    counts.get(AttendanceRecord.STATUS_HOLIDAY, 0),

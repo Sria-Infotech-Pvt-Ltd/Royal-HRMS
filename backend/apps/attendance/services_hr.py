@@ -130,10 +130,12 @@ def get_dashboard_stats(
     on_leave      = status_counts.get('on_leave', 0)
 
     day_records   = AttendanceRecord.objects.filter(date=target_date, employee__in=employee_qs, status__in=CAME_IN)
-    late_short    = status_counts.get('late', 0)                          # late and short of the full day: a late mark in payroll
-    late_full_day = day_records.filter(is_late=True).exclude(status='late').count()   # late but worked the full day ("Late login")
+    # Late = arrived after the grace time. "Full day" is the Late login case (stored as Present); every other late arrival is short of the
+    # full day: status Late, or a late half day / unfinished day.
+    late_full_day = day_records.filter(is_late=True, status='present').count()
+    late_arrivals = day_records.filter(Q(status='late') | Q(is_late=True)).count()
+    late_short    = late_arrivals - late_full_day
     wfh           = day_records.filter(work_mode=AttendanceRecord.WORK_MODE_WFH).count()
-    late_arrivals = late_short + late_full_day
 
     invalid_count = _count_invalid_punches(target_date, branch, department, employee_ids)
     unpunch_count = _count_unpunches(target_date, branch, department, employee_ids)

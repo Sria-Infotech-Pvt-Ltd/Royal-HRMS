@@ -101,6 +101,7 @@ class LeaveTrendView(APIView):
         series = [
             {
                 'label': month_end.strftime('%b %Y'),
+                'month': month_end.strftime('%Y-%m'),   # lets the chart open that month's requests
                 'approved': counts.get((month_end.year, month_end.month), {}).get('approved', 0),
                 'rejected': counts.get((month_end.year, month_end.month), {}).get('rejected', 0),
             }

@@ -44,7 +44,9 @@ class AttendanceOverviewView(APIView):
         }
         present = counts.get('present', 0) + counts.get('late', 0) + counts.get('half_day', 0)
         on_leave = counts.get('on_leave', 0)
-        late = counts.get('late', 0)
+        # Late = arrived after the grace time, whether or not the full day was then worked; those people are also counted as present above.
+        late = AttendanceRecord.objects.filter(date=today, status__in=['present', 'late', 'half_day', 'incomplete']).filter(
+            Q(status='late') | Q(is_late=True)).count()
         missing_punch = AttendanceRecord.objects.filter(
             date=today, status='incomplete',
         ).count()

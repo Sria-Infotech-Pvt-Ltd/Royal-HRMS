@@ -16,6 +16,7 @@ import ImportModal from "./ImportModal";
 import AttendanceDetailDrawer from "./AttendanceDetailDrawer";
 import AttendanceDatePicker from "./AttendanceDatePicker";
 import AttendanceStatusTabs from "./AttendanceStatusTabs";
+import StatsLoadNotice from "./StatsLoadNotice";
 import AttendanceTable from "./AttendanceTable";
 import type { SortState } from "./attendanceView";
 import { localISODate } from "./monthView";
@@ -80,7 +81,7 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
   const dashboardUrl = user ? `${API.attendance.dashboard}${toQuery(filters)}` : null;
 
   const { data: records, loading, error, refetch: refetchRecords } = useFetch<PaginatedAttendance>(recordsUrl);
-  const { data: dashboard, refetch: refetchChips } = useFetch<DashboardData>(dashboardUrl);
+  const { data: dashboard, error: dashboardError, status: dashboardStatus, refetch: refetchChips } = useFetch<DashboardData>(dashboardUrl);
 
   const rows  = useMemo(() => records?.results ?? [], [records]);
 
@@ -145,6 +146,7 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
       </div>
 
       {error && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {error}</div>}
+      {dashboardError && !dashboard && <StatsLoadNotice status={dashboardStatus} onRetry={refetchChips} />}
 
       <div className="card">
         <AttendanceStatusTabs

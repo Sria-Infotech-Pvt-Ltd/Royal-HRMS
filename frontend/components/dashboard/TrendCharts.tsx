@@ -5,11 +5,13 @@
 // trailing-6-month series and renders a simple bar chart, same visual
 // language as DeptHeadcountChart.tsx (plain divs, no chart library).
 
+import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { buildApprovalsLink } from "@/lib/approvalLink";
 
 interface HeadcountPoint { label: string; count: number }
-interface LeavePoint { label: string; approved: number; rejected: number }
+interface LeavePoint { label: string; month?: string; approved: number; rejected: number }
 interface PayrollCostPoint { label: string; amount: number }
 
 function LoadingRow() {
@@ -63,7 +65,23 @@ export function HeadcountTrendCard() {
   );
 }
 
+// One bar. With something behind it, it is a button that opens those requests; clicking it must not also trigger the card around it
+// (the HR dashboard wraps the whole card in a link to the Leave page).
+function TrendBar({ title, height, colour, isLinked, onOpen }: { title: string; height: number; colour: string; isLinked: boolean; onOpen: () => void }) {
+  const bar = { width: 12, height: `${height}px`, background: colour, borderRadius: "3px 3px 0 0" } as const;
+  if (!isLinked) return <div title={title} style={bar} />;
+  return (
+    <button
+      type="button" title={`${title}. Click to see them.`} aria-label={title}
+      onClick={event => { event.stopPropagation(); onOpen(); }}
+      onKeyDown={event => event.stopPropagation()}
+      style={{ ...bar, padding: 0, border: 0, cursor: "pointer" }}
+    />
+  );
+}
+
 export function LeaveTrendCard() {
+  const router = useRouter();
   const { data, loading } = useFetch<{ series: LeavePoint[] }>(API.dashboard.leaveTrend);
   const series = data?.series ?? [];
   const max = Math.max(1, ...series.map(s => Math.max(s.approved, s.rejected)));
@@ -85,8 +103,14 @@ export function LeaveTrendCard() {
           {series.map(point => (
             <div key={point.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
               <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: "100%" }}>
-                <div title={`${point.label}: ${point.approved} approved`} style={{ width: 12, height: `${Math.max(4, (point.approved / max) * 100)}px`, background: "var(--success)", borderRadius: "3px 3px 0 0" }} />
-                <div title={`${point.label}: ${point.rejected} rejected`} style={{ width: 12, height: `${Math.max(4, (point.rejected / max) * 100)}px`, background: "var(--error)", borderRadius: "3px 3px 0 0" }} />
+                <TrendBar
+                  title={`${point.label}: ${point.approved} approved`} height={Math.max(4, (point.approved / max) * 100)} colour="var(--success)"
+                  isLinked={point.approved > 0} onOpen={() => router.push(buildApprovalsLink({ type: "leave", status: "approved", month: point.month }))}
+                />
+                <TrendBar
+                  title={`${point.label}: ${point.rejected} rejected`} height={Math.max(4, (point.rejected / max) * 100)} colour="var(--error)"
+                  isLinked={point.rejected > 0} onOpen={() => router.push(buildApprovalsLink({ type: "leave", status: "rejected", month: point.month }))}
+                />
               </div>
               <span style={{ fontSize: 10, color: "var(--on-variant)" }}>{point.label.split(" ")[0]}</span>
             </div>

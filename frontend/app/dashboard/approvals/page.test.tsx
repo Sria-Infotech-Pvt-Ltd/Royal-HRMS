@@ -13,7 +13,9 @@ vi.mock("@/hooks/usePermission", () => ({
   useAnyPermission: (...codes: string[]) => codes.some(code => permissions.has(code)),
 }));
 vi.mock("@/hooks/useCurrentUser", () => ({ useCurrentUser: () => user }));
-vi.mock("./_components/TeamApprovalsSection", () => ({ default: () => <div>team-approvals-content</div> }));
+vi.mock("./_components/TeamApprovalsSection", () => ({
+  default: (props: { initialFilters?: object }) => <div>team-approvals-content {JSON.stringify(props.initialFilters ?? {})}</div>,
+}));
 vi.mock("./_components/AttendanceApprovalTab", () => ({ default: () => <div>attendance-content</div> }));
 vi.mock("./_components/FaceRegistrationApprovalsTab", () => ({ default: () => <div>face-content</div> }));
 vi.mock("./_components/PersonnelActionsTab", () => ({ default: () => <div>personnel-content</div> }));
@@ -66,5 +68,24 @@ describe("Approvals page: opening a tab from a link", () => {
     permissions = new Set(["timesheet.approve"]);
     render(<ApprovalsPage />);
     expect(screen.getByText("overview-content")).toBeTruthy();
+  });
+
+  it("a chart link opens Team Approvals on the asked-for type, status and month (the dashboard's Rejected bar)", () => {
+    query = "section=approvals&type=leave&status=rejected&month=2026-11";
+    permissions = new Set(["leave.approve"]);
+    render(<ApprovalsPage />);
+    expect(screen.getByText(/team-approvals-content/)).toBeTruthy();
+    expect(screen.queryByText("overview-content")).toBeNull();
+    expect(screen.getByText(/team-approvals-content/).textContent).toContain(
+      JSON.stringify({ type: "leave", status: "rejected", dateFrom: "2026-11-01", dateTo: "2026-11-30" }),
+    );
+  });
+
+  it("a superuser reaches it too", () => {
+    query = "section=approvals&type=leave&status=rejected";
+    user = { can_manage_team: false, is_superuser: true };
+    permissions = new Set(["leave.approve"]);
+    render(<ApprovalsPage />);
+    expect(screen.getByText(/team-approvals-content/).textContent).toContain('"status":"rejected"');
   });
 });

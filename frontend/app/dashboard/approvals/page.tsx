@@ -12,6 +12,7 @@ import TimesheetApprovalsTab from "./_components/TimesheetApprovalsTab";
 import MyApprovalsOverview from "./_components/MyApprovalsOverview";
 import { isUnrestrictedUser } from "@/lib/auth";
 import { approvalSectionsFor, sectionFromLink, type ApprovalSectionKey } from "@/lib/approvalSections";
+import { parseApprovalsLink } from "@/lib/approvalLink";
 
 type Section = ApprovalSectionKey;
 
@@ -52,7 +53,9 @@ export default function ApprovalsPage() {
   }, [section, sections]);
 
   // A link such as a timesheet bell notice opens a named tab (?section=timesheets), once this person's tabs are known.
-  const linkedSection = useSearchParams().get("section");
+  const linkParams = useSearchParams();
+  const linkedSection = linkParams.get("section");
+  const linkedFilters = useMemo(() => parseApprovalsLink(linkParams), [linkParams]);
   useEffect(() => {
     const wanted = sectionFromLink(linkedSection, sections);
     if (wanted) setSection(wanted);
@@ -87,7 +90,7 @@ export default function ApprovalsPage() {
         />
       )}
       {section === "timesheets"        && canApproveTimesheets && <TimesheetApprovalsTab />}
-      {section === "approvals"         && canApprove           && <TeamApprovalsSection />}
+      {section === "approvals"         && canApprove           && <TeamApprovalsSection initialFilters={linkedFilters} />}
       {section === "attendance"        && canApproveAttendance && <div className="settings-card"><AttendanceApprovalTab /></div>}
       {section === "personnel"         && canSeePersonnel      && <PersonnelActionsTab />}
       {section === "face_registration" && canApproveFace        && <div className="settings-card"><FaceRegistrationApprovalsTab /></div>}

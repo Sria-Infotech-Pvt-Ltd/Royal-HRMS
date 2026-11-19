@@ -20,6 +20,7 @@ import ApprovalsTable from "./ApprovalsTable";
 import RequestDetailDrawer from "./RequestDetailDrawer";
 import BulkConfirmModal from "./BulkConfirmModal";
 import { confirmDialog } from "@/components/DialogProvider";
+import type { ApprovalLinkFilters } from "@/lib/approvalLink";
 
 interface ModalState {
   id:            string;
@@ -31,7 +32,7 @@ interface ModalState {
   autoVars?:     Record<string, string>;
 }
 
-export default function TeamApprovalsSection() {
+export default function TeamApprovalsSection({ initialFilters }: { initialFilters?: ApprovalLinkFilters }) {
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -87,12 +88,13 @@ export default function TeamApprovalsSection() {
   }), [counts]);
 
   // ── Tabs + toolbar filter state ──
-  const [activeTab,    setActiveTab]    = useState<"all" | ApprovalKind>("all");
+  // A link (e.g. a dashboard chart bar) can open this already filtered to one type, status and month.
+  const [activeTab,    setActiveTab]    = useState<"all" | ApprovalKind>(initialFilters?.type ?? "all");
   const [search,       setSearch]       = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | DisplayStatus>("pending");
+  const [statusFilter, setStatusFilter] = useState<"all" | DisplayStatus>(initialFilters?.status ?? "pending");
   const [typeFilter,   setTypeFilter]   = useState<"all" | ApprovalKind>("all");
-  const [dateFrom,     setDateFrom]     = useState("");
-  const [dateTo,       setDateTo]       = useState("");
+  const [dateFrom,     setDateFrom]     = useState(initialFilters?.dateFrom ?? "");
+  const [dateTo,       setDateTo]       = useState(initialFilters?.dateTo ?? "");
   const [selected,     setSelected]     = useState<Set<string>>(new Set());
 
   useEffect(() => { setSelected(new Set()); }, [activeTab]);

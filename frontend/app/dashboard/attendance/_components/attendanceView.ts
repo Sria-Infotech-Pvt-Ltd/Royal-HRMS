@@ -17,10 +17,13 @@ export const STATUS_TABS: readonly StatusTab[] = [
   { key: "weekly_off", label: "Weekly Off", colour: PALETTE.weekly_off },
 ];
 
-/** The number to show on a tab, or null for "All" (no count: the chips leave out holidays and incomplete days, so a sum could mislead). */
+/**
+ * The number to show on a tab, or null for "All" (no count: the chips leave out holidays and incomplete days, so a sum could mislead) and
+ * null while the numbers are not known (loading, or failed): a 0 there would claim nobody is present.
+ */
 export function tabCount(key: StatusTab["key"], chips: SummaryChips | undefined): number | null {
-  if (key === "") return null;
-  return chips?.[key] ?? 0;
+  if (key === "" || !chips) return null;
+  return chips[key] ?? 0;
 }
 
 export type SortKey = "name" | "clock_in" | "status";

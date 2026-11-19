@@ -120,6 +120,7 @@ class LeaveTrendTests(TestCase):
         current_month = resp.data['data']['series'][-1]
         self.assertEqual(current_month['approved'], 2)
         self.assertEqual(current_month['rejected'], 1)
+        self.assertEqual(current_month['month'], today.strftime('%Y-%m'))   # the chart links to that month's requests
 
 
 class PayrollCostTrendTests(TestCase):

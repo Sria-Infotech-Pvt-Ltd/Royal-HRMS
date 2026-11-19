@@ -9,8 +9,8 @@ describe("tabCount", () => {
     expect(tabCount("absent", chips)).toBe(11);
     expect(tabCount("half_day", chips)).toBe(0);
   });
-  it("shows 0 while the numbers are still loading", () => {
-    expect(tabCount("present", undefined)).toBe(0);
+  it("shows no number while the numbers are loading or failed, never a misleading 0", () => {
+    expect(tabCount("present", undefined)).toBeNull();
   });
   it("lists All first and then the seven statuses the server can filter on", () => {
     expect(STATUS_TABS.map(tab => tab.key)).toEqual(["", "present", "late", "wfh", "absent", "on_leave", "half_day", "weekly_off"]);

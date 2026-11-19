@@ -133,6 +133,12 @@ class HREmployeeMonthView(APIView):
 
             if status in stats:
                 stats[status] += 1
+            # A late arrival was still present, so a Late day counts as Present too; a late login (full hours, stored as Present) counts as
+            # Late too. Present days and Late days therefore overlap on purpose.
+            if status == 'late':
+                stats['present'] += 1
+            elif status == 'present' and rec is not None and rec.is_late:
+                stats['late'] += 1
             if status in LOP_STATUSES:
                 stats['lop_days'] += 1
             total_minutes += minutes

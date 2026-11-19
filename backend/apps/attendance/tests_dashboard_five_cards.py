@@ -27,6 +27,7 @@ class FiveCardsTests(TestCase):
             'late_short': dict(status='late', is_late=True),
             'wfh_late':   dict(status='present', is_late=True, work_mode='wfh'),
             'half':       dict(status='half_day'),
+            'half_late':  dict(status='half_day', is_late=True),             # late AND short: not a full-day late login
             'working':    dict(status='incomplete'),
             'leave':      dict(status='on_leave'),
             'wfh_absent': dict(status='absent', work_mode='wfh'),            # not counted: never came in
@@ -44,21 +45,21 @@ class FiveCardsTests(TestCase):
         return {row['employee_id'] for row in get_attendance_list({'date': TODAY, 'branch': self.branch, 'status': status})}
 
     def test_present_counts_everyone_who_came_in(self):
-        self.assertEqual(self.cards()['present_today'], 6)   # on time, late full, late short, wfh, half day, still working
+        self.assertEqual(self.cards()['present_today'], 7)   # on time, late full, late short, wfh, half day, still working
 
     def test_wfh_counts_only_people_who_came_in(self):
         self.assertEqual(self.cards()['wfh'], 1)
 
     def test_late_is_split_into_full_day_and_short(self):
         cards = self.cards()
-        self.assertEqual((cards['late_full_day'], cards['late_short'], cards['late_arrivals']), (2, 1, 3))
+        self.assertEqual((cards['late_full_day'], cards['late_short'], cards['late_arrivals']), (2, 2, 4))
 
     def test_lists_match_the_cards(self):
         rows = self.rows
-        self.assertEqual(self.listed('present'), {rows[key] for key in ('on_time', 'late_full', 'late_short', 'wfh_late', 'half', 'working')})
-        self.assertEqual(self.listed('late'), {rows['late_full'], rows['late_short'], rows['wfh_late']})
+        self.assertEqual(self.listed('present'), {rows[key] for key in ('on_time', 'late_full', 'late_short', 'wfh_late', 'half', 'half_late', 'working')})
+        self.assertEqual(self.listed('late'), {rows['late_full'], rows['late_short'], rows['wfh_late'], rows['half_late']})
         self.assertEqual(self.listed('wfh'), {rows['wfh_late']})
 
     def test_chips_agree_with_the_cards(self):
         chips = get_dashboard_stats(TODAY, self.branch, '')['summary_chips']
-        self.assertEqual((chips['present'], chips['late'], chips['wfh']), (6, 3, 1))
+        self.assertEqual((chips['present'], chips['late'], chips['wfh']), (7, 4, 1))
