@@ -29,6 +29,12 @@ export interface WorkFromHomeRequest {
   created_at:       string;
   can_approve:      boolean;
   can_cancel:       boolean;
+  /** False when an approver allowed punching from any location on these days; absent on older responses (treat as true). */
+  enforce_location?: boolean;
+  location_unlocked_by_name?: string;
+  location_unlocked_at?: string | null;
+  /** True for the people who may allow / stop "any location" on this request. */
+  can_set_location_policy?: boolean;
 }
 
 export interface WFHSavedLocation {

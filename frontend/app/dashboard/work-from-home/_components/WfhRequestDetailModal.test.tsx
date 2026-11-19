@@ -120,4 +120,23 @@ describe("WfhRequestDetailModal", () => {
     expect(onChanged).not.toHaveBeenCalled();
     expect(patch).not.toHaveBeenCalled();
   });
+
+  it("tells an employee with an approved request that punches must be near the declared location, and how to get that changed", () => {
+    open({ status: "approved", can_cancel: false, enforce_location: true });
+    expect(screen.getByText("Location check")).toBeTruthy();
+    expect(screen.getByText(/ask your manager or HR to allow punching from any location/)).toBeTruthy();
+  });
+
+  it("says so when an approver allowed punching from any location, and who", () => {
+    open({ status: "approved", can_cancel: false, enforce_location: false, location_unlocked_by_name: "Hema" });
+    expect(screen.getByText(/You can punch from any location on these days \(allowed by Hema\)/)).toBeTruthy();
+  });
+
+  it("shows no location-check line for a request that is not approved or from an older server", () => {
+    open({ status: "pending", enforce_location: true });
+    expect(screen.queryByText("Location check")).toBeNull();
+    cleanup();
+    open({ status: "approved", can_cancel: false });
+    expect(screen.queryByText("Location check")).toBeNull();
+  });
 });

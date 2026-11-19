@@ -881,6 +881,13 @@ class WorkFromHomeRequest(models.Model):
     longitude    = models.DecimalField(max_digits=9, decimal_places=6)
     # How the point was obtained: captured on the device (gps) or looked up from a typed address (address, approximate).
     location_source = models.CharField(max_length=10, choices=WFH_LOCATION_SOURCE_CHOICES, default=WFH_SOURCE_GPS)
+    # True (the default): a punch on these days must be near the location above. An approver can switch it off for someone who
+    # moves around during the approved days (see services_geofencing._validate_wfh); face verification still applies.
+    enforce_location = models.BooleanField(default=True)
+    location_unlocked_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='wfh_locations_unlocked',
+    )
+    location_unlocked_at = models.DateTimeField(null=True, blank=True)
     status       = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default=REQ_PENDING, db_index=True)
 
     # L1 approval

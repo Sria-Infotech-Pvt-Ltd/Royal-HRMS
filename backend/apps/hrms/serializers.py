@@ -511,18 +511,33 @@ class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
     l2_approver_name = serializers.SerializerMethodField()
     can_approve      = serializers.SerializerMethodField()
     can_cancel       = serializers.SerializerMethodField()
+    can_set_location_policy = serializers.SerializerMethodField()
+    location_unlocked_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model  = WorkFromHomeRequest
         fields = [
             'id', 'start_date', 'end_date', 'reason', 'location_label',
             'latitude', 'longitude', 'location_source', 'status',
+            'enforce_location', 'location_unlocked_by_name', 'location_unlocked_at', 'can_set_location_policy',
             'employee_name', 'employee_code', 'employee_dept', 'employee_branch',
             'employee_email', 'l1_approver_name', 'l1_skipped', 'l1_status', 'l1_remarks', 'l1_actioned_at',
             'l2_approver_name', 'l2_status', 'l2_remarks', 'l2_actioned_at',
             'created_at',
             'can_approve', 'can_cancel',
         ]
+
+    def get_location_unlocked_by_name(self, obj):
+        return obj.location_unlocked_by.full_name if obj.location_unlocked_by_id else ''
+
+    def get_can_set_location_policy(self, obj):
+        """Whether the viewer may allow / stop "punch from any location" on this request (same people who can approve it)."""
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is None or not getattr(user, 'is_authenticated', False):
+            return False
+        from apps.hrms.views.wfh_location_policy import can_set_location_policy
+        return can_set_location_policy(user, obj)
 
     def get_employee_name(self, obj):
         return obj.employee.full_name if obj.employee_id else ''

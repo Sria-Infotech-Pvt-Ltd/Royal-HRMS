@@ -392,6 +392,7 @@ export const API = {
     requests:            "/wfh/requests/",
     requestDetail:       (id: string) => `/wfh/requests/${id}/`,
     approve:             (id: string) => `/wfh/requests/${id}/approve/`,
+    locationPolicy:      (id: string) => `/wfh/requests/${id}/location-policy/`,
     savedLocations:      "/wfh/saved-locations/",
     savedLocationDetail: (id: string) => `/wfh/saved-locations/${id}/`,
   },

@@ -6,6 +6,7 @@ import { LeaveRequest } from "../../leave/_data";
 import { ApprovalItem, CorrectionRequest, ExpenseRequest, fmtAmount, fmtSubmitted, initials } from "../_data";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import { TypeBadge, StatusChip } from "./Badges";
+import WfhLocationPolicy from "./WfhLocationPolicy";
 
 interface Props {
   item:      ApprovalItem | null;
@@ -170,6 +171,9 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
                   {reasonText(item)}
                 </p>
               </div>
+
+              {/* The location check on this request's punches (work from home only) */}
+              {isWfh(item) && <WfhLocationPolicy key={item.raw.id} request={item.raw} />}
 
               {/* Attachments */}
               {(isLeave(item) && item.raw.document_url) || (isExpense(item) && item.raw.receipts?.length > 0) ? (

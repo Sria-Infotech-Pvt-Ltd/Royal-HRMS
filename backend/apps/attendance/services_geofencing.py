@@ -365,6 +365,20 @@ def _validate_wfh(
             wfh_request=None,
         )
 
+    if not wfh_request.enforce_location:
+        # An approver lifted the location lock for these days (the employee moves around). The punch is allowed from anywhere; the
+        # distance is still recorded when a reading is available, but is not judged, so is_inside_geofence stays "not evaluated".
+        distance = None
+        if employee_lat is not None and employee_lon is not None:
+            distance = round(haversine_distance(
+                GpsCoordinate(latitude=float(employee_lat), longitude=float(employee_lon)),
+                GpsCoordinate(latitude=float(wfh_request.latitude), longitude=float(wfh_request.longitude)),
+            ), 2)
+        return GeofenceResult(
+            is_allowed=True, is_inside_geofence=None, calculated_distance=distance, branch=None,
+            rejection_message=None, wfh_request=wfh_request,
+        )
+
     if employee_lat is None or employee_lon is None:
         return GeofenceResult(
             is_allowed=False, is_inside_geofence=False,
@@ -401,7 +415,8 @@ def _validate_wfh(
         is_allowed=False, is_inside_geofence=False,
         calculated_distance=round(distance_m, 2), branch=None,
         rejection_message=(
-            'You are outside your declared work-from-home location. Punch In is not permitted.'
+            'You are outside your declared work-from-home location. Punch In is not permitted. '
+            'If you have moved, ask your manager or HR to allow punching from any location for these days.'
         ),
         wfh_request=wfh_request,
     )

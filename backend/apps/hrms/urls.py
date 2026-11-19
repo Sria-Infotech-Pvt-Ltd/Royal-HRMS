@@ -53,6 +53,7 @@ from .views import (
     ProjectAssignmentsWebhookView,
     ProjectSyncStatusView,
     WorkFromHomeApprovalView,
+    WorkFromHomeLocationPolicyView,
     WorkFromHomeRequestDetailView,
     WorkFromHomeRequestListCreateView,
     WFHSavedLocationDetailView,
@@ -101,6 +102,7 @@ urlpatterns = [
     path('wfh/requests/',                          WorkFromHomeRequestListCreateView.as_view(), name='wfh-request-list'),
     path('wfh/requests/<str:request_id>/',         WorkFromHomeRequestDetailView.as_view(),     name='wfh-request-detail'),
     path('wfh/requests/<str:request_id>/approve/', WorkFromHomeApprovalView.as_view(),          name='wfh-request-approve'),
+    path('wfh/requests/<str:request_id>/location-policy/', WorkFromHomeLocationPolicyView.as_view(), name='wfh-request-location-policy'),
     path('wfh/saved-locations/',                   WFHSavedLocationListCreateView.as_view(),    name='wfh-saved-location-list-create'),
     path('wfh/saved-locations/<uuid:location_id>/', WFHSavedLocationDetailView.as_view(),        name='wfh-saved-location-detail'),
 

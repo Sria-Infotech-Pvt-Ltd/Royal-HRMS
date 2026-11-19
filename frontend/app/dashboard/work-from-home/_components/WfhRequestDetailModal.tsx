@@ -107,6 +107,17 @@ export default function WfhRequestDetailModal({ request, onClose, onChanged, rea
           </div>
         )}
 
+        {request.status === "approved" && request.enforce_location !== undefined && (
+          <div className="border-t border-[var(--outline-v)] pt-4">
+            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Location check</p>
+            <p className="text-sm text-[var(--on-bg)]">
+              {request.enforce_location
+                ? "You must punch near this location. If you have moved, ask your manager or HR to allow punching from any location."
+                : `You can punch from any location on these days${request.location_unlocked_by_name ? ` (allowed by ${request.location_unlocked_by_name})` : ""}.`}
+            </p>
+          </div>
+        )}
+
         <div className="border-t border-[var(--outline-v)] pt-4">
           <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Reason</p>
           <p className="text-sm text-[var(--on-bg)]">{request.reason || "—"}</p>
