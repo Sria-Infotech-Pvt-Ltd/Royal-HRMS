@@ -32,6 +32,11 @@ from core.permissions import HasClearedAssessments, HasCompletedOnboarding, HasC
 
 INCOMPLETE = (User.ONBOARDING_PENDING, User.ONBOARDING_DRAFT, User.ONBOARDING_SUBMITTED, User.ONBOARDING_REJECTED)
 STATUS_MESSAGE = HasCompletedOnboardingStatus.message
+# The status gate now names the missing step; any of these means "blocked by the status gate".
+STATUS_MESSAGES = {
+    STATUS_MESSAGE, HasCompletedOnboardingStatus.AWAITING_APPROVAL_MESSAGE, HasCompletedOnboardingStatus.AWAITING_ACTIVATION_MESSAGE,
+    HasCompletedOnboardingStatus.PASSWORD_SET_MESSAGE,
+}
 COMBINED_MESSAGE = HasCompletedOnboarding.message
 
 COMBINED_READS = [  # the views that already used the combined gate before G1
@@ -126,7 +131,10 @@ class GateFixtures(TestCase):
         )
 
     def _blocked(self, response, message=STATUS_MESSAGE) -> bool:
-        return response.status_code == 403 and response.json().get('message') == message
+        if response.status_code != 403:
+            return False
+        shown = response.json().get('message')
+        return shown in STATUS_MESSAGES if message == STATUS_MESSAGE else shown == message
 
     def _blocked_by_any_gate(self, response) -> bool:
         return self._blocked(response, STATUS_MESSAGE) or self._blocked(response, COMBINED_MESSAGE)
@@ -275,3 +283,94 @@ class PermissionClassTests(GateFixtures):
     def test_the_combined_gate_keeps_its_original_message(self):
         self.assertEqual(COMBINED_MESSAGE, 'Complete onboarding and your assigned assessments before accessing this resource.')
         self.assertNotEqual(STATUS_MESSAGE, COMBINED_MESSAGE)
+
+
+class GateMessageTests(TestCase):
+    """The refusal names the step the person still has to do."""
+
+    _count = 0
+
+    def _message(self, record_password_set=False, **fields):
+        from rest_framework.test import APIRequestFactory
+
+        from apps.accounts.models import OnboardingEvent
+
+        type(self)._count += 1
+        user = make_user(f'gate_msg{self._count}@test.com', employee_id=f'GM{self._count}', requires_self_service_onboarding=True, **fields)
+        if record_password_set:
+            OnboardingEvent.objects.create(employee=user, event=OnboardingEvent.PASSWORD_SET)
+        request = APIRequestFactory().get('/x/')
+        request.user = user
+        gate = HasCompletedOnboardingStatus()
+        return gate.has_permission(request, None), gate.message
+
+    def test_submitted_onboarding_says_it_is_waiting_for_hr(self):
+        allowed, message = self._message(onboarding_status=User.ONBOARDING_SUBMITTED)
+        self.assertFalse(allowed)
+        self.assertEqual(message, HasCompletedOnboardingStatus.AWAITING_APPROVAL_MESSAGE)
+
+    def test_approved_but_not_activated_says_to_open_the_activation_link(self):
+        for fields in ({'activation_pending': True}, {'activation_pending': False, 'account_activated_at': None}):
+            allowed, message = self._message(onboarding_status=User.ONBOARDING_COMPLETE, **fields)
+            self.assertFalse(allowed, fields)
+            self.assertEqual(message, HasCompletedOnboardingStatus.AWAITING_ACTIVATION_MESSAGE)
+            self.assertIn('activation link', message)
+
+    def test_someone_who_already_set_a_password_is_told_to_sign_in_again(self):
+        allowed, message = self._message(record_password_set=True, onboarding_status=User.ONBOARDING_COMPLETE, activation_pending=True)
+        self.assertFalse(allowed)
+        self.assertEqual(message, HasCompletedOnboardingStatus.PASSWORD_SET_MESSAGE)
+        self.assertIn('sign in again', message.lower())
+
+    def test_an_activated_approved_employee_passes(self):
+        from django.utils import timezone
+
+        allowed, _ = self._message(onboarding_status=User.ONBOARDING_COMPLETE, activation_pending=False, account_activated_at=timezone.now())
+        self.assertTrue(allowed)
+
+
+class ExpiredLinkResetFlowTests(TestCase):
+    """The activation link expired, so the employee used Forgot password. Activation finishes at the NEXT sign-in."""
+
+    def test_the_old_session_stays_blocked_until_a_fresh_sign_in(self):
+        from django.urls import reverse
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import PasswordResetToken
+        from apps.accounts.services_onboarding import start_onboarding
+
+        user = make_user(
+            'expired_link@test.com', employee_id='EL1', requires_self_service_onboarding=True,
+            onboarding_status=User.ONBOARDING_COMPLETE, account_activated_at=None,
+        )
+        with patch('apps.accounts.utils.send_activation_invite'):
+            start_onboarding(user, actor=None)      # approval: activation link sent, account awaiting activation
+        user.refresh_from_db()
+        self.assertTrue(user.activation_pending)
+
+        session = APIClient()                        # the browser session he already had
+        session.force_authenticate(user=user)
+        url = reverse('attendance-stats')
+        before = session.get(url, {'month': 11, 'year': 2026})
+        self.assertEqual(before.status_code, 403)
+        self.assertEqual(before.json()['message'], HasCompletedOnboardingStatus.AWAITING_ACTIVATION_MESSAGE)
+
+        token = PasswordResetToken.create_for_user(user)                  # Forgot password, because the link had expired
+        reset = APIClient().post(reverse('reset-password'), {
+            'reset_token': str(token.id), 'new_password': 'Fresh-Pass-2026!', 'confirm_password': 'Fresh-Pass-2026!',
+        }, format='json')
+        self.assertEqual(reset.status_code, 200, reset.json())
+
+        still_old = session.get(url, {'month': 11, 'year': 2026})         # same session: still not activated
+        self.assertEqual(still_old.status_code, 403)
+        self.assertEqual(still_old.json()['message'], HasCompletedOnboardingStatus.PASSWORD_SET_MESSAGE)
+
+        signed_in = APIClient().post(reverse('login'), {'email': 'expired_link@test.com', 'password': 'Fresh-Pass-2026!'}, format='json')
+        self.assertEqual(signed_in.status_code, 200, signed_in.json())
+        user.refresh_from_db()
+        self.assertFalse(user.activation_pending)
+        self.assertIsNotNone(user.account_activated_at)
+
+        fresh = APIClient()
+        fresh.force_authenticate(user=user)
+        self.assertEqual(fresh.get(url, {'month': 11, 'year': 2026}).status_code, 200)

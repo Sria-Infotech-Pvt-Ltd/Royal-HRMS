@@ -135,6 +135,21 @@ class HasCompletedOnboardingStatus(BasePermission):
     Same exemptions as HasCompletedOnboarding.
     """
     message = 'Complete onboarding before accessing this resource.'
+    AWAITING_APPROVAL_MESSAGE = 'Your onboarding is waiting for HR approval. Employee features open once it is approved.'
+    AWAITING_ACTIVATION_MESSAGE = (
+        'Your onboarding is approved, but your account is not activated yet. Open the activation link HR emailed you, '
+        'set your password, then sign in again. If you cannot find the email, ask HR to resend it.'
+    )
+
+    PASSWORD_SET_MESSAGE = (
+        'Your password is set, but your account is only activated the next time you sign in. '
+        'Sign out, then sign in again with your new password.'
+    )
+
+    @staticmethod
+    def _has_set_password(user) -> bool:
+        from apps.accounts.models import OnboardingEvent
+        return OnboardingEvent.objects.filter(employee=user, event=OnboardingEvent.PASSWORD_SET).exists()
 
     def has_permission(self, request, view) -> bool:
         user = request.user
@@ -144,8 +159,16 @@ class HasCompletedOnboardingStatus(BasePermission):
             return True
         if not user.requires_self_service_onboarding:
             return True
-        approved = user.onboarding_status == user.ONBOARDING_COMPLETE
-        return approved and user.account_activated_at is not None and not user.activation_pending
+        if user.onboarding_status != user.ONBOARDING_COMPLETE:
+            # Say which step is missing: a person who finished everything was only told "complete onboarding" and could not tell why.
+            self.message = self.AWAITING_APPROVAL_MESSAGE if user.onboarding_status == user.ONBOARDING_SUBMITTED else self.message
+            return False
+        if user.account_activated_at is None or user.activation_pending:
+            # He set a password (the activation link, or Forgot password when the link had expired) but is still on the session he
+            # had before: activation completes at his next sign-in, so tell him that instead of sending him back to the link.
+            self.message = self.PASSWORD_SET_MESSAGE if self._has_set_password(user) else self.AWAITING_ACTIVATION_MESSAGE
+            return False
+        return True
 
 
 class HasClearedAssessments(BasePermission):
