@@ -1,0 +1,46 @@
+/*
+  Phone and small-tablet safety net. Imported last (after the theme files) so it wins.
+
+  Much of the app lays out its grids with INLINE styles (gridTemplateColumns: "repeat(4, 1fr)" and similar), which a normal media query
+  cannot override. These attribute selectors match those inline values and collapse them on narrow screens. Both spellings of the style
+  attribute are matched: the server writes "grid-template-columns:repeat(4, 1fr)", the browser rewrites it with a space after the colon,
+  and the substring selectors below do not depend on that space. Seven-column calendars are left alone on purpose.
+
+  Breakpoints: 640px and below is a phone; 760px and below is a phone in landscape / small tablet.
+*/
+
+/* ---- Rows of 3 or 4 stat tiles: two across on a phone ---- */
+@media (max-width: 640px) {
+  [style*="grid-template-columns"][style*="repeat(4, 1fr)"],
+  [style*="grid-template-columns"][style*="repeat(3, 1fr)"],
+  [style*="grid-template-columns"][style*="1fr 1fr 1fr"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* ---- Two-column forms and two-card rows: one column on a phone ---- */
+@media (max-width: 640px) {
+  [style*="columns: 1fr 1fr"]:not([style*="1fr 1fr 1fr"]),
+  [style*="columns:1fr 1fr"]:not([style*="1fr 1fr 1fr"]),
+  [style*="columns: 2fr 1fr"],
+  [style*="columns:2fr 1fr"],
+  [style*="columns: 300px 1fr"],
+  [style*="columns:300px 1fr"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* ---- Fixed-width first columns (label | value | action rows) squeeze the flexible one to nothing: let the row wrap ---- */
+@media (max-width: 560px) {
+  [style*="columns: 160px 1fr 90px 80px"],
+  [style*="columns:160px 1fr 90px 80px"] {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+}
+
+/* ---- Grid and flex children may shrink below their content, so long names and numbers wrap instead of pushing the page sideways ---- */
+@media (max-width: 760px) {
+  .card, .ess-card, .lv-panel, [class*="-card"] { min-width: 0; }
+  pre, code { max-width: 100%; overflow-x: auto; }
+  img, video, canvas, svg { max-width: 100%; }
+}

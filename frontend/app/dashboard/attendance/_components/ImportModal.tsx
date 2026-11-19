@@ -208,7 +208,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
                     )}
                   </div>
 
-                  <div style={{ border: "1px solid var(--outline-v)", borderRadius: 8, overflow: "hidden", maxHeight: 260, overflowY: "auto" }}>
+                  <div style={{ border: "1px solid var(--outline-v)", borderRadius: 8, overflowX: "auto", maxHeight: 260, overflowY: "auto" }}>
                     <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
                       <thead>
                         <tr style={{ background: "var(--bg-low)", position: "sticky", top: 0 }}>

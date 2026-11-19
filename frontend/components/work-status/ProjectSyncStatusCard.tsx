@@ -103,6 +103,7 @@ export default function ProjectSyncStatusCard() {
           {groups.length === 0 ? (
             <div style={{ fontSize: 13, color: "var(--on-variant)" }}>Nothing has synced yet.</div>
           ) : (
+            <div style={{ overflowX: "auto" }}>
             <table className="table" style={{ width: "100%", fontSize: 13 }}>
               <thead><tr><th>When</th><th>What happened</th><th>Result</th><th>Details</th></tr></thead>
               <tbody>
@@ -128,6 +129,7 @@ export default function ProjectSyncStatusCard() {
                 ))}
               </tbody>
             </table>
+          </div>
           )}
           <Pager logs={data.logs} onPage={setPage} />
         </div>

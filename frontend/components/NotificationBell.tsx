@@ -94,7 +94,7 @@ export function NotificationBell() {
         <div
           ref={panelRef}
           className="fixed w-[340px] rounded-xl border border-[var(--outline-v)] shadow-lg z-[1000] overflow-hidden"
-          style={{ top: coords.top, right: coords.right, background: "var(--surface)" }}
+          style={{ top: coords.top, right: coords.right, maxWidth: "calc(100vw - 16px)", background: "var(--surface)" }}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--outline-v)]">
             <span className="text-sm font-semibold text-[var(--on-bg)]">Notifications</span>
