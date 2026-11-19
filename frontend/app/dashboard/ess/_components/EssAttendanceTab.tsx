@@ -69,7 +69,7 @@ export default function EssAttendanceTab({ isReadOnly = false, onViewAllRequests
   });
   const month = displayedMonth.getMonth() + 1;
   const year = displayedMonth.getFullYear();
-  const { calendar, isLoading: attendanceLoading, refetch } = useAttendanceDashboard({ month, year });
+  const { calendar, isLoading: attendanceLoading, error: attendanceError, refetch } = useAttendanceDashboard({ month, year });
   // Dedicated recent-punches endpoint (date + location + source), not the
   // calendar dashboard's generic `history` list — that one has no location/
   // source fields at all, which is why this card was always missing them.
@@ -109,6 +109,14 @@ export default function EssAttendanceTab({ isReadOnly = false, onViewAllRequests
           <button className="rvbtn pri" type="button" onClick={() => setShowRegularize(true)}>Regularize attendance</button>
         </div>
       </div>
+
+      {/* Without this a failed load drew an empty calendar that looked like "nothing was marked". */}
+      {attendanceError && (
+        <div className="alert alert-error" role="alert" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <span>Could not load your attendance for this month ({attendanceError}). Your records are not lost; this is only the screen failing to load them.</span>
+          <button className="rvbtn" type="button" onClick={refetch}>Try again</button>
+        </div>
+      )}
 
       <div className="ess-grid">
         <div className="ess-card">

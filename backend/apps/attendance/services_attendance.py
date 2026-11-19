@@ -650,6 +650,9 @@ class AttendanceProcessorService:
 
 
 # Status → hex colour used by CalendarGrid and DayRecordSerializer
+# Statuses that mean the person worked the day (see AttendanceDashboardService._classify_day).
+_WORKED_STATUSES = (AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE, AttendanceRecord.STATUS_HALF_DAY)
+
 _STATUS_COLOR: dict[str, str] = {
     AttendanceRecord.STATUS_PRESENT:    '#22c55e',   # green-500
     AttendanceRecord.STATUS_LATE:       '#f59e0b',   # amber-500
@@ -1101,6 +1104,11 @@ class AttendanceDashboardService:
             return AttendanceRecord.STATUS_NOT_EMPLOYED
         if last_working_day and cur > last_working_day:
             return AttendanceRecord.STATUS_NOT_EMPLOYED
+        # A day someone actually worked (a punch, or HR marking it Present / Late / Half Day afterwards) is a worked day even when
+        # the calendar calls it a weekly off or holiday. Without this, attendance HR marked for a past Saturday, Sunday or holiday
+        # sat in the database but the employee's own calendar still said "Weekly Off". Approved leave keeps its priority below.
+        if rec and rec.status in _WORKED_STATUSES and cur not in leave_dates:
+            return rec.status
         if cur in holiday_dates or (rec and rec.status == AttendanceRecord.STATUS_HOLIDAY):
             return AttendanceRecord.STATUS_HOLIDAY
         if cur in off_dates or (rec and rec.status == AttendanceRecord.STATUS_WEEKLY_OFF):

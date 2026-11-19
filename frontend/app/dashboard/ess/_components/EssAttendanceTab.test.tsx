@@ -10,6 +10,7 @@ const refetch: Record<string, ReturnType<typeof vi.fn>> = {};
 const requestedUrls: string[] = [];
 const attendanceRefetch = vi.fn();
 let rows: Record<string, unknown[]> = {};
+let attendanceError: string | null = null;
 
 vi.mock("@/hooks/useFetch", () => ({
   useFetch: (url: string | null) => {
@@ -21,7 +22,7 @@ vi.mock("@/hooks/useFetch", () => ({
     return { data, loading: false, error: null, status: null, refetch: refetch[key] };
   },
 }));
-vi.mock("@/hooks/useAttendanceDashboard", () => ({ useAttendanceDashboard: () => ({ calendar: null, isLoading: false, refetch: attendanceRefetch }) }));
+vi.mock("@/hooks/useAttendanceDashboard", () => ({ useAttendanceDashboard: () => ({ calendar: null, isLoading: false, error: attendanceError, refetch: attendanceRefetch }) }));
 vi.mock("@/hooks/useWeeklyTimesheet", () => ({ useWeeklyTimesheet: () => ({ data: null, submitting: false, submit: vi.fn() }) }));
 vi.mock("./EssAttendanceCalendar", () => ({ default: () => <div>calendar</div> }));
 vi.mock("../../my-attendance/_components/RegularizationModal", () => ({
@@ -55,6 +56,7 @@ beforeEach(() => {
   requestedUrls.length = 0;
   attendanceRefetch.mockReset();
   rows = { corrections: [correction], wfh: [wfhRequest] };
+  attendanceError = null;
 });
 afterEach(() => cleanup());
 
@@ -151,5 +153,22 @@ describe("EssAttendanceTab > Request work from home", () => {
     render(<EssAttendanceTab isReadOnly />);
     expect(screen.queryByRole("button", { name: /Request work from home/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Regularize attendance" })).toBeTruthy();
+  });
+});
+
+describe("EssAttendanceTab: a calendar that fails to load", () => {
+  it("says so and offers to try again, instead of showing an empty calendar", () => {
+    attendanceError = "Server error";
+    render(<EssAttendanceTab />);
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Could not load your attendance");
+    expect(alert.textContent).toContain("Server error");
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(attendanceRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no warning when the calendar loaded", () => {
+    render(<EssAttendanceTab />);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

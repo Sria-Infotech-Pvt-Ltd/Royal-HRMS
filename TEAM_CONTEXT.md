@@ -6319,3 +6319,9 @@ Detail for the commit "Short-hours rule, WFH backdating limit, Email Log resend 
 - The shared test database `test_hrms_dev` can be left half-migrated by another session; run tests with `TEST_DB_SUFFIX=<name> ... --keepdb` for a private one. Editing a test file while it runs makes tracebacks point at the wrong line.
 - A minted test session is signed out while the real user is using the same account.
 - Not verified in a browser: the One person and Bulk apply tabs and the global search API (unit and API tests only).
+
+## Attendance: worked days on weekly offs / holidays; ESS calendar load errors (2026-11-19)
+
+- `AttendanceDashboardService._classify_day` (shared by the calendar, the monthly summary and the weekly timesheet): a record with status present / late / half_day now wins over the generic Weekly Off / Holiday label, so attendance HR marks for a past Saturday, Sunday or holiday shows on the employee's own calendar. Approved leave keeps its priority; absent / incomplete / weekly_off records are unchanged. Tests: `tests_worked_on_off_day.py`; the whole attendance suite passes (489).
+- `EssAttendanceTab` now shows the failure ("Could not load your attendance...") with a Try again button when the calendar request fails. Before, a failed load drew an empty grid that looked like "nothing was marked".
+- Open: the reported case (a super user marked past days, the employee's own login showed an empty calendar and a timesheet stuck on "Loading...") could not be reproduced locally through the real API; it needs the server's response for `/api/attendance/calendar/?month=..&year=..` and the server's branch / commit.
