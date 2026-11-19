@@ -13,7 +13,7 @@ const row = (overrides: Partial<AttendanceRow> = {}): AttendanceRow => ({
   record_id: "r1", employee_id: "EMP001", name: "Asha Rao", initials: "AR", department: "Finance", branch: "Mulugu",
   clock_in: "09:05", clock_out: "18:10", total_hours: "9h 5m", ot: "40m", status: "Present", status_key: "present", is_late: false, ...overrides,
 });
-const CHIPS = { present: 3, late: 1, absent: 11, on_leave: 2, half_day: 0, weekly_off: 4, holiday: 0 };
+const CHIPS = { present: 3, late: 1, wfh: 0, absent: 11, on_leave: 2, half_day: 0, weekly_off: 4, holiday: 0 };
 
 describe("AttendanceTable", () => {
   const props = { loading: false, sort: { by: "name" as const, dir: "asc" as const }, onSortChange: vi.fn(), onOpen: vi.fn() };
@@ -103,22 +103,24 @@ describe("AttendanceStatusTabs", () => {
 });
 
 describe("AttendanceSummaryStrip", () => {
-  const cards = { present_today: 0, absent: 11, late_arrivals: 0, on_leave: 0, total_employees: 11 };
+  const cards = { present_today: 6, absent: 11, late_arrivals: 3, late_full_day: 2, late_short: 1, wfh: 1, on_leave: 0, total_employees: 17 };
 
-  it("shows today's four numbers and each one jumps to its rows", () => {
+  it("shows today's five numbers and each one jumps to its rows", () => {
     const onJump = vi.fn();
     render(<AttendanceSummaryStrip cards={cards} onJump={onJump} />);
     const strip = within(screen.getByRole("group", { name: "Today at a glance" }));
-    expect(strip.getByText("of 11 employees")).toBeTruthy();
+    expect(strip.getByText("of 17 employees, incl. late")).toBeTruthy();
+    expect(strip.getByText("2 full day · 1 short hours")).toBeTruthy();
     fireEvent.click(strip.getByRole("button", { name: /Absent/ }));
     fireEvent.click(strip.getByRole("button", { name: /On leave/ }));
-    fireEvent.click(strip.getByRole("button", { name: /Late arrivals/ }));
-    fireEvent.click(strip.getByRole("button", { name: /Present today/ }));
-    expect(onJump.mock.calls.map(call => call[0])).toEqual(["absent", "on_leave", "late", "present"]);
+    fireEvent.click(strip.getByRole("button", { name: /Late/ }));
+    fireEvent.click(strip.getByRole("button", { name: /Work from home/ }));
+    fireEvent.click(strip.getByRole("button", { name: /^6Present/ }));
+    expect(onJump.mock.calls.map(call => call[0])).toEqual(["absent", "on_leave", "late", "wfh", "present"]);
   });
 
   it("shows a dash while the numbers load", () => {
     render(<AttendanceSummaryStrip cards={undefined} onJump={vi.fn()} />);
-    expect(screen.getAllByText("—")).toHaveLength(4);
+    expect(screen.getAllByText("—")).toHaveLength(5);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-// One slim strip with today's four numbers, in place of four tall cards. Each number is a button that jumps to the matching rows.
+// One slim strip with today's five numbers, in place of four tall cards. Each number is a button that jumps to the matching rows.
 
 import type { StatCards } from "@/types/attendance";
 import { PALETTE } from "./attendancePalette";
@@ -15,9 +15,10 @@ interface Item { status: string; label: string; value: number | undefined; sub: 
 export default function AttendanceSummaryStrip({ cards, onJump }: Props) {
   const total = cards?.total_employees ?? 0;
   const items: Item[] = [
-    { status: "present", label: "Present today", value: cards?.present_today, sub: `of ${total} employees`, colour: PALETTE.present },
+    { status: "present", label: "Present", value: cards?.present_today, sub: `of ${total} employees, incl. late`, colour: PALETTE.present },
+    { status: "wfh", label: "Work from home", value: cards?.wfh, sub: "Present, working remotely", colour: PALETTE.wfh },
+    { status: "late", label: "Late", value: cards?.late_arrivals, sub: `${cards?.late_full_day ?? 0} full day · ${cards?.late_short ?? 0} short hours`, colour: PALETTE.late },
     { status: "absent", label: "Absent", value: cards?.absent, sub: "No check-in recorded", colour: PALETTE.absent },
-    { status: "late", label: "Late arrivals", value: cards?.late_arrivals, sub: "After the grace time", colour: PALETTE.late },
     { status: "on_leave", label: "On leave", value: cards?.on_leave, sub: "Approved leave", colour: PALETTE.on_leave },
   ];
   return (

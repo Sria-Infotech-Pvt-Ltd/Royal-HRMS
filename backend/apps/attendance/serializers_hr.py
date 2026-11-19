@@ -21,7 +21,7 @@ class AttendanceListFilterSerializer(serializers.Serializer):
     branch     = serializers.CharField(required=False, allow_blank=True, default='')
     department = serializers.CharField(required=False, allow_blank=True, default='')
     status     = serializers.ChoiceField(
-        choices=['', 'present', 'late', 'absent', 'half_day', 'weekly_off', 'holiday', 'on_leave', 'incomplete'],
+        choices=['', 'present', 'late', 'wfh', 'absent', 'half_day', 'weekly_off', 'holiday', 'on_leave', 'incomplete'],
         required=False, allow_blank=True, default='',
     )
     search     = serializers.CharField(required=False, allow_blank=True, default='')
@@ -54,6 +54,9 @@ class StatCardSerializer(serializers.Serializer):
     present_today    = serializers.IntegerField()
     absent           = serializers.IntegerField()
     late_arrivals    = serializers.IntegerField()
+    late_full_day    = serializers.IntegerField()
+    late_short       = serializers.IntegerField()
+    wfh              = serializers.IntegerField()
     on_leave         = serializers.IntegerField()
     total_employees  = serializers.IntegerField()
 
@@ -61,6 +64,7 @@ class StatCardSerializer(serializers.Serializer):
 class SummaryChipsSerializer(serializers.Serializer):
     present    = serializers.IntegerField()
     late       = serializers.IntegerField()
+    wfh        = serializers.IntegerField()
     absent     = serializers.IntegerField()
     on_leave   = serializers.IntegerField()
     half_day   = serializers.IntegerField()

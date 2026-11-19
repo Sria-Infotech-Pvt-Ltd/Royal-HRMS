@@ -106,7 +106,10 @@ export interface PunchLocation {
 export interface StatCards {
   present_today:   number;
   absent:          number;
-  late_arrivals:   number;
+  late_arrivals:   number;   // everyone who arrived after the grace time
+  late_full_day:   number;   // of those, worked the full day ("Late login")
+  late_short:      number;   // of those, short of the full day (a late mark)
+  wfh:             number;
   on_leave:        number;
   total_employees: number;
 }
@@ -114,6 +117,7 @@ export interface StatCards {
 export interface SummaryChips {
   present:    number;
   late:       number;
+  wfh:        number;
   absent:     number;
   on_leave:   number;
   half_day:   number;

@@ -11,6 +11,7 @@ export const PALETTE = {
   not_marked: "#64748B",  // slate: "no data yet", deliberately not a warning colour
   weekly_off: "#94A3B8",  // light gray
   holiday: "#0891B2",     // teal
+  wfh: "#0D9488",         // deep teal: working from home
   future: "#CBD5E1",      // pale slate: a day that has not happened
   brand: "#7C3AED",       // AIRA purple
 } as const;

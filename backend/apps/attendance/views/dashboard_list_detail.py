@@ -181,24 +181,8 @@ class HRAttendanceDetailView(APIView):
             f"{record.first_punch_in or '—'} → {record.last_punch_out or '—'}"
         )
 
-        if 'status' in data:
-            record.status = data['status']
-        if 'clock_in' in data:
-            record.first_punch_in = data['clock_in']
-        if 'clock_out' in data:
-            record.last_punch_out = data['clock_out']
-        record.note = data.get('note', record.note)
-
-        if record.first_punch_in and record.last_punch_out:
-            import datetime as _dt
-            _dummy = _dt.date(2000, 1, 1)
-            t_in  = _dt.datetime.combine(_dummy, record.first_punch_in)
-            t_out = _dt.datetime.combine(_dummy, record.last_punch_out)
-            if t_out < t_in:
-                t_out = _dt.datetime.combine(_dummy + _dt.timedelta(days=1), record.last_punch_out)
-            record.total_working_minutes = max(0, int((t_out - t_in).total_seconds() / 60))
-        elif not record.first_punch_in and not record.last_punch_out:
-            record.total_working_minutes = 0
+        from apps.attendance.services_hr_edit import apply_hr_edit
+        apply_hr_edit(record, data)
 
         record.save()
 

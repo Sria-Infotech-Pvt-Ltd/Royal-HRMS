@@ -10,6 +10,7 @@ export const STATUS_TABS: readonly StatusTab[] = [
   { key: "", label: "All", colour: "var(--on-variant)" },
   { key: "present", label: "Present", colour: PALETTE.present },
   { key: "late", label: "Late", colour: PALETTE.late },
+  { key: "wfh", label: "WFH", colour: PALETTE.wfh },
   { key: "absent", label: "Absent", colour: PALETTE.absent },
   { key: "on_leave", label: "On Leave", colour: PALETTE.on_leave },
   { key: "half_day", label: "Half Day", colour: PALETTE.half_day },

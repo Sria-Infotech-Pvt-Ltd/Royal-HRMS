@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { STATUS_TABS, isBlank, nextSort, summariseTimes, tabCount } from "./attendanceView";
 
-const chips = { present: 3, late: 1, absent: 11, on_leave: 2, half_day: 0, weekly_off: 4, holiday: 0 };
+const chips = { present: 3, late: 1, wfh: 0, absent: 11, on_leave: 2, half_day: 0, weekly_off: 4, holiday: 0 };
 
 describe("tabCount", () => {
   it("gives each status its own number and leaves All without one", () => {
@@ -12,8 +12,8 @@ describe("tabCount", () => {
   it("shows 0 while the numbers are still loading", () => {
     expect(tabCount("present", undefined)).toBe(0);
   });
-  it("lists All first and then the six statuses the server can filter on", () => {
-    expect(STATUS_TABS.map(tab => tab.key)).toEqual(["", "present", "late", "absent", "on_leave", "half_day", "weekly_off"]);
+  it("lists All first and then the seven statuses the server can filter on", () => {
+    expect(STATUS_TABS.map(tab => tab.key)).toEqual(["", "present", "late", "wfh", "absent", "on_leave", "half_day", "weekly_off"]);
   });
 });
 

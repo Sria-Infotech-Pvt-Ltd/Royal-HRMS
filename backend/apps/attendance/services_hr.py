@@ -23,6 +23,8 @@ _TTL_DASHBOARD_STATS = 60  # seconds — action-queue-ish tab badges, kept near-
 
 # Statuses that mean "not absent" — employee showed up, regardless of clock-out status
 _NON_ABSENT = {'present', 'late', 'half_day', 'weekly_off', 'holiday', 'on_leave', 'incomplete'}
+# Statuses where the person came in. Present counts all of them; Late and Work-from-home are slices of this group.
+CAME_IN = ('present', 'late', 'half_day', 'incomplete')
 
 
 # ── Format helpers ────────────────────────────────────────────────────────────
@@ -123,11 +125,15 @@ def get_dashboard_stats(
     absent = total_employees - non_absent_total
 
     incomplete    = status_counts.get('incomplete', 0)
-    # Employees still working (open session) count as present on the stat card.
-    # Employees marked incomplete (past grace, no clock-out) also came in — include them.
-    present_today = status_counts.get('present', 0) + status_counts.get('late', 0) + incomplete
-    late_arrivals  = status_counts.get('late', 0)
-    on_leave       = status_counts.get('on_leave', 0)
+    # Present = everyone who came in: on time, late, half day, and still working / no clock-out yet.
+    present_today = sum(status_counts.get(status, 0) for status in CAME_IN)
+    on_leave      = status_counts.get('on_leave', 0)
+
+    day_records   = AttendanceRecord.objects.filter(date=target_date, employee__in=employee_qs, status__in=CAME_IN)
+    late_short    = status_counts.get('late', 0)                          # late and short of the full day: a late mark in payroll
+    late_full_day = day_records.filter(is_late=True).exclude(status='late').count()   # late but worked the full day ("Late login")
+    wfh           = day_records.filter(work_mode=AttendanceRecord.WORK_MODE_WFH).count()
+    late_arrivals = late_short + late_full_day
 
     invalid_count = _count_invalid_punches(target_date, branch, department, employee_ids)
     unpunch_count = _count_unpunches(target_date, branch, department, employee_ids)
@@ -137,13 +143,17 @@ def get_dashboard_stats(
             'present_today':   present_today,
             'absent':          absent,
             'late_arrivals':   late_arrivals,
+            'late_full_day':   late_full_day,
+            'late_short':      late_short,
+            'wfh':             wfh,
             'on_leave':        on_leave,
             'total_employees': total_employees,
         },
         'summary_chips': {
-            # Late employees did come in, so they are Present too (Late stays a subset, shown on its own chip).
-            'present':    status_counts.get('present', 0) + status_counts.get('late', 0),
-            'late':       status_counts.get('late', 0),
+            # Everyone who came in is Present (Late stays a subset, shown on its own chip, and so does Work from home).
+            'present':    present_today,
+            'late':       late_arrivals,
+            'wfh':        wfh,
             'absent':     absent,
             'on_leave':   on_leave,
             'half_day':   status_counts.get('half_day', 0),
@@ -293,6 +303,7 @@ def get_attendance_list(filters: dict) -> list[dict]:
         _minutes  = Subquery(rec_qs.filter(employee=OuterRef('pk')).values('total_working_minutes')[:1]),
         _ot_min   = Subquery(rec_qs.filter(employee=OuterRef('pk')).values('overtime_minutes')[:1]),
         _is_late  = Subquery(rec_qs.filter(employee=OuterRef('pk')).values('is_late')[:1]),
+        _work_mode = Subquery(rec_qs.filter(employee=OuterRef('pk')).values('work_mode')[:1]),
         _lwd      = Subquery(alumni_qs.values('last_working_day')[:1]),
     )
 
@@ -311,8 +322,13 @@ def get_attendance_list(filters: dict) -> list[dict]:
                 )
             )
         elif status_f == 'present':
-            # Present includes Late: a late punch-in is still a day worked (same rule as the Present stat card).
-            employee_qs = employee_qs.filter(_status__in=['present', 'late'])
+            # Present = everyone who came in (same rule as the Present stat card).
+            employee_qs = employee_qs.filter(_status__in=CAME_IN)
+        elif status_f == 'late':
+            # Late = arrived after the grace time, whether or not the full day was then worked (same rule as the Late stat card).
+            employee_qs = employee_qs.filter(_status__in=CAME_IN).filter(Q(_status='late') | Q(_is_late=True))
+        elif status_f == 'wfh':
+            employee_qs = employee_qs.filter(_status__in=CAME_IN, _work_mode=AttendanceRecord.WORK_MODE_WFH)
         else:
             employee_qs = employee_qs.filter(_status=status_f)
 
