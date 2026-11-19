@@ -5,6 +5,7 @@
 // move between tabs, and on a narrow screen the bar scrolls sideways.
 
 import { useEffect, useRef } from "react";
+import { useT } from "@/hooks/useI18n";
 import { PALETTE, tint } from "./attendancePalette";
 
 export interface AttendanceTabItem {
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export default function AttendancePageTabs({ tabs, active, onSelect }: Props) {
+  const t = useT();
   const buttons = useRef<Record<string, HTMLButtonElement | null>>({});
   const indicator = useRef<HTMLSpanElement | null>(null);
 
@@ -49,7 +51,7 @@ export default function AttendancePageTabs({ tabs, active, onSelect }: Props) {
   }
 
   return (
-    <div role="tablist" aria-label="Attendance sections" style={{ position: "relative", display: "flex", gap: 2, overflowX: "auto", borderBottom: "1px solid var(--outline-v)", marginBottom: 20, scrollbarWidth: "none" }}>
+    <div role="tablist" aria-label={t("Attendance sections")} style={{ position: "relative", display: "flex", gap: 2, overflowX: "auto", borderBottom: "1px solid var(--outline-v)", marginBottom: 20, scrollbarWidth: "none" }}>
       {tabs.map((tab, index) => {
         const selected = tab.id === active;
         return (
@@ -64,7 +66,7 @@ export default function AttendancePageTabs({ tabs, active, onSelect }: Props) {
             }}
           >
             <i className={`ti ${tab.icon}`} aria-hidden="true" style={{ fontSize: 17, opacity: selected ? 1 : 0.75 }} />
-            {tab.label}
+            {t(tab.label)}
             {!!tab.badge && (
               <span style={{ minWidth: 20, height: 20, padding: "0 6px", borderRadius: 10, display: "inline-grid", placeItems: "center", fontSize: 11, fontWeight: 800, background: PALETTE.absent, color: "#fff", fontVariantNumeric: "tabular-nums" }}>{tab.badge}</span>
             )}

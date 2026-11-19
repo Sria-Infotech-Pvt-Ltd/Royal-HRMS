@@ -3,6 +3,7 @@
 // The status filter and the search box in one row, sitting on top of the attendance table. Replaces the separate row of count chips.
 
 import type { SummaryChips } from "@/types/attendance";
+import { useT } from "@/hooks/useI18n";
 import { STATUS_TABS, tabCount } from "./attendanceView";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export default function AttendanceStatusTabs({ status, onStatusChange, chips, search, onSearchChange }: Props) {
+  const t = useT();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "0 16px", borderBottom: "1px solid var(--outline-v)" }}>
       <div role="group" aria-label="Filter by status" style={{ display: "flex", gap: 2, flexWrap: "wrap", flex: 1 }}>
@@ -30,7 +32,7 @@ export default function AttendanceStatusTabs({ status, onStatusChange, chips, se
               }}
             >
               {tab.key !== "" && <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: "50%", background: tab.colour }} />}
-              {tab.label}
+              {t(tab.label)}
               {count !== null && (
                 <span style={{ fontSize: 11.5, fontWeight: 700, padding: "1px 7px", borderRadius: 999, fontVariantNumeric: "tabular-nums", background: selected ? "var(--bg-low)" : "transparent", color: count > 0 ? "var(--on-bg)" : "var(--outline)" }}>
                   {count}

@@ -7,7 +7,9 @@ import clientApi, { resetSessionExpired } from "@/lib/clientApi";
 import { saveAuth } from "@/lib/auth";
 import type { UserInfo } from "@/lib/auth";
 import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
+import LoginLanguageSwitch from "@/components/auth/LoginLanguageSwitch";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 
 interface LoginApiResponse {
   status: string;
@@ -38,6 +40,7 @@ const FALLBACK_BRAND_NAME = "Aira HRMS";
 const FALLBACK_BRAND_LOGO = "/logo-icon.png";
 
 export default function LoginPage() {
+  const t = useT();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,8 +67,8 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!email.trim()) { setError("Please enter your email address."); return; }
-    if (!password) { setError("Please enter your password."); return; }
+    if (!email.trim()) { setError(t("Please enter your email address.")); return; }
+    if (!password) { setError(t("Please enter your password.")); return; }
     setLoading(true);
     setError("");
     try {
@@ -111,13 +114,13 @@ export default function LoginPage() {
       router.push(dest);
     } catch (err) {
       const { message } = err as { message: string };
-      setError(message || "Login failed. Please check your credentials.");
+      setError(message || t("Login failed. Please check your credentials."));
     } finally {
       setLoading(false);
     }
   }
 
-  const subtitle = `Sign in to your ${brandName} account`;
+  const subtitle = t("Sign in to your {brand} account", { brand: brandName });
 
   return (
     <div className="login-page-root">
@@ -151,7 +154,7 @@ export default function LoginPage() {
               />
             </div>
 
-            <h2 className="login-title">Welcome back</h2>
+            <h2 className="login-title">{t("Welcome back")}</h2>
             <p className="login-subtitle">{subtitle}</p>
 
             {/* Error banner */}
@@ -173,7 +176,7 @@ export default function LoginPage() {
                 {/* Email field */}
                 <div className="login-field">
                   <label htmlFor="login-email" className="login-label">
-                    Email
+                    {t("Email")}
                   </label>
                   <input
                     id="login-email"
@@ -193,7 +196,7 @@ export default function LoginPage() {
                 <div className="login-field-pwd">
                   <div className="login-label-row">
                     <label htmlFor="login-password" className="login-label">
-                      Password
+                      {t("Password")}
                     </label>
                     <button
                       type="button"
@@ -201,7 +204,7 @@ export default function LoginPage() {
                       onClick={() => setShowForgot(true)}
                       suppressHydrationWarning
                     >
-                      Forgot password?
+                      {t("Forgot password?")}
                     </button>
                   </div>
                   <div className="login-pwd-wrap">
@@ -209,7 +212,7 @@ export default function LoginPage() {
                       id="login-password"
                       type={showPwd ? "text" : "password"}
                       className="login-input login-input-pwd"
-                      placeholder="Enter your password"
+                      placeholder={t("Enter your password")}
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       onFocus={() => setError("")}
@@ -220,7 +223,7 @@ export default function LoginPage() {
                     <button
                       type="button"
                       tabIndex={-1}
-                      aria-label={showPwd ? "Hide password" : "Show password"}
+                      aria-label={showPwd ? t("Hide password") : t("Show password")}
                       className="login-pwd-toggle"
                       onClick={() => setShowPwd(v => !v)}
                       suppressHydrationWarning
@@ -238,15 +241,17 @@ export default function LoginPage() {
                   suppressHydrationWarning
                 >
                   {loading && <Spinner />}
-                  {loading ? "Signing in…" : "Sign in"}
+                  {loading ? t("Signing in…") : t("Sign in")}
                 </button>
 
               </form>
             )}
 
             <p className="login-footer-text">
-              Protected by {brandName} · Enterprise SSO available
+              {t("Protected by {brand} · Enterprise SSO available", { brand: brandName })}
             </p>
+
+            <LoginLanguageSwitch />
 
           </div>
         </div>

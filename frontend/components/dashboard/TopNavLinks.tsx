@@ -8,6 +8,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { MENU_ATTRIBUTE, type OpenMenu } from "@/hooks/useOpenMenu";
 import type { BarEntry, NavItem } from "@/lib/navConfig";
 import NavMenuItems from "@/components/dashboard/NavMenuItems";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   bar: BarEntry[];
@@ -24,10 +25,11 @@ const PANEL_CLASS = "absolute top-full z-50 mt-1 rounded-2xl border p-2";
 const PANEL_STYLE = { background: "var(--surface)", borderColor: "var(--line)", boxShadow: "0 18px 50px rgba(24,20,48,.16)" } as const;
 
 function PanelHeader({ title, count }: { title: string; count: number }) {
+  const t = useT();
   return (
     <div className="nm-head">
-      <span className="nm-title">{title}</span>
-      <span className="nm-pill">{count} {count === 1 ? "page" : "pages"}</span>
+      <span className="nm-title">{t(title)}</span>
+      <span className="nm-pill">{count} {t(count === 1 ? "page" : "pages")}</span>
     </div>
   );
 }
@@ -35,6 +37,7 @@ function PanelHeader({ title, count }: { title: string; count: number }) {
 const LINK_GAP_PX = 2;
 
 export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Props) {
+  const t = useT();
   const slotRef = useRef<HTMLDivElement>(null);
   const linksRef = useRef<HTMLElement>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -68,7 +71,7 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
       <nav
         ref={linksRef}
         className="nav-desktop h-full items-center gap-0.5"
-        aria-label="Main"
+        aria-label={t("Main")}
         aria-hidden={isCollapsed}
         style={isCollapsed
           ? { display: "flex", position: "absolute", left: 0, top: 0, visibility: "hidden", pointerEvents: "none" }
@@ -79,7 +82,7 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
             const { item } = entry;
             return (
               <button key={item.id} type="button" className={`navlink${item.id === activeNavId ? " on" : ""}`} onClick={() => select(item)} suppressHydrationWarning>
-                {item.topNavLabel ?? item.label}
+                {t(item.topNavLabel ?? item.label)}
               </button>
             );
           }
@@ -96,11 +99,11 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
                 onClick={() => menu.toggle(entry.id)}
                 suppressHydrationWarning
               >
-                {entry.title}
+                {t(entry.title)}
                 <i className={`ti ${isOpen ? "ti-chevron-up" : "ti-chevron-down"}`} style={{ fontSize: 12 }} />
               </button>
               {isOpen && (
-                <div className={`${PANEL_CLASS} left-0 ${isTwoColumn ? "w-[520px]" : "w-[300px]"}`} role="menu" aria-label={entry.title} style={PANEL_STYLE}>
+                <div className={`${PANEL_CLASS} left-0 ${isTwoColumn ? "w-[520px]" : "w-[300px]"}`} role="menu" aria-label={t(entry.title)} style={PANEL_STYLE}>
                   <PanelHeader title={entry.title} count={entry.items.length} />
                   <NavMenuItems items={entry.items} activeNavId={activeNavId} onSelect={select} isTwoColumn={isTwoColumn} />
                 </div>
@@ -119,10 +122,10 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
           onClick={() => menu.toggle(MOBILE_MENU_KEY)}
           suppressHydrationWarning
         >
-          <i className="ti ti-menu-2" style={{ fontSize: 16 }} /> Menu
+          <i className="ti ti-menu-2" style={{ fontSize: 16 }} /> {t("Menu")}
         </button>
         {menu.openKey === MOBILE_MENU_KEY && (
-          <div className={`${PANEL_CLASS} left-0 max-h-[70vh] w-[min(92vw,360px)] overflow-y-auto`} role="menu" aria-label="Menu" style={PANEL_STYLE}>
+          <div className={`${PANEL_CLASS} left-0 max-h-[70vh] w-[min(92vw,360px)] overflow-y-auto`} role="menu" aria-label={t("Menu")} style={PANEL_STYLE}>
             {bar.map(entry => (
               <div key={entry.kind === "link" ? entry.item.id : entry.id} className="mb-1">
                 {entry.kind === "menu" && <PanelHeader title={entry.title} count={entry.items.length} />}

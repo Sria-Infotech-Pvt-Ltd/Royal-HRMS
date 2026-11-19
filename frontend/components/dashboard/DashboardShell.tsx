@@ -13,6 +13,7 @@ import {
 import { NotificationBell } from "@/components/NotificationBell";
 import GlobalSearch from "@/components/dashboard/GlobalSearch";
 import ThemePicker from "@/components/dashboard/ThemePicker";
+import LanguagePicker from "@/components/dashboard/LanguagePicker";
 import DashboardFooter from "@/components/dashboard/DashboardFooter";
 import { useFetch } from "@/hooks/useFetch";
 import TopNavLinks from "@/components/dashboard/TopNavLinks";
@@ -137,6 +138,7 @@ export default function DashboardShell({
           {!isEssPage && (
             <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
           )}
+          <LanguagePicker />
           <ThemePicker />
           <NotificationBell />
           <ProfileMenu

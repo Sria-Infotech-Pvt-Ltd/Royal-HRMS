@@ -17,6 +17,7 @@ import EmployeeMonthView from "./EmployeeMonthView";
 import WeeklyOffAssignmentTab from "./WeeklyOffAssignmentTab";
 import { buildAttendanceSearch, parseAttendanceLocation, type AttendanceTabId } from "./attendanceTabs";
 import { useAfterMount } from "@/hooks/useAfterMount";
+import { useT } from "@/hooks/useI18n";
 
 type TabId = AttendanceTabId;
 
@@ -25,6 +26,7 @@ function todayLabel(): string {
 }
 
 export default function AttendanceDetailClient({ initialTab, onBack }: { initialTab?: string; onBack?: () => void }) {
+  const t = useT();
   const today = useAfterMount(todayLabel, "");  // the viewer's own date, after mount: the server's clock may differ
   const [active, setActive]       = useState<TabId>(() => parseAttendanceLocation(initialTab ? `?tab=${initialTab}` : "").tab);
   const [viewMode, setViewMode]   = useState<"team" | "employee">("team");
@@ -100,13 +102,13 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
               onClick={onBack}
               style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
             >
-              <i className="ti ti-arrow-left" /> Back to overview
+              <i className="ti ti-arrow-left" /> {t("Back to overview")}
             </button>
           )}
           <div className="page-title">
-            Attendance &amp; Time{!unrestricted && effectiveBranch ? ` — ${effectiveBranch}` : ""}
+            {t("Attendance & Time")}{!unrestricted && effectiveBranch ? ` — ${effectiveBranch}` : ""}
           </div>
-          <div className="page-sub">Monitor daily attendance, overtime, and correction requests</div>
+          <div className="page-sub">{t("Monitor daily attendance, overtime, and correction requests")}</div>
         </div>
         <div className="page-actions">
           <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{today}</span>
@@ -145,14 +147,14 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
                 onClick={() => goTo("attendance", "team")}
                 style={{ gap: 6 }}
               >
-                <i className="ti ti-layout-list" /> Team Day View
+                <i className="ti ti-layout-list" /> {t("Team Day View")}
               </button>
               <button
                 className={viewMode === "employee" ? "btn btn-filled btn-sm" : "btn btn-ghost btn-sm"}
                 onClick={() => goTo("attendance", "employee")}
                 style={{ gap: 6 }}
               >
-                <i className="ti ti-calendar-user" /> Employee Month View
+                <i className="ti ti-calendar-user" /> {t("Employee Month View")}
               </button>
             </div>
             {viewMode === "team"

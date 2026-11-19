@@ -15,6 +15,7 @@ import VoiceCommandButton from "@/components/VoiceCommandButton";
 import { ToastProvider } from "@/components/ToastProvider";
 import { DialogProvider } from "@/components/DialogProvider";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
+import I18nProvider from "@/components/I18nProvider";
 
 // style: ["normal", "italic"] combined with 5 weights used to be here for a
 // real italic cut on the highlighted title word (em.hl) — combining multiple
@@ -54,6 +55,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/logo-icon.png" />
       </head>
       <body className={inter.className} style={{ minHeight: "100vh" }} suppressHydrationWarning>
+        <I18nProvider>
         <ToastProvider>
           <DialogProvider>
           {children}
@@ -66,6 +68,7 @@ export default function RootLayout({
           </DialogProvider>
         </ToastProvider>
         <SessionExpiredOverlay />
+        </I18nProvider>
       </body>
     </html>
   );

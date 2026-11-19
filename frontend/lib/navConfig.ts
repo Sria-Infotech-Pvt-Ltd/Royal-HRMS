@@ -22,7 +22,7 @@ export function isSection(e: NavEntry): e is NavSection {
   return "section" in e;
 }
 
-const ALL_NAV: NavEntry[] = [
+export const ALL_NAV: NavEntry[] = [
   { section: "Main" },
   { id: "dashboard", icon: "ti-layout-dashboard", label: "Dashboard", path: "/dashboard", permission: null, pinned: true },
   { id: "announcements", icon: "ti-speakerphone", label: "Announcements", path: "/dashboard/announcements", permission: "announcements.view", pinned: true },

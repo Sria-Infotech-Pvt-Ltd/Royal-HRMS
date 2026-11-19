@@ -7,6 +7,7 @@ import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import { MENU_ATTRIBUTE, type OpenMenu } from "@/hooks/useOpenMenu";
 import type { NavItem } from "@/lib/navConfig";
 import NavMenuItems from "@/components/dashboard/NavMenuItems";
+import { useT } from "@/hooks/useI18n";
 
 const PROFILE_MENU_KEY = "profile";
 
@@ -26,11 +27,12 @@ function initials(name: string) {
 }
 
 export default function ProfileMenu({ name, subtitle, photoUrl, items, activeNavId, menu, onNavigate, onLogout }: Props) {
+  const t = useT();
   const isOpen = menu.openKey === PROFILE_MENU_KEY;
 
   return (
     <div className="relative" {...{ [MENU_ATTRIBUTE]: "" }} onMouseEnter={() => menu.switchTo(PROFILE_MENU_KEY)}>
-      <button type="button" className="who-chip" aria-haspopup="menu" aria-expanded={isOpen} onClick={() => menu.toggle(PROFILE_MENU_KEY)} title="My account" suppressHydrationWarning>
+      <button type="button" className="who-chip" aria-haspopup="menu" aria-expanded={isOpen} onClick={() => menu.toggle(PROFILE_MENU_KEY)} title={t("My account")} suppressHydrationWarning>
         <Avatar text={initials(name)} size={24} photoUrl={photoUrl} />
         <span className="hidden whitespace-nowrap lg:inline">{name}</span>
         <i className={`ti ${isOpen ? "ti-chevron-up" : "ti-chevron-down"}`} style={{ fontSize: 12 }} />
@@ -40,7 +42,7 @@ export default function ProfileMenu({ name, subtitle, photoUrl, items, activeNav
           className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,500px)] rounded-2xl border p-2"
           style={{ background: "var(--surface)", borderColor: "var(--line)", boxShadow: "0 18px 50px rgba(24,20,48,.16)" }}
           role="menu"
-          aria-label="My account"
+          aria-label={t("My account")}
         >
           <div className="nm-who">
             <Avatar text={initials(name)} size={36} photoUrl={photoUrl} />
@@ -51,7 +53,7 @@ export default function ProfileMenu({ name, subtitle, photoUrl, items, activeNav
           </div>
           {items.length > 0 && (
             <>
-              <div className="nm-section">My</div>
+              <div className="nm-section">{t("My")}</div>
               <NavMenuItems items={items} activeNavId={activeNavId} isTwoColumn onSelect={item => { menu.close(); onNavigate(item.path); }} />
             </>
           )}
@@ -61,7 +63,7 @@ export default function ProfileMenu({ name, subtitle, photoUrl, items, activeNav
             className="nm-signout"
             onClick={() => { menu.close(); onLogout(); }}
           >
-            <i className="ti ti-logout" style={{ fontSize: 16 }} /> Sign out
+            <i className="ti ti-logout" style={{ fontSize: 16 }} /> {t("Sign out")}
           </button>
         </div>
       )}
