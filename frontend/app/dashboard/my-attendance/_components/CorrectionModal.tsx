@@ -5,6 +5,7 @@ import Modal from "@/components/Modal";
 import { useAttendanceCorrection } from "@/hooks/useAttendanceCorrection";
 import type { PunchType, CorrectionReason } from "@/types/attendance";
 import DateInput from "@/components/shared/DateInput";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   isOpen:    boolean;
@@ -14,11 +15,11 @@ interface Props {
 }
 
 const REASON_OPTIONS: { value: CorrectionReason; label: string }[] = [
-  { value: "biometric_error",  label: "Device malfunction / biometric error" },
-  { value: "forgot_to_punch",  label: "Forgot to punch"                      },
-  { value: "field_work",       label: "Work from field (client visit)"        },
-  { value: "system_downtime",  label: "System / server downtime"              },
-  { value: "other",            label: "Other"                                 },
+  { value: "biometric_error",  get label() { return tr("Device malfunction / biometric error"); } },
+  { value: "forgot_to_punch",  get label() { return tr("Forgot to punch"); }                      },
+  { value: "field_work",       get label() { return tr("Work from field (client visit)"); }        },
+  { value: "system_downtime",  get label() { return tr("System / server downtime"); }              },
+  { value: "other",            get label() { return tr("Other"); }                                 },
 ];
 
 export default function CorrectionModal({ isOpen, date, onClose, onSuccess }: Props) {
@@ -62,38 +63,38 @@ export default function CorrectionModal({ isOpen, date, onClose, onSuccess }: Pr
         title={
           <>
             <i className="ti ti-file-description" style={{ marginRight: 8, color: "var(--warn)" }} />
-            Attendance Correction Request
+            {tr("Attendance Correction Request")}
           </>
         }
         onClose={onClose}
         maxWidth={480}
         footer={
           <>
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={isSubmitting}>Cancel</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={isSubmitting}>{tr("Cancel")}</button>
             <button type="submit" form={formId} className="btn btn-filled" disabled={isSubmitting}>
               {isSubmitting
-                ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Submitting…</>
-                : <><i className="ti ti-send" /> Submit Request</>}
+                ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {tr("Submitting…")}</>
+                : <><i className="ti ti-send" /> {tr("Submit Request")}</>}
             </button>
           </>
         }
       >
         <div className="alert alert-warn mb-16">
           <i className="ti ti-alert-triangle" />
-          <span>Submit a correction for a missed or incorrect punch. Your manager will review within the regularization cutoff window (7 days after month end).</span>
+          <span>{tr("Submit a correction for a missed or incorrect punch. Your manager will review within the regularization cutoff window (7 days after month end).")}</span>
         </div>
 
         <div className="form-row cols-2">
           <div className="field-group">
-            <label className="field-label">Date</label>
+            <label className="field-label">{tr("Date")}</label>
             <DateInput className="field-input" value={date} readOnly onChange={() => undefined} />
           </div>
           <div className="field-group">
-            <label className="field-label">Punch Type</label>
+            <label className="field-label">{tr("Punch Type")}</label>
             <select className="field-input field-select" value={punchType} onChange={e => setPunchType(e.target.value as PunchType)}>
-              <option value="IN">Clock In (IN)</option>
-              <option value="OUT">Clock Out (OUT)</option>
-              <option value="BOTH">Both IN &amp; OUT</option>
+              <option value="IN">{tr("Clock In (IN)")}</option>
+              <option value="OUT">{tr("Clock Out (OUT)")}</option>
+              <option value="BOTH">{tr("Both IN & OUT")}</option>
             </select>
           </div>
         </div>
@@ -101,20 +102,20 @@ export default function CorrectionModal({ isOpen, date, onClose, onSuccess }: Pr
         <div className="form-row cols-2">
           {showIn && (
             <div className="field-group">
-              <label className="field-label">Correct In Time</label>
+              <label className="field-label">{tr("Correct In Time")}</label>
               <input type="time" className="field-input" value={correctInTime} onChange={e => setCorrectInTime(e.target.value)} required />
             </div>
           )}
           {showOut && (
             <div className="field-group">
-              <label className="field-label">Correct Out Time</label>
+              <label className="field-label">{tr("Correct Out Time")}</label>
               <input type="time" className="field-input" value={correctOutTime} onChange={e => setCorrectOutTime(e.target.value)} required />
             </div>
           )}
         </div>
 
         <div className="field-group mb-16">
-          <label className="field-label">Reason</label>
+          <label className="field-label">{tr("Reason")}</label>
           <select className="field-input field-select" value={reason} onChange={e => setReason(e.target.value as CorrectionReason)}>
             {REASON_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -123,8 +124,8 @@ export default function CorrectionModal({ isOpen, date, onClose, onSuccess }: Pr
         </div>
 
         <div className="field-group">
-          <label className="field-label">Additional Notes (optional)</label>
-          <textarea className="field-input" style={{ minHeight: 72 }} placeholder="Describe the situation…" value={notes} onChange={e => setNotes(e.target.value)} />
+          <label className="field-label">{tr("Additional Notes (optional)")}</label>
+          <textarea className="field-input" style={{ minHeight: 72 }} placeholder={tr("Describe the situation…")} value={notes} onChange={e => setNotes(e.target.value)} />
         </div>
       </Modal>
     </form>

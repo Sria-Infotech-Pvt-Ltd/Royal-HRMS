@@ -8,6 +8,7 @@ import {
   ACCEPTED_EXTENSIONS, ACCEPTED_TYPES_LABEL, MAX_FILE_SIZE_LABEL, formatFileSize, openFilePreview, validateDocumentFile,
 } from "@/lib/documentFile";
 import { Err, Lbl } from "./applyLeaveFormHelpers";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   file: File | null;
@@ -36,10 +37,10 @@ export default function LeaveSupportingDocument({ file, isRequired, error, onCha
           <i className="ti ti-file text-base text-[var(--primary)]" />
           <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--on-bg)]" title={file.name}>{file.name}</span>
           <span className="text-xs text-[var(--on-variant)]">{formatFileSize(file.size)}</span>
-          <button type="button" onClick={() => openFilePreview(file)} aria-label="View file" title="View file" className="text-[var(--on-variant)] hover:text-[var(--primary)]">
+          <button type="button" onClick={() => openFilePreview(file)} aria-label={tr("View file")} title={tr("View file")} className="text-[var(--on-variant)] hover:text-[var(--primary)]">
             <i className="ti ti-eye" />
           </button>
-          <button type="button" onClick={() => { onChange(null); setFileError(null); }} aria-label="Remove file" title="Remove file" className="text-[var(--on-variant)] hover:text-[var(--error)]">
+          <button type="button" onClick={() => { onChange(null); setFileError(null); }} aria-label={tr("Remove file")} title={tr("Remove file")} className="text-[var(--on-variant)] hover:text-[var(--error)]">
             <i className="ti ti-x" />
           </button>
         </div>
@@ -50,8 +51,8 @@ export default function LeaveSupportingDocument({ file, isRequired, error, onCha
         ].join(" ")}>
           <i className="ti ti-upload text-base text-[var(--on-variant)]" />
           <span className="text-[13px] text-[var(--on-bg)]">
-            <span className="font-semibold text-[var(--primary)]">Choose a file</span>
-            <span className="ml-2 text-xs text-[var(--on-variant)]">{ACCEPTED_TYPES_LABEL} · up to {MAX_FILE_SIZE_LABEL}</span>
+            <span className="font-semibold text-[var(--primary)]">{tr("Choose a file")}</span>
+            <span className="ml-2 text-xs text-[var(--on-variant)]">{ACCEPTED_TYPES_LABEL} · {tr("up to {size}", { size: MAX_FILE_SIZE_LABEL })}</span>
           </span>
           <input type="file" accept={ACCEPTED_EXTENSIONS.join(",")} className="hidden" onChange={handlePicked} />
         </label>

@@ -12,6 +12,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { DOCUMENTS_BASE, type ApiDocument } from "../../documents/_data";
 import { LeaveRequest, PaginatedResponse, fmtShortDate } from "../_data";
+import { tr } from "@/lib/i18n/tr";
 
 interface PagedResponse<T> { results: T[]; count: number }
 
@@ -30,9 +31,9 @@ export default function LeavePolicyGuidanceCard() {
     <div className="card">
       <div className="card-header">
         <div>
-          <div className="card-title"><i className="ti ti-file-info" /> Leave policy guidance</div>
+          <div className="card-title"><i className="ti ti-file-info" /> {tr("Leave policy guidance")}</div>
           <div className="page-sub" style={{ marginTop: 2 }}>
-            Balances and approval requirements vary by entity and employment type.
+            {tr("Balances and approval requirements vary by entity and employment type.")}
           </div>
         </div>
       </div>
@@ -41,24 +42,24 @@ export default function LeavePolicyGuidanceCard() {
           {policyDoc ? (
             <a href={policyDoc.file_url} target="_blank" rel="noopener noreferrer" className="lv-link">
               <span className="lv-icon"><i className="ti ti-file-text" /></span>
-              <span>Read leave policy<small>Opens the policy document</small></span>
+              <span>{tr("Read leave policy")}<small>{tr("Opens the policy document")}</small></span>
             </a>
           ) : (
             <div className="lv-link is-muted">
               <span className="lv-icon" style={{ "--lv-accent": "#6b7280" } as CSSProperties}><i className="ti ti-file-off" /></span>
-              <span>No leave policy document has been uploaded yet.</span>
+              <span>{tr("No leave policy document has been uploaded yet.")}</span>
             </div>
           )}
 
           {pending ? (
             <a href={`/dashboard/my-requests?tab=leave&request=${pending.id}`} className="lv-link">
               <span className="lv-icon"><i className="ti ti-progress" /></span>
-              <span>Track {fmtShortDate(pending.start_date)} request<small>See who still has to approve it</small></span>
+              <span>{tr("Track {date} request", { date: fmtShortDate(pending.start_date) })}<small>{tr("See who still has to approve it")}</small></span>
             </a>
           ) : (
             <div className="lv-link is-muted">
               <span className="lv-icon" style={{ "--lv-accent": "#6b7280" } as CSSProperties}><i className="ti ti-progress-check" /></span>
-              <span>No pending leave request to track right now.</span>
+              <span>{tr("No pending leave request to track right now.")}</span>
             </div>
           )}
         </div>

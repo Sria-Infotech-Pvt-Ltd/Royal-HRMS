@@ -3,6 +3,7 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { RecentPunchRow } from "@/types/attendance";
+import { tr } from "@/lib/i18n/tr";
 
 export default function RecentPunchesCard() {
   const { data, loading } = useFetch<RecentPunchRow[]>(API.attendance.recentPunches);
@@ -12,19 +13,19 @@ export default function RecentPunchesCard() {
     <div className="card">
       <div className="card-header">
         <div>
-          <div className="card-title">Recent punches</div>
-          <div className="page-sub" style={{ marginTop: 2 }}>Device and web attendance events.</div>
+          <div className="card-title">{tr("Recent punches")}</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>{tr("Device and web attendance events.")}</div>
         </div>
       </div>
       <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 0, padding: rows.length ? "4px 20px" : 20 }}>
         {loading ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 0", fontSize: 12.5, color: "var(--on-variant)" }}>
-            <i className="ti ti-loader-2 animate-spin" /> Loading…
+            <i className="ti ti-loader-2 animate-spin" /> {tr("Loading…")}
           </div>
         ) : rows.length === 0 ? (
           <div style={{ textAlign: "center", padding: "24px 8px", color: "var(--on-variant)" }}>
             <i className="ti ti-clock-exclamation" style={{ fontSize: 28, color: "var(--outline-v)", display: "block", marginBottom: 8 }} />
-            <div style={{ fontSize: 12.5 }}>No punches recorded yet.</div>
+            <div style={{ fontSize: 12.5 }}>{tr("No punches recorded yet.")}</div>
           </div>
         ) : (
           rows.map((row, i) => (
@@ -38,8 +39,8 @@ export default function RecentPunchesCard() {
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13.5 }}>{row.date} · {row.location}</div>
                 <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                  {row.clockIn ? `In ${row.clockIn}` : "No in-punch"}
-                  {row.clockOut ? ` · Out ${row.clockOut}` : ` · ${row.source}`}
+                  {row.clockIn ? `In ${row.clockIn}` : tr("No in-punch")}
+                  {row.clockOut ? tr(" · Out {clockOut}", { clockOut: row.clockOut }) : ` · ${row.source}`}
                 </div>
               </div>
               <span className={`badge ${row.status === "PRESENT" ? "badge-success" : "badge-neutral"}`}>{row.status}</span>

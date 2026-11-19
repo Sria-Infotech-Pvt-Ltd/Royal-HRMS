@@ -6,6 +6,7 @@
 
 import { useWorkedToday } from "@/hooks/useWorkedToday";
 import type { AttendanceStatus } from "@/types/employeeDashboard";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   status: AttendanceStatus | null;
@@ -54,15 +55,15 @@ export default function HomeWorkedTodayCard({ status }: Props) {
     <div className="card" style={{ padding: "16px 20px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
       <div>
         <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em", display: "flex", alignItems: "center", gap: 6 }}>
-          <i className="ti ti-clock-hour-4" /> TIME WORKED TODAY
+          <i className="ti ti-clock-hour-4" /> {tr("TIME WORKED TODAY")}
         </div>
         <div style={{ fontSize: 26, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--on-bg)", lineHeight: 1.15, marginTop: 4 }}>
           {formatTimer(isClockedIn ? sessionSeconds : totalSeconds)}
         </div>
         <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
           {isClockedIn
-            ? <>Current session · total today <b style={{ color: "var(--on-bg)" }}>{formatTotal(totalSeconds)}</b></>
-            : "Punched out · total for today"}
+            ? <>{tr("Current session · total today")} <b style={{ color: "var(--on-bg)" }}>{formatTotal(totalSeconds)}</b></>
+            : tr("Punched out · total for today")}
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -76,7 +77,7 @@ export default function HomeWorkedTodayCard({ status }: Props) {
           }}
         >
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block", animation: isClockedIn ? "clockPulse 2s ease-in-out infinite" : "none" }} />
-          {isClockedIn ? "Punched In" : "Punched Out"}
+          {isClockedIn ? tr("Punched In") : tr("Punched Out")}
         </span>
       </div>
     </div>

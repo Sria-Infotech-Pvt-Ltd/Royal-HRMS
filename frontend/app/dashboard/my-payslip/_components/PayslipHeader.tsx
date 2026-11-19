@@ -5,6 +5,7 @@ import { fmtMonth } from "./types";
 import { logPayslipDownload } from "./downloadAudit";
 import { API } from "@/lib/api/endpoints";
 import { API_BASE } from "@/lib/config";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   payslips: ApiPayslip[];
@@ -19,9 +20,9 @@ export default function PayslipHeader({ payslips, selectedId, onSelect, activeSl
   return (
     <div className="flex items-start justify-between flex-wrap gap-3">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: "var(--on-bg)" }}>Payslips &amp; tax</h1>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: "var(--on-bg)" }}>{tr("Payslips & tax")}</h1>
         <p className="text-sm mt-1" style={{ color: "var(--on-variant)" }}>
-          Understand your salary, deductions, taxes and employer contributions.
+          {tr("Understand your salary, deductions, taxes and employer contributions.")}
         </p>
       </div>
 
@@ -30,7 +31,7 @@ export default function PayslipHeader({ payslips, selectedId, onSelect, activeSl
           className="field-input field-select"
           value={activeId}
           onChange={e => onSelect(e.target.value)}
-          aria-label="Select payslip month"
+          aria-label={tr("Select payslip month")}
         >
           {payslips.map(p => (
             <option key={p.id} value={p.id}>{fmtMonth(p.cycle_start)}</option>
@@ -43,15 +44,15 @@ export default function PayslipHeader({ payslips, selectedId, onSelect, activeSl
             className="btn btn-filled"
             onClick={() => logPayslipDownload(activeSlip.id)}
           >
-            <i className="ti ti-download text-sm" /> Download payslip
+            <i className="ti ti-download text-sm" /> {tr("Download payslip")}
           </a>
         ) : (
           <button
             disabled
             className="btn btn-filled disabled:opacity-50 disabled:cursor-not-allowed"
-            title="No payslip selected"
+            title={tr("No payslip selected")}
           >
-            <i className="ti ti-download text-sm" /> Download payslip
+            <i className="ti ti-download text-sm" /> {tr("Download payslip")}
           </button>
         )}
       </div>

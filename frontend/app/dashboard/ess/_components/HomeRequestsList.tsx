@@ -6,6 +6,7 @@
 // shared helpers in my-requests/_data.ts; this component only renders.
 
 import { DisplayStatus, MyRequestItem, STATUS_BADGE_CLASS, STATUS_LABEL, TYPE_META, fmtSubmitted } from "../../my-requests/_data";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   items: MyRequestItem[];
@@ -17,18 +18,18 @@ export default function HomeRequestsList({ items, onViewAll }: Props) {
     <div className="card">
       <div className="card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
-          <div className="card-title" style={{ fontSize: 20 }}><i className="ti ti-list-check" /> My requests</div>
-          <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--on-variant)" }}>Recent submissions and approval progress.</p>
+          <div className="card-title" style={{ fontSize: 20 }}><i className="ti ti-list-check" /> {tr("My requests")}</div>
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--on-variant)" }}>{tr("Recent submissions and approval progress.")}</p>
         </div>
         <button onClick={onViewAll} className="btn btn-ghost btn-sm">
-          View all <i className="ti ti-arrow-right" />
+          {tr("View all")} <i className="ti ti-arrow-right" />
         </button>
       </div>
 
       {items.length === 0 ? (
         <div className="empty-state" style={{ padding: "32px 20px" }}>
           <i className="ti ti-inbox" />
-          <p>No requests yet.</p>
+          <p>{tr("No requests yet.")}</p>
         </div>
       ) : (
         <div>

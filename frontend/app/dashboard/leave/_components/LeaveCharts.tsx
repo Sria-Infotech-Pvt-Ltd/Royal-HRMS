@@ -1,3 +1,4 @@
+import { tr } from "@/lib/i18n/tr";
 // Small SVG charts for the Leave analytics screen (no chart library): monthly bars and a status donut.
 
 export interface MonthPoint { month: number; requests: number; approved_days: number }
@@ -76,7 +77,7 @@ export function StatusDonut({ slices, total }: { slices: DonutSlice[]; total: nu
         return arc;
       })}
       <text x={70} y={68} textAnchor="middle" fontSize={26} fontWeight={800} fill="currentColor">{total}</text>
-      <text x={70} y={86} textAnchor="middle" fontSize={10} fill="currentColor" fillOpacity={0.6}>requests</text>
+      <text x={70} y={86} textAnchor="middle" fontSize={10} fill="currentColor" fillOpacity={0.6}>{tr("requests")}</text>
     </svg>
   );
 }

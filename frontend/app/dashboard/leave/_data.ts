@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/formatDate";
+import { tr } from "@/lib/i18n/tr";
 
 // ─── Leave type UI metadata ───────────────────────────────────────────────────
 
@@ -20,17 +21,17 @@ export interface LeaveTypeConfig {
 export const LEAVE_TYPE_CONFIG: Record<LeaveTypeKey, LeaveTypeConfig> = {
   // color/bg reuse this app's design tokens (see globals.css) so these chips
   // stay theme-correct in dark mode instead of a fixed light-mode rgba tint.
-  casual:    { key: "casual",    label: "Casual Leave",      shortLabel: "CL",  icon: "ti-beach",          color: "var(--primary)",   bg: "color-mix(in srgb, var(--primary) 10%, transparent)",   isLwp: false, requiresDoc: false },
-  earned:    { key: "earned",    label: "Earned Leave",      shortLabel: "EL",  icon: "ti-calendar-check", color: "var(--success)",   bg: "color-mix(in srgb, var(--success) 10%, transparent)",   isLwp: false, requiresDoc: false },
-  sick:      { key: "sick",      label: "Sick Leave",        shortLabel: "SL",  icon: "ti-stethoscope",    color: "var(--info)",      bg: "color-mix(in srgb, var(--info) 10%, transparent)",      isLwp: false, requiresDoc: true  },
-  lwp:       { key: "lwp",       label: "Leave Without Pay", shortLabel: "LWP", icon: "ti-coin-off",       color: "var(--warn)",      bg: "color-mix(in srgb, var(--warn) 10%, transparent)",      isLwp: true,  requiresDoc: false },
-  maternity: { key: "maternity", label: "Maternity Leave",   shortLabel: "ML",  icon: "ti-heart",          color: "var(--primary-c)", bg: "color-mix(in srgb, var(--primary-c) 12%, transparent)", isLwp: false, requiresDoc: true  },
-  paternity: { key: "paternity", label: "Paternity Leave",   shortLabel: "PL",  icon: "ti-baby-carriage",  color: "var(--primary-c)", bg: "color-mix(in srgb, var(--primary-c) 10%, transparent)", isLwp: false, requiresDoc: true  },
+  casual:    { key: "casual",    get label() { return tr("Casual Leave"); },      shortLabel: "CL",  icon: "ti-beach",          color: "var(--primary)",   bg: "color-mix(in srgb, var(--primary) 10%, transparent)",   isLwp: false, requiresDoc: false },
+  earned:    { key: "earned",    get label() { return tr("Earned Leave"); },      shortLabel: "EL",  icon: "ti-calendar-check", color: "var(--success)",   bg: "color-mix(in srgb, var(--success) 10%, transparent)",   isLwp: false, requiresDoc: false },
+  sick:      { key: "sick",      get label() { return tr("Sick Leave"); },        shortLabel: "SL",  icon: "ti-stethoscope",    color: "var(--info)",      bg: "color-mix(in srgb, var(--info) 10%, transparent)",      isLwp: false, requiresDoc: true  },
+  lwp:       { key: "lwp",       get label() { return tr("Leave Without Pay"); }, shortLabel: "LWP", icon: "ti-coin-off",       color: "var(--warn)",      bg: "color-mix(in srgb, var(--warn) 10%, transparent)",      isLwp: true,  requiresDoc: false },
+  maternity: { key: "maternity", get label() { return tr("Maternity Leave"); },   shortLabel: "ML",  icon: "ti-heart",          color: "var(--primary-c)", bg: "color-mix(in srgb, var(--primary-c) 12%, transparent)", isLwp: false, requiresDoc: true  },
+  paternity: { key: "paternity", get label() { return tr("Paternity Leave"); },   shortLabel: "PL",  icon: "ti-baby-carriage",  color: "var(--primary-c)", bg: "color-mix(in srgb, var(--primary-c) 10%, transparent)", isLwp: false, requiresDoc: true  },
   // Added for parity with the 8 real, DB-configured LeaveType rows
   // (apps/hrms/models_leave_ledger.py) — this map previously only covered
   // the 6 legacy LEAVE_TYPE_CHOICES codes, silently missing these two.
-  bereavement: { key: "bereavement", label: "Bereavement Leave",  shortLabel: "BL",  icon: "ti-heart-handshake", color: "var(--on-variant)", bg: "color-mix(in srgb, var(--on-variant) 10%, transparent)", isLwp: false, requiresDoc: false },
-  comp_off:    { key: "comp_off",    label: "Compensatory Off",   shortLabel: "CO",  icon: "ti-clock-plus",      color: "var(--success)",    bg: "color-mix(in srgb, var(--success) 10%, transparent)",    isLwp: false, requiresDoc: false },
+  bereavement: { key: "bereavement", get label() { return tr("Bereavement Leave"); },  shortLabel: "BL",  icon: "ti-heart-handshake", color: "var(--on-variant)", bg: "color-mix(in srgb, var(--on-variant) 10%, transparent)", isLwp: false, requiresDoc: false },
+  comp_off:    { key: "comp_off",    get label() { return tr("Compensatory Off"); },   shortLabel: "CO",  icon: "ti-clock-plus",      color: "var(--success)",    bg: "color-mix(in srgb, var(--success) 10%, transparent)",    isLwp: false, requiresDoc: false },
 };
 
 export const LEAVE_TYPES_LIST = Object.values(LEAVE_TYPE_CONFIG);

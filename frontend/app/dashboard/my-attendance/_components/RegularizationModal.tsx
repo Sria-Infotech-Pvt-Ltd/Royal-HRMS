@@ -8,6 +8,7 @@ import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
 import type { CorrectionRequest, CorrectionPunchType, CorrectionReason } from "@/types/myAttendance";
 import DateInput from "@/components/shared/DateInput";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   onClose:    () => void;
@@ -18,11 +19,11 @@ interface Props {
 type NormalisedError = { message?: string };
 
 const REASON_OPTIONS: { value: CorrectionReason; label: string }[] = [
-  { value: "biometric_error",  label: "Device malfunction / biometric error" },
-  { value: "forgot_to_punch",  label: "Forgot to punch"                      },
-  { value: "field_work",       label: "Work from field (client visit)"        },
-  { value: "system_downtime",  label: "System / server downtime"              },
-  { value: "other",            label: "Other"                                 },
+  { value: "biometric_error",  get label() { return tr("Device malfunction / biometric error"); } },
+  { value: "forgot_to_punch",  get label() { return tr("Forgot to punch"); }                      },
+  { value: "field_work",       get label() { return tr("Work from field (client visit)"); }        },
+  { value: "system_downtime",  get label() { return tr("System / server downtime"); }              },
+  { value: "other",            get label() { return tr("Other"); }                                 },
 ];
 
 function todayString() {
@@ -88,7 +89,7 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
         title={
           <>
             <i className="ti ti-file-description" style={{ marginRight: 8, color: "var(--warn)" }} />
-            Attendance Correction Request
+            {tr("Attendance Correction Request")}
           </>
         }
         onClose={onClose}
@@ -96,12 +97,12 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
         footer={
           <>
             <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>
-              Cancel
+              {tr("Cancel")}
             </button>
             <button type="submit" form={formId} className="btn btn-filled" disabled={submitting}>
               {submitting
-                ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Submitting…</>
-                : <><i className="ti ti-send" /> Submit Request</>
+                ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {tr("Submitting…")}</>
+                : <><i className="ti ti-send" /> {tr("Submit Request")}</>
               }
             </button>
           </>
@@ -110,28 +111,27 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
         <div className="alert alert-warn mb-16">
           <i className="ti ti-alert-triangle" />
           <span>
-            Submit a correction for a missed or incorrect punch. Your manager will review and approve
-            within the regularization cutoff window (7 days after month end).
+            {tr("Submit a correction for a missed or incorrect punch. Your manager will review and approve within the regularization cutoff window (7 days after month end).")}
           </span>
         </div>
 
         <div className="form-row cols-2">
           <div className="field-group">
-            <label className="field-label">Date</label>
+            <label className="field-label">{tr("Date")}</label>
             <DateInput className="field-input" value={formDate} onChange={isoDate => setFormDate(isoDate)} required />
           </div>
           <div className="field-group">
-            <label className="field-label">Punch Type</label>
+            <label className="field-label">{tr("Punch Type")}</label>
             <select
               className="field-input field-select"
               value={punchType}
               onChange={e => setPunchType(e.target.value as CorrectionPunchType | "")}
               required
             >
-              <option value="">Select what was missed…</option>
-              <option value="IN">Missed clock-in (adds a punch-in)</option>
-              <option value="OUT">Missed clock-out (adds a punch-out)</option>
-              <option value="BOTH">Both clock-in and clock-out</option>
+              <option value="">{tr("Select what was missed…")}</option>
+              <option value="IN">{tr("Missed clock-in (adds a punch-in)")}</option>
+              <option value="OUT">{tr("Missed clock-out (adds a punch-out)")}</option>
+              <option value="BOTH">{tr("Both clock-in and clock-out")}</option>
             </select>
           </div>
         </div>
@@ -139,7 +139,7 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
         <div className="form-row cols-2">
           {showIn && (
             <div className="field-group">
-              <label className="field-label">Correct In Time</label>
+              <label className="field-label">{tr("Correct In Time")}</label>
               <input
                 type="time"
                 className="field-input"
@@ -151,7 +151,7 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
           )}
           {showOut && (
             <div className="field-group">
-              <label className="field-label">Correct Out Time</label>
+              <label className="field-label">{tr("Correct Out Time")}</label>
               <input
                 type="time"
                 className="field-input"
@@ -159,13 +159,13 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
                 onChange={e => setCorrectOutTime(e.target.value)}
                 required={showOut}
               />
-              {punchType === "OUT" && <small style={{ color: "var(--on-variant)" }}>Adds a punch-out at this time. Your punch-in for the day stays as it is.</small>}
+              {punchType === "OUT" && <small style={{ color: "var(--on-variant)" }}>{tr("Adds a punch-out at this time. Your punch-in for the day stays as it is.")}</small>}
             </div>
           )}
         </div>
 
         <div className="field-group mb-16">
-          <label className="field-label">Reason</label>
+          <label className="field-label">{tr("Reason")}</label>
           <select
             className="field-input field-select"
             value={reason}
@@ -178,11 +178,11 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
         </div>
 
         <div className="field-group">
-          <label className="field-label">Additional Notes (optional)</label>
+          <label className="field-label">{tr("Additional Notes (optional)")}</label>
           <textarea
             className="field-input"
             style={{ minHeight: 72 }}
-            placeholder="Describe the situation…"
+            placeholder={tr("Describe the situation…")}
             value={notes}
             onChange={e => setNotes(e.target.value)}
           />

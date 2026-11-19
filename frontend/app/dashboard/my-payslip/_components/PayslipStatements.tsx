@@ -5,6 +5,7 @@ import { INR, fmtMonth } from "./types";
 import { logPayslipDownload } from "./downloadAudit";
 import { API } from "@/lib/api/endpoints";
 import { API_BASE } from "@/lib/config";
+import { tr } from "@/lib/i18n/tr";
 
 function StatementRow({ label, amountLabel, downloadHref, payslipId, disabledTitle }: {
   label: string; amountLabel: string; downloadHref: string | null; payslipId: string | null; disabledTitle?: string;
@@ -22,11 +23,11 @@ function StatementRow({ label, amountLabel, downloadHref, payslipId, disabledTit
           style={{ color: "var(--primary)" }}
           onClick={() => payslipId && logPayslipDownload(payslipId)}
         >
-          Download
+          {tr("Download")}
         </a>
       ) : (
         <span className="text-xs font-semibold" style={{ color: "var(--outline)", cursor: "not-allowed" }} title={disabledTitle}>
-          Download
+          {tr("Download")}
         </span>
       )}
     </div>
@@ -43,8 +44,8 @@ export default function PayslipStatements({ payslips, currentFinancialYearLabel,
   return (
     <div className="card">
       <div className="px-4 py-3 border-b" style={{ borderColor: "var(--outline-v)" }}>
-        <div className="text-sm font-bold" style={{ color: "var(--on-bg)" }}>Previous statements</div>
-        <div className="text-xs mt-0.5" style={{ color: "var(--on-variant)" }}>Secure downloads are access logged.</div>
+        <div className="text-sm font-bold" style={{ color: "var(--on-bg)" }}>{tr("Previous statements")}</div>
+        <div className="text-xs mt-0.5" style={{ color: "var(--on-variant)" }}>{tr("Secure downloads are access logged.")}</div>
       </div>
       <div className="px-4 py-1">
         {payslips.map(p => (

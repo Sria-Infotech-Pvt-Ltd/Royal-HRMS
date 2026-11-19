@@ -11,6 +11,7 @@ import { isWorkFromHome } from "@/lib/workMode";
 import { shortHoursText } from "@/lib/shortHours";
 import { LATE_LOGIN_LABEL, LATE_LOGIN_MEANING, isLateLogin, lateLoginText } from "@/lib/lateLogin";
 import type { DayRecord } from "@/types/attendance";
+import { tr } from "@/lib/i18n/tr";
 
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -18,13 +19,13 @@ interface LegendEntry { className: string; label: string; meaning: string }
 
 /** Every colour the calendar can show, with what it means. The inline legend lists only the ones present in the month. */
 const LEGEND: ReadonlyArray<LegendEntry> = [
-  { className: "present",    label: "Present",            meaning: "A full working day." },
-  { className: "late",       label: "Late",               meaning: "Arrived after the grace time." },
-  { className: "absent",     label: "Absent",             meaning: "No attendance recorded on a working day." },
-  { className: "half-day",   label: "Half day",           meaning: "Worked up to the half-day limit." },
-  { className: "leave",      label: "On leave",           meaning: "Approved leave." },
-  { className: "unrecorded", label: "Week off / Holiday", meaning: "Not a working day." },
-  { className: "incomplete", label: "Incomplete",         meaning: "Punched in but never punched out. Raise a correction so the day gets its hours." },
+  { className: "present",    get label() { return tr("Present"); },            meaning: "A full working day." },
+  { className: "late",       get label() { return tr("Late"); },               meaning: "Arrived after the grace time." },
+  { className: "absent",     get label() { return tr("Absent"); },             meaning: "No attendance recorded on a working day." },
+  { className: "half-day",   get label() { return tr("Half day"); },           meaning: "Worked up to the half-day limit." },
+  { className: "leave",      get label() { return tr("On leave"); },           meaning: "Approved leave." },
+  { className: "unrecorded", get label() { return tr("Week off / Holiday"); }, meaning: "Not a working day." },
+  { className: "incomplete", get label() { return tr("Incomplete"); },         meaning: "Punched in but never punched out. Raise a correction so the day gets its hours." },
 ];
 const WFH_MEANING = "Worked from home (approved request).";
 const SHORT_MEANING = "Hours not completed: worked more than a half day but less than a full day. The tag shows how many minutes short.";
@@ -88,7 +89,7 @@ function dayTitle(day: number, monthName: string, year: number, record: DayRecor
   if (isWorkFromHome(record)) parts.push("Work from home");
   const short = shortHoursText(record);
   if (short) parts.push(`Hours not completed (short by ${short})`);
-  if (isLateLogin(record)) parts.push(LATE_LOGIN_LABEL);
+  if (isLateLogin(record)) parts.push(tr(LATE_LOGIN_LABEL));
   if (record?.clockIn) parts.push(`In ${record.clockIn}${record.clockOut ? ` · Out ${record.clockOut}` : ""}`);
   return parts.join(" — ");
 }
@@ -106,21 +107,21 @@ function DayTip({ heading, record, position }: { heading: string; record: DayRec
     <div className="ess-cal-tip" role="tooltip" style={{ left: position.left, top: position.top, width: TIP_WIDTH }}>
       <strong>{heading}</strong>
       {record?.status && <span className="ess-cal-tip-status">{record.holiday_name ? `${record.status}: ${record.holiday_name}` : record.status}</span>}
-      {isWorkFromHome(record) && <span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /> Work from home</span>}
+      {isWorkFromHome(record) && <span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /> {tr("Work from home")}</span>}
       {shortHoursText(record) && (
-        <span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /> Hours not completed: short by {shortHoursText(record)}</span>
+        <span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /> {tr("Hours not completed: short by {time}", { time: shortHoursText(record) ?? "" })}</span>
       )}
       {lateLoginText(record) && (
-        <span className="ess-cal-late"><i className="ti ti-clock-exclamation" aria-hidden="true" /> {LATE_LOGIN_LABEL}: {lateLoginText(record)}</span>
+        <span className="ess-cal-late"><i className="ti ti-clock-exclamation" aria-hidden="true" /> {tr(LATE_LOGIN_LABEL)}: {lateLoginText(record)}</span>
       )}
       {hasPunch ? (
         <dl>
-          <dt>Punched in</dt><dd>{record?.clockIn || "—"}</dd>
-          <dt>Punched out</dt><dd>{record?.clockOut || "—"}</dd>
-          {record?.hours && (<><dt>Hours</dt><dd>{record.hours}</dd></>)}
+          <dt>{tr("Punched in")}</dt><dd>{record?.clockIn || "—"}</dd>
+          <dt>{tr("Punched out")}</dt><dd>{record?.clockOut || "—"}</dd>
+          {record?.hours && (<><dt>{tr("Hours")}</dt><dd>{record.hours}</dd></>)}
         </dl>
       ) : (
-        <span className="ess-cal-tip-empty">No punches recorded</span>
+        <span className="ess-cal-tip-empty">{tr("No punches recorded")}</span>
       )}
     </div>
   );
@@ -166,18 +167,18 @@ function DayCell({ day, year, month, record: rawRecord, isToday }: {
       {(isWorkFromHome(record) || shortHoursText(record) || isLateLogin(record)) && (
         <div className="ess-cal-tags">
           {isWorkFromHome(record) && (
-            <span className="ess-cal-wfh" title="Work from home">
-              <i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">WFH</span>
+            <span className="ess-cal-wfh" title={tr("Work from home")}>
+              <i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("WFH")}</span>
             </span>
           )}
           {shortHoursText(record) && (
             <span className="ess-cal-short" title={`Hours not completed: short by ${shortHoursText(record)}`}>
-              <i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">Short {shortHoursText(record)}</span>
+              <i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("Short")} {shortHoursText(record)}</span>
             </span>
           )}
           {isLateLogin(record) && (
-            <span className="ess-cal-late" title={lateLoginText(record) ?? LATE_LOGIN_LABEL}>
-              <i className="ti ti-clock-exclamation" aria-hidden="true" /><span className="ess-cal-tag-text">{LATE_LOGIN_LABEL}</span>
+            <span className="ess-cal-late" title={lateLoginText(record) ?? tr(LATE_LOGIN_LABEL)}>
+              <i className="ti ti-clock-exclamation" aria-hidden="true" /><span className="ess-cal-tag-text">{tr(LATE_LOGIN_LABEL)}</span>
             </span>
           )}
         </div>
@@ -200,43 +201,43 @@ export default function EssAttendanceCalendar({
       <div className="ess-cal-head">
         <div>
           <h2>{MONTH_LONG[month - 1]} {year}</h2>
-          <p>Daily attendance and approved leave.</p>
+          <p>{tr("Daily attendance and approved leave.")}</p>
         </div>
         <div className="ess-cal-nav">
           <button className="rvbtn" type="button" onClick={onToday} disabled={isLoading || isCurrentMonth}>
-            Today
+            {tr("Today")}
           </button>
-          <button className="rvbtn ess-cal-arrow" type="button" onClick={onPreviousMonth} disabled={isLoading} aria-label="Previous month">
+          <button className="rvbtn ess-cal-arrow" type="button" onClick={onPreviousMonth} disabled={isLoading} aria-label={tr("Previous month")}>
             <i className="ti ti-chevron-left" />
           </button>
-          <button className="rvbtn ess-cal-arrow" type="button" onClick={onNextMonth} disabled={isLoading} aria-label="Next month">
+          <button className="rvbtn ess-cal-arrow" type="button" onClick={onNextMonth} disabled={isLoading} aria-label={tr("Next month")}>
             <i className="ti ti-chevron-right" />
           </button>
         </div>
       </div>
 
-      <div className="ess-calendar-legend" aria-label="Attendance status colors">
+      <div className="ess-calendar-legend" aria-label={tr("Attendance status colors")}>
         {LEGEND.filter(entry => used.classes.has(entry.className)).map(entry => (
           <span key={entry.className} title={entry.meaning}><i className={`ess-status-dot ${entry.className}`} />{entry.label}</span>
         ))}
         {used.hasWfh && (
           <span title={WFH_MEANING}>
-            <span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">WFH</span></span>Work from home
+            <span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("WFH")}</span></span>{tr("Work from home")}
           </span>
         )}
         {used.hasLateLogin && (
-          <span title={LATE_LOGIN_MEANING}>
-            <span className="ess-cal-late"><i className="ti ti-clock-exclamation" aria-hidden="true" /><span className="ess-cal-tag-text">{LATE_LOGIN_LABEL}</span></span>Arrived late, full day worked
+          <span title={tr(LATE_LOGIN_MEANING)}>
+            <span className="ess-cal-late"><i className="ti ti-clock-exclamation" aria-hidden="true" /><span className="ess-cal-tag-text">{tr(LATE_LOGIN_LABEL)}</span></span>{tr("Arrived late, full day worked")}
           </span>
         )}
         {used.hasShort && (
           <span title={SHORT_MEANING}>
-            <span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">Short</span></span>Hours not completed
+            <span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("Short")}</span></span>{tr("Hours not completed")}
           </span>
         )}
       </div>
       <details className="ess-cal-key">
-        <summary>What do these mean?</summary>
+        <summary>{tr("What do these mean?")}</summary>
         <dl>
           {LEGEND.map(entry => (
             <div key={entry.className} className="ess-cal-key-row">
@@ -245,15 +246,15 @@ export default function EssAttendanceCalendar({
             </div>
           ))}
           <div className="ess-cal-key-row">
-            <dt><span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">WFH</span></span>Work from home</dt>
+            <dt><span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("WFH")}</span></span>{tr("Work from home")}</dt>
             <dd>{WFH_MEANING}</dd>
           </div>
           <div className="ess-cal-key-row">
-            <dt><span className="ess-cal-late"><i className="ti ti-clock-exclamation" aria-hidden="true" /><span className="ess-cal-tag-text">{LATE_LOGIN_LABEL}</span></span>Arrived late</dt>
-            <dd>{LATE_LOGIN_MEANING}</dd>
+            <dt><span className="ess-cal-late"><i className="ti ti-clock-exclamation" aria-hidden="true" /><span className="ess-cal-tag-text">{tr(LATE_LOGIN_LABEL)}</span></span>{tr("Arrived late")}</dt>
+            <dd>{tr(LATE_LOGIN_MEANING)}</dd>
           </div>
           <div className="ess-cal-key-row">
-            <dt><span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">Short</span></span>Hours not completed</dt>
+            <dt><span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("Short")}</span></span>{tr("Hours not completed")}</dt>
             <dd>{SHORT_MEANING}</dd>
           </div>
         </dl>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import AttendanceTab from "./_components/AttendanceTab";
 import AttendanceCorrectionsTab from "./_components/AttendanceCorrectionsTab";
 import WeeklyTimesheetCard from "../ess/_components/WeeklyTimesheetCard";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   autoOpenNew?: boolean;
@@ -23,8 +24,8 @@ export default function MyAttendanceClient({ autoOpenNew = false }: Props) {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Attendance</div>
-          <div className="page-sub">Punch status, monthly calendar and regularization requests.</div>
+          <div className="page-title">{tr("Attendance")}</div>
+          <div className="page-sub">{tr("Punch status, monthly calendar and regularization requests.")}</div>
         </div>
         <div className="page-actions">
           <button
@@ -32,7 +33,7 @@ export default function MyAttendanceClient({ autoOpenNew = false }: Props) {
             onClick={() => { setPendingAutoOpen(true); setOpenCorrectionKey(k => k + 1); }}
             suppressHydrationWarning
           >
-            Regularize attendance
+            {tr("Regularize attendance")}
           </button>
         </div>
       </div>

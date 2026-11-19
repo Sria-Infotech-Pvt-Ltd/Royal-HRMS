@@ -4,11 +4,17 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import I18nProvider from "@/components/I18nProvider";
 import LoginLanguageSwitch from "@/components/auth/LoginLanguageSwitch";
 import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n/languages";
 
 function Greeting() {
   const t = useT();
   return <p>{t("Welcome back")}</p>;
+}
+
+// A screen that uses the plain tr() function and never subscribes to the language (most converted screens).
+function PlainGreeting() {
+  return <p>{tr("Welcome back")}</p>;
 }
 
 beforeEach(() => { localStorage.clear(); document.documentElement.lang = ""; });
@@ -44,6 +50,15 @@ describe("I18nProvider", () => {
   it("ignores a saved value it does not know", () => {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, "klingon");
     render(<I18nProvider><Greeting /></I18nProvider>);
+    expect(screen.getByText("Welcome back")).toBeTruthy();
+  });
+
+  it("also switches screens that use the plain tr() function", () => {
+    render(<I18nProvider><PlainGreeting /><LoginLanguageSwitch /></I18nProvider>);
+    expect(screen.getByText("Welcome back")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "हिन्दी" }));
+    expect(screen.getByText("वापसी पर स्वागत है")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
     expect(screen.getByText("Welcome back")).toBeTruthy();
   });
 });

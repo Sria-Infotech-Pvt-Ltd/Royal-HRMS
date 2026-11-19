@@ -2,6 +2,8 @@
 // The day's status therefore no longer says they were late; this tag does, for the employee and for managers. Display only: the stored
 // status (and what payroll reads from it) does not change.
 
+import { tr } from "@/lib/i18n/tr"
+
 export const LATE_LOGIN_LABEL = "Late login"
 export const LATE_LOGIN_MEANING = "Punched in after the grace time, but the full hours were worked, so the day counts as Present."
 
@@ -19,6 +21,6 @@ export function isLateLogin(record: LateLoginRecord | null | undefined): boolean
 export function lateLoginText(record: LateLoginRecord | null | undefined): string | null {
   if (!record || !isLateLogin(record)) return null
   const at = record.clockIn ? ` ${record.clockIn}` : ""
-  const after = record.late_after ? ` (after ${record.late_after})` : ""
-  return `Punched in${at}${after}. Full hours were completed, so the day counts as Present.`
+  const after = record.late_after ? ` (${tr("after {time}", { time: record.late_after })})` : ""
+  return tr("Punched in{at}{after}. Full hours were completed, so the day counts as Present.", { at, after })
 }

@@ -2,6 +2,7 @@
 
 import type { ApiPayslip } from "./types";
 import { INR, fmtMonth } from "./types";
+import { tr } from "@/lib/i18n/tr";
 
 interface Row {
   label: string;
@@ -52,12 +53,12 @@ export default function PayslipBreakdown({ slip, gratuityRate }: Props) {
     .map(([name, amt]) => ({ label: name, value: Number(amt) }));
 
   const earningsRows: Row[] = [
-    { label: "Basic salary", value: Number(slip.basic) },
-    { label: "House rent allowance", value: Number(slip.hra) },
-    { label: "Special allowance", value: Number(slip.special_allowance) },
+    { label: tr("Basic salary"), value: Number(slip.basic) },
+    { label: tr("House rent allowance"), value: Number(slip.hra) },
+    { label: tr("Special allowance"), value: Number(slip.special_allowance) },
     ...otherEarningsRows,
-    ...(Number(slip.bonus) > 0 ? [{ label: "Bonus", value: Number(slip.bonus) }] : []),
-    ...(Number(slip.reimbursements) > 0 ? [{ label: "Reimbursements", value: Number(slip.reimbursements) }] : []),
+    ...(Number(slip.bonus) > 0 ? [{ label: tr("Bonus"), value: Number(slip.bonus) }] : []),
+    ...(Number(slip.reimbursements) > 0 ? [{ label: tr("Reimbursements"), value: Number(slip.reimbursements) }] : []),
   ].filter(r => r.value !== 0);
 
   // "Other deductions" folds in ESI, LWF, one-off adjustments and LOP — real
@@ -67,14 +68,14 @@ export default function PayslipBreakdown({ slip, gratuityRate }: Props) {
     + Number(slip.adjustments_deduction) + Number(slip.lop_deduction);
 
   const deductionsRows: Row[] = [
-    { label: "Provident fund", value: Number(slip.pf_employee) },
-    { label: "Professional tax", value: Number(slip.pt_deduction) },
+    { label: tr("Provident fund"), value: Number(slip.pf_employee) },
+    { label: tr("Professional tax"), value: Number(slip.pt_deduction) },
     // Real FY2026-27 slab-based TDS estimate from the payroll engine — see
     // backend/apps/payroll/services_income_tax.py. Resolved against the
     // employee's declared EmployeeTaxDeclaration regime at computation time,
     // not a fabricated or hardcoded figure.
-    { label: "Income tax (TDS)", value: Number(slip.income_tax) },
-    ...(otherDeductions > 0 ? [{ label: "Other deductions", value: otherDeductions }] : []),
+    { label: tr("Income tax (TDS)"), value: Number(slip.income_tax) },
+    ...(otherDeductions > 0 ? [{ label: tr("Other deductions"), value: otherDeductions }] : []),
   ];
 
   // Gratuity provision is never persisted per payslip (see EmployeePayslip
@@ -86,25 +87,25 @@ export default function PayslipBreakdown({ slip, gratuityRate }: Props) {
   const employerTotal = Number(slip.pf_employer) + Number(slip.esi_employer) + (gratuityProvision ?? 0);
 
   const employerRows: Row[] = [
-    { label: "Employer PF", value: Number(slip.pf_employer) },
+    { label: tr("Employer PF"), value: Number(slip.pf_employer) },
     gratuityProvision === null
-      ? { label: "Gratuity provision", value: null, unavailableNote: "Rate not loaded" }
-      : { label: "Gratuity provision", value: gratuityProvision },
-    { label: "Insurance premium", value: Number(slip.esi_employer) },
+      ? { label: tr("Gratuity provision"), value: null, unavailableNote: "Rate not loaded" }
+      : { label: tr("Gratuity provision"), value: gratuityProvision },
+    { label: tr("Insurance premium"), value: Number(slip.esi_employer) },
   ];
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 items-stretch">
       <BreakdownColumn
-        title="Earnings" subtitle={`${monthLabel} payroll components.`}
+        title={tr("Earnings")} subtitle={`${monthLabel} payroll components.`}
         rows={earningsRows} totalLabel="Total earnings" totalValue={Number(slip.gross_earnings)} accent="var(--success)"
       />
       <BreakdownColumn
-        title="Deductions" subtitle={`${monthLabel} payroll components.`}
+        title={tr("Deductions")} subtitle={`${monthLabel} payroll components.`}
         rows={deductionsRows} totalLabel="Total deductions" totalValue={Number(slip.total_deductions)} accent="var(--error)"
       />
       <BreakdownColumn
-        title="Employer contributions" subtitle="Benefits paid in addition to net salary."
+        title={tr("Employer contributions")} subtitle="Benefits paid in addition to net salary."
         rows={employerRows} totalLabel="Total" totalValue={employerTotal} accent="var(--primary)"
       />
     </div>

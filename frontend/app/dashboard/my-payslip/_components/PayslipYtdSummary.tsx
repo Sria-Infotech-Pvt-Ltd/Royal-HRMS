@@ -1,6 +1,7 @@
 "use client";
 
 import { INR } from "./types";
+import { tr } from "@/lib/i18n/tr";
 
 function YtdTile({ label, value, caption }: { label: string; value: string; caption: string }) {
   return (
@@ -24,8 +25,8 @@ export default function PayslipYtdSummary({ monthRangeLabel, ytdGross, ytdNet, y
   return (
     <div className="card">
       <div className="px-4 py-3 border-b" style={{ borderColor: "var(--outline-v)" }}>
-        <div className="text-sm font-bold" style={{ color: "var(--on-bg)" }}>Year-to-date summary</div>
-        <div className="text-xs mt-0.5" style={{ color: "var(--on-variant)" }}>{monthRangeLabel} cumulative payroll.</div>
+        <div className="text-sm font-bold" style={{ color: "var(--on-bg)" }}>{tr("Year-to-date summary")}</div>
+        <div className="text-xs mt-0.5" style={{ color: "var(--on-variant)" }}>{tr("{range} cumulative payroll.", { range: monthRangeLabel })}</div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4">
         <YtdTile label="Gross earnings" value={INR(ytdGross)} caption={`${periodCount} payroll period${periodCount === 1 ? "" : "s"}`} />

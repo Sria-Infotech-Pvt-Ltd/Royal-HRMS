@@ -1,6 +1,7 @@
 "use client";
 
 import type { HistoryRow } from "@/types/attendance";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   data:         HistoryRow[];
@@ -34,7 +35,7 @@ export default function AttendanceHistoryTable({ data, onRegularize, readOnly = 
   if (data.length === 0) {
     return (
       <div style={{ padding: 32, textAlign: "center", color: "var(--on-variant)", borderTop: "1px solid var(--outline-v)" }}>
-        No attendance records for this month.
+        {tr("No attendance records for this month.")}
       </div>
     );
   }
@@ -45,13 +46,13 @@ export default function AttendanceHistoryTable({ data, onRegularize, readOnly = 
         <table>
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Day</th>
-              <th>Clock In</th>
-              <th>Clock Out</th>
-              <th>Hours</th>
-              <th>Status</th>
-              <th>Action</th>
+              <th>{tr("Date")}</th>
+              <th>{tr("Day")}</th>
+              <th>{tr("Clock In")}</th>
+              <th>{tr("Clock Out")}</th>
+              <th>{tr("Hours")}</th>
+              <th>{tr("Status")}</th>
+              <th>{tr("Action")}</th>
             </tr>
           </thead>
           <tbody>
@@ -85,7 +86,7 @@ export default function AttendanceHistoryTable({ data, onRegularize, readOnly = 
                         style={{ fontSize: 11, color: "var(--warn)", gap: 4 }}
                       >
                         <i className="ti ti-flag-3" style={{ fontSize: 11 }} />
-                        Regularize
+                        {tr("Regularize")}
                       </button>
                     )}
                   </td>

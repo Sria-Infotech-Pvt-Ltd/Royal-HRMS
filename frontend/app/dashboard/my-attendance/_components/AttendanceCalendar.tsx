@@ -4,6 +4,7 @@ import type { DayRecord } from "@/types/attendance";
 import { isWorkFromHome } from "@/lib/workMode";
 import { shortHoursText } from "@/lib/shortHours";
 import { LATE_LOGIN_LABEL, isLateLogin, lateLoginText } from "@/lib/lateLogin";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   year:         number;
@@ -115,20 +116,20 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                   </div>
 
                   {isWorkFromHome(record) && (
-                    <div title="Work from home" style={{ fontSize: 8, fontWeight: 800, color: "var(--info, #2563eb)", letterSpacing: "0.04em" }}>
-                      <i className="ti ti-home" aria-hidden="true" /> WFH
+                    <div title={tr("Work from home")} style={{ fontSize: 8, fontWeight: 800, color: "var(--info, #2563eb)", letterSpacing: "0.04em" }}>
+                      <i className="ti ti-home" aria-hidden="true" /> {tr("WFH")}
                     </div>
                   )}
 
                   {isLateLogin(record) && (
-                    <div title={lateLoginText(record) ?? LATE_LOGIN_LABEL} style={{ fontSize: 8, fontWeight: 800, color: "var(--warn, #b45309)" }}>
-                      <i className="ti ti-clock-exclamation" aria-hidden="true" /> {LATE_LOGIN_LABEL}
+                    <div title={lateLoginText(record) ?? tr(LATE_LOGIN_LABEL)} style={{ fontSize: 8, fontWeight: 800, color: "var(--warn, #b45309)" }}>
+                      <i className="ti ti-clock-exclamation" aria-hidden="true" /> {tr(LATE_LOGIN_LABEL)}
                     </div>
                   )}
 
                   {shortHoursText(record) && (
                     <div title={`Hours not completed: short by ${shortHoursText(record)}`} style={{ fontSize: 8, fontWeight: 800, color: "var(--warn, #b45309)" }}>
-                      <i className="ti ti-alert-triangle" aria-hidden="true" /> Short {shortHoursText(record)}
+                      <i className="ti ti-alert-triangle" aria-hidden="true" /> {tr("Short")} {shortHoursText(record)}
                     </div>
                   )}
 
@@ -154,7 +155,7 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                   {!readOnly && record?.canRegularize && (
                     <button
                       onClick={() => onRegularize(dateStr(day))}
-                      title="Request correction for this day"
+                      title={tr("Request correction for this day")}
                       style={{
                         marginTop: 2, padding: "1px 4px", fontSize: 7.5, fontWeight: 700,
                         background: "var(--warn-c)", color: "var(--warn)",
@@ -162,7 +163,7 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                         cursor: "pointer", letterSpacing: "0.02em", lineHeight: 1.3,
                       }}
                     >
-                      Regularize
+                      {tr("Regularize")}
                     </button>
                   )}
                 </>

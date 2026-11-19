@@ -1,4 +1,5 @@
 "use client";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   financialYearLabel: string;
@@ -15,19 +16,19 @@ export default function PayslipTaxNotice({ financialYearLabel, fyEndLabel, isApp
     <div className="card p-4">
       <div className="flex items-center gap-2 text-sm font-bold" style={{ color: "var(--on-bg)" }}>
         <i className="ti ti-file-invoice" style={{ color: "var(--primary)" }} />
-        {isApproved ? "Tax declaration approved" : "Tax declaration window is open"}
+        {isApproved ? tr("Tax declaration approved") : tr("Tax declaration window is open")}
       </div>
       <p className="text-xs mt-2" style={{ color: "var(--on-variant)" }}>
         {isApproved
-          ? `Your ${financialYearLabel} regime and declarations were approved by HR. Further changes follow payroll approval.`
-          : `Review your ${financialYearLabel} regime and declarations before ${fyEndLabel}. Changes follow payroll approval.`}
+          ? tr("Your {financialYearLabel} regime and declarations were approved by HR. Further changes follow payroll approval.", { financialYearLabel: financialYearLabel })
+          : tr("Review your {financialYearLabel} regime and declarations before {fyEndLabel}. Changes follow payroll approval.", { financialYearLabel: financialYearLabel, fyEndLabel: fyEndLabel })}
       </p>
       <button
         onClick={onNavigateToTax}
         className="text-xs font-semibold mt-3"
         style={{ background: "none", border: "none", padding: 0, color: "var(--primary)", cursor: "pointer" }}
       >
-        Review declarations <i className="ti ti-arrow-right" />
+        {tr("Review declarations")} <i className="ti ti-arrow-right" />
       </button>
     </div>
   );

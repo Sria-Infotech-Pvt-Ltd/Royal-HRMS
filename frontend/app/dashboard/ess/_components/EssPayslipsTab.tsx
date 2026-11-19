@@ -17,6 +17,7 @@ import {
   type ApiFinancialYearConfig, type ApiMe, type ApiPayrollSettings, type ApiPayslip,
   type ApiTaxDeclarationBrief, type PagedResponse,
 } from "../../my-payslip/_components/types";
+import { tr } from "@/lib/i18n/tr";
 
 interface Line { label: string; value: number }
 
@@ -28,7 +29,7 @@ function PayTable({ title, subtitle, lines, totalLabel, total }: {
       <h2>{title}</h2>
       <p>{subtitle}</p>
       <table className="pay-table">
-        <thead><tr><th>COMPONENT</th><th>AMOUNT</th></tr></thead>
+        <thead><tr><th>{tr("COMPONENT")}</th><th>{tr("AMOUNT")}</th></tr></thead>
         <tbody>
           {lines.map(line => <tr key={line.label}><td>{line.label}</td><td>{INR(line.value)}</td></tr>)}
           <tr className="pay-total"><td>{totalLabel}</td><td>{INR(total)}</td></tr>
@@ -41,22 +42,22 @@ function PayTable({ title, subtitle, lines, totalLabel, total }: {
 function earningsOf(slip: ApiPayslip): Line[] {
   const others = Object.entries(slip.other_earnings ?? {}).map(([label, amount]) => ({ label, value: Number(amount) }));
   return [
-    { label: "Basic salary", value: Number(slip.basic) },
-    { label: "House rent allowance", value: Number(slip.hra) },
-    { label: "Special allowance", value: Number(slip.special_allowance) },
+    { label: tr("Basic salary"), value: Number(slip.basic) },
+    { label: tr("House rent allowance"), value: Number(slip.hra) },
+    { label: tr("Special allowance"), value: Number(slip.special_allowance) },
     ...others,
-    { label: "Bonus", value: Number(slip.bonus) },
-    { label: "Reimbursements", value: Number(slip.reimbursements) },
+    { label: tr("Bonus"), value: Number(slip.bonus) },
+    { label: tr("Reimbursements"), value: Number(slip.reimbursements) },
   ].filter(line => line.value !== 0);
 }
 
 function deductionsOf(slip: ApiPayslip): Line[] {
   const other = Number(slip.esi_employee) + Number(slip.lwf_employee) + Number(slip.adjustments_deduction) + Number(slip.lop_deduction);
   return [
-    { label: "Provident fund", value: Number(slip.pf_employee) },
-    { label: "Professional tax", value: Number(slip.pt_deduction) },
-    { label: "Income tax (TDS)", value: Number(slip.income_tax) },
-    ...(other > 0 ? [{ label: "Other deductions", value: other }] : []),
+    { label: tr("Provident fund"), value: Number(slip.pf_employee) },
+    { label: tr("Professional tax"), value: Number(slip.pt_deduction) },
+    { label: tr("Income tax (TDS)"), value: Number(slip.income_tax) },
+    ...(other > 0 ? [{ label: tr("Other deductions"), value: other }] : []),
   ];
 }
 
@@ -73,29 +74,29 @@ export default function EssPayslipsTab({ onNavigateToTax }: { onNavigateToTax: (
   const head = (
     <div className="ess-pagehead">
       <div>
-        <h2>Payslips &amp; tax</h2>
-        <p>Understand your salary, deductions, taxes and employer contributions.</p>
+        <h2>{tr("Payslips & tax")}</h2>
+        <p>{tr("Understand your salary, deductions, taxes and employer contributions.")}</p>
       </div>
       {slip && (
         <div className="pay-actions">
-          <select className="pay-selector" aria-label="Payslip month" value={slip.id} onChange={event => setSelectedId(event.target.value)}>
+          <select className="pay-selector" aria-label={tr("Payslip month")} value={slip.id} onChange={event => setSelectedId(event.target.value)}>
             {payslips.map(item => <option key={item.id} value={item.id}>{fmtMonth(item.cycle_start)}</option>)}
           </select>
-          <a className="rvbtn pri" href={`${API_BASE}${API.payroll.payslipPdf(slip.id)}`} onClick={() => logPayslipDownload(slip.id)}>Download payslip</a>
+          <a className="rvbtn pri" href={`${API_BASE}${API.payroll.payslipPdf(slip.id)}`} onClick={() => logPayslipDownload(slip.id)}>{tr("Download payslip")}</a>
         </div>
       )}
     </div>
   );
 
-  if (slips.loading) return <section className="ess-page">{head}<div className="ess-card"><p>Loading your payslips…</p></div></section>;
-  if (slips.error) return <section className="ess-page">{head}<div className="alert alert-error">Failed to load payslips. Please refresh.</div></section>;
+  if (slips.loading) return <section className="ess-page">{head}<div className="ess-card"><p>{tr("Loading your payslips…")}</p></div></section>;
+  if (slips.error) return <section className="ess-page">{head}<div className="alert alert-error">{tr("Failed to load payslips. Please refresh.")}</div></section>;
   if (!slip) {
     return (
       <section className="ess-page">
         {head}
         <div className="ess-card">
-          <h2>No payslips yet</h2>
-          <p>Your payslips will appear here once payroll is processed for your account.</p>
+          <h2>{tr("No payslips yet")}</h2>
+          <p>{tr("Your payslips will appear here once payroll is processed for your account.")}</p>
         </div>
       </section>
     );
@@ -111,9 +112,9 @@ export default function EssPayslipsTab({ onNavigateToTax }: { onNavigateToTax: (
   const ytd = computeYtd(payslips, fyStart);
   const gratuity = settings ? Number(slip.basic) * Number(settings.gratuity_rate) / 100 : 0;
   const employer: Line[] = [
-    { label: "Employer PF", value: Number(slip.pf_employer) },
-    { label: "Gratuity provision", value: gratuity },
-    { label: "Insurance premium", value: Number(slip.esi_employer) },
+    { label: tr("Employer PF"), value: Number(slip.pf_employer) },
+    { label: tr("Gratuity provision"), value: gratuity },
+    { label: tr("Insurance premium"), value: Number(slip.esi_employer) },
   ];
   const approved = taxDeclaration?.status === "approved";
 
@@ -123,70 +124,70 @@ export default function EssPayslipsTab({ onNavigateToTax }: { onNavigateToTax: (
 
       <div className="pay-hero">
         <div>
-          <small>NET PAY · <span>{month.toUpperCase()}</span></small>
+          <small>{tr("NET PAY ·")} <span>{month.toUpperCase()}</span></small>
           <h3>{INR(slip.net_pay)}</h3>
           <p>{credited}</p>
         </div>
         <div className="pay-hero-side">
-          <div><small>GROSS EARNINGS</small><b>{INR(gross)}</b></div>
-          <div><small>TOTAL DEDUCTIONS</small><b>{INR(deductionsTotal)}</b></div>
-          <div><small>PAID DAYS</small><b>{slip.total_working_days - Number(slip.lop_days)} / {slip.total_working_days}</b></div>
-          <div><small>PF NUMBER</small><b>{me?.profile?.pf_number || "—"}</b></div>
+          <div><small>{tr("GROSS EARNINGS")}</small><b>{INR(gross)}</b></div>
+          <div><small>{tr("TOTAL DEDUCTIONS")}</small><b>{INR(deductionsTotal)}</b></div>
+          <div><small>{tr("PAID DAYS")}</small><b>{slip.total_working_days - Number(slip.lop_days)} / {slip.total_working_days}</b></div>
+          <div><small>{tr("PF NUMBER")}</small><b>{me?.profile?.pf_number || "—"}</b></div>
         </div>
       </div>
 
       <div className="pay-layout">
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="ess-grid">
-            <PayTable title="Earnings" subtitle={`${month} payroll components.`} lines={earningsOf(slip)} totalLabel="Total earnings" total={gross} />
-            <PayTable title="Deductions" subtitle={`${month} payroll components.`} lines={deductionsOf(slip)} totalLabel="Total deductions" total={deductionsTotal} />
+            <PayTable title={tr("Earnings")} subtitle={`${month} payroll components.`} lines={earningsOf(slip)} totalLabel="Total earnings" total={gross} />
+            <PayTable title={tr("Deductions")} subtitle={`${month} payroll components.`} lines={deductionsOf(slip)} totalLabel="Total deductions" total={deductionsTotal} />
           </div>
           <div className="ess-card">
-            <h2>Year-to-date summary</h2>
-            <p>{ytd.monthRangeLabel} cumulative payroll.</p>
+            <h2>{tr("Year-to-date summary")}</h2>
+            <p>{tr("{range} cumulative payroll.", { range: ytd.monthRangeLabel })}</p>
             <div className="ess-metrics ess-metrics-3">
-              <article className="ess-metric"><i>GROSS EARNINGS</i><b>{INR(ytd.gross)}</b><span>{ytd.periodCount} payroll period{ytd.periodCount === 1 ? "" : "s"}</span></article>
-              <article className="ess-metric"><i>INCOME TAX</i><b>{INR(ytd.incomeTax)}</b><span>deducted to date</span></article>
-              <article className="ess-metric"><i>NET PAY</i><b>{INR(ytd.net)}</b><span>credited to date</span></article>
+              <article className="ess-metric"><i>{tr("GROSS EARNINGS")}</i><b>{INR(ytd.gross)}</b><span>{tr(ytd.periodCount === 1 ? "{count} payroll period" : "{count} payroll periods", { count: ytd.periodCount })}</span></article>
+              <article className="ess-metric"><i>{tr("INCOME TAX")}</i><b>{INR(ytd.incomeTax)}</b><span>{tr("deducted to date")}</span></article>
+              <article className="ess-metric"><i>{tr("NET PAY")}</i><b>{INR(ytd.net)}</b><span>{tr("credited to date")}</span></article>
             </div>
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="ess-card">
-            <h2>Employer contributions</h2>
-            <p>Benefits paid in addition to net salary.</p>
+            <h2>{tr("Employer contributions")}</h2>
+            <p>{tr("Benefits paid in addition to net salary.")}</p>
             <table className="pay-table">
               <tbody>
                 {employer.map(line => <tr key={line.label}><td>{line.label}</td><td>{INR(line.value)}</td></tr>)}
-                <tr className="pay-total"><td>Total</td><td>{INR(employer.reduce((sum, line) => sum + line.value, 0))}</td></tr>
+                <tr className="pay-total"><td>{tr("Total")}</td><td>{INR(employer.reduce((sum, line) => sum + line.value, 0))}</td></tr>
               </tbody>
             </table>
           </div>
 
           <div className="pay-callout">
-            <b>{approved ? "Tax declaration approved" : "Tax declaration window is open"}</b>
+            <b>{approved ? tr("Tax declaration approved") : tr("Tax declaration window is open")}</b>
             <p>
               {approved
-                ? `Your ${taxDeclaration?.financial_year ? `FY ${taxDeclaration.financial_year}` : fyLabel} regime and declarations were approved. Further changes follow payroll approval.`
-                : `Review your ${taxDeclaration?.financial_year ? `FY ${taxDeclaration.financial_year}` : fyLabel} regime and declarations before ${fyEndLabel(fyStart)}. Changes follow payroll approval.`}
+                ? tr("Your {year} regime and declarations were approved. Further changes follow payroll approval.", { year: taxDeclaration?.financial_year ? `FY ${taxDeclaration.financial_year}` : fyLabel })
+                : tr("Review your {year} regime and declarations before {date}. Changes follow payroll approval.", { year: taxDeclaration?.financial_year ? `FY ${taxDeclaration.financial_year}` : fyLabel, date: fyEndLabel(fyStart) })}
             </p>
-            <button className="rvbtn ghost" type="button" style={{ marginTop: 10 }} onClick={onNavigateToTax}>Review declarations</button>
+            <button className="rvbtn ghost" type="button" style={{ marginTop: 10 }} onClick={onNavigateToTax}>{tr("Review declarations")}</button>
           </div>
 
           <div className="ess-card pay-history">
-            <h2>Previous statements</h2>
-            <p>Secure downloads are access logged.</p>
+            <h2>{tr("Previous statements")}</h2>
+            <p>{tr("Secure downloads are access logged.")}</p>
             <div className="ess-list">
               {payslips.map(item => (
                 <div className="ess-row" key={item.id}>
                   <div><b>{fmtMonth(item.cycle_start)}</b><small>{INR(item.net_pay)} · PDF</small></div>
-                  <a className="rvbtn ghost" href={`${API_BASE}${API.payroll.payslipPdf(item.id)}`} onClick={() => logPayslipDownload(item.id)}>Download</a>
+                  <a className="rvbtn ghost" href={`${API_BASE}${API.payroll.payslipPdf(item.id)}`} onClick={() => logPayslipDownload(item.id)}>{tr("Download")}</a>
                 </div>
               ))}
               <div className="ess-row">
-                <div><b>Form 16 · {fyLabel}</b><small>Tax certificate · not yet available</small></div>
-                <button className="rvbtn ghost" type="button" disabled title="Form 16 generation is not yet available">Download</button>
+                <div><b>{tr("Form 16 · {year}", { year: fyLabel })}</b><small>{tr("Tax certificate · not yet available")}</small></div>
+                <button className="rvbtn ghost" type="button" disabled title={tr("Form 16 generation is not yet available")}>{tr("Download")}</button>
               </div>
             </div>
           </div>
@@ -194,8 +195,8 @@ export default function EssPayslipsTab({ onNavigateToTax }: { onNavigateToTax: (
       </div>
 
       <div className="pay-callout">
-        <b>Confidential payroll document</b>
-        <p>This payslip contains personal and financial information. Downloads are generated for the signed-in employee and recorded in the audit trail.</p>
+        <b>{tr("Confidential payroll document")}</b>
+        <p>{tr("This payslip contains personal and financial information. Downloads are generated for the signed-in employee and recorded in the audit trail.")}</p>
       </div>
     </section>
   );

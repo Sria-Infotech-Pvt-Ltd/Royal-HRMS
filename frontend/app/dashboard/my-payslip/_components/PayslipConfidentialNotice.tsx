@@ -1,4 +1,5 @@
 "use client";
+import { tr } from "@/lib/i18n/tr";
 
 // A distinct warning/notice card — deliberately NOT styled like the plain
 // gray ESS disclaimer used elsewhere, per the strict-replication spec for
@@ -15,9 +16,8 @@ export default function PayslipConfidentialNotice() {
     >
       <i className="ti ti-shield-lock text-lg mt-0.5" style={{ color: "var(--warn)" }} />
       <div className="text-xs" style={{ color: "var(--on-bg)" }}>
-        <span className="font-bold">Confidential payroll document.</span>{" "}
-        This payslip contains personal and financial information. Downloads are generated for the
-        signed-in employee, watermarked and recorded in the audit trail.
+        <span className="font-bold">{tr("Confidential payroll document.")}</span>{" "}
+        {tr("This payslip contains personal and financial information. Downloads are generated for the signed-in employee, watermarked and recorded in the audit trail.")}
       </div>
     </div>
   );

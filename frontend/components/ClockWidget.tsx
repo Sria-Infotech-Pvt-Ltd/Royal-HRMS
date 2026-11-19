@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import RegularizationModal from "@/app/dashboard/my-attendance/_components/RegularizationModal";
+import { tr } from "@/lib/i18n/tr";
 
 interface PunchEntry {
   type: "IN" | "OUT";
@@ -116,7 +117,7 @@ export default function ClockWidget() {
                 display: "inline-block",
                 flexShrink: 0,
               }} />
-              {isClockedIn ? "Punched In" : "Punched Out"}
+              {isClockedIn ? tr("Punched In") : tr("Punched Out")}
             </div>
           </div>
         </div>
@@ -134,7 +135,7 @@ export default function ClockWidget() {
           }}>
             <div style={{ padding: "10px 12px", textAlign: "center" }}>
               <div style={{ fontSize: 10, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 }}>
-                Session
+                {tr("Session")}
               </div>
               <div style={{
                 fontFamily: "Menlo, Consolas, monospace",
@@ -149,7 +150,7 @@ export default function ClockWidget() {
             <div style={{ background: "var(--outline-v)" }} />
             <div style={{ padding: "10px 12px", textAlign: "center" }}>
               <div style={{ fontSize: 10, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 }}>
-                Total Today
+                {tr("Total Today")}
               </div>
               <div style={{
                 fontFamily: "Menlo, Consolas, monospace",
@@ -193,14 +194,14 @@ export default function ClockWidget() {
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
           >
             <i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} style={{ fontSize: 18 }} />
-            {isClockedIn ? "Clock Out" : "Clock In"}
+            {isClockedIn ? tr("Clock Out") : tr("Clock In")}
           </button>
 
           {/* Punch timeline */}
           {punches.length > 0 && (
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 10, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, fontWeight: 600 }}>
-                Today&apos;s Punches
+                {tr("Today's Punches")}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {punches.map((p, i) => (
@@ -242,7 +243,7 @@ export default function ClockWidget() {
             style={{ width: "100%", fontSize: 12, height: 34, gap: 6 }}
           >
             <i className="ti ti-flag-3" />
-            Request Attendance Correction
+            {tr("Request Attendance Correction")}
           </button>
         </div>
       </div>

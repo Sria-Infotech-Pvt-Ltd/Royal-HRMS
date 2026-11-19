@@ -5,6 +5,7 @@ import { useAttendanceDashboard } from "@/hooks/useAttendanceDashboard";
 import CalendarAndHistory from "./CalendarAndHistory";
 import CorrectionModal from "./CorrectionModal";
 import RecentPunchesCard from "./RecentPunchesCard";
+import { tr } from "@/lib/i18n/tr";
 
 function Spinner() {
   return <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />;
@@ -49,27 +50,27 @@ export default function AttendanceTab() {
       {/* Top row: 4 plain stat tiles */}
       <div className="attendance-top-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
         <div className="stat-card">
-          <div className="stat-label">Present</div>
+          <div className="stat-label">{tr("Present")}</div>
           <div className="stat-value">{isLoading ? <Spinner /> : daysPresent}</div>
-          <div className="stat-sub">{isLoading ? "" : `of ${workingDays} working days`}</div>
+          <div className="stat-sub">{isLoading ? "" : tr("of {workingDays} working days", { workingDays: workingDays })}</div>
         </div>
 
         <div className="stat-card">
-          <div className="stat-label">Work Hours</div>
+          <div className="stat-label">{tr("Work Hours")}</div>
           <div className="stat-value">{isLoading ? <Spinner /> : workHours}</div>
-          <div className="stat-sub">{isLoading ? "" : `${workHoursPct}% of expected`}</div>
+          <div className="stat-sub">{isLoading ? "" : tr("{workHoursPct}% of expected", { workHoursPct: workHoursPct })}</div>
         </div>
 
         <div className="stat-card">
-          <div className="stat-label">Late Arrivals</div>
+          <div className="stat-label">{tr("Late Arrivals")}</div>
           <div className="stat-value" style={{ color: "var(--warn)" }}>{isLoading ? <Spinner /> : lateArrivals}</div>
           <div className="stat-sub">{isLoading ? "" : `${regularized} regularized`}</div>
         </div>
 
         <div className="stat-card">
-          <div className="stat-label">Missing Punch</div>
+          <div className="stat-label">{tr("Missing Punch")}</div>
           <div className="stat-value" style={{ color: "var(--error)" }}>{isLoading ? <Spinner /> : missingPunch}</div>
-          <div className="stat-sub">no action required</div>
+          <div className="stat-sub">{tr("no action required")}</div>
         </div>
       </div>
 

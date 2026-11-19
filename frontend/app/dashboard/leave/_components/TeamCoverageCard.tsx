@@ -10,6 +10,7 @@
 
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { tr } from "@/lib/i18n/tr";
 
 interface CalEvent {
   id:            string;
@@ -91,8 +92,8 @@ export default function TeamCoverageCard() {
     <div className="card">
       <div className="card-header">
         <div>
-          <div className="card-title"><i className="ti ti-users" /> Team coverage</div>
-          <div className="page-sub" style={{ marginTop: 2 }}>Demo view for planning leave before submission.</div>
+          <div className="card-title"><i className="ti ti-users" /> {tr("Team coverage")}</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>{tr("Demo view for planning leave before submission.")}</div>
         </div>
       </div>
       <div className="card-body" style={{ padding: 0 }}>
@@ -109,11 +110,11 @@ export default function TeamCoverageCard() {
                 <div className="lv-row-meta">
                   {row.isAway
                     ? `${row.maxCount} team member${row.maxCount === 1 ? "" : "s"} already away · Manager review required`
-                    : "No scheduled team overlap"}
+                    : tr("No scheduled team overlap")}
                 </div>
               </div>
               <span className={`badge ${row.isAway ? "badge-warn" : "badge-success"}`}>
-                {row.isAway ? "CHECK" : "AVAILABLE"}
+                {row.isAway ? tr("CHECK") : tr("AVAILABLE")}
               </span>
             </div>
           ))

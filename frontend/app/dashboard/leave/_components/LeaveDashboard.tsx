@@ -13,6 +13,7 @@ import {
 import LopBadge from "./LopBadge";
 import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
 import { notifyLeaveChanged, useOnLeaveChanged } from "@/hooks/useLeaveRefresh";
+import { tr } from "@/lib/i18n/tr";
 
 // Short pill text for this card only — "PENDING"/"APPROVED" rather than
 // StatusCell's longer "Pending Manager Approval" wording used elsewhere.
@@ -34,9 +35,9 @@ const STATUS_ICON: Record<ReqStatus, string> = {
 };
 
 const BALANCE_DISPLAY = [
-  { key: "casual" as const, label: "Casual Leave", icon: "ti-beach",      accent: "#7c3aed" },
-  { key: "sick"   as const, label: "Sick Leave",   icon: "ti-heartbeat",  accent: "#e11d48" },
-  { key: "earned" as const, label: "Earned Leave", icon: "ti-award",      accent: "#16a34a" },
+  { key: "casual" as const, get label() { return tr("Casual Leave"); }, icon: "ti-beach",      accent: "#7c3aed" },
+  { key: "sick"   as const, get label() { return tr("Sick Leave"); },   icon: "ti-heartbeat",  accent: "#e11d48" },
+  { key: "earned" as const, get label() { return tr("Earned Leave"); }, icon: "ti-award",      accent: "#16a34a" },
 ];
 
 // Everyone — employee, manager, or HR — sees the same thing here: their own
@@ -92,11 +93,11 @@ export function LeaveBalanceStats() {
               <div className="lv-tile-label">{label.toUpperCase()}</div>
               <span className="lv-icon"><i className={`ti ${icon}`} /></span>
             </div>
-            <div className="lv-tile-value"><b>{fmtDays(available)}</b><span>days available</span></div>
+            <div className="lv-tile-value"><b>{fmtDays(available)}</b><span>{tr("days available")}</span></div>
             <div className="lv-bar" role="img" aria-label={`${Math.round(percentLeft)} percent of ${label} left`}><i style={{ width: `${percentLeft}%` }} /></div>
             <div className="lv-tile-sub">
-              <span>{entitled > 0 ? `of ${entitled.toFixed(1)} days` : "No entitlement"}</span>
-              {pending > 0 && <span className="lv-pending">{pending.toFixed(1)} pending</span>}
+              <span>{entitled > 0 ? `of ${entitled.toFixed(1)} days` : tr("No entitlement")}</span>
+              {pending > 0 && <span className="lv-pending">{pending.toFixed(1)} {tr("pending")}</span>}
             </div>
           </div>
         );
@@ -108,11 +109,11 @@ export function LeaveBalanceStats() {
           count). */}
       <div className="lv-tile" style={{ "--lv-accent": "#0ea5e9" } as CSSProperties}>
         <div className="lv-tile-top">
-          <div className="lv-tile-label">USED THIS YEAR</div>
+          <div className="lv-tile-label">{tr("USED THIS YEAR")}</div>
           <span className="lv-icon"><i className="ti ti-calendar-check" /></span>
         </div>
-        <div className="lv-tile-value"><b>{fmtDays(usedThisYear)}</b><span>days approved</span></div>
-        <div className="lv-tile-sub"><span>Across all leave types</span></div>
+        <div className="lv-tile-value"><b>{fmtDays(usedThisYear)}</b><span>{tr("days approved")}</span></div>
+        <div className="lv-tile-sub"><span>{tr("Across all leave types")}</span></div>
       </div>
     </div>
   );
@@ -152,8 +153,8 @@ export default function LeaveDashboard() {
     <div className="card">
       <div className="card-header">
         <div>
-          <div className="card-title"><i className="ti ti-list-details" /> My leave requests</div>
-          <div className="page-sub" style={{ marginTop: 2 }}>Approval status and history.</div>
+          <div className="card-title"><i className="ti ti-list-details" /> {tr("My leave requests")}</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>{tr("Approval status and history.")}</div>
         </div>
       </div>
       <div className="card-body" style={{ padding: 0 }}>
@@ -163,7 +164,7 @@ export default function LeaveDashboard() {
           </div>
         ) : recentRequests.length === 0 ? (
           <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-            No leave requests yet.
+            {tr("No leave requests yet.")}
           </div>
         ) : (
           recentRequests.map(r => {
@@ -177,7 +178,7 @@ export default function LeaveDashboard() {
                 <div className="lv-row-main">
                   <div className="lv-row-title">{r.leave_type_display} · {dateLabel}</div>
                   <div className="lv-row-meta">
-                    {r.total_days} day{r.total_days === 1 ? "" : "s"} · {r.reason || approver || "—"}
+                    {tr(r.total_days === 1 ? "{count} day" : "{count} days", { count: r.total_days })} · {r.reason || approver || "—"}
                     <LopBadge request={r} />
                   </div>
                 </div>

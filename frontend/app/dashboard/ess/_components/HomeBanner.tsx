@@ -17,6 +17,8 @@ import { API } from "@/lib/api/endpoints";
 import ClockInButton from "@/components/ClockInButton";
 import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
 import type { AttendanceStatus } from "@/types/employeeDashboard";
+import { getActiveLanguage, tr } from "@/lib/i18n/tr";
+import { LANGUAGE_LOCALES } from "@/lib/i18n/languages";
 
 interface Shift { name: string; start_time: string; end_time: string }
 
@@ -32,9 +34,9 @@ interface HomeProfile {
 }
 
 function greetingWord(hour: number): string {
-  if (hour < 12) return "morning";
-  if (hour < 17) return "afternoon";
-  return "evening";
+  if (hour < 12) return tr("Good morning");
+  if (hour < 17) return tr("Good afternoon");
+  return tr("Good evening");
 }
 
 function initials(name: string): string {
@@ -63,7 +65,7 @@ export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false 
   // so they are filled in only after mount.
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => { setNow(new Date()); }, []);
-  const greeting = now ? `Good ${greetingWord(now.getHours())}` : "Welcome";
+  const greeting = now ? greetingWord(now.getHours()) : tr("Welcome");
   const firstName = (profile?.full_name ?? "").split(" ")[0];
   const subtitle = [
     profile?.position_title || profile?.designation,
@@ -76,8 +78,8 @@ export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false 
   const shiftLabel = shift?.start_time
     ? `${shift.name} · ${shift.start_time}–${shift.end_time}`
     : status?.clocked_in
-      ? `Punched in · ${status.clock_in_time ?? "—"}`
-      : "Not punched in yet";
+      ? tr("Punched in · {time}", { time: status.clock_in_time ?? "—" })
+      : tr("Not punched in yet");
 
   return (
     <section className="ess-hero">
@@ -94,13 +96,13 @@ export default function HomeBanner({ status, onPunchSuccess, isReadOnly = false 
           {!profile?.profile_photo_url && profile ? initials(profile.full_name) : null}
         </div>
         <div>
-          <h1>{firstName ? `${greeting}, ${firstName}` : greeting}</h1>
-          <p>{subtitle || "Welcome to your workspace"}</p>
+          <h1>{firstName ? tr("{greeting}, {name}", { greeting, name: firstName }) : greeting}</h1>
+          <p>{subtitle || tr("Welcome to your workspace")}</p>
         </div>
       </div>
       <div className="ess-clock">
         <div>
-          <b>{now ? now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }) : " "}</b>
+          <b>{now ? now.toLocaleDateString(LANGUAGE_LOCALES[getActiveLanguage()], { weekday: "long", day: "numeric", month: "long" }) : " "}</b>
           <span>{shiftLabel}</span>
         </div>
         {!isReadOnly && <ClockInButton variant="ess" onPunchSuccess={onPunchSuccess} />}

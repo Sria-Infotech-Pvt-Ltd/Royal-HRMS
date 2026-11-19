@@ -13,6 +13,7 @@ const HERO_GRADIENT = "linear-gradient(135deg, #1e1b3a 0%, #4c1d95 100%)";
 
 import type { ApiPayslip } from "./types";
 import { INR, fmtMonth } from "./types";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   slip: ApiPayslip;
@@ -46,7 +47,7 @@ export default function PayslipHero({
     <div className="rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6" style={{ background: HERO_GRADIENT }}>
       <div>
         <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.65)" }}>
-          Net pay · {fmtMonth(slip.cycle_start)}
+          {tr("Net pay")} · {fmtMonth(slip.cycle_start)}
         </div>
         <div className="text-4xl font-extrabold mt-1" style={{ color: "#fff" }}>{INR(net)}</div>
         <div className="text-xs mt-2" style={{ color: "rgba(255,255,255,0.7)" }}>{creditedParts.join(" · ")}</div>

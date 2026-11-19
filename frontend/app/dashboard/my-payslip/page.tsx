@@ -23,6 +23,7 @@ import {
   type ApiPayslip, type ApiMe, type ApiPayrollSettings, type ApiTaxDeclarationBrief,
   type ApiFinancialYearConfig, type PagedResponse,
 } from "./_components/types";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   /** Wired by the ESS shell to switch to its Tax tab (see _client.tsx). Falls
@@ -50,26 +51,26 @@ export default function MyPayslipPage({ onNavigateToTax }: Props) {
     return (
       <div className="empty-state">
         <i className="ti ti-loader-2 animate-spin text-2xl" />
-        <div className="empty-state-desc mt-2">Loading your payslips…</div>
+        <div className="empty-state-desc mt-2">{tr("Loading your payslips…")}</div>
       </div>
     );
   }
   if (error) {
-    return <div className="alert alert-error">Failed to load payslips. Please refresh.</div>;
+    return <div className="alert alert-error">{tr("Failed to load payslips. Please refresh.")}</div>;
   }
   if (!slip) {
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "var(--on-bg)" }}>Payslips &amp; tax</h1>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "var(--on-bg)" }}>{tr("Payslips & tax")}</h1>
           <p className="text-sm mt-1" style={{ color: "var(--on-variant)" }}>
-            Understand your salary, deductions, taxes and employer contributions.
+            {tr("Understand your salary, deductions, taxes and employer contributions.")}
           </p>
         </div>
         <div className="empty-state">
           <div className="empty-state-icon">📄</div>
-          <div className="empty-state-title">No payslips yet</div>
-          <div className="empty-state-desc">Your payslips will appear here once payroll is processed for your account.</div>
+          <div className="empty-state-title">{tr("No payslips yet")}</div>
+          <div className="empty-state-desc">{tr("Your payslips will appear here once payroll is processed for your account.")}</div>
         </div>
       </div>
     );

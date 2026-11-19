@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_NAV, isSection, TEAM_DASHBOARD_NAV_ITEM } from "@/lib/navConfig";
 import { STATUS_TABS } from "@/app/dashboard/attendance/_components/attendanceView";
@@ -70,5 +72,39 @@ describe("language files", () => {
     for (const code of codes) {
       expect(names.filter(name => !(name in MESSAGES[code])), `${code} is missing names`).toEqual([]);
     }
+  });
+});
+
+// Every English text passed to t("...") / tr("...") anywhere in the app must have a Hindi and a Telugu wording, so a screen that was
+// converted can never ship half translated. Text built from variables cannot be looked up: use a {placeholder} instead.
+function sourceFiles(directory: string): string[] {
+  return readdirSync(directory).flatMap(name => {
+    if (name === "node_modules" || name === ".next" || name === "messages") return [];
+    const full = path.join(directory, name);
+    if (statSync(full).isDirectory()) return sourceFiles(full);
+    return /\.(ts|tsx)$/.test(name) && !/\.test\./.test(name) ? [full] : [];
+  });
+}
+
+describe("translated screens", () => {
+  const CALL = /\b(?:tr|t)\(\s*(?:[^"()]*?\?\s*)?"((?:[^"\\]|\\.)*)"(?:\s*:\s*"((?:[^"\\]|\\.)*)")?/g;
+
+  it("have a wording in every language for each text they translate", () => {
+    const root = path.resolve(__dirname, "../..");
+    const missing: string[] = [];
+    for (const directory of ["app", "components", "hooks", "lib"]) {
+      for (const file of sourceFiles(path.join(root, directory))) {
+        for (const match of readFileSync(file, "utf8").matchAll(CALL)) {
+          for (const literal of [match[1], match[2]]) {
+            if (!literal) continue;
+            const english = JSON.parse(`"${literal}"`) as string;
+            for (const code of Object.keys(MESSAGES) as (keyof typeof MESSAGES)[]) {
+              if (!(english in MESSAGES[code])) missing.push(`${code}: "${english}" (${path.relative(root, file)})`);
+            }
+          }
+        }
+      }
+    }
+    expect(missing).toEqual([]);
   });
 });

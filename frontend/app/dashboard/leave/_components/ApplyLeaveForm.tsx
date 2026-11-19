@@ -19,11 +19,12 @@ import LeaveHandoverFields from "./LeaveHandoverFields";
 import { notifyLeaveChanged } from "@/hooks/useLeaveRefresh";
 import { useMyApprovals } from "@/hooks/useMyApprovals";
 import ApprovalChainPreview, { chainBlocksSubmit } from "@/components/approvals/ApprovalChainPreview";
+import { tr } from "@/lib/i18n/tr";
 
 const DURATION_OPTIONS: { value: DurationKey; label: string }[] = [
-  { value: "full_day",       label: "Full day" },
-  { value: "half_morning",   label: "Morning half" },
-  { value: "half_afternoon", label: "Afternoon half" },
+  { value: "full_day",       get label() { return tr("Full day"); } },
+  { value: "half_morning",   get label() { return tr("Morning half"); } },
+  { value: "half_afternoon", get label() { return tr("Afternoon half"); } },
 ];
 
 // The server names fields start_date / end_date / document; this form calls them from_date / to_date / doc.
@@ -212,7 +213,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
           </select>
           <Err msg={errors.leave_type} />
           {policies && availableLeaveTypes.length === 0 && (
-            <p className="mt-1.5 text-xs text-[var(--on-variant)]">No active leave types are available for your profile. Contact HR.</p>
+            <p className="mt-1.5 text-xs text-[var(--on-variant)]">{tr("No active leave types are available for your profile. Contact HR.")}</p>
           )}
           {policy?.policy_note && (
             <p className="mt-1.5 flex items-start gap-1.5 text-xs text-[var(--on-variant)]">
@@ -252,7 +253,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
             className={`field-input${errors.reason ? " field-error" : ""}`}
             value={form.reason}
             onChange={event => setField("reason", event.target.value)}
-            placeholder="Reason for leave"
+            placeholder={tr("Reason for leave")}
             rows={3}
             maxLength={500}
             style={{ resize: "none" }}
@@ -263,7 +264,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
         <div>
           <SmallLbl text="Balance preview" />
           <div className="field-input flex items-center" style={{ background: "var(--bg-low)", color: "var(--on-variant)", minHeight: 76 }}>
-            {previewLoading && canPreview ? "Checking balance…" : balancePreviewText}
+            {previewLoading && canPreview ? tr("Checking balance…") : balancePreviewText}
           </div>
           {insufficientBalance && <Err msg="Insufficient leave balance for the selected dates." />}
         </div>
@@ -280,11 +281,11 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
       )}
 
       <div className="mt-6 flex items-center justify-between gap-2.5 border-t border-[var(--outline-v)] pt-4">
-        <p className="text-xs text-[var(--on-variant)]">Submissions are routed for approval and retained in My Requests.</p>
+        <p className="text-xs text-[var(--on-variant)]">{tr("Submissions are routed for approval and retained in My Requests.")}</p>
         <div className="flex items-center gap-2.5">
-        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={submitting}>Cancel</button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={submitting}>{tr("Cancel")}</button>
         <button type="button" className="btn btn-filled" onClick={handleSubmit} disabled={submitting || insufficientBalance || !isCurrentTypeAvailable || availableLeaveTypes.length === 0 || chainBlocksSubmit(chain, chainAcknowledged)}>
-          {submitting ? <><i className="ti ti-loader-2 spin" /> Submitting…</> : "Submit request"}
+          {submitting ? <><i className="ti ti-loader-2 spin" /> {tr("Submitting…")}</> : tr("Submit request")}
         </button>
         </div>
       </div>

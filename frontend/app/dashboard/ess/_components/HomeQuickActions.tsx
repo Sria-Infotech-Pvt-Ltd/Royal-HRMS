@@ -1,4 +1,5 @@
 "use client";
+import { tr } from "@/lib/i18n/tr";
 
 interface Action { icon: string; title: string; sub: string; onClick: () => void }
 
@@ -21,8 +22,8 @@ export default function HomeQuickActions({ primary, secondary }: Props) {
   return (
     <div className="card ess-quick">
       <div className="card-header" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
-        <div className="card-title"><i className="ti ti-bolt" /> Quick actions</div>
-        <p style={{ margin: 0, fontSize: 11, color: "var(--on-variant)" }}>Complete common employee tasks without contacting HR.</p>
+        <div className="card-title"><i className="ti ti-bolt" /> {tr("Quick actions")}</div>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--on-variant)" }}>{tr("Complete common employee tasks without contacting HR.")}</p>
       </div>
       <div className="ess-quick-grid">
         {tiles.map((a, i) => (

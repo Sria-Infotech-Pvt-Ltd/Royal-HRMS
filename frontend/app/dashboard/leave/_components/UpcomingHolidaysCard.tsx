@@ -8,6 +8,7 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { tr } from "@/lib/i18n/tr";
 
 interface ApiHoliday {
   id:       string;
@@ -61,8 +62,8 @@ export default function UpcomingHolidaysCard() {
     <div className="card">
       <div className="card-header">
         <div>
-          <div className="card-title"><i className="ti ti-calendar-event" /> Upcoming holidays</div>
-          <div className="page-sub" style={{ marginTop: 2 }}>Your {scopeLabel} holiday calendar.</div>
+          <div className="card-title"><i className="ti ti-calendar-event" /> {tr("Upcoming holidays")}</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>{tr("Your {scope} holiday calendar.", { scope: scopeLabel })}</div>
         </div>
       </div>
       <div className="card-body" style={{ padding: 0 }}>
@@ -72,7 +73,7 @@ export default function UpcomingHolidaysCard() {
           </div>
         ) : upcoming.length === 0 ? (
           <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-            No upcoming holidays scheduled.
+            {tr("No upcoming holidays scheduled.")}
           </div>
         ) : (
           upcoming.map(h => {
@@ -88,7 +89,7 @@ export default function UpcomingHolidaysCard() {
                   <div className="lv-row-meta">{h.day} · {fmtHolidayDate(h.date)}</div>
                 </div>
                 {when && <span className="lv-soon">{when}</span>}
-                <span className="badge badge-success">HOLIDAY</span>
+                <span className="badge badge-success">{tr("HOLIDAY")}</span>
               </div>
             );
           })

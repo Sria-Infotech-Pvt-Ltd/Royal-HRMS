@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { LeaveTypeKey, LEAVE_TYPE_CONFIG } from "../_data";
 import { LeaveStyles } from "./leaveStyles";
+import { tr } from "@/lib/i18n/tr";
 
 interface CalEvent {
   id:                  string;
@@ -50,7 +51,7 @@ function LeaveRow({ event }: { event: CalEvent }) {
         <div className="lv-row-title">{event.employee_name}</div>
         <div className="lv-row-meta">{event.leave_type_display} · {shortDate(event.start_date)}{event.start_date === event.end_date ? "" : ` - ${shortDate(event.end_date)}`}</div>
       </div>
-      <span className="lv-chip">{event.total_days} day{event.total_days === 1 ? "" : "s"}</span>
+      <span className="lv-chip">{tr(event.total_days === 1 ? "{count} day" : "{count} days", { count: event.total_days })}</span>
     </div>
   );
 }
@@ -101,14 +102,14 @@ export default function TeamCalendar() {
       <div className="lv-panel">
         <div className="lv-panel-head">
           <div className="lv-cal-nav">
-            <button className="lv-cal-btn" onClick={prev} aria-label="Previous month"><i className="ti ti-chevron-left" /></button>
+            <button className="lv-cal-btn" onClick={prev} aria-label={tr("Previous month")}><i className="ti ti-chevron-left" /></button>
             <span className="lv-cal-title">{MONTH_NAMES[month]} {year}</span>
-            <button className="lv-cal-btn" onClick={next} aria-label="Next month"><i className="ti ti-chevron-right" /></button>
-            <button className="lv-cal-btn" onClick={() => goTo(now.getFullYear(), now.getMonth())}>Today</button>
+            <button className="lv-cal-btn" onClick={next} aria-label={tr("Next month")}><i className="ti ti-chevron-right" /></button>
+            <button className="lv-cal-btn" onClick={() => goTo(now.getFullYear(), now.getMonth())}>{tr("Today")}</button>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span className="lv-chip" style={{ "--lv-accent": "var(--brand)" } as CSSProperties}><i className="ti ti-users" /> {peopleAway} away</span>
-            <span className="lv-chip" style={{ "--lv-accent": "#0ea5e9" } as CSSProperties}><i className="ti ti-calendar-stats" /> {leaveDays} leave day{leaveDays === 1 ? "" : "s"}</span>
+            <span className="lv-chip" style={{ "--lv-accent": "var(--brand)" } as CSSProperties}><i className="ti ti-users" /> {peopleAway} {tr("away")}</span>
+            <span className="lv-chip" style={{ "--lv-accent": "#0ea5e9" } as CSSProperties}><i className="ti ti-calendar-stats" /> {tr(leaveDays === 1 ? "{count} leave day" : "{count} leave days", { count: leaveDays })}</span>
           </div>
         </div>
 
@@ -147,7 +148,7 @@ export default function TeamCalendar() {
                       {e.employee_name.split(" ")[0]}
                     </span>
                   ))}
-                  {ev.length > PILLS_PER_DAY && <span className="lv-cal-more">+{ev.length - PILLS_PER_DAY} more</span>}
+                  {ev.length > PILLS_PER_DAY && <span className="lv-cal-more">+{ev.length - PILLS_PER_DAY} {tr("more")}</span>}
                 </button>
               );
             })}
@@ -168,8 +169,8 @@ export default function TeamCalendar() {
       {selected && (
         <div className="lv-panel">
           <div className="lv-panel-head">
-            <span><i className="ti ti-user-off" /> Away on {shortDate(selected)}</span>
-            <button className="lv-cal-btn" onClick={() => setSelected(null)} aria-label="Close day details"><i className="ti ti-x" /></button>
+            <span><i className="ti ti-user-off" /> {tr("Away on {date}", { date: shortDate(selected) })}</span>
+            <button className="lv-cal-btn" onClick={() => setSelected(null)} aria-label={tr("Close day details")}><i className="ti ti-x" /></button>
           </div>
           {selectedEvents.map(e => <LeaveRow key={e.id} event={e} />)}
         </div>
@@ -177,14 +178,14 @@ export default function TeamCalendar() {
 
       {allEvents.length > 0 && (
         <div className="lv-panel">
-          <div className="lv-panel-head"><span><i className="ti ti-calendar-event" /> Leaves this month</span><span className="lv-chip">{allEvents.length}</span></div>
+          <div className="lv-panel-head"><span><i className="ti ti-calendar-event" /> {tr("Leaves this month")}</span><span className="lv-chip">{allEvents.length}</span></div>
           {allEvents.map(e => <LeaveRow key={e.id} event={e} />)}
         </div>
       )}
 
       {!loading && allEvents.length === 0 && (
         <div className="lv-panel">
-          <div className="lv-empty"><i className="ti ti-calendar-off" />No approved leaves for {MONTH_NAMES[month]} {year}.</div>
+          <div className="lv-empty"><i className="ti ti-calendar-off" />{tr("No approved leaves for {month} {year}.", { month: MONTH_NAMES[month], year })}</div>
         </div>
       )}
     </div>

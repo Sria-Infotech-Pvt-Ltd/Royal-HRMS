@@ -10,6 +10,7 @@ import UpcomingHolidaysCard from "./_components/UpcomingHolidaysCard";
 import TeamCoverageCard from "./_components/TeamCoverageCard";
 import LeavePolicyGuidanceCard from "./_components/LeavePolicyGuidanceCard";
 import { LeaveStyles } from "./_components/leaveStyles";
+import { tr } from "@/lib/i18n/tr";
 
 type DetailTab = "dashboard" | "apply" | "calendar" | "analytics";
 
@@ -44,21 +45,21 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
               onClick={onBack}
               style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
             >
-              <i className="ti ti-arrow-left" /> Back to overview
+              <i className="ti ti-arrow-left" /> {tr("Back to overview")}
             </button>
           )}
-          <div className="page-title">Leave</div>
-          <div className="page-sub">Balances, requests, holidays and team coverage.</div>
+          <div className="page-title">{tr("Leave")}</div>
+          <div className="page-sub">{tr("Balances, requests, holidays and team coverage.")}</div>
         </div>
         <div className="page-actions lv-actions">
           <button className="btn btn-ghost" onClick={() => setShowCalendar(true)}>
-            <i className="ti ti-calendar-event" /> Team calendar
+            <i className="ti ti-calendar-event" /> {tr("Team calendar")}
           </button>
           <button className="btn btn-ghost" onClick={() => setShowAnalytics(true)}>
-            <i className="ti ti-chart-bar" /> Analytics
+            <i className="ti ti-chart-bar" /> {tr("Analytics")}
           </button>
           <button className="btn btn-filled" onClick={() => setShowApply(true)} suppressHydrationWarning>
-            Request leave
+            {tr("Request leave")}
           </button>
         </div>
       </div>
@@ -79,9 +80,9 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
         <Modal
           title={
             <div>
-              <div className="text-[18px] font-bold">Leave request</div>
+              <div className="text-[18px] font-bold">{tr("Leave request")}</div>
               <div className="mt-0.5 text-[12px] font-normal text-[var(--on-variant)]">
-                Complete the required information. Your submission will appear in My Requests.
+                {tr("Complete the required information. Your submission will appear in My Requests.")}
               </div>
             </div>
           }
@@ -95,13 +96,13 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
       )}
 
       {showCalendar && (
-        <Modal title="Team calendar" onClose={() => setShowCalendar(false)} size="lg">
+        <Modal title={tr("Team calendar")} onClose={() => setShowCalendar(false)} size="lg">
           <TeamCalendar />
         </Modal>
       )}
 
       {showAnalytics && (
-        <Modal title="Leave analytics" onClose={() => setShowAnalytics(false)} size="lg">
+        <Modal title={tr("Leave analytics")} onClose={() => setShowAnalytics(false)} size="lg">
           <LeaveAnalytics />
         </Modal>
       )}

@@ -9,6 +9,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { LeaveStats, LEAVE_TYPE_CONFIG } from "../_data";
 import { LeaveStyles } from "./leaveStyles";
 import { MonthlyBars, StatusDonut } from "./LeaveCharts";
+import { tr } from "@/lib/i18n/tr";
 
 export default function LeaveAnalytics() {
   const canApproveLeave = usePermission("leave.approve");
@@ -37,17 +38,17 @@ export default function LeaveAnalytics() {
   const balances      = stats?.balances  ?? [];
   const lopRequests   = stats?.lop_requests ?? 0;
   const summary = [
-    { label: "Total requests",   value: totalAll,             icon: "ti-clipboard-list", accent: "var(--brand)", sub: `This year (${currentYear})` },
-    { label: "Approved",         value: totalApproved,        icon: "ti-circle-check",   accent: "#16a34a", sub: `This year (${currentYear})` },
-    { label: "Pending approval", value: totalPending,         icon: "ti-clock",          accent: "#d97706", sub: `This year (${currentYear})` },
-    { label: "Rejected",         value: stats?.rejected ?? 0, icon: "ti-circle-x",       accent: "#dc2626", sub: `This year (${currentYear})` },
-    { label: "Loss of pay",      value: stats?.lop_days ?? 0, icon: "ti-coin-off",       accent: "#ea580c", sub: `${lopRequests} request${lopRequests !== 1 ? "s" : ""} in ${currentYear}` },
+    { label: tr("Total requests"),   value: totalAll,             icon: "ti-clipboard-list", accent: "var(--brand)", sub: tr("This year ({currentYear})", { currentYear: currentYear }) },
+    { label: tr("Approved"),         value: totalApproved,        icon: "ti-circle-check",   accent: "#16a34a", sub: tr("This year ({currentYear})", { currentYear: currentYear }) },
+    { label: tr("Pending approval"), value: totalPending,         icon: "ti-clock",          accent: "#d97706", sub: tr("This year ({currentYear})", { currentYear: currentYear }) },
+    { label: tr("Rejected"),         value: stats?.rejected ?? 0, icon: "ti-circle-x",       accent: "#dc2626", sub: tr("This year ({currentYear})", { currentYear: currentYear }) },
+    { label: tr("Loss of pay"),      value: stats?.lop_days ?? 0, icon: "ti-coin-off",       accent: "#ea580c", sub: tr(lopRequests === 1 ? "{count} request in {year}" : "{count} requests in {year}", { count: lopRequests, year: currentYear }) },
   ];
   const statusRows = [
-    { label: "Approved",  value: totalApproved,         color: "#16a34a" },
-    { label: "Pending",   value: totalPending,          color: "#d97706" },
-    { label: "Rejected",  value: stats?.rejected  ?? 0, color: "#dc2626" },
-    { label: "Cancelled", value: stats?.cancelled ?? 0, color: "#9ca3af" },
+    { label: tr("Approved"),  value: totalApproved,         color: "#16a34a" },
+    { label: tr("Pending"),   value: totalPending,          color: "#d97706" },
+    { label: tr("Rejected"),  value: stats?.rejected  ?? 0, color: "#dc2626" },
+    { label: tr("Cancelled"), value: stats?.cancelled ?? 0, color: "#9ca3af" },
   ];
   const byType = stats?.by_type ?? [];
   // 12 empty months when the server has nothing yet, so the chart axes still draw.
@@ -70,25 +71,25 @@ export default function LeaveAnalytics() {
 
       <div className="lv-panel">
         <div className="lv-panel-head">
-          <span><i className="ti ti-chart-bar" /> Month by month · {currentYear}</span>
+          <span><i className="ti ti-chart-bar" /> {tr("Month by month")} · {currentYear}</span>
           <div className="lv-legend">
-            <span><i style={{ background: "var(--brand)", opacity: 0.35 }} />Requests</span>
-            <span><i style={{ background: "#16a34a" }} />Approved days</span>
+            <span><i style={{ background: "var(--brand)", opacity: 0.35 }} />{tr("Requests")}</span>
+            <span><i style={{ background: "#16a34a" }} />{tr("Approved days")}</span>
           </div>
         </div>
         <div className="lv-panel-body" style={{ color: "var(--on-variant)" }}>
           <MonthlyBars data={monthly} />
-          {totalAll === 0 && <div className="lv-empty" style={{ padding: "6px 0 0" }}>No leave requests in {currentYear} yet. The chart fills in as requests are made.</div>}
+          {totalAll === 0 && <div className="lv-empty" style={{ padding: "6px 0 0" }}>{tr("No leave requests in {year} yet. The chart fills in as requests are made.", { year: currentYear })}</div>}
         </div>
       </div>
 
       <div className="lv-panel">
-        <div className="lv-panel-head"><span><i className="ti ti-chart-pie" /> Approved days by leave type</span></div>
+        <div className="lv-panel-head"><span><i className="ti ti-chart-pie" /> {tr("Approved days by leave type")}</span></div>
         <div className="lv-panel-body">
-          {byType.length === 0 && <div className="lv-empty" style={{ padding: "10px 0" }}>No approved leave in {currentYear} yet.</div>}
+          {byType.length === 0 && <div className="lv-empty" style={{ padding: "10px 0" }}>{tr("No approved leave in {year} yet.", { year: currentYear })}</div>}
           {byType.map(row => (
               <div key={row.leave_type} className="lv-meter">
-                <div className="lv-meter-head"><b>{LEAVE_TYPE_CONFIG[row.leave_type]?.label ?? row.leave_type}</b><span><b>{row.days}</b> day{row.days === 1 ? "" : "s"}</span></div>
+                <div className="lv-meter-head"><b>{LEAVE_TYPE_CONFIG[row.leave_type]?.label ?? row.leave_type}</b><span><b>{row.days}</b> {tr(row.days === 1 ? "day" : "days")}</span></div>
                 <div className="lv-bar" style={{ marginTop: 0, "--lv-accent": LEAVE_TYPE_CONFIG[row.leave_type]?.color ?? "var(--primary)" } as CSSProperties}><i style={{ width: `${(row.days / topTypeDays) * 100}%` }} /></div>
               </div>
           ))}
@@ -98,7 +99,7 @@ export default function LeaveAnalytics() {
       <div className="lv-split">
         {balances.length > 0 && (
           <div className="lv-panel">
-            <div className="lv-panel-head"><span><i className="ti ti-chart-bar" /> Leave balance breakdown</span></div>
+            <div className="lv-panel-head"><span><i className="ti ti-chart-bar" /> {tr("Leave balance breakdown")}</span></div>
             <div className="lv-panel-body">
               {balances.map(b => {
                 const percentUsed = b.total_days > 0 ? Math.min(100, Math.round((b.used_days / b.total_days) * 100)) : 0;
@@ -107,7 +108,7 @@ export default function LeaveAnalytics() {
                   <div key={b.leave_type} className="lv-meter">
                     <div className="lv-meter-head">
                       <b>{b.leave_type_display}</b>
-                      <span>{b.used_days} used of {b.total_days} · <b>{b.available} left</b></span>
+                      <span>{tr("{used} used of {total}", { used: b.used_days, total: b.total_days })} · <b>{tr("{count} left", { count: b.available })}</b></span>
                     </div>
                     <div className="lv-bar" style={{ marginTop: 0, "--lv-accent": color } as CSSProperties}><i style={{ width: `${percentUsed}%` }} /></div>
                   </div>
@@ -120,13 +121,13 @@ export default function LeaveAnalytics() {
         {/* Approvers never receive balance rows, so the empty note is for employees only. */}
         {isEmployee && balances.length === 0 && (
           <div className="lv-panel">
-            <div className="lv-empty"><i className="ti ti-chart-bar-off" />No leave balance data for {currentYear}. Contact HR to credit your annual leave.</div>
+            <div className="lv-empty"><i className="ti ti-chart-bar-off" />{tr("No leave balance data for {year}. Contact HR to credit your annual leave.", { year: currentYear })}</div>
           </div>
         )}
 
         {(
           <div className="lv-panel">
-            <div className="lv-panel-head"><span><i className="ti ti-chart-donut" /> Request status</span></div>
+            <div className="lv-panel-head"><span><i className="ti ti-chart-donut" /> {tr("Request status")}</span></div>
             <div className="lv-panel-body" style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", color: "var(--on-bg)" }}>
               <StatusDonut slices={statusRows} total={totalAll} />
               <div style={{ flex: 1, minWidth: 160 }}>

@@ -11,6 +11,9 @@ export const LANGUAGE_STORAGE_KEY = "aira-language";
 /** Each language is named in its own script, so a person can find theirs even when the screen is in a language they cannot read. */
 export const LANGUAGE_NAMES: Record<LanguageCode, string> = { en: "English", hi: "हिन्दी", te: "తెలుగు" };
 
+/** The locale used to write dates and numbers in each language. */
+export const LANGUAGE_LOCALES: Record<LanguageCode, string> = { en: "en-GB", hi: "hi-IN", te: "te-IN" };
+
 export function isLanguageCode(value: unknown): value is LanguageCode {
   return typeof value === "string" && (LANGUAGES as readonly string[]).includes(value);
 }

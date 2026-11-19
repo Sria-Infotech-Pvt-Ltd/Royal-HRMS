@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PALETTE, tint } from "./attendancePalette";
 import { LATE_LOGIN_LABEL, LATE_LOGIN_MEANING } from "@/lib/lateLogin";
+import { tr } from "@/lib/i18n/tr";
 import {
   STATUS_META, buildGrid, dayTiming, effectiveStatus, formatMonthLabel, hoursBarPercent, timeRangeLabel, type DayRecord,
 } from "./monthView";
@@ -101,8 +102,8 @@ function Cell({ day, month, todayISO, highlight, selectedDate, onSelect, weekend
         }}>{compact ? meta.short : meta.label}</span>
       )}
       {day.late_forgiven && (
-        <span title={LATE_LOGIN_MEANING} style={{ alignSelf: "flex-start", fontSize: compact ? 9 : 10, fontWeight: 700, color: PALETTE.late, whiteSpace: "nowrap" }}>
-          <i className="ti ti-clock-exclamation" aria-hidden="true" /> {compact ? "Late" : LATE_LOGIN_LABEL}
+        <span title={tr(LATE_LOGIN_MEANING)} style={{ alignSelf: "flex-start", fontSize: compact ? 9 : 10, fontWeight: 700, color: PALETTE.late, whiteSpace: "nowrap" }}>
+          <i className="ti ti-clock-exclamation" aria-hidden="true" /> {compact ? "Late" : tr(LATE_LOGIN_LABEL)}
         </span>
       )}
       {!compact && times && <div style={{ fontSize: 10.5, color: "var(--on-variant)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{times}</div>}

@@ -8,6 +8,7 @@
 
 import { API } from "@/lib/api/endpoints";
 import { API_BASE } from "@/lib/config";
+import { tr } from "@/lib/i18n/tr";
 
 interface HomePayslipRow {
   cycle:       string;
@@ -29,18 +30,18 @@ export default function HomePayslipsPanel({ payslips, form16FyStartYear, onViewA
     <div className="card">
       <div className="card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
-          <div className="card-title"><i className="ti ti-receipt" /> Payslips &amp; documents</div>
-          <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--on-variant)" }}>Your latest secure employee documents.</p>
+          <div className="card-title"><i className="ti ti-receipt" /> {tr("Payslips & documents")}</div>
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--on-variant)" }}>{tr("Your latest secure employee documents.")}</p>
         </div>
         <button onClick={onViewAll} className="btn btn-ghost btn-sm">
-          View all <i className="ti ti-arrow-right" />
+          {tr("View all")} <i className="ti ti-arrow-right" />
         </button>
       </div>
 
       {payslips.length === 0 ? (
         <div className="empty-state" style={{ padding: "28px 20px" }}>
           <i className="ti ti-file-off" />
-          <p>No payslips yet.</p>
+          <p>{tr("No payslips yet.")}</p>
         </div>
       ) : (
         <div>
@@ -52,10 +53,10 @@ export default function HomePayslipsPanel({ payslips, form16FyStartYear, onViewA
               </div>
               {p.payslip_pdf ? (
                 <a href={p.payslip_pdf} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm">
-                  <i className="ti ti-download" /> Download
+                  <i className="ti ti-download" /> {tr("Download")}
                 </a>
               ) : (
-                <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Not available</span>
+                <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{tr("Not available")}</span>
               )}
             </div>
           ))}
@@ -66,11 +67,11 @@ export default function HomePayslipsPanel({ payslips, form16FyStartYear, onViewA
         {/* Content-Disposition: attachment makes the browser download each PDF, so no target="_blank" is needed. */}
         {form16FyStartYear !== null && (
           <a href={`${API_BASE}${API.payroll.form16Pdf(form16FyStartYear)}`} className="btn btn-ghost btn-sm">
-            <i className="ti ti-download" /> Form 16
+            <i className="ti ti-download" /> {tr("Form 16")}
           </a>
         )}
         <a href={`${API_BASE}${API.employees.myEmploymentLetterPdf}`} className="btn btn-ghost btn-sm">
-          <i className="ti ti-download" /> Employment letter
+          <i className="ti ti-download" /> {tr("Employment letter")}
         </a>
       </div>
     </div>

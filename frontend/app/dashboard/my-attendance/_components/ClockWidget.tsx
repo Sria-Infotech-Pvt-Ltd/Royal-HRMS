@@ -7,6 +7,7 @@ import FaceVerificationModal from "@/components/FaceVerificationModal";
 import { formatLockoutCountdown } from "@/lib/faceApi/lockout";
 import type { PunchLocation } from "@/types/attendance";
 import { useAfterMount } from "@/hooks/useAfterMount";
+import { tr } from "@/lib/i18n/tr";
 
 function fmtTimer(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -22,9 +23,9 @@ function fmtTotal(seconds: number) {
 }
 
 function geofenceDot(isInside: boolean | null) {
-  if (isInside === true)  return { color: "var(--success)", title: "Inside geofence"  };
-  if (isInside === false) return { color: "var(--error)",   title: "Outside geofence" };
-  return { color: "var(--outline)", title: "Geofence N/A" };
+  if (isInside === true)  return { color: "var(--success)", title: tr("Inside geofence")  };
+  if (isInside === false) return { color: "var(--error)",   title: tr("Outside geofence") };
+  return { color: "var(--outline)", title: tr("Geofence N/A") };
 }
 
 function browserDate(): string {
@@ -96,18 +97,18 @@ export default function ClockWidget() {
             }}
           >
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block", animation: isClockedIn ? "clockPulse 2s ease-in-out infinite" : "none" }} />
-            {isClockedIn ? "Punched In" : "Punched Out"}
+            {isClockedIn ? tr("Punched In") : tr("Punched Out")}
           </span>
           {MODE === "wfh" && (
             <span
-              title="You have an approved Work From Home request for today"
+              title={tr("You have an approved Work From Home request for today")}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 5, marginLeft: 8,
                 padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600,
                 background: "var(--primary-c)", color: "var(--primary)",
               }}
             >
-              <i className="ti ti-home-2" style={{ fontSize: 11 }} /> WFH Today
+              <i className="ti ti-home-2" style={{ fontSize: 11 }} /> {tr("WFH Today")}
             </span>
           )}
         </div>
@@ -117,7 +118,7 @@ export default function ClockWidget() {
             {fmtTimer(session?.session_seconds ?? 0)}
           </div>
           <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-            Total today: <span style={{ fontWeight: 600, color: "var(--on-bg)" }}>{fmtTotal(session?.total_seconds ?? 0)}</span>
+            {tr("Total today:")} <span style={{ fontWeight: 600, color: "var(--on-bg)" }}>{fmtTotal(session?.total_seconds ?? 0)}</span>
           </div>
         </div>
 
@@ -133,17 +134,17 @@ export default function ClockWidget() {
           }}
         >
           {isLockedOut
-            ? <><i className="ti ti-lock" /> Please wait {formatLockoutCountdown(lockoutSecondsRemaining)}</>
+            ? <><i className="ti ti-lock" /> {tr("Please wait")} {formatLockoutCountdown(lockoutSecondsRemaining)}</>
             : isLocating
-            ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Getting location…</>
+            ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {tr("Getting location…")}</>
             : isPunching
-            ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Please wait…</>
-            : <><i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} /> {isClockedIn ? "Punch Out" : "Punch In"}</>}
+            ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {tr("Please wait…")}</>
+            : <><i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} /> {isClockedIn ? tr("Punch Out") : tr("Punch In")}</>}
         </button>
 
         {displayPunches.length > 0 && (
           <div>
-            <div style={{ fontSize: 10, fontWeight: 600, color: "var(--on-variant)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Punch Log</div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: "var(--on-variant)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>{tr("Punch Log")}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {displayPunches.map((p, i) => {
                 const dot = geofenceDot(p.is_inside_geofence);

@@ -14,6 +14,7 @@ import { API } from "@/lib/api/endpoints";
 import type { AttendanceStatus } from "@/types/employeeDashboard";
 import type { HolidayListData } from "@/types/holidays";
 import WeeklyTimesheetCard from "./WeeklyTimesheetCard";
+import { tr } from "@/lib/i18n/tr";
 
 interface Shift {
   name: string;
@@ -31,13 +32,13 @@ function shiftBadge(status: AttendanceStatus | null, shift: Shift): { label: str
     const [startH, startM] = shift.start_time.split(":").map(Number);
     const startMinutes = startH * 60 + startM;
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    return nowMinutes < startMinutes ? { label: "UPCOMING", tone: "neutral" } : { label: "NOT CLOCKED IN", tone: "warn" };
+    return nowMinutes < startMinutes ? { label: tr("UPCOMING"), tone: "neutral" } : { label: tr("NOT CLOCKED IN"), tone: "warn" };
   }
-  if (!status.clock_in_time) return { label: "ON TIME", tone: "ok" };
+  if (!status.clock_in_time) return { label: tr("ON TIME"), tone: "ok" };
   const [inH, inM] = status.clock_in_time.split(":").map(Number);
   const [startH, startM] = shift.start_time.split(":").map(Number);
   const late = inH * 60 + inM > startH * 60 + startM + 15; // matches this app's own grace-period convention elsewhere
-  return late ? { label: "LATE", tone: "warn" } : { label: "ON TIME", tone: "ok" };
+  return late ? { label: tr("LATE"), tone: "warn" } : { label: tr("ON TIME"), tone: "ok" };
 }
 
 const BADGE_CLASS: Record<"ok" | "warn" | "neutral", string> = {
@@ -61,10 +62,10 @@ export default function HomeTodayPanel({ status }: Props) {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-calendar-time" /> Today</div>
+        <div className="card-title"><i className="ti ti-calendar-time" /> {tr("Today")}</div>
       </div>
       <div style={{ padding: "4px 20px 16px", fontSize: 12, color: "var(--on-variant)" }}>
-        Your schedule and attendance status.
+        {tr("Your schedule and attendance status.")}
       </div>
       <div style={{ padding: "0 20px 16px" }}>
         {/* The backend's success() envelope turns a "no default shift
@@ -89,11 +90,11 @@ export default function HomeTodayPanel({ status }: Props) {
                 {new Date(nextHoliday.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long" })}
               </div>
             </div>
-            <span className="badge badge-neutral">UPCOMING</span>
+            <span className="badge badge-neutral">{tr("UPCOMING")}</span>
           </div>
         )}
         {!shift?.start_time && !nextHoliday && !timesheet && (
-          <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "14px 0" }}>Nothing scheduled to show yet.</div>
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "14px 0" }}>{tr("Nothing scheduled to show yet.")}</div>
         )}
       </div>
     </div>

@@ -6,6 +6,7 @@
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import type { MyCorrectionRequest } from "../../my-requests/_data";
 import type { AttendanceRequestRow } from "./attendanceRequestRows";
+import { tr } from "@/lib/i18n/tr";
 
 interface AttendanceRequestsCardProps {
   rows: AttendanceRequestRow[];
@@ -18,14 +19,14 @@ interface AttendanceRequestsCardProps {
 export default function AttendanceRequestsCard({ rows, onOpenCorrection, onOpenWfh, onViewAll }: AttendanceRequestsCardProps) {
   return (
     <div className="ess-card">
-      <h2>Attendance requests</h2>
-      <p>Corrections and work-from-home requests, newest first.</p>
+      <h2>{tr("Attendance requests")}</h2>
+      <p>{tr("Corrections and work-from-home requests, newest first.")}</p>
       <div className="ess-list">
         {rows.length === 0 && (
           <div className="ess-row">
             <div>
-              <b>No attendance requests yet</b>
-              <small>Use Regularize attendance if a punch was missed or recorded incorrectly, or Request work from home to work remotely.</small>
+              <b>{tr("No attendance requests yet")}</b>
+              <small>{tr("Use Regularize attendance if a punch was missed or recorded incorrectly, or Request work from home to work remotely.")}</small>
             </div>
           </div>
         )}
@@ -43,7 +44,7 @@ export default function AttendanceRequestsCard({ rows, onOpenCorrection, onOpenW
         })}
         {onViewAll && rows.length > 0 && (
           <button className="ess-row ess-row-link" type="button" onClick={onViewAll}>
-            <div><b>View all requests</b><small>Every leave, expense, attendance, work-from-home and HR help request</small></div>
+            <div><b>{tr("View all requests")}</b><small>{tr("Every leave, expense, attendance, work-from-home and HR help request")}</small></div>
             <span className="row-go" aria-hidden="true">›</span>
           </button>
         )}

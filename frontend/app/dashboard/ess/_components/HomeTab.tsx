@@ -33,6 +33,7 @@ import HomeProjectsPanel from "./HomeProjectsPanel";
 import ReportingApprovalsCard from "@/components/approvals/ReportingApprovalsCard";
 import EssFaceIdCard from "./EssFaceIdCard";
 import { currentFinancialYearStart } from "@/app/dashboard/my-payslip/_components/types";
+import { tr } from "@/lib/i18n/tr";
 
 interface ApiPayslip {
   cycle:       string;
@@ -122,44 +123,44 @@ export default function HomeTab({ onNavigate, status, isReadOnly = false }: Prop
 
   const tiles = [
     {
-      icon: "ti-clock-check", label: "ATTENDANCE",
+      icon: "ti-clock-check", label: tr("ATTENDANCE"),
       value: attStats ? `${attStats.days_present}/${attStats.working_days}` : "—",
-      sub: "days present this month", linkText: "View details",
+      sub: tr("days present this month"), linkText: "View details",
       onClick: () => onNavigate("attendance"),
     },
     {
-      icon: "ti-beach", label: "LEAVE BALANCE",
+      icon: "ti-beach", label: tr("LEAVE BALANCE"),
       value: balances ? leaveBalanceTotal.toFixed(1) : "—",
-      sub: "days available", linkText: "View details",
+      sub: tr("days available"), linkText: "View details",
       onClick: () => onNavigate("leave"),
     },
     {
-      icon: "ti-calendar-event", label: "NEXT PAYDAY",
+      icon: "ti-calendar-event", label: tr("NEXT PAYDAY"),
       value: payrollSettings ? nextPayday(payrollSettings.pay_day) : "—",
       sub: latestPayslip ? "payslip follows approval" : "no payslips yet", linkText: "View details",
       onClick: () => onNavigate("payslips"),
     },
     {
-      icon: "ti-list-check", label: "MY REQUESTS",
+      icon: "ti-list-check", label: tr("MY REQUESTS"),
       value: String(openRequestCount),
-      sub: "open and recent requests", linkText: "View all",
+      sub: tr("open and recent requests"), linkText: "View all",
       onClick: () => onNavigate("requests"),
     },
   ];
 
   const primaryActions = [
-    { icon: "ti-beach",       title: "Request leave",            sub: "Check balance and submit dates",             onClick: () => onNavigate("leave") },
-    { icon: "ti-clock-edit",  title: "Regularize attendance",     sub: "Correct a missing or late punch",            onClick: () => onNavigate("attendance") },
-    { icon: "ti-receipt",     title: "Download payslip",          sub: "View monthly salary statements",             onClick: () => onNavigate("payslips") },
-    { icon: "ti-user-circle", title: "View my full profile",      sub: "Open the same employee record used by Admin", onClick: () => onNavigate("profile") },
-    { icon: "ti-folder",      title: "Upload document",           sub: "Submit declarations or certificates",        onClick: () => onNavigate("documents") },
-    { icon: "ti-headset",     title: "Ask HR",                    sub: "Raise and track a support request",          onClick: () => onNavigate("hrHelp") },
+    { icon: "ti-beach",       title: tr("Request leave"),            sub: tr("Check balance and submit dates"),             onClick: () => onNavigate("leave") },
+    { icon: "ti-clock-edit",  title: tr("Regularize attendance"),     sub: tr("Correct a missing or late punch"),            onClick: () => onNavigate("attendance") },
+    { icon: "ti-receipt",     title: tr("Download payslip"),          sub: tr("View monthly salary statements"),             onClick: () => onNavigate("payslips") },
+    { icon: "ti-user-circle", title: tr("View my full profile"),      sub: tr("Open the same employee record used by Admin"), onClick: () => onNavigate("profile") },
+    { icon: "ti-folder",      title: tr("Upload document"),           sub: tr("Submit declarations or certificates"),        onClick: () => onNavigate("documents") },
+    { icon: "ti-headset",     title: tr("Ask HR"),                    sub: tr("Raise and track a support request"),          onClick: () => onNavigate("hrHelp") },
   ];
 
   const secondaryActions = [
-    { icon: "ti-wallet",         title: "Claim an expense",   sub: "Submit a work expense for approval",          onClick: () => onNavigate("expenses") },
-    { icon: "ti-file-text",      title: "Complete appraisal", sub: "Self-review, outcome and development plan",   onClick: () => onNavigate("appraisals") },
-    { icon: "ti-shield-check",   title: "Read policies",      sub: "Company guidance and assigned assets",        onClick: () => onNavigate("assets") },
+    { icon: "ti-wallet",         title: tr("Claim an expense"),   sub: tr("Submit a work expense for approval"),          onClick: () => onNavigate("expenses") },
+    { icon: "ti-file-text",      title: tr("Complete appraisal"), sub: tr("Self-review, outcome and development plan"),   onClick: () => onNavigate("appraisals") },
+    { icon: "ti-shield-check",   title: tr("Read policies"),      sub: tr("Company guidance and assigned assets"),        onClick: () => onNavigate("assets") },
   ];
 
   return (

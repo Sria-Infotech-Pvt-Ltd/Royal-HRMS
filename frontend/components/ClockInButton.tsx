@@ -7,6 +7,7 @@ import CorrectionModal from "@/app/dashboard/my-attendance/_components/Correctio
 import FaceVerificationModal from "@/components/FaceVerificationModal";
 import { formatLockoutCountdown } from "@/lib/faceApi/lockout";
 import type { PunchLocation } from "@/types/attendance";
+import { tr } from "@/lib/i18n/tr";
 
 function todayString() {
   const d = new Date();
@@ -66,7 +67,7 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
     return (
       <>
         <button type="button" className="btn" onClick={handlePunch} disabled={isBusy} aria-pressed={isClockedIn} suppressHydrationWarning>
-          {isLockedOut ? waitLabel : isPunching ? "Please wait…" : isClockedIn ? "Punch out" : "Punch in"}
+          {isLockedOut ? waitLabel : isPunching ? tr("Please wait…") : isClockedIn ? tr("Punch out") : tr("Punch in")}
         </button>
         <FaceVerificationModal
           isOpen={showFaceModal}
@@ -117,7 +118,7 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
                 animation: !isClockedIn ? "clockPulse 2s ease-in-out infinite" : "none",
               }} />
               <i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} style={{ fontSize: 14 }} />
-              {isClockedIn ? "Punch Out" : "Punch In"}
+              {isClockedIn ? tr("Punch Out") : tr("Punch In")}
             </>
           )}
         </button>

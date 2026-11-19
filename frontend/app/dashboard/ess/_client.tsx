@@ -30,26 +30,27 @@ import EssRequestsTab from "./_components/EssRequestsTab";
 import EssAnnouncementsTab from "./_components/EssAnnouncementsTab";
 import EssTimesheetTab from "./_components/EssTimesheetTab";
 import { currentMonday, isIsoDate, mondayOf } from "@/lib/timesheet";
+import { tr } from "@/lib/i18n/tr";
 
 type TabId = "home" | "profile" | "attendance" | "leave" | "payslips" | "tax" | "expenses" | "documents" | "growth" | "appraisals" | "assets" | "employment" | "requests" | "announcements" | "hrHelp" | "timesheet";
 
 // Labels exactly as the reference's tab bar spells them.
 const TABS: { id: TabId; label: string }[] = [
-  { id: "home",        label: "Home" },
-  { id: "profile",     label: "My profile" },
-  { id: "attendance",  label: "Attendance" },
-  { id: "leave",       label: "Leave" },
-  { id: "payslips",    label: "Payslips" },
-  { id: "tax",         label: "Tax" },
-  { id: "expenses",    label: "Expenses" },
-  { id: "documents",   label: "Documents" },
-  { id: "growth",      label: "Growth" },
-  { id: "appraisals",  label: "Appraisals" },
-  { id: "assets",      label: "Policies & assets" },
-  { id: "employment",  label: "Employment" },
-  { id: "requests",    label: "Requests" },
-  { id: "announcements", label: "Announcements" },
-  { id: "hrHelp",      label: "HR help" },
+  { id: "home",        get label() { return tr("Home"); } },
+  { id: "profile",     get label() { return tr("My profile"); } },
+  { id: "attendance",  get label() { return tr("Attendance"); } },
+  { id: "leave",       get label() { return tr("Leave"); } },
+  { id: "payslips",    get label() { return tr("Payslips"); } },
+  { id: "tax",         get label() { return tr("Tax"); } },
+  { id: "expenses",    get label() { return tr("Expenses"); } },
+  { id: "documents",   get label() { return tr("Documents"); } },
+  { id: "growth",      get label() { return tr("Growth"); } },
+  { id: "appraisals",  get label() { return tr("Appraisals"); } },
+  { id: "assets",      get label() { return tr("Policies & assets"); } },
+  { id: "employment",  get label() { return tr("Employment"); } },
+  { id: "requests",    get label() { return tr("Requests"); } },
+  { id: "announcements", get label() { return tr("Announcements"); } },
+  { id: "hrHelp",      get label() { return tr("HR help"); } },
 ];
 
 // "timesheet" is a view inside the Attendance tab (no tab button of its own), but it can still be opened by a link (?tab=timesheet&week=...).
@@ -94,7 +95,7 @@ export default function EssShellClient({ session: _session, viewAsEmployee }: { 
       {/* The welcome banner scrolls away with the page. Only the slim tab bar stays fixed, so a tall block never covers the cards under it. */}
       <HomeBanner status={status} onPunchSuccess={refetchStatus} isReadOnly={!!viewAsEmployee} />
       <div className="ess-sticky">
-        <nav className="ess-tabs" aria-label="Employee Self Service">
+        <nav className="ess-tabs" aria-label={tr("Employee Self Service")}>
           {TABS.map(t => (
             <button
               key={t.id}
@@ -128,8 +129,8 @@ export default function EssShellClient({ session: _session, viewAsEmployee }: { 
 
       <div className="ess-footer-note">
         {viewAsEmployee
-          ? "You are viewing this workspace read-only. Nothing you do here is saved."
-          : "Requests are recorded against your employee record and routed to the approver shown on each one."}
+          ? tr("You are viewing this workspace read-only. Nothing you do here is saved.")
+          : tr("Requests are recorded against your employee record and routed to the approver shown on each one.")}
       </div>
     </div>
   );

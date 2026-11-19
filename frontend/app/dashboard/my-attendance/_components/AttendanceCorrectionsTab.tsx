@@ -9,6 +9,7 @@ import {
   MyCorrectionRequest, PaginatedResponse, STATUS_BADGE_CLASS, STATUS_LABEL,
   toDisplayStatus,
 } from "../../my-requests/_data";
+import { tr } from "@/lib/i18n/tr";
 
 const RECENT_COUNT = 5;
 
@@ -48,8 +49,8 @@ export default function AttendanceCorrectionsTab({ autoOpenNew = false }: { auto
       <div className="card">
         <div className="card-header">
           <div>
-            <div className="card-title"><i className="ti ti-clock-edit" /> Attendance requests</div>
-            <div className="page-sub" style={{ marginTop: 2 }}>Corrections remain visible beside original punches.</div>
+            <div className="card-title"><i className="ti ti-clock-edit" /> {tr("Attendance requests")}</div>
+            <div className="page-sub" style={{ marginTop: 2 }}>{tr("Corrections remain visible beside original punches.")}</div>
           </div>
         </div>
         <div className="card-body" style={{ padding: 0 }}>
@@ -60,8 +61,8 @@ export default function AttendanceCorrectionsTab({ autoOpenNew = false }: { auto
           ) : recent.length === 0 ? (
             <div className="empty-state" style={{ padding: "24px 20px" }}>
               <i className="ti ti-clock-edit" style={{ fontSize: 28, marginBottom: 8 }} />
-              <h3 style={{ fontSize: 13.5 }}>No correction requests yet</h3>
-              <p>Use Request Attendance Correction above if a punch was missed or recorded incorrectly.</p>
+              <h3 style={{ fontSize: 13.5 }}>{tr("No correction requests yet")}</h3>
+              <p>{tr("Use Request Attendance Correction above if a punch was missed or recorded incorrectly.")}</p>
             </div>
           ) : (
             recent.map((r, idx) => {
@@ -83,8 +84,8 @@ export default function AttendanceCorrectionsTab({ autoOpenNew = false }: { auto
                     </div>
                     <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>
                       {displayStatus === "approved" && approver
-                        ? `Approved by ${approver}`
-                        : STATUS_LABEL[displayStatus]} · View details
+                        ? tr("Approved by {approver}", { approver: approver })
+                        : STATUS_LABEL[displayStatus]} · {tr("View details")}
                     </div>
                   </div>
                   <span className={STATUS_BADGE_CLASS[displayStatus]}>{STATUS_LABEL[displayStatus].toUpperCase()}</span>

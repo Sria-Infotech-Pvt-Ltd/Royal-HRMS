@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import ConfirmModal from "@/components/ConfirmModal";
 import { LeaveRequest, STATUS_BADGE, STATUS_LABEL, fmtDate } from "../_data";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   requestId:        string;
@@ -42,7 +43,7 @@ function DecisionRow({
           <span className="text-sm font-semibold text-[var(--on-bg)]">{level}</span>
           <span className="text-xs font-medium text-[var(--on-variant)]">{label}</span>
         </div>
-        <p className="text-xs text-[var(--on-variant)] mt-0.5">{isSkipped ? "No approval needed at this stage" : (approverName || "Not yet assigned")}</p>
+        <p className="text-xs text-[var(--on-variant)] mt-0.5">{isSkipped ? tr("No approval needed at this stage") : (approverName || tr("Not yet assigned"))}</p>
         {remarks && (
           <p className="text-xs text-[var(--on-variant)] bg-[var(--bg-low)] rounded-lg px-2.5 py-1.5 mt-1.5">“{remarks}”</p>
         )}
@@ -81,14 +82,14 @@ export default function LeaveRequestDetailModal({
               <i className="ti ti-file-description text-[var(--info)] text-lg" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-[var(--on-bg)]">Leave Request Details</h3>
+              <h3 className="text-sm font-bold text-[var(--on-bg)]">{tr("Leave Request Details")}</h3>
               <p className="text-xs text-[var(--on-variant)] mt-0.5">{r.leave_type_display} · {r.duration_display}</p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--on-variant)] hover:bg-[var(--bg-mid)] hover:text-[var(--on-bg)] transition-colors"
-           aria-label="Close">
+           aria-label={tr("Close")}>
             <i className="ti ti-x text-sm" />
           </button>
         </div>
@@ -98,17 +99,17 @@ export default function LeaveRequestDetailModal({
 
           {loading && !data && (
             <div className="flex items-center gap-1.5 text-xs text-[var(--on-variant)]">
-              <i className="ti ti-loader-2 animate-spin" /> Loading latest status…
+              <i className="ti ti-loader-2 animate-spin" /> {tr("Loading latest status…")}
             </div>
           )}
           {error && (
             <div className="flex items-center gap-1.5 text-xs text-[var(--error)]">
-              <i className="ti ti-alert-circle" /> Could not refresh — showing last known details.
+              <i className="ti ti-alert-circle" /> {tr("Could not refresh — showing last known details.")}
             </div>
           )}
 
           <div>
-            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Employee</p>
+            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{tr("Employee")}</p>
             <p className="text-sm text-[var(--on-bg)] font-medium">{r.employee_name}</p>
             <p className="text-xs text-[var(--on-variant)] mt-0.5">
               {[r.employee_code, r.employee_dept, r.employee_branch].filter(Boolean).join(" · ") || "—"}
@@ -120,34 +121,34 @@ export default function LeaveRequestDetailModal({
               <p>{fmtDate(r.start_date)} → {fmtDate(r.end_date)}</p>
               {r.lop_days > 0 ? (
                 <div className="mt-1.5 flex flex-col gap-0.5">
-                  <span>{r.leave_type_display}: {r.total_days - r.lop_days} day{(r.total_days - r.lop_days) !== 1 ? "s" : ""}</span>
-                  <span className="text-[var(--warn)] font-medium">LOP: {r.lop_days} day{r.lop_days !== 1 ? "s" : ""}</span>
-                  <span className="text-[var(--on-bg)] font-semibold">Total: {r.total_days} day{r.total_days !== 1 ? "s" : ""}</span>
+                  <span>{r.leave_type_display}: {tr(r.total_days - r.lop_days === 1 ? "{count} day" : "{count} days", { count: r.total_days - r.lop_days })}</span>
+                  <span className="text-[var(--warn)] font-medium">{tr("LOP")}: {tr(r.lop_days === 1 ? "{count} day" : "{count} days", { count: r.lop_days })}</span>
+                  <span className="text-[var(--on-bg)] font-semibold">{tr("Total")}: {tr(r.total_days === 1 ? "{count} day" : "{count} days", { count: r.total_days })}</span>
                 </div>
               ) : (
-                <span>{r.total_days} day{r.total_days !== 1 ? "s" : ""}</span>
+                <span>{tr(r.total_days === 1 ? "{count} day" : "{count} days", { count: r.total_days })}</span>
               )}
             </div>
             <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Reason</p>
+            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{tr("Reason")}</p>
             <p className="text-sm text-[var(--on-bg)]">{r.reason || "—"}</p>
           </div>
 
           <div className="flex items-center justify-between border-t border-[var(--outline-v)] pt-4">
             <div>
-              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Approver</p>
+              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{tr("Approver")}</p>
               <p className="text-sm text-[var(--on-bg)] font-medium">{r.approved_by || "—"}</p>
             </div>
             <p className="text-xs text-[var(--on-variant)]">
-              {r.approved_at ? fmtDate(r.approved_at.slice(0, 10)) : "Not yet actioned"}
+              {r.approved_at ? fmtDate(r.approved_at.slice(0, 10)) : tr("Not yet actioned")}
             </p>
           </div>
 
           <div className="flex flex-col gap-4 border-t border-[var(--outline-v)] pt-4">
-            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide -mb-1">Approval Flow</p>
+            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide -mb-1">{tr("Approval Flow")}</p>
             <DecisionRow
               level="Manager Approval"
               approverName={r.l1_approver_name}
@@ -169,9 +170,9 @@ export default function LeaveRequestDetailModal({
 
           {(r.handover_to || r.contact_during_leave || r.handover_notes) && (
             <div className="border-t border-[var(--outline-v)] pt-4">
-              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1.5">Handover & Contact</p>
-              {r.handover_to && <p className="text-sm text-[var(--on-bg)]">Handover to: <span className="font-medium">{r.handover_to}</span></p>}
-              {r.contact_during_leave && <p className="text-sm text-[var(--on-bg)] mt-0.5">Contact: <span className="font-medium">{r.contact_during_leave}</span></p>}
+              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1.5">{tr("Handover & Contact")}</p>
+              {r.handover_to && <p className="text-sm text-[var(--on-bg)]">{tr("Handover to:")} <span className="font-medium">{r.handover_to}</span></p>}
+              {r.contact_during_leave && <p className="text-sm text-[var(--on-bg)] mt-0.5">{tr("Contact:")} <span className="font-medium">{r.contact_during_leave}</span></p>}
               {r.handover_notes && <p className="text-xs text-[var(--on-variant)] mt-1.5">{r.handover_notes}</p>}
             </div>
           )}
@@ -184,7 +185,7 @@ export default function LeaveRequestDetailModal({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-sm text-[var(--primary)] hover:opacity-80 font-medium"
               >
-                <i className="ti ti-paperclip" /> View attached document
+                <i className="ti ti-paperclip" /> {tr("View attached document")}
               </a>
             </div>
           )}
@@ -196,7 +197,7 @@ export default function LeaveRequestDetailModal({
             onClick={onClose}
             className="px-5 py-2.5 rounded-xl border border-[var(--outline-v)] text-sm font-medium text-[var(--on-variant)] hover:bg-[var(--bg-low)] transition-colors"
           >
-            Close
+            {tr("Close")}
           </button>
           {/* This list only ever contains the caller's own requests, so status is
               a safe stand-in on rows the backend hasn't attached can_cancel to. */}
@@ -205,7 +206,7 @@ export default function LeaveRequestDetailModal({
               onClick={() => setConfirmingCancel(true)}
               className="px-5 py-2.5 rounded-xl border border-[var(--error)] text-sm font-medium text-[var(--error)] hover:bg-[var(--error-c)] transition-colors"
             >
-              Cancel Request
+              {tr("Cancel Request")}
             </button>
           )}
           {/* onApprove/onReject are only ever passed from an approval-queue context,
@@ -215,7 +216,7 @@ export default function LeaveRequestDetailModal({
               onClick={() => { onReject(); onClose(); }}
               className="btn-danger flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors"
             >
-              <i className="ti ti-x" /> Reject
+              <i className="ti ti-x" /> {tr("Reject")}
             </button>
           )}
           {onApprove && (r.can_approve ?? true) && (
@@ -223,7 +224,7 @@ export default function LeaveRequestDetailModal({
               onClick={() => { onApprove(); onClose(); }}
               className="btn-success flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors"
             >
-              <i className="ti ti-check" /> Approve
+              <i className="ti ti-check" /> {tr("Approve")}
             </button>
           )}
         </div>
@@ -231,7 +232,7 @@ export default function LeaveRequestDetailModal({
 
       {confirmingCancel && (
         <ConfirmModal
-          title="Cancel this leave request?"
+          title={tr("Cancel this leave request?")}
           body={`This cancels the ${r.leave_type_display} request for ${fmtDate(r.start_date)} → ${fmtDate(r.end_date)} and releases any balance held against it. This cannot be undone.`}
           confirmLabel="Cancel Request"
           danger

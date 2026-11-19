@@ -8,6 +8,7 @@ import { PALETTE, tint } from "./attendancePalette";
 import { LATE_LOGIN_LABEL } from "@/lib/lateLogin";
 import { dateCaption, longDate } from "./detailView";
 import { STATUS_META, canMark, daySentence, effectiveStatus, type DayRecord } from "./monthView";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   day: DayRecord | null;
@@ -72,7 +73,7 @@ export default function MonthDayPanel({ day, todayISO, mayMark, onViewDetail, on
         {day.late_forgiven && (
           <div role="note" style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, padding: "9px 12px", borderRadius: 12, background: tint(PALETTE.late, 0.1), border: `1px solid ${tint(PALETTE.late, 0.3)}`, marginBottom: 12 }}>
             <i className="ti ti-clock-exclamation" aria-hidden="true" style={{ color: PALETTE.late, fontSize: 18 }} />
-            <span><strong>{LATE_LOGIN_LABEL}</strong>{day.clock_in ? `: clocked in at ${day.clock_in}, after the grace time.` : "."} Full hours were completed, so the day counts as Present.</span>
+            <span><strong>{tr(LATE_LOGIN_LABEL)}</strong>{day.clock_in ? `: clocked in at ${day.clock_in}, after the grace time.` : "."} Full hours were completed, so the day counts as Present.</span>
           </div>
         )}
         {day.is_flagged && (

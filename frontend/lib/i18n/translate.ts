@@ -2,7 +2,7 @@
 // anything not yet translated simply stays in English instead of showing a code like "nav.leave".
 //
 //   t("Sign in")                                  -> "साइन इन करें" in Hindi
-//   t("Signing in as {name}", { name: "Asha" })   -> {name} is filled in after translating
+//   t("Sign in to your {brand} account", { brand: "AIRA" })   -> {brand} is filled in after translating
 
 import type { LanguageCode } from "./languages";
 import { HINDI } from "./messages/hi";

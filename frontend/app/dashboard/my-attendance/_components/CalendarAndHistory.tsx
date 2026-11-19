@@ -4,6 +4,7 @@ import { useState } from "react";
 import AttendanceCalendar from "./AttendanceCalendar";
 import AttendanceHistoryTable from "./AttendanceHistoryTable";
 import type { DayRecord, HistoryRow } from "@/types/attendance";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   month:        number;  // 1-indexed
@@ -22,13 +23,13 @@ interface Props {
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const LEGEND = [
-  { label: "Present",    bg: "var(--success-c)",          color: "var(--success)"   },
-  { label: "Late",       bg: "var(--warn-c)",             color: "var(--warn)"      },
-  { label: "Absent",     bg: "var(--error-c)",            color: "var(--error)"     },
-  { label: "On Leave",   bg: "rgba(59,130,246,0.12)",     color: "#3b82f6"          },
-  { label: "Half Day",   bg: "rgba(251,146,60,0.15)",     color: "#ea580c"          },
-  { label: "Weekly Off", bg: "var(--bg-low)",             color: "var(--outline)"   },
-  { label: "Holiday",    bg: "rgba(168,85,247,0.12)",     color: "#a855f7"          },
+  { get label() { return tr("Present"); },    bg: "var(--success-c)",          color: "var(--success)"   },
+  { get label() { return tr("Late"); },       bg: "var(--warn-c)",             color: "var(--warn)"      },
+  { get label() { return tr("Absent"); },     bg: "var(--error-c)",            color: "var(--error)"     },
+  { get label() { return tr("On Leave"); },   bg: "rgba(59,130,246,0.12)",     color: "#3b82f6"          },
+  { get label() { return tr("Half Day"); },   bg: "rgba(251,146,60,0.15)",     color: "#ea580c"          },
+  { get label() { return tr("Weekly Off"); }, bg: "var(--bg-low)",             color: "var(--outline)"   },
+  { get label() { return tr("Holiday"); },    bg: "rgba(168,85,247,0.12)",     color: "#a855f7"          },
 ];
 
 type Tab = "calendar" | "history";
@@ -42,9 +43,9 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
       <div className="card-header" style={{ flexWrap: "wrap", gap: 8 }}>
         <div>
           <div className="card-title">
-            {isLoading ? "Loading…" : `${MONTH_NAMES[month - 1]} ${year}`}
+            {isLoading ? tr("Loading…") : `${MONTH_NAMES[month - 1]} ${year}`}
           </div>
-          <div className="page-sub" style={{ marginTop: 2 }}>Daily attendance and approved leave.</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>{tr("Daily attendance and approved leave.")}</div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -54,13 +55,13 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
                 onClick={() => setTab("calendar")}
                 className={`btn btn-sm ${tab === "calendar" ? "btn-filled" : "btn-ghost"}`}
               >
-                <i className="ti ti-calendar" /> Calendar
+                <i className="ti ti-calendar" /> {tr("Calendar")}
               </button>
               <button
                 onClick={() => setTab("history")}
                 className={`btn btn-sm ${tab === "history" ? "btn-filled" : "btn-ghost"}`}
               >
-                <i className="ti ti-list-details" /> History
+                <i className="ti ti-list-details" /> {tr("History")}
               </button>
             </div>
           )}
@@ -69,8 +70,8 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
             type="button"
             onClick={onPrev}
             disabled={isLoading}
-            aria-label="Previous month"
-            title="Previous month"
+            aria-label={tr("Previous month")}
+            title={tr("Previous month")}
           >
             <i className="ti ti-chevron-left" />
           </button>
@@ -79,8 +80,8 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
             type="button"
             onClick={onNext}
             disabled={isLoading}
-            aria-label="Next month"
-            title="Next month"
+            aria-label={tr("Next month")}
+            title={tr("Next month")}
           >
             <i className="ti ti-chevron-right" />
           </button>

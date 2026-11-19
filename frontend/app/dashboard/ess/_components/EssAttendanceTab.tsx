@@ -25,6 +25,7 @@ import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import AttendanceRequestsCard from "./AttendanceRequestsCard";
 import EssAttendanceCalendar from "./EssAttendanceCalendar";
 import { MONTH_LONG, buildAttendanceRequestRows } from "./attendanceRequestRows";
+import { tr } from "@/lib/i18n/tr";
 
 const RECENT_PUNCHES = 3;
 const RECENT_REQUESTS = 5;
@@ -35,22 +36,22 @@ function punchDetail(row: RecentPunchRow): string {
 
 function TimesheetCard({ isReadOnly, onOpen }: { isReadOnly: boolean; onOpen?: (weekStart: string) => void }) {
   const { data } = useWeeklyTimesheet();
-  if (!data) return <div className="ess-card"><h2>Weekly timesheet</h2><p>Loading…</p></div>;
+  if (!data) return <div className="ess-card"><h2>{tr("Weekly timesheet")}</h2><p>{tr("Loading…")}</p></div>;
   const weekEnding = new Date(`${data.week_end}T12:00:00`);
   const card = timesheetCardState(data, dueDayLabel(data.week_start));
   return (
     <div className="ess-card">
       <div className="ess-pagehead">
         <div>
-          <h2>Weekly timesheet</h2>
-          <p>{data.hours_logged} of {data.target_hours} hours logged for the current week.</p>
+          <h2>{tr("Weekly timesheet")}</h2>
+          <p>{tr("{logged} of {target} hours logged for the current week.", { logged: data.hours_logged, target: data.target_hours })}</p>
         </div>
         {!isReadOnly && <TimesheetCardAction summary={data} className="rvbtn pri" onOpen={onOpen} />}
       </div>
       <div className="ess-list">
         <div className="ess-row">
           <div>
-            <b>Week ending {weekEnding.getDate()} {MONTH_LONG[weekEnding.getMonth()]}</b>
+            <b>{tr("Week ending")} {weekEnding.getDate()} {MONTH_LONG[weekEnding.getMonth()]}</b>
             <small>{card.subtitle}</small>
           </div>
           <span className={`state${card.isDone ? " ok" : ""}`}>{card.badge}</span>
@@ -97,24 +98,24 @@ export default function EssAttendanceTab({ isReadOnly = false, onViewAllRequests
     <section className="ess-page">
       <div className="ess-pagehead">
         <div>
-          <h2>Attendance</h2>
-          <p>Punch status, monthly calendar, regularization and work-from-home requests.</p>
+          <h2>{tr("Attendance")}</h2>
+          <p>{tr("Punch status, monthly calendar, regularization and work-from-home requests.")}</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {!isReadOnly && (
             <button className="rvbtn" type="button" onClick={() => setShowWfh(true)}>
-              <i className="ti ti-home-2" aria-hidden="true" /> Request work from home
+              <i className="ti ti-home-2" aria-hidden="true" /> {tr("Request work from home")}
             </button>
           )}
-          <button className="rvbtn pri" type="button" onClick={() => setShowRegularize(true)}>Regularize attendance</button>
+          <button className="rvbtn pri" type="button" onClick={() => setShowRegularize(true)}>{tr("Regularize attendance")}</button>
         </div>
       </div>
 
       {/* Without this a failed load drew an empty calendar that looked like "nothing was marked". */}
       {attendanceError && (
         <div className="alert alert-error" role="alert" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <span>Could not load your attendance for this month ({attendanceError}). Your records are not lost; this is only the screen failing to load them.</span>
-          <button className="rvbtn" type="button" onClick={refetch}>Try again</button>
+          <span>{tr("Could not load your attendance for this month ({error}). Your records are not lost; this is only the screen failing to load them.", { error: attendanceError })}</span>
+          <button className="rvbtn" type="button" onClick={refetch}>{tr("Try again")}</button>
         </div>
       )}
 
@@ -131,10 +132,10 @@ export default function EssAttendanceTab({ isReadOnly = false, onViewAllRequests
           />
         </div>
         <div className="ess-card">
-          <h2>Recent punches</h2>
-          <p>Device and web attendance events.</p>
+          <h2>{tr("Recent punches")}</h2>
+          <p>{tr("Device and web attendance events.")}</p>
           <div className="ess-list">
-            {punches.length === 0 && <div className="ess-row"><div><b>No punches yet</b><small>Your clock-ins will appear here.</small></div></div>}
+            {punches.length === 0 && <div className="ess-row"><div><b>{tr("No punches yet")}</b><small>{tr("Your clock-ins will appear here.")}</small></div></div>}
             {punches.map(row => (
               // row.date is already a display string ("14 Oct") from the
               // backend, not an ISO date — rendered as-is, not re-parsed.

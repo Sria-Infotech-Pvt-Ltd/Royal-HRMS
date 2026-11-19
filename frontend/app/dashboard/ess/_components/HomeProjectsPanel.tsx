@@ -7,6 +7,7 @@
 
 import { useWorkStatus } from "@/hooks/useWorkStatus";
 import { STATUS_BADGE, endLabel, fmtDate, statusLabel } from "@/components/work-status/workStatusFormat";
+import { tr } from "@/lib/i18n/tr";
 
 const MAX_PROJECTS_SHOWN = 5;
 
@@ -24,27 +25,27 @@ export default function HomeProjectsPanel({ onViewAll }: Props) {
     <div className="card" style={{ marginBottom: 20 }}>
       <div className="card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
-          <div className="card-title" style={{ fontSize: 20 }}><i className="ti ti-briefcase" /> Work status</div>
+          <div className="card-title" style={{ fontSize: 20 }}><i className="ti ti-briefcase" /> {tr("Work status")}</div>
           <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--on-variant)" }}>
-            Projects assigned to you in Project Budgeting.
+            {tr("Projects assigned to you in Project Budgeting.")}
           </p>
         </div>
         <button onClick={onViewAll} className="btn btn-ghost btn-sm">
-          Work status &amp; history <i className="ti ti-arrow-right" />
+          {tr("Work status & history")} <i className="ti ti-arrow-right" />
         </button>
       </div>
 
       {loading && !data ? (
         <div style={{ padding: "16px 20px", fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {tr("Loading…")}
         </div>
       ) : error || !data ? (
         <div style={{ padding: "16px 20px", fontSize: 13, color: "var(--on-variant)" }}>
-          Could not load your project assignments right now.
+          {tr("Could not load your project assignments right now.")}
         </div>
       ) : current.length === 0 ? (
         <div style={{ padding: "16px 20px", fontSize: 13, color: "var(--on-variant)" }}>
-          No project is assigned to you in Project Budgeting right now.
+          {tr("No project is assigned to you in Project Budgeting right now.")}
         </div>
       ) : (
       <div>
@@ -58,9 +59,9 @@ export default function HomeProjectsPanel({ onViewAll }: Props) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{assignment.project_name}</div>
               <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                {assignment.milestone_name || "Whole project"}
+                {assignment.milestone_name || tr("Whole project")}
                 {assignment.role && ` · ${assignment.role}`}
-                {assignment.allocation_percent && ` · ${assignment.allocation_percent}% allocated`}
+                {assignment.allocation_percent && tr(" · {allocation_percent}% allocated", { allocation_percent: assignment.allocation_percent })}
                 {" · "}{fmtDate(assignment.start_date)} – {endLabel(assignment)}
               </div>
             </div>
