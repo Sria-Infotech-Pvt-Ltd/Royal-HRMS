@@ -218,6 +218,11 @@ export interface OvertimeRow {
 
 export interface InvalidPunch {
   id:              string;
+  /** Whose punch it is, so HR can tell without opening anything. */
+  employee_name:   string;
+  employee_code:   string;
+  /** How the punch was made: Web, Mobile, Biometric or Manual (entered by hand). */
+  source:          string;
   device_id:       string;
   raw_time:        string;
   biometric_id:    string;

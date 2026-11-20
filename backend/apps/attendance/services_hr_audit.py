@@ -75,10 +75,15 @@ def get_invalid_punches(
         date=target_date, employee__in=employee_qs,
     ).values_list('employee_id', flat=True)
 
+    # A punch HR has already dealt with (discarded, or converted into a valid one) is finished business: it leaves the list and the
+    # count, and no longer takes part in the duplicate / sequence checks of the punches around it. Punches nobody has acted on have no
+    # tracking record at all, and stay.
+    from apps.attendance.models import InvalidPunch
     punches = (
         AttendancePunch.objects
         .filter(employee_id__in=employee_ids_with_record)
         .filter(punched_at__date=target_date)
+        .exclude(invalid_record__status__in=[InvalidPunch.STATUS_DISCARDED, InvalidPunch.STATUS_CONVERTED])
         .select_related('employee', 'branch')
         .order_by('employee_id', 'punched_at')
     )
@@ -124,8 +129,13 @@ def get_invalid_punches(
 
 def _build_row(punch: AttendancePunch, issue_type: str, issue: str) -> dict:
     branch_name = punch.branch.name if punch.branch else punch.employee.branch or '—'
+    employee = punch.employee
     return {
         'id':              str(punch.id),
+        # Who the punch belongs to, so HR can tell whose it is without opening anything.
+        'employee_name':   employee.full_name or employee.email,
+        'employee_code':   employee.employee_id or '—',
+        'source':          punch.get_source_display(),
         'device_id':       punch.device_id or '—',
         'raw_time':        punch.punched_at.strftime('%Y-%m-%d %H:%M:%S'),
         'biometric_id':    punch.device_id or '—',

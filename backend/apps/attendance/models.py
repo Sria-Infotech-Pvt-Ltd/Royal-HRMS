@@ -359,6 +359,16 @@ class PunchRulesPolicy(models.Model):
         help_text='Required when auto_checkout_enabled is True.',
     )
 
+    # ── Clock-in reminder ─────────────────────────────────────────────────────
+    clock_in_reminder_enabled = models.BooleanField(
+        default=True,
+        help_text='Email people who are expected today and have not clocked in once this time has passed.',
+    )
+    clock_in_reminder_time = models.TimeField(
+        default=time(10, 0),
+        help_text='Time of day after which the clock-in reminder goes out (nothing is sent once the shift has ended).',
+    )
+
     # ── Early checkout grace ──────────────────────────────────────────────────
     early_checkout_grace = models.PositiveSmallIntegerField(
         default=0,
@@ -1569,6 +1579,31 @@ class AttendanceImportLog(models.Model):
 # ══════════════════════════════════════════════════════════════════════════════
 #  Missing Punch Notification Log  (de-duplicate clock-out reminder alerts)
 # ══════════════════════════════════════════════════════════════════════════════
+
+class ClockInReminder(models.Model):
+    """
+    Records that the "you have not clocked in yet" email was sent to an employee for a date, so each person gets it at most once a
+    day however often the background job runs. Separate from MissingPunchNotification (the clock-out reminder), whose one-per-day rule
+    would otherwise let the morning reminder block the evening one.
+    """
+
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee   = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='clock_in_reminders',
+    )
+    date       = models.DateField(help_text='The working date the reminder was sent for.')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'attendance_clock_in_reminders'
+        constraints = [models.UniqueConstraint(fields=['employee', 'date'], name='clock_in_reminder_once_a_day')]
+
+    def __str__(self) -> str:
+        return f'Clock-in reminder {self.employee_id} {self.date}'
+
 
 class MissingPunchNotification(models.Model):
     """

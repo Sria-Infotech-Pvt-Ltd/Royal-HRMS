@@ -36,6 +36,23 @@ def check_missing_clockouts(self):
         raise self.retry(exc=exc)
 
 
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def check_missing_clockins(self):
+    """
+    Periodic task: email each person who is expected at work today and has not clocked in, once the clock-in reminder time
+    (10:00 by default) has passed. Runs every 5 minutes; idempotent through ClockInReminder (one email per person per day).
+    """
+    from apps.attendance.services_clockin_reminder import send_clock_in_reminders
+
+    try:
+        result = send_clock_in_reminders()
+        logger.info('check_missing_clockins: %s', result)
+        return result
+    except Exception as exc:
+        logger.error('check_missing_clockins failed: %s', exc, exc_info=True)
+        raise self.retry(exc=exc)
+
+
 @shared_task(bind=True, max_retries=0, default_retry_delay=0)
 def process_attendance_import(self, import_log_id: str, imported_by_pk: str, csv_content: str):
     """

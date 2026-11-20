@@ -50,12 +50,16 @@ export default function InvalidPunchesTab({ onMutated }: Props) {
         <div className="table-wrap" style={{ marginTop: 14 }}>
           <table>
             <thead>
-              <tr><th>Device ID</th><th>Raw Punch Time</th><th>Card / Bio ID</th><th>Issue</th><th>Suggested Match</th><th>Company Code</th><th>Action</th></tr>
+              <tr><th>Employee</th><th>Device ID</th><th>Raw Punch Time</th><th>Card / Bio ID</th><th>Issue</th><th>Suggested Match</th><th>Company Code</th><th>Action</th></tr>
             </thead>
             <tbody>
-              <TableStates columns={7} loading={loading} empty={rows.length === 0} icon="ti-circle-check" title="No invalid punches found." hint="Every punch has been matched to an employee." />
+              <TableStates columns={8} loading={loading} empty={rows.length === 0} icon="ti-circle-check" title="No invalid punches found." hint="Every punch has been matched to an employee." />
               {rows.map(p => (
                 <tr key={p.id}>
+                  <td>
+                    <div style={{ fontWeight: 700, color: "var(--on-bg)" }}>{p.employee_name}</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{p.employee_code} · {p.source}</div>
+                  </td>
                   <td style={{ ...MONO, color: "var(--on-bg)", fontWeight: 700 }}>{p.device_id}</td>
                   <td style={MONO}>{p.raw_time}</td>
                   <td style={MONO}>{p.biometric_id}</td>

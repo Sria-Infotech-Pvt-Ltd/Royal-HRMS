@@ -369,6 +369,12 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.attendance.tasks.check_missing_clockouts',
         'schedule': 300.0,  # seconds
     },
+    # Runs every 5 minutes — once the clock-in reminder time (default 10:00, on the default punch policy) has passed, emails
+    # each person who is expected today and has not clocked in (never people on leave, weekly offs, holidays).
+    'check-missing-clockins': {
+        'task':     'apps.attendance.tasks.check_missing_clockins',
+        'schedule': 300.0,  # seconds
+    },
     # Runs once daily at 09:00 IST — fires absence alerts for employees absent N+ consecutive days.
     'check-absence-alerts': {
         'task':     'apps.attendance.tasks.check_absence_alerts',
