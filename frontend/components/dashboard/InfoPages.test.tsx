@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 
 const push = vi.hoisted(() => vi.fn());
 const back = vi.hoisted(() => vi.fn());
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, back }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, back }), usePathname: () => "/dashboard/privacy" }));
 
 import DashboardFooter from "./DashboardFooter";
 import PrivacyPage from "@/app/dashboard/privacy/page";
@@ -14,18 +14,12 @@ beforeEach(() => { push.mockReset(); back.mockReset(); });
 afterEach(cleanup);
 
 describe("the footer", () => {
-  it("shows the AIRA mark (not two letters) and sends every link somewhere", () => {
+  it("shows the AIRA mark (not two letters) and has no footer links", () => {
     const { container } = render(<DashboardFooter />);
     expect(container.querySelector(".footer-logo svg")).toBeTruthy();
     expect(container.querySelector(".footer-logo")?.textContent).toBe("");
-    for (const [name, path] of [
-      ["Privacy & retention", "/dashboard/privacy"], ["Security", "/dashboard/security"],
-      ["Audit trail", "/dashboard/settings/audit"], ["Support", "/dashboard/ess?tab=hrHelp"],
-    ]) {
-      push.mockClear();
-      fireEvent.click(screen.getByRole("button", { name }));
-      expect(push).toHaveBeenCalledWith(path);
-    }
+    expect(container.querySelector(".footer-links")).toBeNull();
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 });
 
@@ -43,6 +37,18 @@ describe("Privacy & retention", () => {
     const { container } = render(<PrivacyPage />);
     expect(container.textContent).not.toMatch(/ISO|SOC ?2|GDPR|certified|guarantee/i);
     expect(container.textContent).toContain("Your company's own policy and the law apply");
+  });
+});
+
+describe("Privacy & retention: retention schedule and access by role", () => {
+  it("lays out the retention schedule and who sees what as tables, using only facts the system states", () => {
+    render(<PrivacyPage />);
+    const schedule = screen.getByRole("region", { name: "Retention schedule" });
+    expect(within(schedule).getByText("Employee record of someone who has left")).toBeTruthy();
+    expect(within(schedule).getByText("30 days after the import finishes")).toBeTruthy();
+    const access = screen.getByRole("region", { name: "Who sees what" });
+    for (const role of ["Employee", "Reporting manager", "HR roles", "System administrators"]) expect(within(access).getByText(role)).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: "Key facts" })).getAllByRole("listitem")).toHaveLength(4);
   });
 });
 

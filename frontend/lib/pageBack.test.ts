@@ -15,7 +15,7 @@ describe("shouldShowBackButton", () => {
   });
 
   it("stays off pages that already have their own Back, so it is never doubled", () => {
-    for (const path of ["/dashboard/org-chart", "/dashboard/announcements", "/dashboard/assessments", "/dashboard/performance", "/dashboard/payroll/runs/12", "/dashboard/separation/abc", "/dashboard/employees/E001/onboarding", "/dashboard/settings/access", "/dashboard/settings/audit", "/dashboard/hire/xyz"]) {
+    for (const path of ["/dashboard/org-chart", "/dashboard/announcements", "/dashboard/assessments", "/dashboard/performance", "/dashboard/privacy", "/dashboard/security", "/dashboard/payroll/runs/12", "/dashboard/separation/abc", "/dashboard/employees/E001/onboarding", "/dashboard/settings/access", "/dashboard/settings/audit", "/dashboard/hire/xyz"]) {
       expect(shouldShowBackButton(path), path).toBe(false);
     }
   });

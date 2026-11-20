@@ -3,15 +3,25 @@
 // A plain information page for the footer links (Privacy & retention, Security): a header with Back on the right, then titled sections
 // of short facts. It states how the system works; it is not a legal document.
 
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { useSupportTarget } from "@/hooks/useSupportTarget";
 import { tr } from "@/lib/i18n/tr";
 
 export interface InfoSection { icon: string; title: string; intro?: string; points: string[] }
 
-interface Props { icon: string; title: string; subtitle: string; sections: InfoSection[]; footnote: string }
+interface Props {
+  icon: string; title: string; subtitle: string; sections: InfoSection[]; footnote: string;
+  /** Shown above the section cards (e.g. a row of key facts). */
+  lead?: ReactNode;
+  /** Shown below the section cards (e.g. tables). */
+  extra?: ReactNode;
+}
 
-export default function InfoPage({ icon, title, subtitle, sections, footnote }: Props) {
+export default function InfoPage({ icon, title, subtitle, sections, footnote, lead, extra }: Props) {
   const router = useRouter();
+  // "Contact HR" opens the HR help ticket form, so it is only offered to people who raise tickets (not to HR / admins who answer them).
+  const supportTarget = useSupportTarget();
   return (
     <>
       <div className="page-header">
@@ -25,6 +35,8 @@ export default function InfoPage({ icon, title, subtitle, sections, footnote }: 
           </button>
         </div>
       </div>
+
+      {lead}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16, alignItems: "start" }}>
         {sections.map(section => (
@@ -41,9 +53,14 @@ export default function InfoPage({ icon, title, subtitle, sections, footnote }: 
         ))}
       </div>
 
+      {extra}
+
       <p style={{ margin: "18px 2px 0", display: "flex", gap: 8, fontSize: 12.5, color: "var(--on-variant)" }}>
         <i className={`ti ${icon}`} aria-hidden="true" style={{ fontSize: 16 }} />
-        <span>{footnote} <button type="button" className="btn btn-ghost btn-sm" onClick={() => router.push("/dashboard/ess?tab=hrHelp")}>{tr("Contact HR")}</button></span>
+        <span>
+          {footnote}{" "}
+          {supportTarget.canRaiseHrHelp && <button type="button" className="btn btn-ghost btn-sm" onClick={() => router.push(supportTarget.path)}>{tr("Contact HR")}</button>}
+        </span>
       </p>
     </>
   );

@@ -13,6 +13,8 @@ const OWN_BACK_PREFIXES = [
   "/dashboard/candidate-review",
   "/dashboard/face-id-registrations",
   "/dashboard/performance",
+  "/dashboard/privacy",
+  "/dashboard/security",
   "/dashboard/settings/access",
   "/dashboard/settings/approval-rules",
   "/dashboard/settings/assessment-config",
