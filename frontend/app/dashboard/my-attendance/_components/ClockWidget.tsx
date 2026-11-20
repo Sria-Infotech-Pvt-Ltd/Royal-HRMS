@@ -45,6 +45,7 @@ export default function ClockWidget() {
   const MODE = useTodayAttendanceMode();
 
   const isClockedIn = session?.is_clocked_in ?? false;
+  const isDayComplete = session?.is_day_complete ?? false;
 
   async function handlePunch() {
     // Not registered / pending / rejected: stop here with the server's instruction. No location request, no camera.
@@ -122,6 +123,18 @@ export default function ClockWidget() {
           </div>
         </div>
 
+        {isDayComplete ? (
+          <div
+            role="status"
+            style={{
+              width: "100%", height: 44, borderRadius: 8, marginBottom: 16, boxSizing: "border-box",
+              background: "var(--success-c)", color: "var(--success)", fontSize: 14, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            <i className="ti ti-circle-check" /> {tr("Day Complete")}
+          </div>
+        ) : (
         <button
           onClick={handlePunch}
           disabled={isPunching || isLockedOut}
@@ -141,6 +154,7 @@ export default function ClockWidget() {
             ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {tr("Please wait…")}</>
             : <><i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} /> {isClockedIn ? tr("Punch Out") : tr("Punch In")}</>}
         </button>
+        )}
 
         {displayPunches.length > 0 && (
           <div>

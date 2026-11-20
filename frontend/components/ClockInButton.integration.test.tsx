@@ -17,7 +17,8 @@ const getCurrentPosition = vi.fn();
 
 // Results must be referentially stable across renders (like the real hook's state), or the hook's effects loop.
 const refetch = vi.fn();
-const todayData = { is_clocked_in: false, session_seconds: 0, total_seconds: 0, punches: [] };
+const QUIET_DAY = { is_clocked_in: false, is_day_complete: false, session_seconds: 0, total_seconds: 0, punches: [] };
+let todayData = QUIET_DAY;
 vi.mock("@/hooks/useFetch", () => ({
   useFetch: (url: string) => {
     if (url === API.attendance.faceVerification.status) return { data: guidance, loading: false, refetch };
@@ -52,6 +53,7 @@ beforeEach(() => {
     ok({ coords: { latitude: 1, longitude: 2, accuracy: 3 } } as GeolocationPosition));
   Object.defineProperty(globalThis.navigator, "geolocation", { value: { getCurrentPosition }, configurable: true });
   guidance = { ...base };
+  todayData = QUIET_DAY;
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -125,5 +127,27 @@ describe("camera / punch gate by Face ID state (server flags -> real client beha
       // stopped before GPS and the camera
       expect(getCurrentPosition).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe("one punch in and one punch out a day", () => {
+  it("shows Day Complete, and no Punch button, once the server says the day is complete", () => {
+    todayData = { ...QUIET_DAY, is_day_complete: true };
+    render(<ClockInButton />);
+    expect(screen.getByRole("status").textContent).toContain("Day Complete");
+    expect(screen.queryByRole("button", { name: /punch (in|out)/i })).toBeNull();
+    // A correction request is a different flow, not a punch, so it stays available.
+    expect(screen.getByRole("button", { name: /attendance correction/i })).toBeTruthy();
+  });
+
+  it("the Home hero variant draws nothing at all (the hero shows its own Day Complete button)", () => {
+    todayData = { ...QUIET_DAY, is_day_complete: true };
+    const { container } = render(<ClockInButton variant="ess" />);
+    expect(container.querySelector("button")).toBeNull();
+  });
+
+  it("still shows Punch in while the day is open", () => {
+    render(<ClockInButton />);
+    expect(screen.getByRole("button", { name: /punch in/i })).toBeTruthy();
   });
 });

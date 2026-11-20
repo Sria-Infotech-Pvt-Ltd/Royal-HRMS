@@ -164,15 +164,15 @@ class PunchService:
         # effect regardless of what an admin configured. Checked before the
         # geofence/face-verification work below, since there's no point doing
         # either for a punch that's going to be rejected anyway.
-        policy = PunchRulesPolicy.objects.filter(is_default=True, is_active=True).first()
-        if policy:
+        daily_cap = cls.daily_punch_cap()
+        if daily_cap is not None:
             today_punch_count = AttendancePunch.objects.filter(
                 employee=employee, punched_at__date=today,
             ).count()
-            if today_punch_count >= policy.max_punch_count:
+            if today_punch_count >= daily_cap:
                 raise ValueError(
                     f'You have reached the maximum number of punches for today '
-                    f'({policy.max_punch_count}).'
+                    f'({daily_cap}).'
                 )
 
         # ── Geofence validation ───────────────────────────────────────────────
@@ -254,6 +254,21 @@ class PunchService:
         )
         return punch
 
+    @staticmethod
+    def daily_punch_cap() -> Optional[int]:
+        """Punch events allowed per day by the default active policy (In and Out each count as one); None when no policy is set."""
+        policy = PunchRulesPolicy.objects.filter(is_default=True, is_active=True).first()
+        return policy.max_punch_count if policy else None
+
+    @classmethod
+    def is_day_complete(cls, employee, for_date: date) -> bool:
+        """True once the person is punched out and the daily cap leaves no room for another punch (one In and one Out a day)."""
+        cap = cls.daily_punch_cap()
+        if cap is None or cls._is_clocked_in(employee, for_date):
+            return False
+        used = AttendancePunch.objects.filter(employee=employee, punched_at__date=for_date).count()
+        return used >= cap
+
     @classmethod
     def get_today_session(cls, employee) -> dict:
         """
@@ -289,6 +304,8 @@ class PunchService:
 
         return {
             'is_clocked_in':   is_clocked_in,
+            # True once today's last allowed punch is used and the person is out: screens show "Day Complete", not a Punch button.
+            'is_day_complete': cls.is_day_complete(employee, today),
             'punches':         punch_list,
             'total_seconds':   total_seconds,
             'session_seconds': session_seconds,

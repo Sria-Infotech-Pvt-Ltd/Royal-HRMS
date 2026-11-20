@@ -9,6 +9,8 @@ export interface PunchEntry {
 
 export interface TodaySession {
   is_clocked_in:   boolean;
+  /** True once the day's last allowed punch is used and the person is out (one punch in and one punch out a day). */
+  is_day_complete?: boolean;
   punches:         PunchEntry[];
   total_seconds:   number;
   session_seconds: number;

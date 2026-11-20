@@ -35,6 +35,8 @@ class DailyPunchCapTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cache.clear()
+        # Migration 0054 ships a default "one in, one out a day" policy; these tests build their own, one at a time.
+        PunchRulesPolicy.objects.all().delete()
         cls.employee = make_user('cap_emp@test.com', employee_id='CAP001')
 
     def punch(self, punch_type: str):
@@ -73,3 +75,37 @@ class DailyPunchCapTests(TestCase):
         other = make_user('cap_other@test.com', employee_id='CAP002')
         PunchService.record_punch(other, {'punch_type': 'IN', 'source': 'web', 'attendance_mode': 'office'})
         self.assertEqual(AttendancePunch.objects.filter(employee=other).count(), 1)
+
+
+class OnePunchADayDefaultTests(TestCase):
+    """The shipped default (migration 0054) is one In and one Out a day, and the session tells screens when the day is done."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cache.clear()
+        cls.employee = make_user('one_a_day@test.com', employee_id='ONE001')
+
+    def test_a_default_policy_is_created_when_none_existed(self):
+        policy = PunchRulesPolicy.objects.get(policy_code='PR-ONE-PER-DAY')
+        self.assertEqual((policy.punch_mode, policy.max_punch_count, policy.is_default, policy.is_active), ('multiple', 2, True, True))
+
+    def test_the_cap_is_two_events(self):
+        self.assertEqual(PunchService.daily_punch_cap(), 2)
+
+    def test_the_day_is_complete_only_after_the_punch_out(self):
+        from django.utils import timezone
+        today = timezone.localdate()
+        self.assertFalse(PunchService.is_day_complete(self.employee, today))
+        AttendancePunch.objects.create(employee=self.employee, punch_type='IN', punched_at=timezone.now(), source='web', attendance_mode='office')
+        self.assertFalse(PunchService.is_day_complete(self.employee, today))          # in, not out yet
+        AttendancePunch.objects.create(employee=self.employee, punch_type='OUT', punched_at=timezone.now(), source='web', attendance_mode='office')
+        self.assertTrue(PunchService.is_day_complete(self.employee, today))
+        self.assertTrue(PunchService.get_today_session(self.employee)['is_day_complete'])
+
+    def test_with_no_policy_the_day_is_never_complete(self):
+        from django.utils import timezone
+        PunchRulesPolicy.objects.all().delete()
+        AttendancePunch.objects.create(employee=self.employee, punch_type='IN', punched_at=timezone.now(), source='web', attendance_mode='office')
+        AttendancePunch.objects.create(employee=self.employee, punch_type='OUT', punched_at=timezone.now(), source='web', attendance_mode='office')
+        self.assertIsNone(PunchService.daily_punch_cap())
+        self.assertFalse(PunchService.is_day_complete(self.employee, timezone.localdate()))

@@ -35,6 +35,8 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
   const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
 
   const isClockedIn = session?.is_clocked_in ?? false;
+  // One punch in and one punch out a day: once both are used, there is nothing left to press.
+  const isDayComplete = session?.is_day_complete ?? false;
   // After too many failed face attempts the button stays disabled and counts down ("Please wait mm:ss").
   const isBusy      = isLoading || isPunching || isLockedOut;
   const waitLabel   = `Please wait ${formatLockoutCountdown(lockoutSecondsRemaining)}`;
@@ -63,6 +65,8 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
     if (ok) onPunchSuccess?.();
   }
 
+  if (variant === "ess" && isDayComplete) return null;
+
   if (variant === "ess") {
     return (
       <>
@@ -81,6 +85,19 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+        {isDayComplete ? (
+          <div
+            role="status"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 16px", borderRadius: 6,
+              border: "1.5px solid rgba(74,222,128,0.45)", background: "rgba(22,163,74,0.18)", color: "#fff",
+              fontSize: 13, fontWeight: 700, whiteSpace: "nowrap",
+            }}
+          >
+            <i className="ti ti-circle-check" style={{ fontSize: 15 }} />
+            {tr("Day Complete")}
+          </div>
+        ) : (
         <button
           onClick={handlePunch}
           disabled={isBusy}
@@ -122,6 +139,7 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
             </>
           )}
         </button>
+        )}
 
         <button
           onClick={() => setShowModal(true)}
