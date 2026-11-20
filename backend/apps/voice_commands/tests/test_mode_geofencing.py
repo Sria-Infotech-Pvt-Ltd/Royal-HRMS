@@ -26,6 +26,7 @@ def _approved_wfh_request():
         latitude=17.385044,
         longitude=78.486671,
         location_label='Test WFH Location',
+        enforce_location=True,   # an approver can switch this off (WorkFromHomeRequest.enforce_location); on is the default
     )
 
 

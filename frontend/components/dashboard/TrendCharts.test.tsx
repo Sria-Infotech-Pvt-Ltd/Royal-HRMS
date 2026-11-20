@@ -39,6 +39,16 @@ describe("LeaveTrendCard bars", () => {
     expect(outer).not.toHaveBeenCalled();
   });
 
+  it("the legend words Approved / Rejected open that status too, for every month, without triggering the card around them", () => {
+    const outer = vi.fn();
+    render(<div onClick={outer}><LeaveTrendCard /></div>);
+    fireEvent.click(screen.getByRole("button", { name: "Rejected" }));
+    expect(push).toHaveBeenCalledWith("/dashboard/approvals?section=approvals&type=leave&status=rejected");
+    fireEvent.click(screen.getByRole("button", { name: "Approved" }));
+    expect(push).toHaveBeenLastCalledWith("/dashboard/approvals?section=approvals&type=leave&status=approved");
+    expect(outer).not.toHaveBeenCalled();
+  });
+
   it("leaves a bar with nothing behind it as plain, not a button", () => {
     render(<LeaveTrendCard />);
     expect(screen.queryByRole("button", { name: "Nov 2026: 0 approved" })).toBeNull();

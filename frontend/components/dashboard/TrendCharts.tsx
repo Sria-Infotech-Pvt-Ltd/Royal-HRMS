@@ -65,6 +65,21 @@ export function HeadcountTrendCard() {
   );
 }
 
+// A legend entry ("Rejected") is a button too: it opens every request of that status, all months. Like the bars, it must not also trigger the
+// link around the whole card.
+function LegendLink({ label, colour, onOpen }: { label: string; colour: string; onOpen: () => void }) {
+  return (
+    <button
+      type="button" title={`Show all ${label.toLowerCase()} leave requests`}
+      onClick={event => { event.stopPropagation(); onOpen(); }}
+      onKeyDown={event => event.stopPropagation()}
+      style={{ display: "inline-flex", alignItems: "center", background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", color: "inherit" }}
+    >
+      <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: colour, marginRight: 4 }} />{label}
+    </button>
+  );
+}
+
 // One bar. With something behind it, it is a button that opens those requests; clicking it must not also trigger the card around it
 // (the HR dashboard wraps the whole card in a link to the Leave page).
 function TrendBar({ title, height, colour, isLinked, onOpen }: { title: string; height: number; colour: string; isLinked: boolean; onOpen: () => void }) {
@@ -92,8 +107,8 @@ export function LeaveTrendCard() {
       <div className="card-header">
         <div className="card-title"><i className="ti ti-calendar-stats" /> Leave Approvals vs Rejections (6 months)</div>
         <div style={{ display: "flex", gap: 10, fontSize: 11, color: "var(--on-variant)" }}>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--success)", marginRight: 4 }} />Approved</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--error)", marginRight: 4 }} />Rejected</span>
+          <LegendLink label="Approved" colour="var(--success)" onOpen={() => router.push(buildApprovalsLink({ type: "leave", status: "approved" }))} />
+          <LegendLink label="Rejected" colour="var(--error)" onOpen={() => router.push(buildApprovalsLink({ type: "leave", status: "rejected" }))} />
         </div>
       </div>
       {loading ? <LoadingRow /> : !hasAny ? (

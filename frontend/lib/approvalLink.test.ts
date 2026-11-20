@@ -22,6 +22,11 @@ describe("approval links", () => {
     expect(parseApprovalsLink(new URLSearchParams("month=2027-02")).dateTo).toBe("2027-02-28");
   });
 
+  it("supports every status (status=all) so a whole-card link can show them all", () => {
+    expect(buildApprovalsLink({ type: "leave", status: "all" })).toBe("/dashboard/approvals?section=approvals&type=leave&status=all");
+    expect(parseApprovalsLink(new URLSearchParams("type=leave&status=all"))).toEqual({ type: "leave", status: "all" });
+  });
+
   it("ignores anything it does not recognise", () => {
     expect(parseApprovalsLink(new URLSearchParams("type=salary&status=maybe&month=2026-13"))).toEqual({});
     expect(parseApprovalsLink(null)).toEqual({});

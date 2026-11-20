@@ -7,6 +7,7 @@ import WorkforceOperations from "@/components/dashboard/WorkforceOperations";
 import DeptHeadcountChart from "@/components/dashboard/DeptHeadcountChart";
 import LinkCard from "@/components/dashboard/LinkCard";
 import { HeadcountTrendCard, LeaveTrendCard, PayrollCostTrendCard } from "@/components/dashboard/TrendCharts";
+import { buildApprovalsLink } from "@/lib/approvalLink";
 import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { usePermission } from "@/hooks/usePermission";
 import { useToast } from "@/components/ToastProvider";
@@ -197,7 +198,7 @@ export default function HRDashboard({ session }: Props) {
         <div className="wf-analytics-grid">
           <LinkCard href="/dashboard/employees" label="Open employees"><HeadcountTrendCard /></LinkCard>
           <LinkCard href="/dashboard/employees" label="Open employees"><DeptHeadcountChart /></LinkCard>
-          <LinkCard href="/dashboard/leave" label="Open leave"><LeaveTrendCard /></LinkCard>
+          <LinkCard href={buildApprovalsLink({ type: "leave", status: "all" })} label="Open leave requests"><LeaveTrendCard /></LinkCard>
           <LinkCard href="/dashboard/payroll" label="Open payroll"><PayrollCostTrendCard /></LinkCard>
         </div>
       </section>

@@ -69,7 +69,7 @@ export default function HrHelpChangePanel({ entry, note, onDecided }: HrHelpChan
           {error && <div className="alert alert-error" style={{ marginBottom: 10 }}>{error}</div>}
           {entry.change_is_sensitive && (
             <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "0 0 8px" }}>
-              Bank detail: check it against the employee's passbook or a cancelled cheque before applying. The number is shown masked once decided.
+              Bank detail: check it against the employee&apos;s passbook or a cancelled cheque before applying. The number is shown masked once decided.
             </p>
           )}
           {entry.change_needs_system_admin && (

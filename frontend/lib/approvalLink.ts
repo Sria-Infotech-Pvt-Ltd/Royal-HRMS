@@ -5,12 +5,14 @@
 import type { ApprovalKind, DisplayStatus } from "@/app/dashboard/approvals/_data";
 
 const KINDS: readonly ApprovalKind[] = ["leave", "wfh", "expense", "attendance_correction", "separation"];
-const STATUSES: readonly DisplayStatus[] = ["pending", "approved", "rejected", "cancelled"];
+// "all" opens the type with every status showing.
+export type ApprovalLinkStatus = DisplayStatus | "all";
+const STATUSES: readonly ApprovalLinkStatus[] = ["pending", "approved", "rejected", "cancelled", "all"];
 const MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
 export interface ApprovalLinkFilters {
   type?: ApprovalKind;
-  status?: DisplayStatus;
+  status?: ApprovalLinkStatus;
   /** First and last day of the month, as YYYY-MM-DD, for the submitted-date filter. */
   dateFrom?: string;
   dateTo?: string;
@@ -18,7 +20,7 @@ export interface ApprovalLinkFilters {
 
 export interface ApprovalLinkInput {
   type: ApprovalKind;
-  status: DisplayStatus;
+  status: ApprovalLinkStatus;
   /** YYYY-MM; leave out to cover every month. */
   month?: string | null;
 }
@@ -47,7 +49,7 @@ export function parseApprovalsLink(params: { get(name: string): string | null } 
   const range = month ? monthRange(month) : null;
   return {
     ...(KINDS.includes(type as ApprovalKind) ? { type: type as ApprovalKind } : {}),   // checked against the list on the line above
-    ...(STATUSES.includes(status as DisplayStatus) ? { status: status as DisplayStatus } : {}),   // same
+    ...(STATUSES.includes(status as ApprovalLinkStatus) ? { status: status as ApprovalLinkStatus } : {}),   // same
     ...(range ?? {}),
   };
 }

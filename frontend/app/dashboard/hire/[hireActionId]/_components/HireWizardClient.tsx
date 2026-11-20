@@ -559,12 +559,15 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   }
 
   // Send anything not yet sent, right now (no waiting for the pause in typing).
-  flushAutosaveRef.current = () => {
-    const payload = latestPayloadRef.current;
-    if (!payload || lastAttemptedRef.current === null) return;
-    const serialized = JSON.stringify(payload);
-    if (serialized !== lastAttemptedRef.current) sendAutosave(payload, serialized);
-  };
+  // (Set after each render, in a layout effect, so the ref is never written while rendering.)
+  useLayoutEffect(() => {
+    flushAutosaveRef.current = () => {
+      const payload = latestPayloadRef.current;
+      if (!payload || lastAttemptedRef.current === null) return;
+      const serialized = JSON.stringify(payload);
+      if (serialized !== lastAttemptedRef.current) sendAutosave(payload, serialized);
+    };
+  });
 
   useEffect(() => {
     if (loading) return;

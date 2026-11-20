@@ -91,7 +91,7 @@ export default function TeamApprovalsSection({ initialFilters }: { initialFilter
   // A link (e.g. a dashboard chart bar) can open this already filtered to one type, status and month.
   const [activeTab,    setActiveTab]    = useState<"all" | ApprovalKind>(initialFilters?.type ?? "all");
   const [search,       setSearch]       = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | DisplayStatus>(initialFilters?.status ?? "pending");
+  const [statusFilter, setStatusFilter] = useState<"all" | DisplayStatus>(initialFilters?.status ?? "pending");   // "all" comes through as-is
   const [typeFilter,   setTypeFilter]   = useState<"all" | ApprovalKind>("all");
   const [dateFrom,     setDateFrom]     = useState(initialFilters?.dateFrom ?? "");
   const [dateTo,       setDateTo]       = useState(initialFilters?.dateTo ?? "");
