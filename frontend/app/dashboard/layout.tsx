@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
+import SessionKeepAlive from "@/components/dashboard/SessionKeepAlive";
 
 export default async function DashboardLayout({
   children,
@@ -11,6 +12,9 @@ export default async function DashboardLayout({
   if (!session) redirect("/login");
 
   return (
-    <DashboardShell session={session}>{children}</DashboardShell>
+    <>
+      <SessionKeepAlive />
+      <DashboardShell session={session}>{children}</DashboardShell>
+    </>
   );
 }

@@ -13,7 +13,7 @@ vi.mock("axios", async importOriginal => {
 });
 
 import clientApi, {
-  isRefreshTokenRejected, isSessionKnownExpired, refreshAccessToken, refreshAccessTokenQuietly, resetSessionExpired,
+  isRefreshTokenRejected, isSessionKnownExpired, loginNeedsRenewal, refreshAccessToken, refreshAccessTokenQuietly, renewLoginIfStale, resetSessionExpired,
 } from "./clientApi";
 
 const LAST_REFRESH_KEY = "royal_hrms_last_token_refresh_at";   // the key the other tab writes after it refreshed
@@ -238,5 +238,51 @@ describe("cross-tab refresh", () => {
     finish();
     await Promise.all([refreshA, refreshB]);
     expect(mocks.post).toHaveBeenCalledTimes(1);                           // B found the cookie fresh and did not call again
+  });
+});
+
+describe("renewing the login before it expires (keep-alive)", () => {
+  const MINUTE = 60_000;
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("renews a login with no refresh on record, then leaves a young login alone", async () => {
+    refreshWillSucceed();
+    expect(loginNeedsRenewal()).toBe(true);
+    await renewLoginIfStale();
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(loginNeedsRenewal()).toBe(false);
+    await renewLoginIfStale();
+    expect(mocks.post).toHaveBeenCalledTimes(1);          // still young: no second request
+  });
+
+  it("renews again once the login is about 11 of its 15 minutes old", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-20T10:00:00Z"));
+    refreshWillSucceed();
+    await renewLoginIfStale();
+    vi.setSystemTime(new Date("2026-11-20T10:10:00Z"));
+    expect(loginNeedsRenewal()).toBe(false);              // 10 minutes: not yet
+    vi.setSystemTime(new Date("2026-11-20T10:12:00Z"));
+    expect(loginNeedsRenewal()).toBe(true);
+    await renewLoginIfStale();
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    expect(MINUTE).toBe(60_000);
+  });
+
+  it("never throws, and a failed renewal leaves the next request to end the session properly", async () => {
+    mocks.post.mockRejectedValue(networkFailure());
+    await expect(renewLoginIfStale()).resolves.toBeUndefined();
+    expect(isSessionKnownExpired()).toBe(false);
+    expect(expiredEvents).toBe(0);
+  });
+
+  it("does nothing once the session is known to be over", async () => {
+    mocks.post.mockRejectedValue(httpFailure(401));
+    await expect(clientApi.get("/leave/requests/")).rejects.toBeTruthy();
+    expect(isSessionKnownExpired()).toBe(true);
+    mocks.post.mockClear();
+    localStorage.clear();                                  // so the login would otherwise look stale
+    await renewLoginIfStale();
+    expect(mocks.post).not.toHaveBeenCalled();
   });
 });

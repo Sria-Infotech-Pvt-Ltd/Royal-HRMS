@@ -101,6 +101,18 @@ const REFRESH_LOCK_NAME = "royal-hrms-token-refresh";
 const LAST_REFRESH_KEY = "royal_hrms_last_token_refresh_at";
 const RECENT_REFRESH_WINDOW_MS = 4000;
 
+// This tab's own record of its last refresh, for when localStorage is blocked (private mode): the cross-tab record is then
+// unavailable, but the keep-alive below must still know roughly how old the login is.
+let lastRefreshInThisTab = 0;
+
+function lastRefreshAt(): number {
+  try {
+    return Number(localStorage.getItem(LAST_REFRESH_KEY) ?? "0");   // shared by every tab; 0 when nothing is recorded yet
+  } catch {
+    return lastRefreshInThisTab;                                      // storage blocked: this tab's own record
+  }
+}
+
 function recentlyRefreshedElsewhere(): boolean {
   try {
     const last = Number(localStorage.getItem(LAST_REFRESH_KEY) ?? "0");
@@ -111,7 +123,8 @@ function recentlyRefreshedElsewhere(): boolean {
 }
 
 function markRefreshedNow(): void {
-  try { localStorage.setItem(LAST_REFRESH_KEY, String(Date.now())); } catch { /* best-effort */ }
+  lastRefreshInThisTab = Date.now();
+  try { localStorage.setItem(LAST_REFRESH_KEY, String(lastRefreshInThisTab)); } catch { /* best-effort */ }
 }
 
 // The refresh call is made with plain axios (not clientApi, whose interceptor would try to refresh the refresh), so it needs
@@ -148,6 +161,25 @@ export function refreshAccessToken(): Promise<void> {
  */
 export function refreshAccessTokenQuietly(): Promise<void> {
   return refreshAccessToken().catch(() => undefined);
+}
+
+// The access login lasts 15 minutes. Renewing it once it is 11 minutes old leaves a few minutes to spare, so a request is
+// rarely the one to find it expired.
+const RENEW_LOGIN_AFTER_MS = 11 * 60 * 1000;
+
+/** True when the access login is old enough that it should be renewed now (or when no refresh has been recorded yet). */
+export function loginNeedsRenewal(now: number = Date.now()): boolean {
+  return now - lastRefreshAt() > RENEW_LOGIN_AFTER_MS;
+}
+
+/**
+ * Renew the login ahead of its expiry, for the keep-alive hook: same lock, same single in-flight call and same recent-refresh
+ * check as every other refresh, and it never throws. It does nothing once the session is known to be over or after a sign-out
+ * chosen by the person, and nothing while the login is still young.
+ */
+export function renewLoginIfStale(): Promise<void> {
+  if (_sessionKnownExpired || _intentionalLogout || !loginNeedsRenewal()) return Promise.resolve();
+  return refreshAccessTokenQuietly();
 }
 
 /**
