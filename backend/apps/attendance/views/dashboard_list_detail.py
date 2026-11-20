@@ -185,6 +185,9 @@ class HRAttendanceDetailView(APIView):
         apply_hr_edit(record, data)
 
         record.save()
+        # So the employee's own dashboard follows what HR entered (Punch out after an HR punch in).
+        from apps.attendance.services_manual_punches import sync_manual_punches
+        sync_manual_punches(record.employee, record.date, record.first_punch_in, record.last_punch_out, record.status)
 
         new_val = (
             f"{record.status} | "

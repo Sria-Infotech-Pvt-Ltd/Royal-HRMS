@@ -143,6 +143,10 @@ class HRAttendanceCreateView(APIView):
             note=data.get('note', ''),
         )
 
+        # So the employee's own dashboard shows Punch out (not Punch in again) when HR punched them in today.
+        from apps.attendance.services_manual_punches import sync_manual_punches
+        sync_manual_punches(employee, target_date, clock_in, clock_out, record.status)
+
         write_audit_log(
             employee=employee,
             date=target_date,

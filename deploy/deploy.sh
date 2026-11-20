@@ -73,6 +73,12 @@ cd "$BACKEND_DIR"
 echo "==> Running database migrations"
 "$VENV/bin/python" manage.py migrate --noinput
 
+# Days saved with an older attendance rule (e.g. an approved earlier punch-in not counted) are calculated again so employees see the
+# right hours. Only days whose saved hours differ from their punches change; HR-edited, leave, holiday and payroll-locked days are left
+# alone. It must never stop a deploy, so a failure here is reported and the deploy carries on.
+echo "==> Recalculating recent attendance days that were saved with an older rule"
+"$VENV/bin/python" manage.py recalculate_attendance_days --days 14 || echo "WARN: attendance recalculation failed (the deploy continues); run it by hand: manage.py recalculate_attendance_days"
+
 if changed "^frontend/(app/|components/|hooks/|lib/|types/|public/|package.*\.json|next\.config\.ts)"; then
     echo "==> Frontend changed - installing deps and rebuilding"
     cd "$FRONTEND_DIR"
