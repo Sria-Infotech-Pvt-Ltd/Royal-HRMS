@@ -7,6 +7,7 @@
 import { useWorkedToday } from "@/hooks/useWorkedToday";
 import type { AttendanceStatus } from "@/types/employeeDashboard";
 import { tr } from "@/lib/i18n/tr";
+import { formatBreak } from "@/lib/workedTime";
 
 interface Props {
   status: AttendanceStatus | null;
@@ -42,7 +43,8 @@ function PunchTime({ label, time, tone }: PunchTimeProps) {
 
 export default function HomeWorkedTodayCard({ status }: Props) {
   const refreshKey = `${status?.clocked_in ?? ""}|${status?.clock_in_time ?? ""}|${status?.clock_out_time ?? ""}`;
-  const { isLoading, isClockedIn, sessionSeconds, totalSeconds, punches } = useWorkedToday(refreshKey);
+  const { isLoading, isClockedIn, sessionSeconds, totalSeconds, finalSeconds, breakSeconds, punches } = useWorkedToday(refreshKey);
+  const breakLabel = formatBreak(breakSeconds);
 
   // Nothing to show until there has been a punch today.
   if (isLoading || punches.length === 0) return null;
@@ -58,12 +60,17 @@ export default function HomeWorkedTodayCard({ status }: Props) {
           <i className="ti ti-clock-hour-4" /> {tr("TIME WORKED TODAY")}
         </div>
         <div style={{ fontSize: 26, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--on-bg)", lineHeight: 1.15, marginTop: 4 }}>
-          {formatTimer(isClockedIn ? sessionSeconds : totalSeconds)}
+          {isClockedIn ? formatTimer(sessionSeconds) : formatTotal(finalSeconds)}
         </div>
         <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
           {isClockedIn
             ? <>{tr("Current session · total today")} <b style={{ color: "var(--on-bg)" }}>{formatTotal(totalSeconds)}</b></>
             : tr("Punched out · total for today")}
+        </div>
+        <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>
+          {!breakLabel ? null : isClockedIn
+            ? tr("{break} break is taken off when you punch out", { break: breakLabel })
+            : tr("{gross} in the office, less {break} break", { gross: formatTotal(totalSeconds), break: breakLabel })}
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

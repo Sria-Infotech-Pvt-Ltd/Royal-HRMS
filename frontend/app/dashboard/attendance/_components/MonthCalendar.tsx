@@ -33,7 +33,7 @@ interface Props {
 
 function describe(day: DayRecord, status: string, month: string): string {
   const times = timeRangeLabel(day);
-  return `${day.day_num} ${formatMonthLabel(month).split(" ")[0]}: ${STATUS_META[status].label}${times ? `, ${times}` : ""}`;
+  return `${day.day_num} ${formatMonthLabel(month).split(" ")[0]}: ${STATUS_META[status].label}${times ? `, ${times}` : ""}${day.is_wfh ? `, ${tr("Work from home")}` : ""}`;
 }
 
 /** The width of an element, kept up to date as the window or the layout changes. Zero until measured (and in tests, where nothing is). */
@@ -104,6 +104,11 @@ function Cell({ day, month, todayISO, highlight, selectedDate, onSelect, weekend
       {day.late_forgiven && (
         <span title={tr(LATE_LOGIN_MEANING)} style={{ alignSelf: "flex-start", fontSize: compact ? 9 : 10, fontWeight: 700, color: PALETTE.late, whiteSpace: "nowrap" }}>
           <i className="ti ti-clock-exclamation" aria-hidden="true" /> {compact ? "Late" : tr(LATE_LOGIN_LABEL)}
+        </span>
+      )}
+      {day.is_wfh && (
+        <span title={tr("Work from home")} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 3, fontSize: compact ? 9 : 10, fontWeight: 700, padding: compact ? "0 4px" : "1px 7px", borderRadius: 999, color: PALETTE.wfh, background: tint(PALETTE.wfh, 0.14), border: `1px solid ${tint(PALETTE.wfh, 0.35)}`, whiteSpace: "nowrap" }}>
+          <i className="ti ti-home-2" aria-hidden="true" />{!compact && tr("WFH")}
         </span>
       )}
       {!compact && times && <div style={{ fontSize: 10.5, color: "var(--on-variant)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{times}</div>}

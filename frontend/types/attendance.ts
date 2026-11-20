@@ -11,6 +11,10 @@ export interface TodaySession {
   is_clocked_in:   boolean;
   /** True once the day's last allowed punch is used and the person is out (one punch in and one punch out a day). */
   is_day_complete?: boolean;
+  /** The company's break in seconds. The live timer is gross; this comes off when the day is saved. */
+  break_seconds?:  number;
+  /** Finished work in whole minutes after the break: exactly the saved attendance record's figure. */
+  worked_minutes?: number;
   punches:         PunchEntry[];
   total_seconds:   number;
   session_seconds: number;

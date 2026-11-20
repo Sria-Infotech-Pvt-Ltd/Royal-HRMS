@@ -177,6 +177,8 @@ class TodayAttendanceSerializer(serializers.Serializer):
     """
     is_clocked_in   = serializers.BooleanField()
     is_day_complete = serializers.BooleanField()
+    break_seconds   = serializers.IntegerField()
+    worked_minutes  = serializers.IntegerField()
     punches         = PunchEntrySerializer(many=True)
     total_seconds   = serializers.IntegerField()
     session_seconds = serializers.IntegerField()

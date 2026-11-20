@@ -477,4 +477,6 @@ export const HINDI: Readonly<Record<string, string>> = {
   "worked today": "आज काम किया",
   "The counts could not be loaded.": "गिनती लोड नहीं हो सकी।",
   "Day Complete": "दिन पूरा",
+  "{break} break is taken off when you punch out": "पंच आउट करने पर {break} का ब्रेक घटा दिया जाता है",
+  "{gross} in the office, less {break} break": "ऑफिस में {gross}, {break} ब्रेक घटाकर",
 };

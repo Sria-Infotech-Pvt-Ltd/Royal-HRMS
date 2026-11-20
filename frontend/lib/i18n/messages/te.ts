@@ -477,4 +477,6 @@ export const TELUGU: Readonly<Record<string, string>> = {
   "worked today": "ఈ రోజు పని చేశారు",
   "The counts could not be loaded.": "లెక్కలను లోడ్ చేయలేకపోయాము.",
   "Day Complete": "రోజు పూర్తయింది",
+  "{break} break is taken off when you punch out": "పంచ్ అవుట్ చేసినప్పుడు {break} బ్రేక్ తీసివేయబడుతుంది",
+  "{gross} in the office, less {break} break": "ఆఫీసులో {gross}, {break} బ్రేక్ తీసివేసి",
 };

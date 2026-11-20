@@ -6,6 +6,7 @@ import { useTodayAttendanceMode } from "@/hooks/useTodayAttendanceMode";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
 import { formatLockoutCountdown } from "@/lib/faceApi/lockout";
 import type { PunchLocation } from "@/types/attendance";
+import { totalAfterPunchOut } from "@/lib/workedTime";
 import { useAfterMount } from "@/hooks/useAfterMount";
 import { tr } from "@/lib/i18n/tr";
 
@@ -119,7 +120,7 @@ export default function ClockWidget() {
             {fmtTimer(session?.session_seconds ?? 0)}
           </div>
           <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-            {tr("Total today:")} <span style={{ fontWeight: 600, color: "var(--on-bg)" }}>{fmtTotal(session?.total_seconds ?? 0)}</span>
+            {tr("Total today:")} <span style={{ fontWeight: 600, color: "var(--on-bg)" }}>{fmtTotal(isClockedIn ? (session?.total_seconds ?? 0) : totalAfterPunchOut(session))}</span>
           </div>
         </div>
 

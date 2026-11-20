@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { useElapsedSeconds, useRefetchWhileActive } from "@/hooks/useElapsedSeconds";
 import { API } from "@/lib/api/endpoints";
 import type { TodaySession } from "@/types/attendance";
+import { totalAfterPunchOut } from "@/lib/workedTime";
 
 /**
  * Today's worked time for the Home card: the server's figures for today plus the real time passed since they arrived (so a throttled
@@ -31,6 +32,9 @@ export function useWorkedToday(refreshKey: string) {
     isClockedIn,
     sessionSeconds: (data?.session_seconds ?? 0) + (isClockedIn ? elapsedSinceLoad : 0),
     totalSeconds: (data?.total_seconds ?? 0) + (isClockedIn ? elapsedSinceLoad : 0),
+    // Once out: the saved record's own figure (after the break), so the card shows the same number as the attendance calendar.
+    finalSeconds: totalAfterPunchOut(data),
+    breakSeconds: data?.break_seconds ?? 0,
     punches: data?.punches ?? [],
   };
 }

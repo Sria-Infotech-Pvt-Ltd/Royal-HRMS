@@ -23,6 +23,8 @@ export interface DayRecord {
   /** Punched in after the grace time; with `late_forgiven` the full hours were worked, so the day is Present and gets a "Late login" tag. */
   is_late?: boolean;
   late_forgiven?: boolean;
+  /** Worked from home: the saved day says so, or an approved work-from-home request covers it. A tag next to the status, never a status. */
+  is_wfh?: boolean;
   record_id: string | null;
 }
 

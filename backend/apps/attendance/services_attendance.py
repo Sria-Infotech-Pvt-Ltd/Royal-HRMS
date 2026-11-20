@@ -35,6 +35,42 @@ logger = logging.getLogger(__name__)
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+def pair_punches(punches: list) -> list[list]:
+    """
+    The ONE way a day's punches become In-to-Out pairs, used by the live timer and by the saved attendance record, so the two
+    can never disagree. `punches` must be in time order. Each pair is [in_time, out_time]; out_time is None while still in.
+
+    Normal days are one In then one Out per pair. Two cases come from approved corrections and HR edits, which add a punch next
+    to an existing one:
+      - a second In while a session is already open keeps the EARLIER In (the employee came early but punched late: the
+        corrected start counts, not the late punch);
+      - an Out with no session open, straight after a closed pair, extends that pair to the LATER Out (a corrected, later
+        punch-out), and is ignored if it is not later.
+    """
+    pairs: list[list] = []
+    open_in = None
+    for punch in punches:
+        if punch.punch_type == AttendancePunch.PUNCH_IN:
+            if open_in is None:
+                open_in = punch.punched_at
+        elif open_in is not None:
+            pairs.append([open_in, punch.punched_at])
+            open_in = None
+        elif pairs and punch.punched_at > pairs[-1][1]:
+            pairs[-1][1] = punch.punched_at
+    if open_in is not None:
+        pairs.append([open_in, None])
+    return pairs
+
+
+def break_minutes_from(cfg) -> int:
+    """Minutes the company takes off a finished day for the break (0 when none is configured)."""
+    if cfg and hasattr(cfg, 'working_hours'):
+        return cfg.working_hours.break_duration_minutes or 0
+    return 0
+
+
+
 def _get_settings() -> Optional[AttendanceSettings]:
     from core.cache_service import AttendanceSettingsCacheService
     return AttendanceSettingsCacheService.get()
@@ -277,6 +313,7 @@ class PunchService:
         """
         now   = timezone.now()
         today = timezone.localdate()   # IST calendar date
+        cfg   = _get_settings()
 
         punches = list(
             AttendancePunch.objects
@@ -306,6 +343,10 @@ class PunchService:
             'is_clocked_in':   is_clocked_in,
             # True once today's last allowed punch is used and the person is out: screens show "Day Complete", not a Punch button.
             'is_day_complete': cls.is_day_complete(employee, today),
+            # The live timer is gross. The saved record takes the company's break off: `break_seconds` is that break and
+            # `worked_minutes` is the finished-pairs figure after it, identical to the record's total_working_minutes.
+            'break_seconds':   break_minutes_from(cfg) * 60,
+            'worked_minutes':  cls._worked_minutes_net(punches, cfg),
             'punches':         punch_list,
             'total_seconds':   total_seconds,
             'session_seconds': session_seconds,
@@ -331,33 +372,31 @@ class PunchService:
     @staticmethod
     def _compute_total_seconds(punches: list, now: datetime) -> int:
         """
-        Sums all completed IN→OUT pairs plus any open session if still clocked in.
+        Seconds worked today (gross, before the break): every finished pair plus any open session still running.
         """
         total = 0
-        last_in: Optional[datetime] = None
-
-        for p in punches:
-            if p.punch_type == AttendancePunch.PUNCH_IN:
-                last_in = p.punched_at
-            elif p.punch_type == AttendancePunch.PUNCH_OUT and last_in is not None:
-                total  += int((p.punched_at - last_in).total_seconds())
-                last_in = None
-
-        # Open session still running
-        if last_in is not None:
-            total += int((now - last_in).total_seconds())
-
+        for start, end in pair_punches(punches):
+            total += int(((end or now) - start).total_seconds())
         return total
 
     @staticmethod
     def _compute_session_seconds(punches: list, now: datetime, is_clocked_in: bool) -> int:
-        """Seconds since the most recent IN punch (current open session)."""
+        """Seconds since the current open session began (the earliest In of it)."""
         if not is_clocked_in:
             return 0
-        for p in reversed(punches):
-            if p.punch_type == AttendancePunch.PUNCH_IN:
-                return int((now - p.punched_at).total_seconds())
+        pairs = pair_punches(punches)
+        if pairs and pairs[-1][1] is None:
+            return int((now - pairs[-1][0]).total_seconds())
         return 0
+
+    @staticmethod
+    def _worked_minutes_net(punches: list, cfg) -> int:
+        """
+        The same figure the saved attendance record shows: whole minutes of the finished pairs, less the break. Exposed so the
+        screen can show, after punch-out, exactly the number the record holds (the live timer is gross, this is net).
+        """
+        closed = sum(int((end - start).total_seconds() / 60) for start, end in pair_punches(punches) if end is not None)
+        return max(0, closed - break_minutes_from(cfg))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -479,27 +518,14 @@ class AttendanceProcessorService:
         if not punches:
             return cls._no_punch_record(for_date, cfg)
 
-        # Pair IN→OUT punches
-        pairs: list[tuple[datetime, Optional[datetime]]] = []
-        last_in: Optional[datetime] = None
-
-        for p in punches:
-            if p.punch_type == AttendancePunch.PUNCH_IN:
-                last_in = p.punched_at
-            elif p.punch_type == AttendancePunch.PUNCH_OUT and last_in is not None:
-                pairs.append((last_in, p.punched_at))
-                last_in = None
-
-        # Open session (employee still IN, no OUT yet)
-        if last_in is not None:
-            pairs.append((last_in, None))
+        # Pair IN→OUT punches (the same pairing the live timer uses)
+        pairs = pair_punches(punches)
 
         if not pairs:
             return cls._no_punch_record(for_date, cfg)
 
-        first_in   = punches[0].punched_at
-        last_punch = punches[-1]
-        last_out   = last_punch.punched_at if last_punch.punch_type == AttendancePunch.PUNCH_OUT else None
+        first_in = pairs[0][0]
+        last_out = pairs[-1][1]
 
         # Net working minutes: sum all closed pairs only
         closed_minutes = sum(
@@ -540,10 +566,7 @@ class AttendanceProcessorService:
     ) -> dict:
         """Break, late, early exit, status, overtime and note from a day's totals. The one place those rules live."""
         # Deduct break if configured
-        break_deduction = 0
-        if cfg and hasattr(cfg, 'working_hours'):
-            break_deduction = cfg.working_hours.break_duration_minutes
-        net_minutes = max(0, closed_minutes - break_deduction)
+        net_minutes = max(0, closed_minutes - break_minutes_from(cfg))
 
         # Determine status
         is_late             = cls._check_late(first_in, cfg)

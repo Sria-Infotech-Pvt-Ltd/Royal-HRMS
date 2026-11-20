@@ -109,6 +109,19 @@ class HREmployeeMonthView(APIView):
             )
         }
 
+        # Work from home is a tag next to the status, not a status of its own (a day can be Late and WFH). A day is WFH when its
+        # saved record says so, or when an approved work-from-home request covers it (so an approved day shows even before, or
+        # without, a punch). One query for the month.
+        from apps.hrms.models import REQ_APPROVED, WorkFromHomeRequest
+        wfh_ranges = list(WorkFromHomeRequest.objects.filter(
+            employee=employee, status=REQ_APPROVED, start_date__lte=month_end, end_date__gte=month_start,
+        ).values_list('start_date', 'end_date'))
+
+        def is_wfh_day(day, record) -> bool:
+            if record is not None and record.work_mode == AttendanceRecord.WORK_MODE_WFH:
+                return True
+            return any(start <= day <= end for start, end in wfh_ranges)
+
         STATUS_LABELS = {
             'present': 'Present', 'late': 'Late Arrival', 'half_day': 'Half Day',
             'on_leave': 'On Leave', 'weekly_off': 'Week Off', 'holiday': 'Holiday',
@@ -119,6 +132,7 @@ class HREmployeeMonthView(APIView):
                         'weekly_off', 'holiday', 'incomplete')
         stats = {k: 0 for k in stat_keys}
         stats['lop_days'] = 0
+        stats['wfh'] = 0
         total_minutes = 0
 
         days = []
@@ -141,6 +155,9 @@ class HREmployeeMonthView(APIView):
                 stats['late'] += 1
             if status in LOP_STATUSES:
                 stats['lop_days'] += 1
+            day_is_wfh = is_wfh_day(current, rec)
+            if day_is_wfh:
+                stats['wfh'] += 1
             total_minutes += minutes
 
             days.append({
@@ -159,6 +176,7 @@ class HREmployeeMonthView(APIView):
                 'is_late':        bool(rec and rec.is_late),
                 'late_forgiven':  bool(rec and rec.is_late and status == 'present'),
                 'record_id':      str(rec.id) if rec else None,
+                'is_wfh':         day_is_wfh,
             })
             current += datetime.timedelta(days=1)
 

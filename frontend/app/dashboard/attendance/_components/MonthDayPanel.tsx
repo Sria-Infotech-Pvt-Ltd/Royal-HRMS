@@ -76,6 +76,12 @@ export default function MonthDayPanel({ day, todayISO, mayMark, onViewDetail, on
             <span><strong>{tr(LATE_LOGIN_LABEL)}</strong>{day.clock_in ? `: clocked in at ${day.clock_in}, after the grace time.` : "."} Full hours were completed, so the day counts as Present.</span>
           </div>
         )}
+        {day.is_wfh && (
+          <div role="note" style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, padding: "9px 12px", borderRadius: 12, background: tint(PALETTE.wfh, 0.1), border: `1px solid ${tint(PALETTE.wfh, 0.3)}`, marginBottom: 12 }}>
+            <i className="ti ti-home-2" aria-hidden="true" style={{ color: PALETTE.wfh, fontSize: 18 }} />
+            <span><strong>{tr("Work from home")}</strong></span>
+          </div>
+        )}
         {day.is_flagged && (
           <div role="note" style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, padding: "9px 12px", borderRadius: 12, background: tint(meta.colour, 0.1), border: `1px solid ${tint(meta.colour, 0.3)}`, marginBottom: 12 }}>
             <i className="ti ti-flag-3-filled" aria-hidden="true" style={{ color: meta.colour, fontSize: 17 }} /> Flagged for review
