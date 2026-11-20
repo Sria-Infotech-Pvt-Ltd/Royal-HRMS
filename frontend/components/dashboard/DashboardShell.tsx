@@ -134,10 +134,9 @@ export default function DashboardShell({
 
         {/* Right-side utilities */}
         <div className="navright order-2 md:order-none">
-          {/* Hidden on the ESS shell, as in the reference (.ess-mode .navsearch). */}
-          {!isEssPage && (
-            <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
-          )}
+          {/* Shown on every page, the employee workspace included: it finds the pages the person may open, and employees only for
+              people who hold employees.view. */}
+          <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
           <LanguagePicker />
           <ThemePicker />
           <NotificationBell />

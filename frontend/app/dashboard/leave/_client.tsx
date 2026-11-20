@@ -40,14 +40,6 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
       <LeaveStyles />
       <div className="page-header">
         <div>
-          {onBack && (
-            <button
-              onClick={onBack}
-              style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
-            >
-              <i className="ti ti-arrow-left" /> {tr("Back to overview")}
-            </button>
-          )}
           <div className="page-title">{tr("Leave")}</div>
           <div className="page-sub">{tr("Balances, requests, holidays and team coverage.")}</div>
         </div>
@@ -61,6 +53,11 @@ export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Pr
           <button className="btn btn-filled" onClick={() => setShowApply(true)} suppressHydrationWarning>
             {tr("Request leave")}
           </button>
+          {onBack && (
+            <button className="btn btn-ghost" onClick={onBack}>
+              <i className="ti ti-arrow-left" /> {tr("Back to overview")}
+            </button>
+          )}
         </div>
       </div>
 

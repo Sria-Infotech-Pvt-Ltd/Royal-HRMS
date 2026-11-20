@@ -97,14 +97,6 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
       {/* Page header */}
       <div className="page-header">
         <div>
-          {onBack && (
-            <button
-              onClick={onBack}
-              style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
-            >
-              <i className="ti ti-arrow-left" /> {t("Back to overview")}
-            </button>
-          )}
           <div className="page-title">
             {t("Attendance & Time")}{!unrestricted && effectiveBranch ? ` — ${effectiveBranch}` : ""}
           </div>
@@ -112,6 +104,11 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
         </div>
         <div className="page-actions">
           <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{today}</span>
+          {onBack && (
+            <button className="btn btn-ghost" onClick={onBack}>
+              <i className="ti ti-arrow-left" /> {t("Back to overview")}
+            </button>
+          )}
         </div>
       </div>
 

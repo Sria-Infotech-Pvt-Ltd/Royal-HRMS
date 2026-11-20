@@ -191,6 +191,14 @@ def _approval_scope_filter(user) -> 'Q':
     return Q(employee=user)
 
 
+def _team_list_filter(user) -> 'Q':
+    """What the Approvals page LIST may show an approver: everything the approval queue shows (_approval_scope_filter, still only the
+    requests waiting for them) PLUS the requests they were the assigned L1 / L2 approver of, in any status. Without the second part a
+    manager or HR user's Approved and Rejected lists were always empty: the queue filter drops a request the moment it is decided.
+    Only the list uses this; the queue filter itself (counts, search, reports, voice) is unchanged."""
+    return _approval_scope_filter(user) | ((Q(l1_approver=user) | Q(l2_approver=user)) & ~Q(employee=user))
+
+
 def _calendar_scope_filter(user) -> 'Q':
     """
     Scope filter for the team calendar.
@@ -1062,6 +1070,7 @@ __all__ = [
     '_can_hr_access_request',
     '_can_approve_at_stage',
     '_approval_scope_filter',
+    '_team_list_filter',
     '_calendar_scope_filter',
     '_allocate_leaves_for_employee',
     '_get_holiday_dates',

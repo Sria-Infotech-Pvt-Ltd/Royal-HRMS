@@ -81,7 +81,7 @@ class LeaveRequestListCreateView(APIView):
             queryset = qs_base.filter(employee=target_user)
         elif scope == 'team' and has_approve:
             # Approval queue — scoped by role, own requests excluded
-            queryset = qs_base.filter(_approval_scope_filter(request.user))
+            queryset = qs_base.filter(_team_list_filter(request.user)).distinct()
         else:
             # Default: return the requesting user's own requests only
             queryset = qs_base.filter(employee=request.user)

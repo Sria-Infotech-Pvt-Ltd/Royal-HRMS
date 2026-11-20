@@ -204,25 +204,26 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
     <>
       <div className="page-header">
         <div>
-          {onBack && (
-            <button
-              onClick={onBack}
-              style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
-            >
-              <i className="ti ti-arrow-left" /> Back
-            </button>
-          )}
           <div className="page-title">Organization Management</div>
           <div className="page-sub">Org units, the positions inside them, and who holds each seat. Modeled on positions, so structure exists before anyone is hired.</div>
         </div>
-        {canEdit && (
+        {(canEdit || onBack) && (
           <div className="page-actions">
-            <button className="btn btn-ghost" onClick={() => setManageJobsOpen(true)}>
-              <i className="ti ti-briefcase" /> Manage job templates
-            </button>
-            <button className="btn btn-filled" onClick={() => setAddUnitParent("new")}>
-              <i className="ti ti-plus" /> Add org unit
-            </button>
+            {canEdit && (
+              <button className="btn btn-ghost" onClick={() => setManageJobsOpen(true)}>
+                <i className="ti ti-briefcase" /> Manage job templates
+              </button>
+            )}
+            {canEdit && (
+              <button className="btn btn-filled" onClick={() => setAddUnitParent("new")}>
+                <i className="ti ti-plus" /> Add org unit
+              </button>
+            )}
+            {onBack && (
+              <button className="btn btn-ghost" onClick={onBack}>
+                <i className="ti ti-arrow-left" /> Back
+              </button>
+            )}
           </div>
         )}
       </div>

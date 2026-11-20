@@ -110,6 +110,13 @@ def _approval_scope_filter(user) -> 'Q':
     return Q(employee=user)
 
 
+def _team_list_filter(user) -> 'Q':
+    """What the Approvals page LIST may show an approver: the approval queue (still only requests waiting for them) PLUS the requests they
+    were the assigned L1 / L2 approver of, in any status, so their Approved and Rejected lists are not always empty. Only the list uses
+    this; _approval_scope_filter itself (search, reports, voice) is unchanged."""
+    return _approval_scope_filter(user) | ((Q(l1_approver=user) | Q(l2_approver=user)) & ~Q(employee=user))
+
+
 class WorkFromHomeRequestListCreateView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
@@ -129,7 +136,7 @@ class WorkFromHomeRequestListCreateView(APIView):
                 return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
             queryset = qs_base.filter(employee=target_user)
         elif scope == 'team' and has_approve:
-            queryset = qs_base.filter(_approval_scope_filter(request.user))
+            queryset = qs_base.filter(_team_list_filter(request.user)).distinct()
         else:
             queryset = qs_base.filter(employee=request.user)
 

@@ -17,7 +17,12 @@ export default function DashboardFooter() {
     <footer className="site-footer">
       <div className="footer-inner">
         <div className="footer-brand">
-          <span className="footer-logo">AI</span>
+          {/* The same AIRA mark as the top-left of the app: the product's logo, not the company's. */}
+          <span className="footer-logo" aria-hidden="true">
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
+              <path d="M12 3 21 8v8l-9 5-9-5V8z" />
+            </svg>
+          </span>
           <span>
             <b>AIRA HR Operations</b>
             <small>Artificial Intelligence Resources Assistance</small>
@@ -25,10 +30,10 @@ export default function DashboardFooter() {
         </div>
 
         <div className="footer-links" aria-label="Footer navigation">
-          <button type="button">Privacy &amp; retention</button>
-          <button type="button">Security</button>
+          <button type="button" onClick={() => router.push("/dashboard/privacy")}>Privacy &amp; retention</button>
+          <button type="button" onClick={() => router.push("/dashboard/security")}>Security</button>
           <button type="button" onClick={() => router.push("/dashboard/settings/audit")}>Audit trail</button>
-          <button type="button">Support</button>
+          <button type="button" onClick={() => router.push("/dashboard/ess?tab=hrHelp")}>Support</button>
         </div>
 
         <div className="footer-meta">{IS_DEMO_BUILD ? "Interactive demo · " : ""}Role-aware access · © 2026 AIRA</div>

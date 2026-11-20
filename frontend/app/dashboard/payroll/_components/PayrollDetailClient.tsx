@@ -88,14 +88,6 @@ export default function PayrollDetailClient({ initialTab, onBack }: { initialTab
     <div>
       <div className="page-header">
         <div>
-          {onBack && (
-            <button
-              onClick={onBack}
-              style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
-            >
-              <i className="ti ti-arrow-left" /> Back to overview
-            </button>
-          )}
           <div className="page-title">Payroll Management</div>
           <div className="page-sub">
             Process, approve and disburse salaries —{" "}
@@ -110,12 +102,17 @@ export default function PayrollDetailClient({ initialTab, onBack }: { initialTab
             )}
           </div>
         </div>
-        {!runWizard && (
+        {(!runWizard || onBack) && (
           <div className="page-actions">
-            {canCreate && (
+            {!runWizard && canCreate && (
               <button className="btn btn-filled btn-sm" onClick={() => openFresh()}>
                 <i className="ti ti-player-play" />
                 {isAdmin ? "Run Payroll" : `Run Payroll — ${userBranch}`}
+              </button>
+            )}
+            {onBack && (
+              <button className="btn btn-ghost btn-sm" onClick={onBack}>
+                <i className="ti ti-arrow-left" /> Back to overview
               </button>
             )}
           </div>
