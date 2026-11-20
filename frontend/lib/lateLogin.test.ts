@@ -12,8 +12,8 @@ describe("late login", () => {
 
   it("explains it with the punch-in time and the grace time when known", () => {
     expect(lateLoginText({ late_forgiven: true, clockIn: "10:14", late_after: "09:15" }))
-      .toBe("Punched in 10:14 (after 09:15). Full hours were completed, so the day counts as Present.")
-    expect(lateLoginText({ late_forgiven: true })).toBe("Punched in. Full hours were completed, so the day counts as Present.")
+      .toBe("Punched in 10:14 (after 09:15).")
+    expect(lateLoginText({ late_forgiven: true })).toBe("Punched in.")
   })
 
   it("has no text for an ordinary day", () => {

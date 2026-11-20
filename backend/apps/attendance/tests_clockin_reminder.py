@@ -15,7 +15,7 @@ from django.test import TestCase
 
 from apps.accounts.factories import make_user
 from apps.accounts.models import EmailTemplate, User
-from apps.attendance.models import AttendancePunch, ClockInReminder, MissingPunchNotification, PunchRulesPolicy
+from apps.attendance.models import AttendancePunch, AttendanceRecord, ClockInReminder, MissingPunchNotification, PunchRulesPolicy
 from apps.attendance.services_clockin_reminder import send_clock_in_reminders
 from apps.hrms.models import REQ_APPROVED, REQ_PENDING, LeaveRequest
 
@@ -91,6 +91,21 @@ class ClockInReminderTests(TestCase):
         punch(self.person)
         self.assertEqual(self.run_at(10, 30)['sent'], 0)
         send.assert_not_called()
+
+    def test_a_day_hr_marked_without_any_punch_or_times_is_not_emailed(self, send, *_):
+        for status in ('present', 'late', 'half_day', 'incomplete', 'on_leave', 'weekly_off', 'holiday'):
+            AttendanceRecord.objects.filter(employee=self.person).delete()
+            AttendanceRecord.objects.create(employee=self.person, date=TUESDAY, status=status)
+            self.assertEqual(self.run_at(10, 30)['sent'], 0, status)
+        send.assert_not_called()
+
+    def test_marking_someone_absent_does_not_stop_the_reminder(self, send, *_):
+        AttendanceRecord.objects.create(employee=self.person, date=TUESDAY, status='absent')
+        self.assertEqual(self.run_at(10, 30)['sent'], 1)
+
+    def test_a_record_for_another_day_does_not_count(self, send, *_):
+        AttendanceRecord.objects.create(employee=self.person, date=TUESDAY - dt.timedelta(days=1), status='present')
+        self.assertEqual(self.run_at(10, 30)['sent'], 1)
 
     def test_a_punch_entered_by_hr_counts_too(self, send, *_):
         punch(self.person, source='manual')

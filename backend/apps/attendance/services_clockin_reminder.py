@@ -6,6 +6,9 @@ reminder time has passed (10:00 by default, a field on the default punch policy)
 
 Skipped, so the email only reaches people who really should have punched in:
   - anyone with a punch today (an HR-entered punch counts);
+  - anyone whose attendance for today HR or an admin has already marked (a present / late / half day / incomplete / on leave / weekly
+    off / holiday record, with or without times): the day is accounted for, so "you have not clocked in" would be wrong. Marking someone
+    Absent does not stop the reminder;
   - anyone on approved leave today (a half day in the afternoon still has to come in the morning, so that one is reminded);
   - weekly offs and holidays;
   - people who have not joined, have left, or are past an approved last working day, and accounts with no employee id.
@@ -30,6 +33,15 @@ DEFAULT_REMINDER_TIME = time(10, 0)
 DEFAULT_SHIFT_END = time(18, 0)
 
 
+def _marked_today_statuses() -> tuple[str, ...]:
+    """Statuses that mean the day is already accounted for. Absent is left out: it says they did not come, not that they are covered."""
+    from apps.attendance.models import AttendanceRecord
+    return (
+        AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE, AttendanceRecord.STATUS_HALF_DAY, AttendanceRecord.STATUS_INCOMPLETE,
+        AttendanceRecord.STATUS_ON_LEAVE, AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY,
+    )
+
+
 def reminder_settings() -> tuple[bool, time]:
     """(enabled, time of day) from the default active punch policy; the shipped defaults (on, 10:00) when no policy exists."""
     from apps.attendance.models import PunchRulesPolicy
@@ -50,7 +62,7 @@ def send_clock_in_reminders(now: Optional[datetime] = None) -> dict:
     """Email every expected, not-yet-punched-in employee once today. Safe to run every few minutes."""
     from apps.accounts.models import User
     from apps.accounts.services_lifecycle_status import attendance_eligible_q
-    from apps.attendance.models import AttendancePunch, ClockInReminder
+    from apps.attendance.models import AttendancePunch, AttendanceRecord, ClockInReminder
     from apps.attendance.services_attendance import AttendanceProcessorService
     from apps.hrms.models import DURATION_AFTERNOON, REQ_APPROVED, LeaveRequest
 
@@ -68,6 +80,11 @@ def send_clock_in_reminders(now: Optional[datetime] = None) -> dict:
     employees = list(User.objects.filter(attendance_eligible_q(as_of=today)).exclude(employee_id=''))
     ids = [employee.pk for employee in employees]
     punched = set(AttendancePunch.objects.filter(employee_id__in=ids, punched_at__date=today).values_list('employee_id', flat=True))
+    # HR / an admin may have marked today without any punch or times; the dashboard's punch button can't know that, this can.
+    marked = set(
+        AttendanceRecord.objects.filter(employee_id__in=ids, date=today, status__in=_marked_today_statuses())
+        .values_list('employee_id', flat=True)
+    )
     on_leave = set(
         LeaveRequest.objects.filter(employee_id__in=ids, status=REQ_APPROVED, start_date__lte=today, end_date__gte=today)
         .exclude(duration=DURATION_AFTERNOON).values_list('employee_id', flat=True)
@@ -76,7 +93,7 @@ def send_clock_in_reminders(now: Optional[datetime] = None) -> dict:
 
     sent = 0
     for employee in employees:
-        if employee.pk in punched or employee.pk in on_leave or employee.pk in already or not employee.email:
+        if employee.pk in punched or employee.pk in marked or employee.pk in on_leave or employee.pk in already or not employee.email:
             continue
         if AttendanceProcessorService._is_holiday(today, employee.branch or ''):
             continue

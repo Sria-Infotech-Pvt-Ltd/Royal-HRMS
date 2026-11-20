@@ -469,7 +469,7 @@ export const HINDI: Readonly<Record<string, string>> = {
   "Your {financialYearLabel} regime and declarations were approved by HR. Further changes follow payroll approval.": "आपकी {financialYearLabel} की व्यवस्था और घोषणाएँ एचआर द्वारा स्वीकृत हो गई हैं। आगे के बदलाव पेरोल स्वीकृति के अनुसार होंगे।",
   "Review your {financialYearLabel} regime and declarations before {fyEndLabel}. Changes follow payroll approval.": "{fyEndLabel} से पहले अपनी {financialYearLabel} की व्यवस्था और घोषणाओं की समीक्षा करें। बदलाव पेरोल स्वीकृति के अनुसार होंगे।",
   "after {time}": "{time} के बाद",
-  "Punched in{at}{after}. Full hours were completed, so the day counts as Present.": "पंच इन{at}{after}। पूरे घंटे पूरे हुए, इसलिए दिन उपस्थित गिना जाता है।",
+  "Punched in{at}{after}.": "पंच इन{at}{after}।",
   "Late login": "देर से लॉगिन",
   "Punched in after the grace time, but the full hours were worked, so the day counts as Present.": "ग्रेस समय के बाद पंच इन किया, लेकिन पूरे घंटे काम किए, इसलिए दिन उपस्थित गिना जाता है।",
   "Today completed": "आज का दिन पूरा",
@@ -479,4 +479,6 @@ export const HINDI: Readonly<Record<string, string>> = {
   "Day Complete": "दिन पूरा",
   "{break} break is taken off when you punch out": "पंच आउट करने पर {break} का ब्रेक घटा दिया जाता है",
   "{gross} in the office, less {break} break": "ऑफिस में {gross}, {break} ब्रेक घटाकर",
+  "Back": "वापस",
+  "Contact HR": "एचआर से संपर्क करें",
 };

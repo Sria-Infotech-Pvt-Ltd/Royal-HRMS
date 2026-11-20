@@ -469,7 +469,7 @@ export const TELUGU: Readonly<Record<string, string>> = {
   "Your {financialYearLabel} regime and declarations were approved by HR. Further changes follow payroll approval.": "మీ {financialYearLabel} విధానం మరియు ప్రకటనలను HR ఆమోదించింది. తదుపరి మార్పులు పేరోల్ ఆమోదాన్ని అనుసరిస్తాయి.",
   "Review your {financialYearLabel} regime and declarations before {fyEndLabel}. Changes follow payroll approval.": "{fyEndLabel} లోపు మీ {financialYearLabel} విధానం మరియు ప్రకటనలను సమీక్షించండి. మార్పులు పేరోల్ ఆమోదాన్ని అనుసరిస్తాయి.",
   "after {time}": "{time} తర్వాత",
-  "Punched in{at}{after}. Full hours were completed, so the day counts as Present.": "పంచ్ ఇన్{at}{after}. పూర్తి గంటలు పూర్తయ్యాయి, కాబట్టి ఆ రోజు హాజరుగా లెక్కించబడుతుంది.",
+  "Punched in{at}{after}.": "పంచ్ ఇన్{at}{after}.",
   "Late login": "ఆలస్య లాగిన్",
   "Punched in after the grace time, but the full hours were worked, so the day counts as Present.": "గ్రేస్ సమయం తర్వాత పంచ్ ఇన్ చేశారు, కానీ పూర్తి గంటలు పని చేశారు, కాబట్టి ఆ రోజు హాజరుగా లెక్కించబడుతుంది.",
   "Today completed": "ఈ రోజు పూర్తయింది",
@@ -479,4 +479,6 @@ export const TELUGU: Readonly<Record<string, string>> = {
   "Day Complete": "రోజు పూర్తయింది",
   "{break} break is taken off when you punch out": "పంచ్ అవుట్ చేసినప్పుడు {break} బ్రేక్ తీసివేయబడుతుంది",
   "{gross} in the office, less {break} break": "ఆఫీసులో {gross}, {break} బ్రేక్ తీసివేసి",
+  "Back": "వెనుకకు",
+  "Contact HR": "హెచ్‌ఆర్‌ను సంప్రదించండి",
 };

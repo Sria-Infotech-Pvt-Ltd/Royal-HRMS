@@ -236,7 +236,8 @@ describe("EssAttendanceCalendar legend", () => {
     });
     expect(html.match(/class="ess-cal-late"/g)?.length).toBeGreaterThanOrEqual(3);   // cell tag + legend + key (once each)
     expect(html).toContain("Late login");
-    expect(html).toContain("Punched in 10:14 (after 09:15). Full hours were completed, so the day counts as Present.");
+    expect(html).toContain("Punched in 10:14 (after 09:15).");
+    expect(html).not.toContain("Full hours were completed");
     // The on-time Present day and the day that is simply Late get no tag.
     const cellFor = (day: string) => html.split('role="cell"').find(cell => cell.includes(`class="ess-cal-date"`) && new RegExp(`class="ess-cal-date"[^>]*>${day}<`).test(cell)) ?? "";
     expect(cellFor("10")).toContain("ess-cal-late");

@@ -49,6 +49,28 @@ class HrPunchSyncTests(TestCase):
         self.assertEqual((punch.punch_type, punch.source), ('IN', 'manual'))
         self.assertEqual(timezone.localtime(punch.punched_at).strftime('%H:%M'), '09:05')
 
+    def test_marking_today_as_worked_without_a_clock_in_time_is_refused(self):
+        for status in ('present', 'late', 'half_day', 'incomplete'):
+            response = self._hr_marks(status=status, clock_in=None)
+            self.assertEqual(response.status_code, 400, status)
+            self.assertIn('clock-in time', response.data['message'])
+        self.assertEqual(AttendanceRecord.objects.filter(employee=self.employee).count(), 0)
+
+    def test_the_time_is_not_needed_for_other_statuses_or_other_days(self):
+        self.assertEqual(self._hr_marks(status='on_leave', clock_in=None).status_code, 201)
+        AttendanceRecord.objects.filter(employee=self.employee).delete()
+        yesterday = (TODAY - datetime.timedelta(days=1)).isoformat()
+        self.assertEqual(self._hr_marks(date=yesterday, status='present', clock_in=None).status_code, 201)
+
+    def test_editing_today_to_a_worked_status_needs_a_time_unless_one_exists(self):
+        record_id = self._hr_marks(status='on_leave', clock_in=None).data['data']['record_id']
+        url = reverse('hr-attendance-detail', kwargs={'pk': record_id})
+        refused = self._client(self.hr).patch(url, {'status': 'present', 'reason': 'He came in'}, format='json')
+        self.assertEqual(refused.status_code, 400, refused.data)
+        allowed = self._client(self.hr).patch(url, {'status': 'present', 'clock_in': '09:10:00', 'reason': 'He came in'}, format='json')
+        self.assertEqual(allowed.status_code, 200, allowed.data)
+        self.assertTrue(self._session()['is_clocked_in'])
+
     def test_when_the_person_then_punches_out_the_day_closes_normally(self):
         self._hr_marks()
         out = self._client(self.employee).post(reverse('attendance-punch'), {'punch_type': 'OUT', 'attendance_mode': 'field'}, format='json')

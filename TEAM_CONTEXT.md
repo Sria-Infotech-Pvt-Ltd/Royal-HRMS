@@ -6552,3 +6552,23 @@ Frontend: `tsc` clean, 204 test files / 1688 tests pass, `npm run build` passes,
 **i18n test fix:** `lib/i18n/translate.test.ts` was failing because `components/dashboard/InfoPage.tsx`'s `tr("Back")` and `tr("Contact HR")` had no entries in `hi.ts` / `te.ts`. Added: Hindi "वापस" / "एचआर से संपर्क करें", Telugu "వెనుకకు" / "హెచ్‌ఆర్‌ను సంప్రదించండి". **These are machine-written; have a Hindi and a Telugu reader check them.**
 
 **Process note:** while checking the i18n failure a `git stash` / `git stash pop` was run on the shared working tree (restored cleanly, nothing lost). Do not do that here: other sessions hold uncommitted work.
+
+## HR-marked day: reminder email no longer sent; today's worked status needs a clock-in time (2026-11-20)
+
+**By:** New-AI session - **Branch:** New-AI. Backend + the late-login frontend text change (see the previous section, whose code was reset out of an earlier commit by another session and is committed together with this). Tests run on a local test DB (`TEST_DB_SUFFIX=remind_fix`): `apps.attendance.tests_clockin_reminder`, `tests_hr_punch_sync`, `tests_hr_entry_lifecycle`, `tests_hr_edit_recalculates` = 49 OK; `vitest` lateLogin / EssAttendanceCalendar / i18n OK. **Not tried through the admin screen or on the deployed server.**
+
+**Symptom (UAT, aira.nxsys.in):** an employee whose attendance an admin had marked still saw **Punch in** on his own dashboard and got the "You have not clocked in yet" reminder email.
+
+**Cause:** the employee's Punch in / Punch out button (`TodayAttendanceView` -> `PunchService.get_today_session`) reads only raw `AttendancePunch` rows. HR's "mark attendance" / edit writes the day's `AttendanceRecord`. `services_manual_punches.sync_manual_punches` bridges that (commit 966718f9, on New-AI, **not on demo**) but only for TODAY, a worked status (present / late / half day / incomplete) AND a clock-in time. A mark with no time, or made before 966718f9 was deployed, leaves no punch. `services_clockin_reminder.py` also looked only at punches (plus approved leave and the weekly-off / holiday schedule), never at the record.
+
+**Fixes:**
+1. `send_clock_in_reminders` skips anyone with an `AttendanceRecord` for today whose status is present, late, half day, incomplete, on leave, weekly off or holiday (`_marked_today_statuses`). **Absent does not stop the reminder** (it means "did not come", not "covered"). 3 new tests in `tests_clockin_reminder.py`.
+2. New `todays_clock_in_problem()` in `services_manual_punches.py`: HR cannot mark (`HRAttendanceCreateView`, `views/manual_create_ot.py`) or edit (`HRAttendanceDetailView.patch`, `views/dashboard_list_detail.py`) TODAY as a worked status without a clock-in time; 400 "Enter the clock-in time...". Not required for other statuses, other days, or when the person already has a punch today. On edit the time that counts is the one sent, else the one already on the record. 3 new tests in `tests_hr_punch_sync.py`. The existing forms already show the server message as a toast; no frontend change.
+
+**Not fixed / things to know:**
+- Old records are NOT repaired. For someone marked before the sync was deployed (or without a time), an admin opens today's record, Edit, saves the Clock In time: that save runs `sync_manual_punches` and creates the punch, so the dashboard then shows Punch out. Only works for today's date.
+- The CSV import (`services_hr_ops._upsert_attendance_record`) writes records with no punches and does not call the sync, so importing today's attendance has the same dashboard gap. Not changed.
+- Option offered but not built: a one-off command to add the missing punches for everyone marked today. Option B (a "Marked present by HR" state on the dashboard instead of the punch button) was not chosen.
+- 966718f9 is not on `origin/demo`; whether UAT runs it was not confirmed.
+
+**Process notes:** another session reset and recommitted `7969170f` as `df6f3d6b`, which left my late-login / i18n frontend changes uncommitted again. Check `git status` after another session's commit before assuming your files went in.

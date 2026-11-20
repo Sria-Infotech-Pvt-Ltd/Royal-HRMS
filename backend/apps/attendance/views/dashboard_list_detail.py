@@ -176,6 +176,14 @@ class HRAttendanceDetailView(APIView):
             )
 
         data = ser.validated_data
+        # The time that will be on the record after this edit: the one sent, or the one it already has.
+        from apps.attendance.services_manual_punches import todays_clock_in_problem
+        missing_time = todays_clock_in_problem(
+            record.employee, record.date, data.get('status', record.status),
+            data['clock_in'] if 'clock_in' in data else record.first_punch_in,
+        )
+        if missing_time:
+            return error(missing_time, http_status=400)
         old_val = (
             f"{record.status} | "
             f"{record.first_punch_in or '—'} → {record.last_punch_out or '—'}"

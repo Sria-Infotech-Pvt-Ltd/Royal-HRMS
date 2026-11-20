@@ -17,10 +17,10 @@ export function isLateLogin(record: LateLoginRecord | null | undefined): boolean
   return Boolean(record?.late_forgiven)
 }
 
-/** "Punched in 10:14 (after 09:15). Full hours were completed, so the day counts as Present."; null when the day was not a late login. */
+/** "Punched in 10:14 (after 09:15)."; null when the day was not a late login. */
 export function lateLoginText(record: LateLoginRecord | null | undefined): string | null {
   if (!record || !isLateLogin(record)) return null
   const at = record.clockIn ? ` ${record.clockIn}` : ""
   const after = record.late_after ? ` (${tr("after {time}", { time: record.late_after })})` : ""
-  return tr("Punched in{at}{after}. Full hours were completed, so the day counts as Present.", { at, after })
+  return tr("Punched in{at}{after}.", { at, after })
 }

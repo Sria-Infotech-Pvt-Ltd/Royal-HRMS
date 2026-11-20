@@ -123,6 +123,10 @@ class HRAttendanceCreateView(APIView):
 
         clock_in  = data.get('clock_in')
         clock_out = data.get('clock_out')
+        from apps.attendance.services_manual_punches import todays_clock_in_problem
+        missing_time = todays_clock_in_problem(employee, target_date, data['status'], clock_in)
+        if missing_time:
+            return error(missing_time, http_status=400)
         total_minutes = 0
         if clock_in and clock_out:
             import datetime as _dt
