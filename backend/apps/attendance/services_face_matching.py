@@ -13,8 +13,11 @@ truth for the whole feature:
     approved registration must submit a live face descriptor that matches it
     before the punch is accepted.
 
-Every source is gated except 'mobile' (see _UNVERIFIED_SOURCES below). The
-check fails closed: an unexpected source value is verified, never skipped.
+Every punch source is gated — web, voice and mobile alike, clock-in and
+clock-out. There is no source-based exemption: a client-supplied `source`
+never decides whether a face is checked. (Mobile was exempt until the app
+could submit a descriptor; that exemption let anyone clock in as any
+employee, so it was removed — mobile now needs a face_embedding like web.)
 HR 'manual' punches don't come through here at all — they are created
 server-side by their own workflows (services_hr_corrections /
 services_invalid_punch), and the punch endpoint refuses 'manual'/'biometric'.
@@ -47,7 +50,7 @@ from typing import Optional
 from django.conf import settings
 from django.db import transaction
 
-from apps.attendance.models import AttendancePunch, FaceRegistrationRequest, FaceVerificationAttempt
+from apps.attendance.models import FaceRegistrationRequest, FaceVerificationAttempt
 from apps.attendance.services_face_antispoofing import FaceAntiSpoofingGuard, fingerprint_embedding
 
 logger = logging.getLogger(__name__)
@@ -76,13 +79,6 @@ FACE_MATCH_MAX_DISTANCE = 0.6
 # draw barely lowered the odds. This band is now a hard reject with no
 # escalation path — retrying can never turn it into an accept.
 FACE_MATCH_LOW_CONFIDENCE_MARGIN = 0.05
-
-# KNOWN GAP, temporary: the mobile app does not yet submit a face descriptor,
-# so mobile punches are still not face-checked (stored face_verified=False).
-# Remove 'mobile' from this set once the app sends a compatible descriptor.
-# Deliberately an exemption list, not an allow-list of gated sources, so any
-# other source value (manual, biometric, system, unknown) is verified.
-_UNVERIFIED_SOURCES = frozenset({AttendancePunch.SOURCE_MOBILE})
 
 _EMBEDDING_REQUIRED_MESSAGE = (
     'Face verification is required for clock-in. Please allow camera access and try again.'
@@ -212,8 +208,8 @@ class FaceVerificationService:
         capture_session_id: str = '', liveness_passed: Optional[bool] = None,
         liveness_score: Optional[float] = None, is_secure: bool = True,
     ) -> FaceVerificationOutcome:
-        if source in _UNVERIFIED_SOURCES:
-            return cls._not_required(submitted_embedding)
+        # `source` is recorded on the attempt row only — it never exempts a
+        # punch from verification (see module docstring).
         if not is_face_verification_mandatory():
             # Org-wide toggle is off — the feature is switched off entirely,
             # even for someone who has an approved registration from before.
