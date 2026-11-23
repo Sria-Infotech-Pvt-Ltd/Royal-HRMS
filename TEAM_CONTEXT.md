@@ -6572,3 +6572,21 @@ Frontend: `tsc` clean, 204 test files / 1688 tests pass, `npm run build` passes,
 - 966718f9 is not on `origin/demo`; whether UAT runs it was not confirmed.
 
 **Process notes:** another session reset and recommitted `7969170f` as `df6f3d6b`, which left my late-login / i18n frontend changes uncommitted again. Check `git status` after another session's commit before assuming your files went in.
+
+## Production 500 on /api/attendance/dashboard/: Branch has no `name` (2026-11-23)
+
+**By:** New-AI session - **Branch:** New-AI. Backend only. Tests on a local test DB: `apps.attendance.tests_invalid_punch_list`, `tests_hr_punch_sync`, `tests_hr_edit_recalculates`, `tests_clockin_reminder` = 45 OK. **Not deployed or verified on aira.nxsys.in.**
+
+**Symptom (production, 20 Nov 2026):** `GET /api/attendance/dashboard/` returned 500 ("An unexpected error occurred") at 15:36, 17:40 and 18:23 IST. Traceback: `HRAttendanceDashboardView.get` -> `get_dashboard_stats` -> `_count_invalid_punches` -> `get_invalid_punch_count` -> `get_invalid_punches` -> `_build_row` -> `AttributeError: 'Branch' object has no attribute 'name'`.
+
+**Cause:** `services_hr_audit._build_row` read `punch.branch.name`. `AttendancePunch.branch` is a `branch.Branch`, whose field is `branch_name` (and `branch_code`); it has no `name`. (`User.branch`, the fallback, is a plain string and was fine.) It only failed when the chosen day held an invalid punch (future time, duplicate within 60 s, IN/OUT sequence) AND that punch had a branch, so it passed locally and on most production days and broke the whole dashboard on the others. My earlier local probe of this endpoint (an empty database) could not have caught it.
+
+**Fix:** `branch_name = punch.branch.branch_name if punch.branch else (punch.employee.branch or '—')`. A search of `backend/apps` and `backend/core` for `branch.name`, `.branch.name` and `branch_fk.name` found no other occurrence.
+
+**Tests (`tests_invalid_punch_list.py`, class `InvalidPunchWithABranchTests`):** a future punch with a branch set returns a row whose `branch` is the `branch_name`; with no punch branch it falls back to the employee's branch text; the HR dashboard endpoint returns 200 with `tab_badges.invalid_punches == 1` for that day. Run without the fix, the first and third fail with the same AttributeError.
+
+**Deploy:** the server repo is on `New-AI` (3dc66ccd when reported). The ops hotfix on the server is `stash@{0}` "hotfix branch_name 2026-11-23", which ops will drop after this deploys. Verify after deploying: the HR attendance dashboard for 20 Nov 2026 must load.
+
+**Open, not touched (from the same report):** `backend/logs/errors.log` rotates roughly every 2 hours because of `redis.exceptions.TimeoutError: Timeout reading from 127.0.0.1:6379` from the `/ws/notifications/` Channels consumer (`apps/notifications/ws_auth.py`). Redis itself is healthy; check the channels-redis layer / timeout settings. The flood hides real error traces within a day.
+
+**Process note:** `git stash` was used again on this shared tree to prove the new tests fail without the fix (it restored cleanly and the existing 8 stashes are untouched). Prove "fails without the fix" by temporarily editing the file, not with stash.

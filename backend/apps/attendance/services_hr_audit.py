@@ -128,7 +128,8 @@ def get_invalid_punches(
 
 
 def _build_row(punch: AttendancePunch, issue_type: str, issue: str) -> dict:
-    branch_name = punch.branch.name if punch.branch else punch.employee.branch or '—'
+    # AttendancePunch.branch is a branch.Branch, whose field is branch_name (it has no `name`); User.branch is a plain string.
+    branch_name = punch.branch.branch_name if punch.branch else (punch.employee.branch or '—')
     employee = punch.employee
     return {
         'id':              str(punch.id),

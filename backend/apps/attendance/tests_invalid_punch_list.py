@@ -7,10 +7,14 @@ time without looking at the discard / convert record, so a discarded punch came 
 import datetime
 from zoneinfo import ZoneInfo
 
+from django.core.cache import cache
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
-from apps.accounts.factories import make_user
+from apps.accounts.factories import make_role, make_user
+from apps.accounts.tests_employee_scope import make_branch
 from apps.attendance.models import AttendancePunch, AttendanceRecord
 from apps.attendance.services_hr_audit import get_invalid_punch_count, get_invalid_punches
 from apps.attendance.services_invalid_punch import convert_invalid_punch, discard_invalid_punch
@@ -78,3 +82,38 @@ class InvalidPunchListTests(TestCase):
         discard_invalid_punch(str(first.id), 'Duplicate', self.hr)
         after = [row for row in self.rows() if row['id'] == str(second.id)]
         self.assertNotIn('duplicate', {row['issue_type'] for row in after})
+
+
+class InvalidPunchWithABranchTests(TestCase):
+    """AttendancePunch.branch is a branch.Branch (field branch_name, no `name`). A row for a punch that has a branch used to raise
+    AttributeError, which turned the whole HR attendance dashboard into a 500 for any day holding such a punch (seen in production)."""
+
+    def setUp(self):
+        cache.clear()
+        self.branch = make_branch('IPB-HYD', 'Invalid Punch Hyderabad')
+        self.employee = make_user('ipb-emp@test.com', full_name='Branch Employee', employee_id='IPB1')
+        AttendanceRecord.objects.create(employee=self.employee, date=TOMORROW, status='present')
+        self.punch = make_punch(self.employee, 'IN', 13)          # tomorrow: in the future
+        AttendancePunch.objects.filter(pk=self.punch.pk).update(branch=self.branch)
+
+    def test_the_row_carries_the_branch_name(self):
+        (row,) = get_invalid_punches(TOMORROW, '', '')
+        self.assertEqual(row['issue_type'], 'future')
+        self.assertEqual(row['branch'], 'Invalid Punch Hyderabad')
+
+    def test_the_row_falls_back_to_the_employees_branch_text_when_the_punch_has_no_branch(self):
+        AttendancePunch.objects.filter(pk=self.punch.pk).update(branch=None)
+        type(self.employee).objects.filter(pk=self.employee.pk).update(branch='Fallback Branch')
+        (row,) = get_invalid_punches(TOMORROW, '', '')
+        self.assertEqual(row['branch'], 'Fallback Branch')
+
+    def test_the_hr_dashboard_still_loads_on_a_day_with_such_a_punch(self):
+        # HR is limited to their own branch, so the employee has to be in it for their punch to count.
+        type(self.employee).objects.filter(pk=self.employee.pk).update(branch='Invalid Punch Hyderabad')
+        hr = make_user('ipb-hr@test.com', role=make_role('ipb_hr', permission_codenames=['attendance.view']), branch='Invalid Punch Hyderabad')
+        client = APIClient()
+        client.force_authenticate(user=hr)
+        response = client.get(reverse('hr-attendance-dashboard'), {'date': TOMORROW.isoformat()})
+        self.assertEqual(response.status_code, 200, getattr(response, 'data', None))
+        self.assertEqual(response.data['data']['tab_badges']['invalid_punches'], 1)
+
