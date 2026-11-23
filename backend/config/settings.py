@@ -252,7 +252,9 @@ else:
 if _REDIS_URL:
     CHANNEL_LAYERS = {
         'default': {
-            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            # Same layer, but a Redis read timeout while waiting for a message is retried instead of crashing the WebSocket and
+            # logging a traceback each time (see core/channel_layer.py).
+            'BACKEND': 'core.channel_layer.ResilientRedisChannelLayer',
             'CONFIG': {'hosts': [_REDIS_URL]},
         }
     }
