@@ -252,7 +252,12 @@ class ApprovalTests(LateBase):
         self.assertTrue({'LATE_REASON_SUBMITTED', 'LATE_REASON_APPROVED', 'LATE_EXCUSED'} <= events)
         self.assertTrue(Notification.objects.filter(user=self.emp, title='Late Arrival Excused').exists())
 
-    def test_calendar_and_history_show_late_excused(self):
+    # The fixture day is "yesterday", which is a Sunday on some run dates and
+    # the calendar shows weekly-off days as "Weekly Off" ahead of the record's
+    # status. Treat the day as a working day so the test is date-independent.
+    @mock.patch('apps.attendance.services_attendance.AttendanceDashboardService._weekly_off_dates',
+                return_value=set())
+    def test_calendar_and_history_show_late_excused(self, _weekly_off):
         self.review(self.manager, self.c, 'approve')
         self.review(self.hr, self.c, 'approve')
         resp = self.client_for(self.emp).get(reverse('attendance-calendar'),

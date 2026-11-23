@@ -46,9 +46,13 @@ class AttendanceModeGeofenceTests(SimpleTestCase):
     moment any of these validators queried the database directly.
     """
 
+    @patch('core.cache_service.ShiftCacheService.get_effective')
     @patch('apps.attendance.services_geofencing._resolve_all_allowed_branches')
-    def test_office_mode_rejected_without_gps(self, mock_resolve):
+    def test_office_mode_rejected_without_gps(self, mock_resolve, mock_shift):
         mock_resolve.return_value = [_geofenced_branch()]
+        # Office mode checks the effective shift for the UK-shift bypass; a
+        # non-UK policy keeps this a pure no-DB test.
+        mock_shift.return_value = SimpleNamespace(policy_code='GENERAL')
 
         result = GeofencingService.validate(
             employee=_fake_employee(), attendance_mode=AttendancePunch.MODE_OFFICE,

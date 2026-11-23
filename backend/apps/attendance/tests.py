@@ -7,11 +7,13 @@ from __future__ import annotations
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
 from apps.attendance.models import AttendancePunch
 from apps.branch.models import Branch, City, State
+from apps.hrms.models import REQ_APPROVED, WorkFromHomeRequest
 from config.test_runner import TEST_COMPANY_CODE
 
 
@@ -117,13 +119,23 @@ class PunchServiceTests(TestCase):
         role = make_role('employee')
         self.employee = make_user('puncher@test.com', role=role, password='TestPass123!')
         _login(self.client, 'puncher@test.com')
+        # WFH punches are gated on an approved WorkFromHomeRequest covering today
+        # and validated against that request's saved GPS point.
+        today = timezone.localdate()
+        WorkFromHomeRequest.objects.create(
+            employee=self.employee, start_date=today, end_date=today,
+            latitude=OFFICE_LAT, longitude=OFFICE_LON, status=REQ_APPROVED,
+        )
 
     def _punch(self, **overrides):
-        payload = {'punch_type': 'IN', 'attendance_mode': 'wfh'}
+        payload = {
+            'punch_type': 'IN', 'attendance_mode': 'wfh',
+            'latitude': OFFICE_LAT, 'longitude': OFFICE_LON,
+        }
         payload.update(overrides)
         return self.client.post(reverse('attendance-punch'), payload, format='json')
 
-    def test_clock_in_succeeds_in_wfh_mode_without_gps(self):
+    def test_clock_in_succeeds_in_wfh_mode_with_approved_request(self):
         resp = self._punch(punch_type='IN')
         self.assertEqual(resp.status_code, 200, resp.data)
         self.assertTrue(
@@ -260,10 +272,15 @@ class AttendanceGeofenceCheckViewTests(TestCase):
         self.assertEqual(resp.status_code, 403)
         self.assertIn('location is required', resp.data['message'].lower())
 
-    def test_wfh_mode_does_not_require_gps(self):
+    def test_wfh_mode_with_approved_request_is_allowed(self):
+        today = timezone.localdate()
+        WorkFromHomeRequest.objects.create(
+            employee=self.employee, start_date=today, end_date=today,
+            latitude=OFFICE_LAT, longitude=OFFICE_LON, status=REQ_APPROVED,
+        )
         resp = self.client.post(
             reverse('attendance-geofence-check'),
-            {'attendance_mode': 'wfh'},
+            {'attendance_mode': 'wfh', 'latitude': OFFICE_LAT, 'longitude': OFFICE_LON},
             format='json',
         )
         self.assertEqual(resp.status_code, 200, resp.data)
