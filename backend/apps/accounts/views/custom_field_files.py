@@ -118,6 +118,7 @@ from apps.accounts.utils import send_otp_email, send_template_email, send_test_e
 logger = logging.getLogger(__name__)
 
 from apps.accounts.views.shared import *  # noqa: F401,F403
+from core.view_mixins import RouteMatchedMethodsMixin
 
 # ─── Custom Field File Values (file/image-type OnboardingFieldConfig fields) ──
 
@@ -125,7 +126,7 @@ from apps.accounts.views.shared import *  # noqa: F401,F403
 
 
 
-class CustomFieldFileValueView(APIView):
+class CustomFieldFileValueView(RouteMatchedMethodsMixin, APIView):
     """
     GET    /onboarding/custom-file-fields/           → list all of this user's file-type custom values
     POST   /onboarding/custom-file-fields/           → upload a value for {field_key, file}
@@ -146,7 +147,7 @@ class CustomFieldFileValueView(APIView):
         from apps.accounts.models import CustomFieldFileValue
         try:
             value = CustomFieldFileValue.objects.get(id=value_id)
-        except CustomFieldFileValue.DoesNotExist:
+        except (CustomFieldFileValue.DoesNotExist, ValueError, TypeError):   # a malformed id is also "not found"
             return None, error('File not found.', http_status=status.HTTP_404_NOT_FOUND)
         if value.user_id != request.user.id:
             if not _has_perm(request.user, 'employees.edit'):

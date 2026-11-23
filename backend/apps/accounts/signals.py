@@ -74,3 +74,45 @@ def link_user_to_branch(sender, instance, update_fields=None, **kwargs):
         return
     type(instance).objects.filter(pk=instance.pk).update(branch_fk=branch)
     instance.branch_fk = branch
+
+
+# --- Reporting manager follows the org chart ---------------------------------------------------------------------------------
+# A placement, a position (chief flag or unit) or an org unit (parent) changing can change who an employee's immediate head is.
+# The stored manager is brought in line after the change commits, and a failure here must never break the org-chart edit itself.
+
+def _run_manager_sync(employee_id=None, unit_id=None):
+    from apps.accounts import services_org_chart_managers as sync
+    from apps.accounts.models import User
+    try:
+        if unit_id is not None:
+            sync.resync_units([unit_id])
+        if employee_id is not None:
+            sync.sync_employees(User.objects.filter(pk=employee_id))
+    except Exception:
+        logger.exception('Reporting manager sync after an org chart change failed (employee=%s unit=%s)', employee_id, unit_id)
+
+
+def _schedule_manager_sync(employee_id=None, unit_id=None):
+    from django.db import transaction
+    transaction.on_commit(lambda: _run_manager_sync(employee_id, unit_id))
+
+
+@receiver(post_save, sender='accounts.Placement')
+@receiver(post_delete, sender='accounts.Placement')
+def on_placement_change_sync_manager(sender, instance, **kwargs):
+    try:
+        position = instance.position
+        unit_id = position.org_unit_id if position.is_chief else None   # a new or ended chief changes everyone below
+    except Exception:  # the position itself is being deleted
+        unit_id = None
+    _schedule_manager_sync(employee_id=instance.employee_id, unit_id=unit_id)
+
+
+@receiver(post_save, sender='accounts.Position')
+def on_position_change_sync_manager(sender, instance, **kwargs):
+    _schedule_manager_sync(unit_id=instance.org_unit_id)
+
+
+@receiver(post_save, sender='accounts.OrgUnit')
+def on_org_unit_change_sync_manager(sender, instance, **kwargs):
+    _schedule_manager_sync(unit_id=instance.pk)

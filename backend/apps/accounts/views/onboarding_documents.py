@@ -118,10 +118,11 @@ from apps.accounts.utils import send_otp_email, send_template_email, send_test_e
 logger = logging.getLogger(__name__)
 
 from apps.accounts.views.shared import *  # noqa: F401,F403
+from core.view_mixins import RouteMatchedMethodsMixin
 
 # ─── Onboarding — Document upload / stream / delete ──────────────────────────
 
-class EmployeeDocumentView(APIView):
+class EmployeeDocumentView(RouteMatchedMethodsMixin, APIView):
     """
     GET  /onboarding/documents/           → list all documents for this user
     POST /onboarding/documents/           → upload a document
@@ -135,7 +136,7 @@ class EmployeeDocumentView(APIView):
         from apps.accounts.models import EmployeeDocument as ED
         try:
             doc = ED.objects.get(id=doc_id)
-        except ED.DoesNotExist:
+        except (ED.DoesNotExist, ValueError, TypeError):   # a malformed id (letters where a number belongs) is also "not found"
             return None, error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
         if doc.user_id != request.user.id:
             if not _has_perm(request.user, 'employees.edit'):

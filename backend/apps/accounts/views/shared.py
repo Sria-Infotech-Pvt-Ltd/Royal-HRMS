@@ -132,10 +132,8 @@ def _auto_assign_managers(employee: 'User') -> list:
 
     HR (all roles): set from Branch.hr if available, otherwise first active hr
     user in the same branch.
-    reporting_manager (non-managers only):
-      - Requires both branch and department to be set.
-      - Branch must have exactly 1 manager__team_lead (ambiguous if multiple).
-      - Prefers dept manager (same branch).
+    reporting_manager (everyone, heads included): the immediate head from the org chart, in any branch (see
+    services_org_chart_managers), only when none is set yet.
 
     Returns a list of field names that were modified — caller must include them in save().
     """
@@ -160,15 +158,9 @@ def _auto_assign_managers(employee: 'User') -> list:
             employee.hr = hr_user
             changed.append('hr')
 
-    # Managers are the reporting manager for others — they have none themselves.
-    if can_manage_team(employee):
-        return changed
-
-    # Need at least a branch to find a manager.
-    if not emp_branch:
-        return changed
-
-    # Skip if reporting_manager already set.
+    # Reporting manager = the immediate head from the org chart, for everyone (a head reports to the head above), in any branch.
+    # Skipped only when one is already set: a manager chosen by hand stays, and an org-chart one is kept current by
+    # services_org_chart_managers whenever the org chart changes.
     if employee.reporting_manager_id is not None:
         return changed
 
@@ -185,13 +177,9 @@ def _auto_assign_managers(employee: 'User') -> list:
     # chief.
     # (No longer requires the legacy `department` text: it is blank for everyone hired onto a Position, which is why
     # "Auto-assign" used to leave nobody. The chief is found from the employee's seat in the org chart.)
-    from apps.accounts.services_approval import resolve_employee_org_unit_chief
-    chief = resolve_employee_org_unit_chief(employee)
-    if (
-        chief and chief.pk != employee.pk
-        and chief.is_active
-        and (chief.branch or '').strip().lower() == emp_branch.lower()
-    ):
+    from apps.accounts.services_org_chart_managers import org_chart_manager_for
+    chief = org_chart_manager_for(employee)
+    if chief is not None:
         employee.reporting_manager = chief
         employee.reporting_manager_from_org_chart = True
         changed.append('reporting_manager')

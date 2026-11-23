@@ -539,7 +539,8 @@ export const SECTION_TINT: Record<string, TintKey> = {
 //  per-row shape, converted into this module's Employee type.
 // ────────────────────────────────────────────────────────────
 export interface ApiEmployee extends EmployeeLifecycle {
-  id: string; employee_id: string;
+  /** The list API's `id` is the employee CODE (QA0001); `uuid` is the real database id the by-id endpoints need. */
+  id: string; uuid?: string; employee_id: string;
   first_name: string; last_name: string; full_name: string;
   email: string; phone: string;
   department: string; designation: string; branch: string;
@@ -560,7 +561,7 @@ export interface ApiEmployee extends EmployeeLifecycle {
 export function apiToEmployee(u: ApiEmployee): Employee {
   return {
     id:            u.employee_id || u.id,
-    uuid:          u.id,
+    uuid:          u.uuid || u.id,   // u.id alone is the employee code: by-id endpoints (onboarding history, resend invite) 404 on it
     code:          u.employee_id || u.id,
     firstName:     u.first_name,
     middleName:    "",

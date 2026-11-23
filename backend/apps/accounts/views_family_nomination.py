@@ -16,6 +16,7 @@ views_education_experience.py; HR-on-behalf has no such lock.
 """
 from __future__ import annotations
 
+import datetime
 import logging
 
 from rest_framework import status
@@ -56,8 +57,32 @@ def family_dict(r: 'FamilyMember') -> dict:
     }
 
 
+_TEXT_LABELS = {'name': 'Name', 'relationship': 'Relationship', 'gender': 'Gender', 'blood_group': 'Blood group',
+                'family_member': 'Nominee', 'scheme': 'Nomination scheme'}
+
+
+def _input_problem(data: dict, *text_fields: str) -> str | None:
+    """A readable message when a text field arrived as a list / number / object, or the date of birth is not a real date.
+
+    Without this a request like {"name": ["a"]} reached .strip() on a list and the caller got "An unexpected error occurred"."""
+    for field in text_fields:
+        value = data.get(field)
+        if value is not None and not isinstance(value, str):
+            return f'{_TEXT_LABELS[field]} must be text.'
+    born = data.get('date_of_birth')
+    if born not in (None, ''):
+        try:
+            datetime.date.fromisoformat(str(born))
+        except ValueError:
+            return 'Date of birth must be a real date in the form YYYY-MM-DD.'
+    return None
+
+
 def add_family_member(target_user: 'User', data: dict):
     """Returns (record, None) or (None, error_message)."""
+    problem = _input_problem(data, 'name', 'relationship', 'gender', 'blood_group')
+    if problem:
+        return None, problem
     name = (data.get('name') or '').strip()
     if not name:
         return None, 'Name is required.'
@@ -86,6 +111,9 @@ def update_family_member(target_user: 'User', pk: str, data: dict):
     record = FamilyMember.objects.filter(pk=pk, employee=target_user).first()
     if not record:
         return None, 'not_found'
+    problem = _input_problem(data, 'name', 'relationship', 'gender', 'blood_group')
+    if problem:
+        return None, problem
     if 'name' in data and not (data.get('name') or '').strip():
         return None, 'Name is required.'
     if 'relationship' in data:
@@ -225,6 +253,9 @@ def nominee_dict(r: 'EPFNominee') -> dict:
 
 def add_nominee(target_user: 'User', data: dict):
     """Returns (record, None) or (None, error_message)."""
+    problem = _input_problem({**data, 'date_of_birth': None}, 'family_member', 'scheme')
+    if problem:
+        return None, problem
     family_member_id = (data.get('family_member') or '').strip()
     if not family_member_id:
         return None, 'A nominee must be selected from the family list.'

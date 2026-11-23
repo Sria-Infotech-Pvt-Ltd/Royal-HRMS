@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 from apps.hrms.views.leave_shared import *  # noqa: F401,F403
+from core.view_mixins import RouteMatchedMethodsMixin
 
 
 
@@ -89,7 +90,7 @@ from apps.hrms.views.leave_shared import *  # noqa: F401,F403
 
 # ─── Leave Policy ──────────────────────────────────────────────────────────────
 
-class LeavePolicyView(APIView):
+class LeavePolicyView(RouteMatchedMethodsMixin, APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboardingStatus]
 
     def _ensure_policies(self):

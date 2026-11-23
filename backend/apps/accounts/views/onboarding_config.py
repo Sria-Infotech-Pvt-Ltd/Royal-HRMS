@@ -116,10 +116,11 @@ from apps.accounts.utils import send_otp_email, send_template_email, send_test_e
 logger = logging.getLogger(__name__)
 
 from apps.accounts.views.shared import *  # noqa: F401,F403
+from core.view_mixins import RouteMatchedMethodsMixin
 
 # ─── Onboarding Field Configuration ────────────────────────────────────────────
 
-class OnboardingFieldConfigView(APIView):
+class OnboardingFieldConfigView(RouteMatchedMethodsMixin, APIView):
     """
     HR-only settings screen for the onboarding wizard's field configuration
     (steps 0-3 — Documents/step 4 is a separate file-upload flow, not covered
@@ -345,7 +346,7 @@ class OnboardingFieldConfigPublicView(APIView):
         return success('Onboarding field configuration retrieved.', data=data)
 
 
-class EducationExperienceFieldConfigView(APIView):
+class EducationExperienceFieldConfigView(RouteMatchedMethodsMixin, APIView):
     """
     Show/require toggles for Education/Experience list-entry fields — see
     EducationExperienceFieldConfig's own docstring for what this does and
@@ -412,7 +413,7 @@ class OnboardingSectionPublicView(APIView):
 
 # ─── Document Type Configuration (onboarding Step 5) ──────────────────────────
 
-class DocumentTypeConfigView(APIView):
+class DocumentTypeConfigView(RouteMatchedMethodsMixin, APIView):
     """
     HR-only settings screen for onboarding Step 5 (Documents) — sibling of
     OnboardingFieldConfigView for the document-type list. GET lists every

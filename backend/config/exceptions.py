@@ -54,6 +54,14 @@ def custom_exception_handler(exc, context):
         }, status=status.HTTP_404_NOT_FOUND)
 
     if isinstance(exc, DjangoValidationError):
+        # A malformed id in the URL (letters where a UUID belongs) is Django's own wording: '"abc" is not a valid UUID.'
+        # To a user that is simply "that item does not exist".
+        if any('is not a valid UUID' in message for message in exc.messages):
+            return Response({
+                'status': 'error',
+                'message': 'That item was not found. Check the link and try again.',
+                'data': {},
+            }, status=status.HTTP_404_NOT_FOUND)
         return Response({
             'status': 'error',
             'message': exc.messages[0] if exc.messages else 'Validation error.',

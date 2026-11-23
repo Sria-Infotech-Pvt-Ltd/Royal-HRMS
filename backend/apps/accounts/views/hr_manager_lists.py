@@ -209,6 +209,8 @@ class EmployeeReportingManagerView(APIView):
         if can_manage_team(employee):
             return error('Managers do not have a reporting manager.')
 
+        if 'reporting_manager_id' not in request.data:
+            return error('Choose a reporting manager. To remove the current one and follow the org chart instead, send reporting_manager_id as null.')
         manager_id = request.data.get('reporting_manager_id')
 
         if manager_id is None:

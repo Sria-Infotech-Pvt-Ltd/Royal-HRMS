@@ -209,6 +209,26 @@ class EmployeeProfileView(APIView):
         return success('Profile saved.', data=serializer.data)
 
 
+def _is_model_field(model, name: str) -> bool:
+    from django.core.exceptions import FieldDoesNotExist
+    try:
+        model._meta.get_field(name)
+    except FieldDoesNotExist:
+        return False
+    return True
+
+
+def _cleared_value(model, name: str):
+    """What "cleared" means for one profile column: NULL only where the column allows it, else its default, else empty text.
+    Setting NULL on a NOT NULL text column (highest_qualification, ...) made DELETE /onboarding/step/<n>/ fail with a 500."""
+    field = model._meta.get_field(name)
+    if field.null:
+        return None
+    if field.has_default():
+        return field.get_default()
+    return ''
+
+
 class OnboardingView(APIView):
     """
     Unified employee self-service onboarding endpoint.
@@ -367,7 +387,7 @@ class OnboardingView(APIView):
 
         try:
             if builtin_keys:
-                EP.objects.filter(pk=profile.pk).update(**{field: None for field in builtin_keys})
+                EP.objects.filter(pk=profile.pk).update(**{field: _cleared_value(EP, field) for field in builtin_keys if _is_model_field(EP, field)})
             if custom_keys:
                 remaining = {k: v for k, v in (profile.custom_field_values or {}).items() if k not in custom_keys}
                 EP.objects.filter(pk=profile.pk).update(custom_field_values=remaining)

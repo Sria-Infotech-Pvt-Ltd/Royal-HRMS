@@ -1,6 +1,7 @@
 """Phase 3B Task D+H — workflow admin API + the unified "My Approvals" inbox."""
 from __future__ import annotations
 
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -197,6 +198,8 @@ class WorkflowTaskActionView(APIView):
         idempotency_key = request.data.get('idempotency_key')
         try:
             task = wf.act(task_id, user=request.user, action=action, remarks=remarks, idempotency_key=idempotency_key)
+        except ObjectDoesNotExist:
+            return error('That approval task was not found.', http_status=404)
         except wf.WorkflowError as exc:
             return error(exc.message, http_status=400)
         return success('Action applied.', WorkflowTaskSerializer(task).data)
@@ -219,6 +222,8 @@ class WorkflowInstanceWithdrawView(APIView):
     def post(self, request, instance_id):
         try:
             instance = wf.withdraw(instance_id, user=request.user)
+        except ObjectDoesNotExist:
+            return error('That request was not found.', http_status=404)
         except wf.WorkflowError as exc:
             return error(exc.message, http_status=400)
         return success('Withdrawn.', WorkflowInstanceSerializer(instance).data)

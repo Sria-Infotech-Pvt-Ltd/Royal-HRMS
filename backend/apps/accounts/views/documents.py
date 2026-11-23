@@ -233,7 +233,7 @@ class DocumentDetailView(APIView):
                 .select_related('uploaded_by', 'branch')
                 .get(pk=pk, is_active=True)
             )
-        except Document.DoesNotExist:
+        except (Document.DoesNotExist, ValueError, TypeError):   # a malformed id is also "not found"
             return None
 
     def _stream_file(self, pk: int, token: str):
@@ -249,7 +249,7 @@ class DocumentDetailView(APIView):
 
         try:
             doc = Document.objects.only('file', 'file_name', 'is_active').get(pk=pk, is_active=True)
-        except Document.DoesNotExist:
+        except (Document.DoesNotExist, ValueError, TypeError):
             return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         try:
