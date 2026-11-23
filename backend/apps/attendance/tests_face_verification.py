@@ -250,6 +250,123 @@ class FaceVerificationLowConfidenceFailClosedTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.data)
 
 
+class FaceVerificationSourceBypassTests(TestCase):
+    """The client-supplied `source` must not decide whether face verification
+    runs: an employee could previously send source='manual' or 'biometric' and
+    punch with no face check at all. Face ID is mandatory and the employee
+    has an approved registration throughout."""
+
+    def setUp(self):
+        cache.clear()
+        self.client   = APIClient()
+        self.employee = make_user('facebypass@test.com', role=make_role('employee_bypass'),
+                                  password='TestPass123!', employee_id='FBP1')
+        _login(self.client, 'facebypass@test.com')
+        _set_face_verification_mandatory(True)
+        _make_approved_request(self.employee)
+
+    def tearDown(self):
+        cache.clear()
+
+    def _punch(self, punch_type='IN', **overrides):
+        # 'office', not 'wfh': a WFH punch now needs an approved WFH request
+        # first, which would refuse the punch before face verification runs.
+        payload = {'punch_type': punch_type, 'attendance_mode': 'office'}
+        payload.update(overrides)
+        return self.client.post(reverse('attendance-punch'), payload, format='json')
+
+    def _assert_no_punch(self):
+        self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
+
+    def test_manual_source_is_refused_for_clock_in_and_out(self):
+        for punch_type in ('IN', 'OUT'):
+            resp = self._punch(punch_type, source='manual')
+            self.assertEqual(resp.status_code, 422, resp.data)
+        self._assert_no_punch()
+
+    def test_biometric_source_is_refused_for_clock_in_and_out(self):
+        for punch_type in ('IN', 'OUT'):
+            resp = self._punch(punch_type, source='biometric')
+            self.assertEqual(resp.status_code, 422, resp.data)
+        self._assert_no_punch()
+
+    def test_unsupported_source_values_are_refused(self):
+        for source in ('system', 'kiosk', 'MANUAL', ''):
+            resp = self._punch(source=source)
+            self.assertEqual(resp.status_code, 422, (source, resp.data))
+        self._assert_no_punch()
+
+    def test_web_without_face_data_is_refused(self):
+        resp = self._punch(source='web')
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self._assert_no_punch()
+
+    def test_clock_out_is_verified_like_clock_in(self):
+        self.assertEqual(self._punch('IN', face_embedding=MATCHING_EMBEDDING,
+                                     capture_session_id='s-in').status_code, 200)
+        self.assertEqual(self._punch('OUT').status_code, 400)                        # no face data
+        self.assertEqual(self._punch('OUT', face_embedding=MISMATCHED_EMBEDDING,
+                                     capture_session_id='s-bad').status_code, 403)   # wrong face
+        second_match = [v + 0.002 for v in REGISTERED_EMBEDDING]
+        resp = self._punch('OUT', face_embedding=second_match, capture_session_id='s-out')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        out = AttendancePunch.objects.get(employee=self.employee, punch_type='OUT')
+        self.assertTrue(out.face_verified)
+
+    def test_service_fails_closed_for_any_non_exempt_source(self):
+        from apps.attendance.services_face_matching import FaceVerificationService
+        for source in ('manual', 'biometric', 'system', 'anything-else'):
+            outcome = FaceVerificationService.verify_for_punch(self.employee, source, None)
+            self.assertTrue(outcome.required, source)
+            self.assertFalse(outcome.is_match, source)
+
+    def test_mobile_is_still_unverified_known_gap(self):
+        # Temporary, documented exemption (_UNVERIFIED_SOURCES) until the app
+        # sends a face descriptor. The punch is accepted but never recorded as
+        # face-verified — not even if an embedding is attached.
+        resp = self._punch(source='mobile', face_embedding=MATCHING_EMBEDDING)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        punch = AttendancePunch.objects.get(employee=self.employee)
+        self.assertEqual(punch.source, AttendancePunch.SOURCE_MOBILE)
+        self.assertFalse(punch.face_verified)
+        self.assertIsNone(punch.face_match_distance)
+
+    def test_hr_approved_correction_still_creates_manual_punch(self):
+        import datetime
+        from django.utils import timezone
+        from apps.attendance.models import AttendanceCorrection
+        admin = make_user('facebypass.admin@test.com', password='TestPass123!', employee_id='FBA1',
+                          role=make_role('admin_bypass', permission_codenames=['settings.edit', 'attendance.view',
+                                                                                'attendance.create']))
+        correction = AttendanceCorrection.objects.create(
+            employee=self.employee, date=timezone.localdate(), punch_type='IN',
+            requested_in_time=datetime.time(9, 0), reason='forgot_to_punch',
+            status=AttendanceCorrection.STATUS_L2_PENDING,
+        )
+        hr_client = APIClient()
+        _login(hr_client, 'facebypass.admin@test.com')
+        resp = hr_client.patch(reverse('hr-correction-review', kwargs={'pk': correction.pk}),
+                               {'action': 'approve'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        punch = AttendancePunch.objects.get(employee=self.employee)
+        self.assertEqual(punch.source, AttendancePunch.SOURCE_MANUAL)
+        self.assertFalse(punch.face_verified)
+
+    def test_employee_cannot_approve_own_correction(self):
+        from django.utils import timezone
+        import datetime
+        from apps.attendance.models import AttendanceCorrection
+        correction = AttendanceCorrection.objects.create(
+            employee=self.employee, date=timezone.localdate(), punch_type='IN',
+            requested_in_time=datetime.time(9, 0), reason='forgot_to_punch',
+            status=AttendanceCorrection.STATUS_L2_PENDING,
+        )
+        resp = self.client.patch(reverse('hr-correction-review', kwargs={'pk': correction.pk}),
+                                 {'action': 'approve'}, format='json')
+        self.assertEqual(resp.status_code, 403, resp.data)
+        self._assert_no_punch()
+
+
 class FaceRegistrationMyStatusTests(TestCase):
     def setUp(self):
         cache.clear()

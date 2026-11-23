@@ -13,10 +13,11 @@ truth for the whole feature:
     approved registration must submit a live face descriptor that matches it
     before the punch is accepted.
 
-Only 'web' and 'voice' punches are gated (see PunchService.record_punch) —
-both originate from a browser tab with camera access (see AttendancePunch's
-own docstring for 'voice'). Mobile, biometric, manual and system-sourced
-punches never carry a camera and are never required to verify.
+Every source is gated except 'mobile' (see _UNVERIFIED_SOURCES below). The
+check fails closed: an unexpected source value is verified, never skipped.
+HR 'manual' punches don't come through here at all — they are created
+server-side by their own workflows (services_hr_corrections /
+services_invalid_punch), and the punch endpoint refuses 'manual'/'biometric'.
 
 Matching stays server-side deliberately (Euclidean distance only — see
 _euclidean_distance below) rather than shipping the stored embedding to the
@@ -75,6 +76,13 @@ FACE_MATCH_MAX_DISTANCE = 0.6
 # draw barely lowered the odds. This band is now a hard reject with no
 # escalation path — retrying can never turn it into an accept.
 FACE_MATCH_LOW_CONFIDENCE_MARGIN = 0.05
+
+# KNOWN GAP, temporary: the mobile app does not yet submit a face descriptor,
+# so mobile punches are still not face-checked (stored face_verified=False).
+# Remove 'mobile' from this set once the app sends a compatible descriptor.
+# Deliberately an exemption list, not an allow-list of gated sources, so any
+# other source value (manual, biometric, system, unknown) is verified.
+_UNVERIFIED_SOURCES = frozenset({AttendancePunch.SOURCE_MOBILE})
 
 _EMBEDDING_REQUIRED_MESSAGE = (
     'Face verification is required for clock-in. Please allow camera access and try again.'
@@ -204,7 +212,7 @@ class FaceVerificationService:
         capture_session_id: str = '', liveness_passed: Optional[bool] = None,
         liveness_score: Optional[float] = None, is_secure: bool = True,
     ) -> FaceVerificationOutcome:
-        if source not in (AttendancePunch.SOURCE_WEB, AttendancePunch.SOURCE_VOICE):
+        if source in _UNVERIFIED_SOURCES:
             return cls._not_required(submitted_embedding)
         if not is_face_verification_mandatory():
             # Org-wide toggle is off — the feature is switched off entirely,
