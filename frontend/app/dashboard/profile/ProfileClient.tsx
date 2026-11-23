@@ -16,6 +16,7 @@ import ProfilePhotoModal from "@/components/ProfilePhotoModal";
 import SeparationCard from "./_components/SeparationCard";
 import OnboardingDynamicField from "@/components/OnboardingDynamicField";
 import CustomFieldFileUpload from "@/components/CustomFieldFileUpload";
+import DocPreviewModal from "@/components/DocPreviewModal";
 import { formatNoticePeriod } from "@/lib/noticePeriod";
 import type { CustomFieldFileValue, OnboardingFieldConfig, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
 
@@ -235,6 +236,9 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
   const [toast,  setToast]  = useState<{ msg: string; ok: boolean } | null>(null);
 
   const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
+  // Opened in-app: the file URL is on the API host, which a new tab can't
+  // authenticate against (the login cookie belongs to the app's own domain).
+  const [previewDoc, setPreviewDoc] = useState<DocEntry | null>(null);
   const docEntries = buildDocEntries(docs ?? [], documentTypeConfigData ?? []);
   const [uploadingFileKey, setUploadingFileKey] = useState<string | null>(null);
 
@@ -792,6 +796,15 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       {active === "documents" && (
       <div className="card">
         <SectionHeader icon="ti-file-description" title="Documents" />
+            {previewDoc?.fileUrl && (
+              <DocPreviewModal
+                name={previewDoc.name}
+                fileName={previewDoc.fileName}
+                fileUrl={previewDoc.fileUrl}
+                fileSize={previewDoc.fileSize}
+                onClose={() => setPreviewDoc(null)}
+              />
+            )}
             <div className="card-body" style={{ padding: 0 }}>
               {docEntries.map((doc, i) => {
                 const uploaded  = !!doc.fileUrl;
@@ -813,9 +826,9 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                       </div>
                     </div>
                     {uploaded ? (
-                      <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" title="Preview document">
+                      <button type="button" onClick={() => setPreviewDoc(doc)} className="btn btn-ghost btn-sm" title="Preview document">
                         <i className="ti ti-eye" />
-                      </a>
+                      </button>
                     ) : (
                       <button
                         type="button"

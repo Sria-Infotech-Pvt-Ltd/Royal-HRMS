@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import re
 
 from django.http import HttpResponse
 from rest_framework.parsers import MultiPartParser
@@ -40,6 +41,7 @@ from apps.attendance.services_hr import (
     bulk_assign_shift,
     bulk_assign_weekly_off,
     get_attendance_detail,
+    filtered_employees,
     get_attendance_list,
     get_dashboard_stats,
     get_shift_assignment_history,
@@ -59,11 +61,16 @@ from apps.attendance.services_hr_ops import (
     list_overtime,
 )
 from core.pagination import paginate, paginated_data
-from core.permissions import has_perm as _has_perm
+from core.permissions import has_perm as _has_perm, is_branch_restricted
 from apps.attendance.access import can_manage_attendance as _can_manage_attendance
 from apps.attendance.access import is_attendance_staff as _is_attendance_staff
 
 logger = logging.getLogger(__name__)
+
+
+# Branch value that matches no employee — a Branch Admin with no assigned branch
+# must see nobody, not (as an empty branch filter would) everybody.
+_NO_BRANCH = '__no_branch_assigned__'
 
 
 def _is_unrestricted(user) -> bool:
@@ -84,7 +91,10 @@ def _branch_scope(user, requested: str) -> str:
     """
     if _is_unrestricted(user):
         return requested
-    return getattr(user, 'branch', '') or ''
+    own = getattr(user, 'branch', '') or ''
+    if not own.strip() and is_branch_restricted(user):
+        return _NO_BRANCH                     # Branch Admin without a branch: matches nobody
+    return own
 
 
 def _manager_scope_employee_ids(user) -> list[str] | None:
@@ -126,6 +136,8 @@ def _manager_can_access_employee(user, employee) -> bool:
         return str(employee.pk) in {str(i) for i in employee_ids}
     # HR / branch admin: their branch, the same rule the list views use (_branch_scope).
     branch = (getattr(user, 'branch', '') or '').strip()
+    if not branch and is_branch_restricted(user):
+        return False                          # Branch Admin without a branch: nobody
     return not branch or (getattr(employee, 'branch', '') or '').strip() == branch
 
 
@@ -860,12 +872,19 @@ class HRAttendanceExportView(APIView):
         filters = ser.validated_data
         filters['branch'] = _branch_scope(request.user, filters.get('branch', ''))
         filters['employee_ids'] = _manager_scope_employee_ids(request.user)
+        # Single-employee export: same message whether the ID doesn't exist or
+        # is outside the caller's scope, so it can't be used to probe IDs.
+        employee_prefix = ''
+        if filters.get('employee'):
+            if not filtered_employees(filters).exists():
+                return error('Employee not found.', http_status=404)
+            employee_prefix = re.sub(r'[^A-Za-z0-9_-]', '_', filters['employee']) + '_'
         if 'range_start' in filters:
             csv_content = export_attendance_range_csv(filters)
-            filename = f"attendance_{filters['range_label']}.csv"
+            filename = f"attendance_{employee_prefix}{filters['range_label']}.csv"
         else:
             csv_content = export_attendance_csv(filters)
-            filename = f"attendance_{filters['date'].strftime('%Y-%m-%d')}.csv"
+            filename = f"attendance_{employee_prefix}{filters['date'].strftime('%Y-%m-%d')}.csv"
 
         response = HttpResponse(csv_content, content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'

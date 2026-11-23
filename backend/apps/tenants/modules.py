@@ -17,7 +17,7 @@ from __future__ import annotations
 from apps.tenants.models import (
     MODULE_ANNOUNCEMENTS, MODULE_ASSESSMENTS, MODULE_ASSETS, MODULE_ATTENDANCE, MODULE_DOCUMENTS,
     MODULE_EXPENSES, MODULE_FACE_ATTENDANCE, MODULE_LEAVE, MODULE_PAYROLL, MODULE_RECRUITMENT,
-    MODULE_SEPARATION, MODULE_VOICE_COMMANDS, MODULE_WFH,
+    MODULE_SEPARATION, MODULE_TRAINING, MODULE_VOICE_COMMANDS, MODULE_WFH,
 )
 
 CORE, MODULE, DISPLAY, COMING_SOON = 'core', 'module', 'display', 'coming_soon'
@@ -41,6 +41,9 @@ FEATURES: list[dict] = [
     {'key': MODULE_EXPENSES, 'label': 'Expense & Reimbursement', 'category': 'Payroll', 'kind': MODULE},
     {'key': MODULE_RECRUITMENT, 'label': 'Recruitment & Applicant Tracking', 'category': 'Talent', 'kind': MODULE},
     {'key': MODULE_ASSESSMENTS, 'label': 'Assessments', 'category': 'Talent', 'kind': MODULE},
+    # Course tests reuse Assessments' MCQ questions and scoring.
+    {'key': MODULE_TRAINING, 'label': 'Training & Learning', 'category': 'Talent', 'kind': MODULE,
+     'depends_on': [MODULE_ASSESSMENTS]},
     {'key': MODULE_SEPARATION, 'label': 'Exit Management (Separation)', 'category': 'Core HR', 'kind': MODULE},
     {'key': MODULE_DOCUMENTS, 'label': 'Document Management', 'category': 'Core HR', 'kind': MODULE},
     {'key': MODULE_ASSETS, 'label': 'Asset Management', 'category': 'Operations', 'kind': MODULE},
@@ -57,7 +60,6 @@ FEATURES: list[dict] = [
     {'key': 'tds', 'label': 'TDS Workflows', 'category': 'Payroll', 'kind': COMING_SOON},
     {'key': 'performance', 'label': 'Performance Management', 'category': 'Talent', 'kind': COMING_SOON},
     {'key': 'appraisal', 'label': 'Appraisal Cycles', 'category': 'Talent', 'kind': COMING_SOON},
-    {'key': 'training', 'label': 'Training & Learning', 'category': 'Talent', 'kind': COMING_SOON},
     {'key': 'advanced_reports', 'label': 'Advanced Reports', 'category': 'Reports', 'kind': COMING_SOON},
     {'key': 'hr_analytics', 'label': 'Advanced HR Analytics', 'category': 'Reports', 'kind': COMING_SOON},
     {'key': 'roster', 'label': 'Shift Roster Planning', 'category': 'Time', 'kind': COMING_SOON},
@@ -97,7 +99,7 @@ DESCRIPTIONS = {
     'tds': 'Income-tax (TDS) declarations and calculations.',
     'performance': 'Goals, reviews and performance tracking.',
     'appraisal': 'Periodic appraisal cycles and ratings.',
-    'training': 'Training programmes and learning records.',
+    MODULE_TRAINING: 'Training courses with videos and documents, assignment, progress tracking and assessments.',
     'advanced_reports': 'Custom report builder across modules.',
     'hr_analytics': 'Workforce analytics and insights.',
     'roster': 'Plan shift rosters for teams.',

@@ -5,6 +5,7 @@ export const API = {
     acknowledgements:        (id: number) => `/documents/${id}/acknowledgements/`,
     contacts:                "/company-contacts/",
     contactDetail:           (id: number) => `/company-contacts/${id}/`,
+    contactApprovers:        (workflow: string) => `/company-contacts/approvers/?workflow=${encodeURIComponent(workflow)}`,
   },
 
   auth: {
@@ -317,6 +318,31 @@ export const API = {
       run:     "/leave/carry-forward/run/",
       history: "/leave/carry-forward/history/",
     },
+  },
+
+  training: {
+    courses:          "/training/courses/",
+    course:           (id: string) => `/training/courses/${id}/`,
+    thumbnail:        (id: string) => `/training/courses/${id}/thumbnail/`,
+    thumbnailFile:    (id: string) => `/training/courses/${id}/thumbnail/file/`,
+    materials:        (id: string) => `/training/courses/${id}/materials/`,
+    reorder:          (id: string) => `/training/courses/${id}/materials/reorder/`,
+    assign:           (id: string) => `/training/courses/${id}/assign/`,
+    progress:         (id: string) => `/training/courses/${id}/progress/`,
+    material:         (id: string) => `/training/materials/${id}/`,
+    materialFile:     (id: string) => `/training/materials/${id}/file/`,
+    videoSource:      (id: string) => `/training/materials/${id}/video-source/`,
+    assignment:       (id: string) => `/training/assignments/${id}/`,
+    resetAssessment:  (id: string) => `/training/assignments/${id}/reset-assessment/`,
+    assessments:      "/training/assessments/",
+    employees:        "/training/employees/",
+    dashboard:        "/training/dashboard/",
+    reports:          "/training/reports/",
+    my:               "/training/my/",
+    myDetail:         (id: string) => `/training/my/${id}/`,
+    myMaterial:       (id: string, materialId: string, action: "open" | "progress" | "confirm") =>
+                        `/training/my/${id}/materials/${materialId}/${action}/`,
+    myAssessment:     (id: string, action: "start" | "submit") => `/training/my/${id}/assessment/${action}/`,
   },
 
   workFromHome: {

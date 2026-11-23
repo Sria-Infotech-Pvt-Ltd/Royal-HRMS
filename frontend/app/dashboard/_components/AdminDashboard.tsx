@@ -10,6 +10,7 @@ import DeptHeadcountChart    from "@/components/dashboard/DeptHeadcountChart";
 import EmployeeLifecycleTabs from "@/components/dashboard/EmployeeLifecycleTabs";
 import BirthdayWidget        from "@/components/dashboard/BirthdayWidget";
 import AuditLogsWidget       from "@/components/dashboard/AuditLogsWidget";
+import HrActionQueue         from "@/components/dashboard/hr/HrActionQueue";
 import type { SessionPayload } from "@/lib/session";
 import { hasModule, moduleForHref } from "@/lib/modules";
 
@@ -78,6 +79,8 @@ export default function AdminDashboard({ session }: Props) {
       <div className="grid-2 mb-20" style={{ alignItems: "start" }}>
         <div>
           <PendingApprovalsWidget />
+          {/* Branch Admin: its own branch's Action Queue (counts scoped by the API). */}
+          {session.can_manage_branch && <div className="mb-20"><HrActionQueue /></div>}
           <DeptHeadcountChart />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

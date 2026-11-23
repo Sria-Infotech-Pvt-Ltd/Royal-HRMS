@@ -8,6 +8,8 @@ Employee-wise leave credit management (Phase 1) — Employee Profile → Leave t
 Access: leave.approve plus _can_manage_leave_credits (no self, managers →
 direct reports only, branch-restricted users → own branch).
 """
+from decimal import Decimal, InvalidOperation
+
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -21,7 +23,7 @@ from ..services_leave_credit import (
     apply_adjustment, current_calendar_year, leave_type_label, monthly_summary,
     reverse_transaction, serialize_transaction, transaction_history, yearly_summary,
 )
-from .leave import _can_manage_leave_credits
+from .leave import _can_manage_leave_credits, _gender_allows
 
 
 def _resolve_employee(request, employee_id: str):
@@ -56,9 +58,12 @@ class LeaveCreditOverviewView(APIView):
         if not leave_type and summaries:
             leave_type = summaries[0]['leave_type']
 
+        # Only types this employee can hold — a gender-restricted type (e.g. female-only
+        # Pink Leave) is not offered for an employee of another gender.
         assignable = [
             {'value': p.leave_type, 'label': leave_type_label(p.leave_type, p), 'credit_schedule': p.credit_schedule}
             for p in LeavePolicy.objects.filter(is_active=True).exclude(leave_type=LEAVE_LWP).order_by('leave_type')
+            if _gender_allows(employee, p)
         ]
         return success('Leave credits retrieved.', {
             'employee':               {'employee_id': employee.employee_id, 'full_name': employee.full_name},
@@ -80,6 +85,15 @@ class LeaveCreditAdjustView(APIView):
         if err:
             return err
         data = request.data
+        # Adding days of a gender-restricted type to an employee of another gender is
+        # refused; removing days stays allowed (HR can clear a wrongly given balance).
+        policy = LeavePolicy.objects.filter(leave_type=data.get('leave_type')).first()
+        try:
+            adding = Decimal(str(data.get('amount'))) > 0
+        except (InvalidOperation, TypeError, ValueError):
+            adding = False                                     # invalid amount: the service reports it
+        if adding and policy is not None and not _gender_allows(employee, policy):
+            return error('This leave type does not apply to this employee (gender restriction).')
         try:
             txn, created = apply_adjustment(
                 employee=employee, leave_type=data.get('leave_type'), year=data.get('year'),

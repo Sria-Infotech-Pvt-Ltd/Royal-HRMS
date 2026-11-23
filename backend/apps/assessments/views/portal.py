@@ -8,9 +8,9 @@ from rest_framework.views import APIView
 
 from core.responses import error, success
 
-from collections import defaultdict
 
 from ..models import AssessmentItem, AssessmentSettings, CandidateAssignment, CandidateResponse
+from ..scoring import section_weighted_score
 from ..serializers import PortalAssignmentSerializer
 
 logger = logging.getLogger(__name__)
@@ -33,31 +33,8 @@ def _compute_weighted_result(assignment) -> tuple:
     correct_ids = frozenset(
         assignment.responses.filter(is_correct=True).values_list('item_id', flat=True)
     )
-    section_map = {s.id: s for s in sections}
-    section_items: dict = defaultdict(list)
-    unsectioned = []
-
-    for item in quiz_items:
-        sid = item['section_id']
-        if sid and sid in section_map:
-            section_items[sid].append(item['id'])
-        else:
-            unsectioned.append(item['id'])
-
-    achieved = 0
-    max_total = 0
-    for section_id, item_ids in section_items.items():
-        section = section_map[section_id]
-        correct   = sum(1 for iid in item_ids if iid in correct_ids)
-        achieved  += round((correct / len(item_ids)) * section.score)
-        max_total += section.score
-
-    for iid in unsectioned:
-        max_total += 1
-        if iid in correct_ids:
-            achieved += 1
-
-    return achieved, max_total
+    # Shared with Training & Learning (apps.assessments.scoring).
+    return section_weighted_score(sections, quiz_items, correct_ids)
 
 
 def _get_candidate(user):

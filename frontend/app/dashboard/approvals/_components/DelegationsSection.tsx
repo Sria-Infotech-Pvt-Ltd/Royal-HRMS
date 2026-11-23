@@ -8,6 +8,7 @@ import { useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
+import { useToast } from "@/components/ToastProvider";
 import {
   DELEGATION_STATE_BADGE, DELEGATION_STATE_LABEL, WORKFLOW_LABEL, apiMessage, delegationState, localToday,
   validateDelegation, type Delegation, type DelegationForm, type PersonRef, type Workflow,
@@ -21,8 +22,7 @@ export default function DelegationsSection() {
   const [form, setForm] = useState<DelegationForm>({ ...EMPTY, start_date: today });
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [apiError, setApiError] = useState("");
-  const [notice, setNotice] = useState("");
+  const { showToast } = useToast();
 
   const primary: Workflow = form.workflows[0] ?? "leave";
   const { data: eligible } = useFetch<PersonRef[]>(`${API.approvals.delegationsEligible}?workflow=${primary}`);
@@ -40,16 +40,14 @@ export default function DelegationsSection() {
     setTouched(true);
     if (Object.keys(errors).length) return;
     setSaving(true);
-    setApiError("");
-    setNotice("");
     try {
       await clientApi.post(API.approvals.delegations, form);
       setForm({ ...EMPTY, start_date: today });
       setTouched(false);
-      setNotice("Delegation created. The delegate has been notified.");
+      showToast("Delegation created. The delegate has been notified.", "success");
       refetch();
     } catch (err) {
-      setApiError(apiMessage(err, "Failed to create the delegation."));
+      showToast(apiMessage(err, "Failed to create the delegation."), "error");
     } finally {
       setSaving(false);
     }
@@ -57,13 +55,12 @@ export default function DelegationsSection() {
 
   async function revoke(d: Delegation) {
     if (!window.confirm(`Revoke the delegation to ${d.delegate.name}?`)) return;
-    setApiError("");
     try {
       await clientApi.post(API.approvals.delegationRevoke(d.id));
-      setNotice("Delegation revoked.");
+      showToast("Delegation revoked.", "success");
       refetch();
     } catch (err) {
-      setApiError(apiMessage(err, "Failed to revoke the delegation."));
+      showToast(apiMessage(err, "Failed to revoke the delegation."), "error");
     }
   }
 
@@ -112,15 +109,13 @@ export default function DelegationsSection() {
   );
 
   return (
-    <div className="settings-card" data-testid="delegations-section">
+    <div className="card card-body" data-testid="delegations-section">
       <div style={{ fontWeight: 600, fontSize: 15 }}>Delegate my approvals</div>
       <div className="text-[12px] text-[var(--on-variant)] mt-1 mb-3">
         While you are away, a colleague in your branch who can approve the same requests acts on requests waiting for you.
         You keep your own access. Up to 180 days; one delegation per period.
       </div>
 
-      {notice && <div className="alert alert-success mb-3"><i className="ti ti-check" /> {notice}</div>}
-      {apiError && <div className="alert alert-error mb-3"><i className="ti ti-alert-circle" /> {apiError}</div>}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
         <div className="field-group">
@@ -160,7 +155,7 @@ export default function DelegationsSection() {
         ))}
         {show("workflows")}
         <div style={{ flex: 1 }} />
-        <button className="btn btn-primary" onClick={create} disabled={saving}>
+        <button className="btn btn-filled" onClick={create} disabled={saving}>
           {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Delegate"}
         </button>
       </div>

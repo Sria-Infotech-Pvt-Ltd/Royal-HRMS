@@ -35,6 +35,9 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   // itself scopes what each viewer sees and can do
   // (see app/dashboard/separation/_access.ts).
   "/dashboard/documents": "documents.view",
+  // /dashboard/my-learning intentionally absent — every employee sees the
+  // courses assigned to them (the API returns only their own).
+  "/dashboard/training": "training.view",
   "/dashboard/reports": "reports.view",
   "/dashboard/audit": "audit.view",
   "/dashboard/settings": "settings.view",

@@ -4,12 +4,16 @@
 // HR matters, and who to escalate to. Visible to every signed-in employee
 // (company-wide contacts plus their own branch's); HR with documents.create
 // maintains it. Contact details are entered by HR — nothing is pre-filled.
+// Below them, read-only L1/L2 approvers (ApproversSection).
 
 import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import Modal from "@/components/Modal";
+import ApproversSection from "./_components/ApproversSection";
+import DeleteContactModal from "./_components/DeleteContactModal";
+import { useToast } from "@/components/ToastProvider";
 import {
   EMPTY_CONTACT, contactFormError, groupByLevel, levelLabel,
   type CompanyContact, type ContactForm,
@@ -19,6 +23,7 @@ interface ContactsResponse { contacts: CompanyContact[]; can_manage: boolean }
 interface BranchOption { id: number; branch_name: string }
 
 export default function ContactMatrixPage() {
+  const { showToast } = useToast();
   const { data, loading, error, refetch } = useFetch<ContactsResponse>(API.companyPolicy.contacts);
   const canManage = !!data?.can_manage;
   const { data: branchData } = useFetch<BranchOption[] | { results: BranchOption[] }>(
@@ -29,6 +34,8 @@ export default function ContactMatrixPage() {
   const [editing, setEditing]   = useState<{ id: number | null; form: ContactForm } | null>(null);
   const [saving, setSaving]     = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<CompanyContact | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const groups = groupByLevel(data?.contacts ?? []);
 
@@ -59,14 +66,18 @@ export default function ContactMatrixPage() {
     } finally { setSaving(false); }
   }
 
-  async function remove(c: CompanyContact) {
-    if (!window.confirm(`Remove ${c.name} from the Contact Matrix?`)) return;
+  // Deletes only from the confirmation modal's Delete button; Cancel just closes it.
+  async function confirmRemove() {
+    if (!removing) return;
+    setDeleting(true);
     try {
-      await clientApi.delete(API.companyPolicy.contactDetail(c.id));
+      await clientApi.delete(API.companyPolicy.contactDetail(removing.id));
+      showToast(`${removing.name} was removed from the Contact Matrix.`, "success");
+      setRemoving(null);
       refetch();
     } catch (err: unknown) {
-      window.alert((err as { message?: string })?.message ?? "Could not remove the contact.");
-    }
+      showToast((err as { message?: string })?.message ?? "Could not remove the contact.", "error");
+    } finally { setDeleting(false); }
   }
 
   const set = <K extends keyof ContactForm>(key: K, value: ContactForm[K]) =>
@@ -113,7 +124,7 @@ export default function ContactMatrixPage() {
                     {canManage && (
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button className="btn btn-ghost btn-sm" onClick={() => openEdit(c)} aria-label={`Edit ${c.name}`}><i className="ti ti-pencil" /></button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => remove(c)} aria-label={`Remove ${c.name}`}><i className="ti ti-trash" /></button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setRemoving(c)} aria-label={`Remove ${c.name}`}><i className="ti ti-trash" /></button>
                       </td>
                     )}
                   </tr>
@@ -123,6 +134,17 @@ export default function ContactMatrixPage() {
           </div>
         </div>
       ))}
+
+      <ApproversSection />
+
+      {removing && (
+        <DeleteContactModal
+          name={removing.name}
+          deleting={deleting}
+          onCancel={() => setRemoving(null)}
+          onConfirm={confirmRemove}
+        />
+      )}
 
       {editing && (
         <Modal

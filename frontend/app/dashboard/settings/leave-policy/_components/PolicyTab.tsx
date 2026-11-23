@@ -43,6 +43,8 @@ interface CreateForm {
   max_carry_forward_days: number;
   policy_note: string;
   is_active: boolean;
+  /** Who can receive and apply for this type — set before any balance is given out. */
+  applicable_gender: "all" | "male" | "female";
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -74,7 +76,7 @@ export default function PolicyTab() {
 
   // ── Create state ──────────────────────────────────────────────────────────
   const [isCreating,    setIsCreating]    = useState(false);
-  const [createForm,    setCreateForm]    = useState<CreateForm>({ leave_type_label: "", annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
+  const [createForm,    setCreateForm]    = useState<CreateForm>({ leave_type_label: "", annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true, applicable_gender: "all" });
   const [createErrors,  setCreateErrors]  = useState<Record<string, string>>({});
   const [isSubmitting,  setIsSubmitting]  = useState(false);
   const [createError,   setCreateError]   = useState<string | null>(null);
@@ -199,7 +201,7 @@ export default function PolicyTab() {
 
   // ── Create handlers ───────────────────────────────────────────────────────
   function openCreate() {
-    setCreateForm({ leave_type_label: "", annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
+    setCreateForm({ leave_type_label: "", annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true, applicable_gender: "all" });
     setCreateErrors({});
     setCreateError(null);
     setIsCreating(true);
@@ -465,6 +467,18 @@ export default function PolicyTab() {
               <input className={`field-input${createErrors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={createForm.max_carry_forward_days} onChange={e => createField("max_carry_forward_days", Number(e.target.value))} disabled={!createForm.can_carry_forward} />
               {createErrors.max_carry_forward_days && <p className="field-error-msg">{createErrors.max_carry_forward_days}</p>}
             </div>
+          </div>
+          <div className="field-group mb-16">
+            <label className="field-label" htmlFor="create-gender">Applicable to *</label>
+            <select id="create-gender" className="field-input field-select" value={createForm.applicable_gender}
+                    onChange={e => createField("applicable_gender", e.target.value)}>
+              <option value="all">All employees</option>
+              <option value="female">Female employees only</option>
+              <option value="male">Male employees only</option>
+            </select>
+            <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
+              Balances are given out as soon as the leave type is created — choose this now (e.g. Female only for Pink Leave).
+            </p>
           </div>
           <div className="field-group mb-16">
             <label className="field-label">Policy Note</label>

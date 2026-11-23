@@ -392,6 +392,209 @@ class WfhGateRunsBeforeFaceVerificationTests(TestCase):
         self.assertEqual(attempt.rejection_reason, '')
 
 
+class FaceVerificationSourceBypassTests(TestCase):
+    """The client-supplied `source` must not decide whether face verification
+    runs: an employee could previously send source='manual' or 'biometric' and
+    punch with no face check at all. Face ID is mandatory and the employee
+    has an approved registration throughout."""
+
+    def setUp(self):
+        cache.clear()
+        self.client   = APIClient()
+        self.employee = make_user('facebypass@test.com', role=make_role('employee_bypass'),
+                                  password='TestPass123!', employee_id='FBP1')
+        _login(self.client, 'facebypass@test.com')
+        _set_face_verification_mandatory(True)
+        _make_approved_request(self.employee)
+
+    def tearDown(self):
+        cache.clear()
+
+    def _punch(self, punch_type='IN', **overrides):
+        # 'office', not 'wfh': a WFH punch now needs an approved WFH request
+        # first, which would refuse the punch before face verification runs.
+        payload = {'punch_type': punch_type, 'attendance_mode': 'office'}
+        payload.update(overrides)
+        return self.client.post(reverse('attendance-punch'), payload, format='json')
+
+    def _assert_no_punch(self):
+        self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
+
+    def test_manual_source_is_refused_for_clock_in_and_out(self):
+        for punch_type in ('IN', 'OUT'):
+            resp = self._punch(punch_type, source='manual')
+            self.assertEqual(resp.status_code, 422, resp.data)
+        self._assert_no_punch()
+
+    def test_biometric_source_is_refused_for_clock_in_and_out(self):
+        for punch_type in ('IN', 'OUT'):
+            resp = self._punch(punch_type, source='biometric')
+            self.assertEqual(resp.status_code, 422, resp.data)
+        self._assert_no_punch()
+
+    def test_unsupported_source_values_are_refused(self):
+        for source in ('system', 'kiosk', 'MANUAL', ''):
+            resp = self._punch(source=source)
+            self.assertEqual(resp.status_code, 422, (source, resp.data))
+        self._assert_no_punch()
+
+    def test_web_without_face_data_is_refused(self):
+        resp = self._punch(source='web')
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self._assert_no_punch()
+
+    def test_clock_out_is_verified_like_clock_in(self):
+        self.assertEqual(self._punch('IN', face_embedding=MATCHING_EMBEDDING,
+                                     capture_session_id='s-in').status_code, 200)
+        self.assertEqual(self._punch('OUT').status_code, 400)                        # no face data
+        self.assertEqual(self._punch('OUT', face_embedding=MISMATCHED_EMBEDDING,
+                                     capture_session_id='s-bad').status_code, 403)   # wrong face
+        second_match = [v + 0.002 for v in REGISTERED_EMBEDDING]
+        resp = self._punch('OUT', face_embedding=second_match, capture_session_id='s-out')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        out = AttendancePunch.objects.get(employee=self.employee, punch_type='OUT')
+        self.assertTrue(out.face_verified)
+
+    def test_service_requires_face_for_every_source(self):
+        from apps.attendance.services_face_matching import FaceVerificationService
+        for source in ('web', 'voice', 'mobile', 'manual', 'biometric', 'system', 'anything-else'):
+            outcome = FaceVerificationService.verify_for_punch(self.employee, source, None)
+            self.assertTrue(outcome.required, source)
+            self.assertFalse(outcome.is_match, source)
+
+    # ── Mobile: no longer exempt ─────────────────────────────────────────────
+
+    def test_mobile_without_face_data_is_refused_for_clock_in_and_out(self):
+        resp = self._punch('IN', source='mobile')
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn('face verification is required', resp.data['message'].lower())
+        self._assert_no_punch()
+        # Clock out (after a verified clock-in) without face data is refused too.
+        self.assertEqual(self._punch('IN', source='mobile', face_embedding=MATCHING_EMBEDDING,
+                                     capture_session_id='m-in').status_code, 200)
+        resp = self._punch('OUT', source='mobile')
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn('face verification is required', resp.data['message'].lower())
+        self.assertFalse(AttendancePunch.objects.filter(employee=self.employee, punch_type='OUT').exists())
+
+    def test_mobile_with_someone_elses_face_is_refused(self):
+        # The reported incident: another person's face accepted on mobile.
+        resp = self._punch(source='mobile', face_embedding=MISMATCHED_EMBEDDING, capture_session_id='m-bad')
+        self.assertEqual(resp.status_code, 403, resp.data)
+        self._assert_no_punch()
+
+    def test_mobile_clock_in_and_out_with_matching_face_succeed(self):
+        resp = self._punch('IN', source='mobile', face_embedding=MATCHING_EMBEDDING, capture_session_id='m-in')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(self._punch('OUT', source='mobile').status_code, 400)    # clock-out needs a face too
+        second_match = [v + 0.002 for v in REGISTERED_EMBEDDING]
+        resp = self._punch('OUT', source='mobile', face_embedding=second_match, capture_session_id='m-out')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        punches = AttendancePunch.objects.filter(employee=self.employee).order_by('punched_at')
+        self.assertEqual([(p.punch_type, p.source, p.face_verified) for p in punches],
+                         [('IN', 'mobile', True), ('OUT', 'mobile', True)])
+
+    def test_web_session_cannot_skip_face_by_claiming_mobile(self):
+        # Same cookie-authenticated client as a browser: claiming source=mobile
+        # used to skip the check entirely.
+        resp = self._punch(source='mobile')
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self._assert_no_punch()
+
+    # ── Voice ────────────────────────────────────────────────────────────────
+
+    def test_voice_is_verified(self):
+        self.assertEqual(self._punch(source='voice').status_code, 400)
+        self.assertEqual(self._punch(source='voice', face_embedding=MISMATCHED_EMBEDDING,
+                                     capture_session_id='v-bad').status_code, 403)
+        resp = self._punch(source='voice', face_embedding=MATCHING_EMBEDDING, capture_session_id='v-ok')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(AttendancePunch.objects.get(employee=self.employee).face_verified)
+
+    # ── Company (tenant) isolation ───────────────────────────────────────────
+
+    def _client_with_token(self, *, company_schema=None, as_cookie=True):
+        from rest_framework_simplejwt.tokens import AccessToken
+        token = AccessToken.for_user(self.employee)
+        if company_schema is not None:
+            token['company_schema'] = company_schema
+        c = APIClient()
+        if as_cookie:
+            c.cookies['royal_access_token'] = str(token)
+        else:
+            c.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        return c
+
+    def _raw_punch(self, client):
+        # A refused cross-company request runs against the public schema,
+        # where the user lookup fails at the DB level (swallowed by the auth
+        # class) and aborts the test's transaction. Run it inside a savepoint
+        # that is always rolled back so the follow-up assertion can query.
+        from django.db import transaction
+
+        class _Rollback(Exception):
+            pass
+
+        resp = None
+        try:
+            with transaction.atomic():
+                resp = client.post(reverse('attendance-punch'),
+                                   {'punch_type': 'IN', 'attendance_mode': 'office', 'source': 'mobile',
+                                    'face_embedding': MATCHING_EMBEDDING, 'capture_session_id': 't-iso'},
+                                   format='json')
+                raise _Rollback
+        except _Rollback:
+            pass
+        return resp
+
+    def test_token_pointing_at_another_company_cannot_punch(self):
+        # A token claiming a different (here: non-existent) company never
+        # reaches this company's data — the request is not authenticated.
+        resp = self._raw_punch(self._client_with_token(company_schema='tenant_othercompany'))
+        self.assertEqual(resp.status_code, 401, resp.data)
+        self._assert_no_punch()
+
+    def test_bearer_token_without_company_cookie_cannot_punch(self):
+        resp = self._raw_punch(self._client_with_token(as_cookie=False))
+        self.assertEqual(resp.status_code, 401, resp.data)
+        self._assert_no_punch()
+
+    def test_hr_approved_correction_still_creates_manual_punch(self):
+        import datetime
+        from django.utils import timezone
+        from apps.attendance.models import AttendanceCorrection
+        admin = make_user('facebypass.admin@test.com', password='TestPass123!', employee_id='FBA1',
+                          role=make_role('admin_bypass', permission_codenames=['settings.edit', 'attendance.view',
+                                                                                'attendance.create']))
+        correction = AttendanceCorrection.objects.create(
+            employee=self.employee, date=timezone.localdate(), punch_type='IN',
+            requested_in_time=datetime.time(9, 0), reason='forgot_to_punch',
+            status=AttendanceCorrection.STATUS_L2_PENDING,
+        )
+        hr_client = APIClient()
+        _login(hr_client, 'facebypass.admin@test.com')
+        resp = hr_client.patch(reverse('hr-correction-review', kwargs={'pk': correction.pk}),
+                               {'action': 'approve'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        punch = AttendancePunch.objects.get(employee=self.employee)
+        self.assertEqual(punch.source, AttendancePunch.SOURCE_MANUAL)
+        self.assertFalse(punch.face_verified)
+
+    def test_employee_cannot_approve_own_correction(self):
+        from django.utils import timezone
+        import datetime
+        from apps.attendance.models import AttendanceCorrection
+        correction = AttendanceCorrection.objects.create(
+            employee=self.employee, date=timezone.localdate(), punch_type='IN',
+            requested_in_time=datetime.time(9, 0), reason='forgot_to_punch',
+            status=AttendanceCorrection.STATUS_L2_PENDING,
+        )
+        resp = self.client.patch(reverse('hr-correction-review', kwargs={'pk': correction.pk}),
+                                 {'action': 'approve'}, format='json')
+        self.assertEqual(resp.status_code, 403, resp.data)
+        self._assert_no_punch()
+
+
 class FaceRegistrationMyStatusTests(TestCase):
     def setUp(self):
         cache.clear()

@@ -11,7 +11,9 @@ from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
 from core.permissions import HasCompletedOnboarding
 from core.responses import error, success
-from apps.dashboard.views.overview import _hr_dashboard_branch, _is_system_admin, _is_hr_or_admin
+from apps.dashboard.views.overview import (
+    _admin_dashboard_scope, _hr_dashboard_branch, _is_system_admin, _is_hr_or_admin,
+)
 
 logger = logging.getLogger(__name__)
 _DENIED = 'You do not have permission to perform this action.'
@@ -21,6 +23,13 @@ _TTL_BIRTHDAYS = 6 * 3600  # 6 h
 
 
 # ─── Shared Birthday Helpers ──────────────────────────────────────────────────
+
+def _in_branch(rows, branch):
+    """Company-wide (cached) birthday rows limited to one branch; all when branch is None."""
+    if not branch:
+        return rows
+    return [r for r in rows if (r.get('branch') or '').strip().lower() == branch.lower()]
+
 
 def _serialize_birthday(profile, days_until):
     user = profile.user
@@ -151,13 +160,17 @@ class SystemAdminEmployeeLifecycleView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _is_system_admin(request.user):
+        allowed, branch = _admin_dashboard_scope(request.user)
+        if not allowed:
             return error(_DENIED, http_status=403)
 
         from apps.accounts.models import User
 
         today      = timezone.localdate()
         thirty_ago = today - timedelta(days=30)
+        people     = User.objects.filter(is_active=True)
+        if branch:                                   # Branch Admin: own branch only
+            people = people.filter(branch=branch)
 
         def _emp(u):
             return {
@@ -168,13 +181,13 @@ class SystemAdminEmployeeLifecycleView(APIView):
                 'date_of_joining': str(u.date_of_joining) if u.date_of_joining else None,
             }
 
-        new_joiners = [_emp(u) for u in User.objects.filter(
-            is_active=True, date_of_joining__isnull=False, date_of_joining__gte=thirty_ago
+        new_joiners = [_emp(u) for u in people.filter(
+            date_of_joining__isnull=False, date_of_joining__gte=thirty_ago
         ).order_by('-date_of_joining')]
 
         anniversaries_qs = (
-            User.objects
-            .filter(is_active=True, date_of_joining__isnull=False, date_of_joining__month=today.month)
+            people
+            .filter(date_of_joining__isnull=False, date_of_joining__month=today.month)
             .exclude(date_of_joining__year=today.year)
             .annotate(doj_day=ExtractDay('date_of_joining'))
             .order_by('doj_day')
@@ -183,7 +196,7 @@ class SystemAdminEmployeeLifecycleView(APIView):
 
         return success('Employee lifecycle retrieved.', data={
             'new_joiners':        {'count': len(new_joiners),   'employees': new_joiners},
-            'notice_period':      _notice_period_data(None),
+            'notice_period':      _notice_period_data(branch),
             'work_anniversaries': {'count': len(anniversaries), 'employees': anniversaries},
         })
 
@@ -194,18 +207,20 @@ class SystemAdminBirthdayTodayView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _is_system_admin(request.user):
+        allowed, branch = _admin_dashboard_scope(request.user)
+        if not allowed:
             return error(_DENIED, http_status=403)
-        return success("Today's birthdays retrieved.", data=_today_birthdays_data())
+        return success("Today's birthdays retrieved.", data=_in_branch(_today_birthdays_data(), branch))
 
 
 class SystemAdminBirthdayUpcomingView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _is_system_admin(request.user):
+        allowed, branch = _admin_dashboard_scope(request.user)
+        if not allowed:
             return error(_DENIED, http_status=403)
-        return success('Upcoming birthdays retrieved.', data=_upcoming_birthdays_data())
+        return success('Upcoming birthdays retrieved.', data=_in_branch(_upcoming_birthdays_data(), branch))
 
 
 # ─── Audit Logs ───────────────────────────────────────────────────────────────
@@ -214,13 +229,16 @@ class SystemAdminAuditLogsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _is_system_admin(request.user):
+        allowed, branch = _admin_dashboard_scope(request.user)
+        if not allowed:
             return error(_DENIED, http_status=403)
 
         from apps.accounts.models import AuditLog
 
         from apps.tenants.access import AUDIT_MODULES, hidden_names
         qs = AuditLog.objects.select_related('user').exclude(module__in=hidden_names(AUDIT_MODULES)).order_by('-created_at')
+        if branch:                                   # Branch Admin: events about its own branch only
+            qs = qs.filter(branch__iexact=branch)
         module = (request.query_params.get('module') or '').strip()
         if module:
             qs = qs.filter(module=module)

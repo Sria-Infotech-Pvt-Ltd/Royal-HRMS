@@ -30,6 +30,26 @@ describe("attendanceExportFilename", () => {
   });
 });
 
+describe("single-employee export", () => {
+  it("sends the exact employee ID with each period and drops branch / department", () => {
+    const one = { ...base, department: "Ops", employeeId: "RIST0308G" };
+    expect(attendanceExportParams({ ...one, mode: "day" })).toEqual({ date: "2026-10-07", employee: "RIST0308G" });
+    expect(attendanceExportParams({ ...one, mode: "month" })).toEqual({ month: "2026-10", employee: "RIST0308G" });
+    expect(attendanceExportParams({ ...one, mode: "range" }))
+      .toEqual({ from_date: "2026-09-25", to_date: "2026-10-05", employee: "RIST0308G" });
+  });
+
+  it("names the file by employee and period", () => {
+    expect(attendanceExportFilename({ ...base, mode: "month", employeeId: "RIST0308G" }, "Surat_"))
+      .toBe("attendance_RIST0308G_2026-10.csv");
+    expect(attendanceExportFilename({ ...base, mode: "day", employeeId: "A/1 2" })).toBe("attendance_A_1_2_2026-10-07.csv");
+  });
+
+  it("an empty employee ID keeps the all-employees export", () => {
+    expect(attendanceExportParams({ ...base, mode: "month", employeeId: "" })).toEqual({ month: "2026-10", branch: "Surat" });
+  });
+});
+
 describe("exportRangeProblem", () => {
   const today = "2026-10-28";
 

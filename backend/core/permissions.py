@@ -24,6 +24,15 @@ def has_perm(user, codename: str) -> bool:
         return True
     if not user.role:
         return False
+    # Branch-restricted roles (Branch Admin: role.can_manage_branch) never get
+    # company-wide DATA access. has_perm(user, 'settings.edit') is used throughout
+    # the codebase as "sees every branch" (employees, attendance, leave, payroll,
+    # org chart, dashboards, ...), so for these roles it answers False and every
+    # such check falls back to the user's own branch. The role still holds
+    # settings.edit: it keeps granting their other permissions below, and the
+    # settings screens they manage check can_edit_settings() instead.
+    if codename == 'settings.edit' and getattr(user.role, 'can_manage_branch', False):
+        return False
     # settings.edit is this codebase's universal "sees/does everything"
     # signal — checking it here (permission-based) instead of a hardcoded
     # role name means any role actually granted settings.edit gets the same
@@ -31,6 +40,27 @@ def has_perm(user, codename: str) -> bool:
     return user.role.role_permissions.filter(
         permission__codename__in={codename, 'settings.edit'}
     ).exists()
+
+
+def is_branch_restricted(user) -> bool:
+    """Branch Admin-type roles (role.can_manage_branch): limited to their own
+    branch's employees and data, whatever else the role holds."""
+    if not user or getattr(user, 'is_superuser', False):
+        return False
+    role = getattr(user, 'role', None)
+    return bool(role and getattr(role, 'can_manage_branch', False))
+
+
+def can_edit_settings(user) -> bool:
+    """May use the settings screens that require settings.edit (roles, company
+    info, escalation rules, ...). Unlike has_perm(user, 'settings.edit'), this is
+    True for a Branch Admin whose role holds settings.edit — it is about editing
+    settings, not about seeing other branches' data."""
+    if not user:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return bool(user.role and user.role.role_permissions.filter(permission__codename='settings.edit').exists())
 
 
 class RequiresSecureTransport(BasePermission):

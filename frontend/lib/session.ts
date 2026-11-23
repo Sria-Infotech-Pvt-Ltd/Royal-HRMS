@@ -11,6 +11,8 @@ export interface SessionPayload {
   name:              string;
   role:              string;
   permissions:       string[];
+  /** Branch Admin-type role (limited to its own branch). */
+  can_manage_branch?: boolean;
   companyName?:      string;
   /** Company modules (subscription) from the access token's `modules` claim;
    *  undefined when unknown (show everything, as before). */

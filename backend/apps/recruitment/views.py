@@ -14,7 +14,7 @@ from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from core.permissions import has_perm as _has_perm
+from core.permissions import can_edit_settings, has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
 from apps.accounts.models import AuditLog, Company, User
@@ -1716,7 +1716,7 @@ class ReferralRuleListCreateView(APIView):
         )
 
     def post(self, request):
-        if not _has_perm(request.user, 'settings.edit'):
+        if not can_edit_settings(request.user):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         serializer = ReferralRuleSerializer(data=request.data)
         if not serializer.is_valid():
@@ -1737,7 +1737,7 @@ class ReferralRuleDetailView(APIView):
             return None
 
     def patch(self, request, pk):
-        if not _has_perm(request.user, 'settings.edit'):
+        if not can_edit_settings(request.user):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         rule = self._get_rule(pk)
         if not rule:

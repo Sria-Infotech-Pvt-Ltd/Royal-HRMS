@@ -236,10 +236,12 @@ def reprocess_date(
 
 def filtered_employees(filters: dict):
     """Active employees in scope for the attendance list / export: a manager's
-    direct reports (employee_ids) else the branch, then department and search."""
+    direct reports (employee_ids) else the branch, then the exact employee ID
+    (export only), department and search."""
     branch       = filters.get('branch', '')
     department   = filters.get('department', '')
     employee_ids = filters.get('employee_ids')
+    employee     = filters.get('employee', '')
     search       = filters.get('search', '').strip()
 
     employee_qs = User.objects.filter(is_active=True)
@@ -247,6 +249,8 @@ def filtered_employees(filters: dict):
         employee_qs = employee_qs.filter(id__in=employee_ids)
     elif branch:
         employee_qs = employee_qs.filter(branch=branch)
+    if employee:
+        employee_qs = employee_qs.filter(employee_id=employee)
     if department:
         employee_qs = employee_qs.filter(department=department)
     if search:

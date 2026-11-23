@@ -15,7 +15,7 @@ modules they've bought.
 from apps.tenants.models import (
     MODULE_ANNOUNCEMENTS, MODULE_ASSESSMENTS, MODULE_ATTENDANCE, MODULE_EXPENSES,
     MODULE_FACE_ATTENDANCE, MODULE_LEAVE, MODULE_PAYROLL, MODULE_RECRUITMENT,
-    MODULE_SEPARATION, MODULE_VOICE_COMMANDS, MODULE_DOCUMENTS, MODULE_ASSETS, MODULE_WFH,
+    MODULE_SEPARATION, MODULE_VOICE_COMMANDS, MODULE_DOCUMENTS, MODULE_ASSETS, MODULE_WFH, MODULE_TRAINING,
 )
 
 # Order matters — more specific prefixes must come before broader ones
@@ -39,6 +39,7 @@ MODULE_URL_PREFIXES = (
     ('/api/payroll/',        MODULE_PAYROLL),
     ('/api/voice/',          MODULE_VOICE_COMMANDS),
     ('/api/assessments/',    MODULE_ASSESSMENTS),
+    ('/api/training/',       MODULE_TRAINING),
 )
 
 

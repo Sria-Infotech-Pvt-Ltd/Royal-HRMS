@@ -36,6 +36,7 @@ function DeptCol({ dept, isFirst, isLast }: DeptColProps) {
   return (
     <div style={{
       flex: "1 0 160px",
+      maxWidth: 260,             // long department names wrap instead of stretching the card
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -66,6 +67,7 @@ function DeptCol({ dept, isFirst, isLast }: DeptColProps) {
         textAlign: "center",
         width: "100%",
         boxShadow: "var(--shadow)",
+        overflowWrap: "anywhere",
       }}>
         <div style={{
           fontSize: 10,
@@ -95,6 +97,7 @@ function DeptCol({ dept, isFirst, isLast }: DeptColProps) {
         borderRadius: "var(--radius-lg)",
         padding: "12px 16px",
         width: "100%",
+        overflowWrap: "anywhere",
       }}>
         <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 6, textAlign: "center" }}>
           Team members
@@ -176,7 +179,7 @@ function BranchNode({ group, isFirst, isLast }: { group: OrgChartGroup; isFirst:
       paddingTop: 28,
       paddingLeft: 16,
       paddingRight: 16,
-      width: 700,
+      minWidth: 700,             // grows with a branch that has many departments
       flexShrink: 0,
     }}>
       <div style={{
@@ -220,8 +223,13 @@ function ZoomableChart({ zoom, children }: { zoom: number; children: React.React
   const scale = zoom / 100;
   return (
     <div style={{ overflow: "auto", WebkitOverflowScrolling: "touch" }}>
-      <div style={size ? { width: size.w * scale, height: size.h * scale } : undefined}>
-        <div ref={contentRef} style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}>
+      {/* margin auto centres a chart narrower than the card; a wider one starts
+          at the left edge so it can be scrolled fully instead of being clipped. */}
+      <div style={size ? { width: size.w * scale, height: size.h * scale, margin: "0 auto" } : undefined}>
+        {/* max-content: the chart takes its own natural width, not the card's,
+            so a narrow screen / high browser zoom can't squeeze it into
+            overflowing off the left side. */}
+        <div ref={contentRef} style={{ width: "max-content", transform: `scale(${scale})`, transformOrigin: "top left" }}>
           {children}
         </div>
       </div>

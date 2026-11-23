@@ -12,6 +12,10 @@ Contact Matrix
   POST   /api/company-contacts/        documents.create
   PATCH  /api/company-contacts/<pk>/   documents.edit
   DELETE /api/company-contacts/<pk>/   documents.delete (soft delete)
+  GET    /api/company-contacts/approvers/?workflow=leave
+                                       read-only L1/L2 approvers: your own for every
+                                       signed-in user; employees.view also gets the
+                                       team in scope (direct reports / branch / all)
 """
 from __future__ import annotations
 
@@ -23,7 +27,10 @@ from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.accounts.models import AuditLog, CompanyContact, Document, DocumentAcknowledgement, User
+from apps.accounts.models import (
+    ApprovalWorkflowRule, AuditLog, CompanyContact, Document, DocumentAcknowledgement, User,
+)
+from apps.accounts.services_approval import resolve_approval_chain
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
@@ -245,3 +252,66 @@ class CompanyContactDetailView(APIView):
         contact.save(update_fields=['is_active', 'updated_by', 'updated_at'])
         _audit(request, 'contact_deleted', contact.id, {'name': contact.name})
         return success('Contact removed.')
+
+
+# ─── Approvers (L1 / L2) ──────────────────────────────────────────────────────
+# Read-only. Uses the same resolver that routes leave / WFH / attendance
+# correction requests (services_approval.resolve_approval_chain): a
+# per-employee override first, else the workflow rule's L1/L2 roles resolved
+# to the employee's reporting manager or HR. Nothing here changes routing.
+
+def _approver_contact(approver) -> dict | None:
+    if approver is None:
+        return None
+    return {'name': approver.full_name, 'email': approver.email or '', 'phone': approver.phone or ''}
+
+
+def _approver_row(employee, workflow_type: str) -> dict:
+    l1, l2 = resolve_approval_chain(employee, workflow_type)
+    return {
+        'employee_id': employee.employee_id or '',
+        'name':        employee.full_name,
+        'department':  employee.department or '',
+        'branch':      employee.branch or '',
+        'l1':          _approver_contact(l1),
+        'l2':          _approver_contact(l2),
+    }
+
+
+def _approver_team(user):
+    """Employees whose approvers this user may see: everyone (settings.edit),
+    a manager's direct reports, else their own branch — never anyone when a
+    branch-scoped user has no branch. The user themselves is in `me`."""
+    qs = User.objects.filter(is_active=True).exclude(employee_id='').exclude(pk=user.pk)
+    if _unrestricted(user):
+        return qs
+    role = user.role
+    if role and role.can_manage_team and not role.can_manage_branch:
+        return qs.filter(reporting_manager=user)
+    if user.branch:
+        return qs.filter(branch=user.branch)
+    return qs.none()
+
+
+class ContactApproversView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        workflow = request.query_params.get('workflow') or ApprovalWorkflowRule.WORKFLOW_LEAVE
+        choices = ApprovalWorkflowRule.WORKFLOW_CHOICES
+        if workflow not in dict(choices):
+            return error(f'workflow must be one of: {", ".join(v for v, _ in choices)}.')
+
+        team = None
+        if _has_perm(request.user, 'employees.view'):
+            employees = _approver_team(request.user).select_related('reporting_manager', 'hr').order_by(
+                'full_name', 'employee_id',
+            )
+            team = [_approver_row(e, workflow) for e in employees]
+
+        return success('Approvers.', data={
+            'workflow':  workflow,
+            'workflows': [{'value': v, 'label': label} for v, label in choices],
+            'me':        _approver_row(request.user, workflow),
+            'team':      team,
+        })

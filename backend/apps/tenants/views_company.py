@@ -8,7 +8,7 @@ from __future__ import annotations
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from core.permissions import has_perm
+from core.permissions import can_edit_settings, has_perm
 from core.responses import error, success
 from apps.tenants.access import current_tenant
 from apps.tenants.customer_plan import plan_details
@@ -21,7 +21,7 @@ class PlanDetailsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not has_perm(request.user, 'settings.edit'):
+        if not can_edit_settings(request.user):
             return error('Only company administrators can view plan details.', http_status=403)
         client = current_tenant()
         if client is None:

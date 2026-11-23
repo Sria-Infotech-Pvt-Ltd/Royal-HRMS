@@ -3098,3 +3098,265 @@ sudo supervisorctl status | grep royalhrms
     plan, Platform Admin mobile layout, Add Company code check, GST default
     for non-INR, DEMO2026 Aug / Sep payroll cleanup confirmation, staging and
     `backend/.env.example` still missing.
+
+------------------------------------------------------------------------
+
+# 36. Server operations log (2026-10-28 → 2026-11-12)
+
+Infrastructure and operations work, not application code. Secrets, passwords
+and personal data are not recorded here. Word documents for the client's
+deployment team (listed at the end) are kept outside the repo.
+
+## RIS inactive accounts deleted (2026-10-28)
+-   After the RIS → RSS conversion (§32), 8 inactive **duplicate** accounts
+    (same person re-created with a different email: same name, phone and
+    date of joining) and 1 inactive former employee who had never logged in
+    were deleted, after HR confirmation.
+-   Checked first with Django's deletion `Collector`: only auto-created rows
+    (`LeaveBalance`, `EmployeeWeeklyOffAssignment`, one `EmployeeProfile`); no
+    attendance, payroll, leave usage or documents; no links on other records
+    cleared. Each delete ran in one transaction with an `AuditLog` row
+    (`employee_duplicate_accounts_deleted`, `employee_inactive_account_deleted`).
+-   Restore points (contain personal data, delete when no longer needed):
+    `/root/backups/royalhrms_db_before_delete_dupes_20261028_0653.dump`,
+    `/root/backups/royalhrms_db_before_delete_RSS0605PP_20261028_0659.dump`.
+
+## Google Maps key deployed (2026-11-10)
+-   `GOOGLE_MAPS_API_KEY` added to `backend/.env` (backup
+    `backend/.env.bak_20261110_0726`), `manage.py check` clean,
+    `royalhrms_backend` + `royalhrms_celery_worker` restarted. Server was on
+    `9970fdb` at the time.
+-   First live call returned `REQUEST_DENIED`: the server calls Google over
+    **IPv6** (`2a02:4780:75:8f41::1`) and the key allowed only the IPv4
+    address. Fixed by adding the IPv6 address to the key's IP restriction;
+    re-test returned a Google address with no fallback warning.
+-   **Any future IP-restricted API key must list both the IPv4 and the IPv6
+    address of this server.**
+
+## Live server inventory (2026-11-12) — corrections to §§2–24
+-   **Third application, bito:** `bitojobs.com`, `www.bitojobs.com`; folder
+    `/var/www/bito/app/bito-jobs/backend`; Supervisor `bito_daphne`
+    (`daphne -b 127.0.0.1 -p 8002 app.main:app`) and `bito_worker`
+    (`python -m app.worker`); Linux user `bito`. Its Nginx `server_name` also
+    contains the bare IP `2.25.73.246`.
+-   **CareerBuddy dev copy:** `dev.careerbuddy4u.com`;
+    `/var/www/careerbuddy4u-dev/app`; Supervisor `careerbuddy_daphne_dev`
+    (`/usr/local/bin/careerbuddy-daphne-dev.sh`, Daphne on 127.0.0.1:8010).
+-   **Docker is installed** (contrary to §16): one container `minio`
+    (`quay.io/minio/minio`) published on 0.0.0.0:9000 (API) and :9001
+    (console). UFW also allows 9000/9001 (IPv4), and Docker-published ports
+    bypass UFW anyway, so **the MinIO console is reachable from the
+    internet**. CareerBuddy prod and dev proxy `/storage/` → 127.0.0.1:9000.
+-   PostgreSQL is `postgresql@16-main`; MySQL also listens on 127.0.0.1:33060.
+-   **Ports to add to the "do not reuse" list (§10):** 3001, 5432, 8001,
+    8002, 8010, 9000, 9001, 33060.
+-   Exporter service names are `nginx-exporter` and
+    `prometheus-mysqld-exporter` (not the names in §12).
+-   Certificates (auto-renewed by certbot): careerbuddy4u.com 2026-12-28,
+    bitojobs.com 2027-01-05, dev.careerbuddy4u.com 2027-01-26, royalhrms.com
+    (+ www, api) 2027-01-29, monitor.careerbuddy4u.com 2027-01-30.
+-   Disk 17 GB used of 193 GB; no swap; no scheduled database dumps for any
+    application; unattended-upgrades reports a package it could not install.
+
+## Grafana (2026-11-11)
+-   `https://monitor.careerbuddy4u.com`, Grafana 13.1.0. Nobody had the admin
+    password, so it was reset (backup `/root/backups/grafana_20261111_1703.db`).
+    Run the CLI as user `grafana` **from `/usr/share/grafana`** — from `/root`
+    it panics with "error getting work directory: permission denied":
+    `cd /usr/share/grafana && ... | sudo -u grafana grafana cli --homepath /usr/share/grafana --config /etc/grafana/grafana.ini admin reset-admin-password --password-from-stdin`.
+    The password is held by the owner, not recorded.
+-   The server and Grafana belong to the client; the client's team gets its
+    own Grafana user (organisation role Admin). Full visibility is agreed.
+
+## CareerBuddy-only monitoring (applied 2026-11-12)
+-   Backup of all changed files: `/root/backups/cb_metrics_20261112_0909`.
+-   `nginx.conf`: `log_format cb_json` (JSON: time, host, ip, method, uri
+    **without query string**, status, bytes, `request_time`,
+    `upstream_response_time`, user agent) after the shared `access_log` line.
+-   `sites-available/careerbuddy4u`, 443 block: its own log
+    `/var/log/nginx/careerbuddy4u.access.log cb_json` plus the shared
+    `access.log` (kept). `nginx -t` + reload, no downtime.
+-   Promtail: new job `careerbuddy_access` (labels `app=careerbuddy`,
+    `job=careerbuddy`, `env=production`, `method` extracted). The two shared
+    Nginx jobs were relabelled `host=all-sites` — the old `host=careerbuddy4u.com`
+    label was wrong, that log contains every site.
+-   Grafana dashboard **"CareerBuddy — Production"** (17 panels): visitors,
+    requests, logins per minute for `/users/login/` and
+    `/employer/accounts/employer/login/`, error rate, response time
+    (p95 / average), slowest pages, MySQL, server.
+-   Rollback: copy the files back from the backup folder, `nginx -t &&
+    systemctl reload nginx`, `systemctl restart promtail`.
+-   Not done: process-exporter (per-application CPU/RAM); Loki retention to
+    confirm (the logs contain visitor IP addresses).
+
+## CareerBuddy capacity findings (for its pilot — CareerBuddy team's decision)
+-   One Daphne process (about 8 threads for normal Django views, about one
+    CPU), no Celery or worker, `proxy_read_timeout 86400` on `location /`,
+    `client_max_body_size 300M`, Nginx `worker_connections 768`.
+-   Recommended before a 500-user pilot: 3–4 Daphne processes on free ports,
+    `ASGI_THREADS` 16–32, 4 GB swap, 60–120 s timeout for normal pages, stop
+    the dev copy during the pilot, and a load test.
+
+## Documents for the client deployment team (not in the repo)
+-   `Server_Architecture_srv1795199_v1.0.docx`,
+    `Application_Update_Procedures_v1.0.docx` (Royal HRMS standard procedure;
+    CareerBuddy part is a DRAFT for their team to confirm),
+    `CareerBuddy_Metrics_Plan_v1.1.docx`, `careerbuddy_production_dashboard.json`.
+
+## Open items
+-   MinIO 9000/9001 public exposure; swap; scheduled database backups;
+    pending OS updates and reboot; bito answering on the bare IP.
+-   CareerBuddy pilot fixes and load test; process-exporter; Loki retention.
+-   Delete old dumps in `/root/backups/` once they are no longer needed
+    (they contain personal data).
+
+------------------------------------------------------------------------
+
+# 37. Application changes and operations log (2026-11-12 → 2026-11-23)
+
+Production support since §36. Secrets, passwords, face data and personal
+data are not recorded here; employees are referred to by employee ID only.
+
+## Commits (branch `production`)
+| Commit | Date | Change |
+|---|---|---|
+| `9b562220` / `7ba855a6` | 11-12 | Training & Learning module (incl. validation fixes, `videos_optional`, migration `training.0003`) |
+| `faf5ba7c` | 11-12 | Leave: gender rules enforced (apply check, eligible-only picker, gender on create, HR credit), unused balances auto-removed when a policy's gender narrows, cleanup command |
+| `0d1b718e` | 11-12 | Leave: document required/optional follows leave type settings; custom leave type names; gender filter in Manage Leave Credits |
+| `36c3abfa` | 11-12 | Leave request details popup uses the shared Modal |
+| `79987b44` | 11-13 | Training course: "+ New Assessment" opens the Assessments create form |
+| `64673c9d` | 11-16 | Branch Admin: own-branch data only, keeps `settings.edit` and its screens; branch-scoped manager/HR dropdowns; blank branch = no access |
+| `366d15db` → `34316209` | 11-16 | Branch Admin dashboard: briefly switched to the HR dashboard, then reverted to the Admin dashboard with every card limited to its own branch |
+| `2cd26b8d` | 11-16 | Action Queue on the Branch Admin dashboard (own-branch counts) |
+| `06567132` | 11-19 | Org chart: no left-side clipping on smaller screens / browser zoom; My Profile documents open in an in-app preview (the eye button opened `api.royalhrms.com/...` in a new tab, which has no login cookie → 401) |
+| `4406a8b3` | 11-23 | Attendance: punch endpoint accepts `source` = `web`, `mobile`, `voice` only (`manual`/`biometric` refused, 422) |
+| `2f5f0b64` | 11-23 | Attendance: **mobile punches now require face verification** (no source-based exemption) |
+
+**Deployment status of `4406a8b3` and `2f5f0b64` to be confirmed** with
+`git log --oneline -1` on the server. All changes are backend restart only
+(`royalhrms_backend`) except `06567132` (frontend build + restart) and the
+Training module (migration).
+
+## Pink Leave shown to men — data clean-up (applied on server)
+-   `cleanup_gender_ineligible_leave_balances` (TenantCommand, dry run by
+    default, `--apply` to delete; skips rows with used days, credit history,
+    requests or no gender on the profile).
+-   Removed: RIS 19 + 7 wrong-gender balances, DEMO2026 3.
+-   **2 balances with credit history were left for HR to reverse manually.**
+
+## Nginx header size
+-   `400 Request Header Or Cookie Too Large` on royalhrms.com fixed with
+    `large_client_header_buffers 4 32k;` (applied by the server owner).
+    Confirm which site file holds it before the next Nginx change.
+
+## Branch Admin rules (agreed with the client)
+-   Branch Admin **must keep `settings.edit`** and every screen it had. Only
+    the data is limited to its own branch (`core.permissions.is_branch_restricted`,
+    `can_edit_settings`; `has_perm(user, 'settings.edit')` is False for
+    `can_manage_branch` roles so it no longer means "sees every branch").
+-   A Branch Admin with a blank branch sees nobody.
+
+## RIS: Training & Learning not visible
+-   `training` is not in RIS `enabled_modules` and RIS has no plan assigned.
+    Decision: **do not enable it and do not assign a plan** for now.
+
+## Attendance deletions on request (test punches)
+| Date | Company | Employee ID | Deleted | Backup |
+|---|---|---|---|---|
+| 11-20 | DEMO2026 | `DE0211VK` (zero, not letter O) | 2 punches, 1 daily record (11-20) | **none** — a second run overwrote it with an empty file |
+| 11-23 10:56 | RIS | `RISP2309P` | 2 punches, 1 record (11-23) | `/tmp/attendance_backup_RIS_RISP2309P_2026-11-23_20261123_105607.json` |
+| 11-23 11:05 | RIS | `RISP2309P` | 2 punches, 1 record (11-23) | `/tmp/attendance_backup_RIS_RISP2309P_2026-11-23_20261123_110505.json` |
+
+-   Script `/tmp/del_att_day.py` (env `CODE`, `EMP`, optional `DAY`,
+    `APPLY=1`): one date only, dry run by default, timestamped backup, no
+    backup or delete when there is nothing to delete. Deletes only
+    `AttendancePunch` and `AttendanceRecord` for that employee and date.
+-   **Delete the `/tmp` script and backups once confirmed** (personal data).
+-   The `royalhrms` Linux user is **not in sudoers** — run app commands
+    directly as `royalhrms`; restarts need root.
+
+## Face verification bypass (investigated and fixed 2026-11-23)
+-   **Root cause:** `FaceVerificationService.verify_for_punch` only checked
+    `web` and `voice`; `source` came from the client. Mobile sent
+    `source=mobile` and no face data, so **any face (or none) was accepted**,
+    including one person on another employee's account (reproduced on RIS).
+    A browser user could do the same by posting `source=mobile`.
+-   Production data, last 90 days: RIS web 2386, voice 68, **mobile 120 (all
+    unverified)**, manual 36 (all HR-created); DEMO2026 web 56, voice 24,
+    **mobile 12 (unverified)**; no `manual`/`biometric` punch sent through the
+    API in any company. Other companies: no punches.
+-   Separate finding: web rejections for `RISP2309P` on 11-23 had distances
+    0.63–0.69 versus 0.27–0.40 for the employee's genuine web matches (10-27 → 11-07),
+    same registration and same code — a different face in front of the camera.
+-   **Fix:** `4406a8b3` + `2f5f0b64`. Every self-service punch (web, voice,
+    mobile; IN and OUT) needs a matching face when the company's Face ID
+    toggle is on; no face → 400, wrong face → 403 and no punch saved. HR
+    manual punches are unaffected (created server-side by
+    `services_hr_corrections` / `services_invalid_punch`).
+-   **Impact:** mobile clock-in/out is refused until the app sends a
+    face-api.js 0.22.2 descriptor (tinyFaceDetector 224/0.5, faceLandmark68Net,
+    faceRecognitionNet, 128 floats) plus `liveness_passed`, `liveness_score`
+    and a new `capture_session_id` per capture. Staff use web meanwhile. A
+    prompt for the mobile team's Claude Code was handed over.
+-   **Rollback:** `git revert` the two commits, pull, restart
+    `royalhrms_backend` (mobile then works again without a face check).
+-   Still open: descriptor and liveness are computed on the device (a crafted
+    client could submit a forged descriptor); `face_verified` is not shown to
+    HR anywhere; `get_client_ip` trusts the first `X-Forwarded-For` entry.
+
+## Authentication / company routing facts (from code review)
+-   The company schema is taken **only** from the `royal_access_token` cookie
+    (`apps/tenants/middleware.py`). A request with only `Authorization:
+    Bearer` runs on the public schema, the user lookup fails and the auth
+    class swallows it → 401. The mobile app must therefore send the cookie.
+
+## Live configuration seen 2026-11-20 (read-only)
+-   `backend/.env`: `DEBUG=False`, `ALLOWED_HOSTS=api.royalhrms.com,127.0.0.1,localhost`,
+    CORS `https://royalhrms.com`, `https://www.royalhrms.com`, CSRF the same
+    plus `https://api.royalhrms.com`; database on localhost, **Redis DB 2**.
+-   Every readable Nginx site sets `X-Forwarded-Proto $scheme`.
+-   `backend/logs/`: `errors.log` about 4.6 MB plus 4 rotated files of 5 MB,
+    `voice_commands.log` about 1.4 MB, `auth.log` empty.
+-   Nginx also has `risone.2.25.73.246.sslip.io` and
+    `api.risone.2.25.73.246.sslip.io` (purpose not confirmed) and a
+    `careerbuddy4u-stage` site that `royalhrms` cannot read.
+
+## Staging (not built)
+-   **No Royal HRMS staging exists.** Pre-staging and staging verification
+    reports are kept outside the repo
+    (`D:\RoyalHrms-Production\Staging-1-Pre-Staging-Report.md`,
+    `Staging-2-Verification-Report.md`).
+-   Key requirements: separate database and DB user, a Redis DB other than 2
+    (Celery beat runs leave resets, payroll reminders and birthday emails),
+    separate Cloudinary, test SMTP (SMTP settings live in the database per
+    company), new `SECRET_KEY` / `FIELD_ENCRYPTION_KEY` / `FIELD_INDEX_HMAC_KEY`,
+    `DEBUG=False`, a valid certificate before first use (production HSTS
+    covers subdomains).
+
+## Client code handover
+-   Clean copy (no git history) pushed to the client's repository
+    `Royal-HRMS-Web`, branch `release/v1.0` (an earlier `client-handover`
+    branch was to be deleted). Excluded: this file, `frontend/TEAMCONTEXT.md`,
+    `frontend/CLAUDE.md`, `frontend/AGENTS.md`, `gen_hyderabad_test_data.py`,
+    `seed_dummy_onboarding.py`. Tests were kept.
+-   The client copy does **not** contain `06567132`, `4406a8b3` or
+    `2f5f0b64`; copy those files into `Royal-HRMS-client` and push if the
+    client should have them. A `.env.example` with placeholders is still
+    missing.
+
+## Test suite notes
+-   Existing failures that also occur on the code before these changes:
+    `tests_face_verification` older classes (work-from-home punches now need
+    an approved WFH request, so they never reach the face check), `tests` (4),
+    `tests_punch_location_geocoding` (5 errors), `tests_uk_office_location_label`
+    (11), `tests_uk_shift_geofence` (13); `test_returns_latest_request_when_several_exist`
+    is order-dependent (flaky). These suites do not currently test what they
+    claim and need a separate clean-up.
+
+## Open items
+-   Confirm `4406a8b3` / `2f5f0b64` are deployed; mobile app face capture
+    (then retest mobile end to end); show `face_verified` to HR.
+-   Delete `/tmp/del_att_day.py` and the `/tmp/attendance_backup_*` files.
+-   2 Pink Leave balances with credit history for HR to reverse.
+-   Purpose of the `risone` sslip hostnames; staging decision.
+-   Fix the broken attendance test suites listed above.

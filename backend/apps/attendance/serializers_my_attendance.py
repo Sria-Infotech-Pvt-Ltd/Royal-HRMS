@@ -31,8 +31,13 @@ class PunchWriteSerializer(serializers.Serializer):
     punch_type      = serializers.ChoiceField(choices=['IN', 'OUT'])
 
     # ── Source & mode ─────────────────────────────────────────────────────────
+    # Self-service sources only. 'manual' (HR regularisation / invalid-punch
+    # conversion) and 'biometric' are written server-side by their own
+    # permission-checked workflows, never through this endpoint — accepting
+    # them here let an employee label their own punch as one and skip face
+    # verification (see FaceVerificationService.verify_for_punch).
     source          = serializers.ChoiceField(
-        choices=['web', 'mobile', 'biometric', 'manual', 'voice'],
+        choices=['web', 'mobile', 'voice'],
         default='web',
     )
     attendance_mode = serializers.ChoiceField(

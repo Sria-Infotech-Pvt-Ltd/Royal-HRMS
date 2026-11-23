@@ -19,7 +19,9 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import CompanyContact, Document, DocumentAcknowledgement
+from apps.accounts.models import (
+    ApprovalWorkflowRule, CompanyContact, Document, DocumentAcknowledgement, EmployeeApprovalOverride,
+)
 from apps.accounts.tests import _login
 from apps.assets.tests import _make_branch
 
@@ -173,3 +175,110 @@ class ContactMatrixTests(PolicyFixture):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(CompanyContact.objects.filter(pk=self.company.pk, is_active=False).exists())
         self.assertNotIn('Company HR Desk', self.names(self.emp)[0])
+
+
+class ContactApproversTests(PolicyFixture):
+    """L1/L2 approvers on the Contact Matrix: read-only, resolved by the real
+    routing resolver, own row for everyone, team rows only with employees.view
+    and only within scope (direct reports / own branch / all)."""
+
+    def setUp(self):
+        super().setUp()
+        self.mgr_role = make_role('apr_mgr', can_manage_team=True, permission_codenames=['employees.view'])
+        self.hr_role = make_role('apr_hr', permission_codenames=['employees.view', 'leave.approve'])
+        for wf in ('leave', 'wfh', 'attendance_correction'):
+            ApprovalWorkflowRule.objects.update_or_create(
+                workflow_type=wf, defaults={'l1_approver_role': self.mgr_role, 'l2_approver_role': self.hr_role})
+        # Expense configured differently: L1 = HR, no L2.
+        ApprovalWorkflowRule.objects.update_or_create(
+            workflow_type='expense', defaults={'l1_approver_role': self.hr_role, 'l2_approver_role': None})
+        cache.clear()
+
+        self.mgr = make_user('apr.mgr@test.com', role=self.mgr_role, employee_id='AM1', full_name='Mona Manager',
+                             branch='Surat Policy', phone='9000000001')
+        self.hr_user = make_user('apr.hr@test.com', role=self.hr_role, employee_id='AH1', full_name='Hari HR',
+                                 branch='Surat Policy', phone='9000000002')
+        # emp: both L1 and L2 · emp2: only L1 · other: only L2 · no_perm: none
+        self.emp.reporting_manager, self.emp.hr = self.mgr, self.hr_user
+        self.emp.save(update_fields=['reporting_manager', 'hr'])
+        self.emp2.reporting_manager = self.mgr
+        self.emp2.save(update_fields=['reporting_manager'])
+        self.other.hr = self.hr_user
+        self.other.save(update_fields=['hr'])
+
+    def get(self, user, **params):
+        resp = self.api(user).get(reverse('company-contact-approvers'), params)
+        self.assertEqual(resp.status_code, 200, getattr(resp, 'data', None))
+        return resp.data['data']
+
+    def team(self, user, **params):
+        rows = self.get(user, **params)['team']
+        return None if rows is None else {r['employee_id']: r for r in rows}
+
+    def test_both_approvers_with_email_and_phone(self):
+        me = self.get(self.emp)['me']
+        self.assertEqual(me['l1'], {'name': 'Mona Manager', 'email': 'apr.mgr@test.com', 'phone': '9000000001'})
+        self.assertEqual(me['l2'], {'name': 'Hari HR', 'email': 'apr.hr@test.com', 'phone': '9000000002'})
+
+    def test_only_l1_only_l2_and_none(self):
+        only_l1 = self.get(self.emp2)['me']
+        self.assertEqual(only_l1['l1']['name'], 'Mona Manager')
+        self.assertIsNone(only_l1['l2'])
+        only_l2 = self.get(self.other)['me']
+        self.assertIsNone(only_l2['l1'])
+        self.assertEqual(only_l2['l2']['name'], 'Hari HR')
+        none = self.get(self.no_perm)['me']
+        self.assertIsNone(none['l1'])
+        self.assertIsNone(none['l2'])
+
+    def test_workflow_selector_defaults_to_leave_and_follows_each_rule(self):
+        data = self.get(self.emp)
+        self.assertEqual(data['workflow'], 'leave')
+        self.assertEqual([w['value'] for w in data['workflows']],
+                         ['leave', 'expense', 'attendance_correction', 'wfh'])
+        expense = self.get(self.emp, workflow='expense')['me']
+        self.assertEqual(expense['l1']['name'], 'Hari HR')
+        self.assertIsNone(expense['l2'])
+        resp = self.api(self.emp).get(reverse('company-contact-approvers'), {'workflow': 'loan'})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_per_employee_override_is_shown_like_routing(self):
+        EmployeeApprovalOverride.objects.create(employee=self.emp, workflow_type='wfh', l1_override=self.admin)
+        wfh = self.get(self.emp, workflow='wfh')['me']
+        self.assertEqual(wfh['l1']['name'], 'Admin')
+        self.assertIsNone(wfh['l2'])   # the routing resolver uses the override row as-is
+        self.assertEqual(self.get(self.emp)['me']['l1']['name'], 'Mona Manager')   # other workflows unaffected
+
+    def test_employee_without_employees_view_sees_only_own(self):
+        self.assertIsNone(self.team(self.emp))
+
+    def test_manager_sees_only_direct_reports(self):
+        self.assertEqual(set(self.team(self.mgr)), {'PE1', 'PE2'})
+
+    def test_branch_hr_sees_own_branch_only(self):
+        rows = self.team(self.hr_user)
+        self.assertIn('PE1', rows)
+        self.assertNotIn('PH1', rows)       # other branch
+        self.assertNotIn('AH1', rows)       # self is in `me`, not repeated
+        self.assertEqual(rows['PE2']['l2'], None)
+
+    def test_hr_admin_sees_all_branches(self):
+        admin = make_user('apr.admin@test.com',
+                          role=make_role('apr_admin', permission_codenames=['settings.edit', 'employees.view']),
+                          employee_id='AAD', full_name='Hr Admin', branch='Surat Policy')
+        self.assertTrue({'PE1', 'PE2', 'PH1', 'PN1', 'AM1'} <= set(self.team(admin)))
+
+    def test_branch_scoped_user_without_branch_sees_no_team(self):
+        floating = make_user('apr.float@test.com', role=self.hr_role, employee_id='AFL', full_name='No Branch', branch='')
+        self.assertEqual(self.team(floating), {})
+
+    def test_read_only(self):
+        client = self.api(self.hr_user)
+        url = reverse('company-contact-approvers')
+        for method in (client.post, client.patch, client.put, client.delete):
+            self.assertEqual(method(url, {}, format='json').status_code, 405)
+        self.assertFalse(EmployeeApprovalOverride.objects.exists())
+
+    def test_contact_list_unchanged(self):
+        resp = self.api(self.emp).get(reverse('company-contact-list'))
+        self.assertEqual(set(resp.data['data']), {'contacts', 'can_manage'})

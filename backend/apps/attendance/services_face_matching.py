@@ -13,10 +13,14 @@ truth for the whole feature:
     approved registration must submit a live face descriptor that matches it
     before the punch is accepted.
 
-Only 'web' and 'voice' punches are gated (see PunchService.record_punch) —
-both originate from a browser tab with camera access (see AttendancePunch's
-own docstring for 'voice'). Mobile, biometric, manual and system-sourced
-punches never carry a camera and are never required to verify.
+Every punch source is gated — web, voice and mobile alike, clock-in and
+clock-out. There is no source-based exemption: a client-supplied `source`
+never decides whether a face is checked. (Mobile was exempt until the app
+could submit a descriptor; that exemption let anyone clock in as any
+employee, so it was removed — mobile now needs a face_embedding like web.)
+HR 'manual' punches don't come through here at all — they are created
+server-side by their own workflows (services_hr_corrections /
+services_invalid_punch), and the punch endpoint refuses 'manual'/'biometric'.
 
 Matching stays server-side deliberately (Euclidean distance only — see
 _euclidean_distance below) rather than shipping the stored embedding to the
@@ -46,7 +50,7 @@ from typing import Optional
 from django.conf import settings
 from django.db import transaction
 
-from apps.attendance.models import AttendancePunch, FaceRegistrationRequest, FaceVerificationAttempt
+from apps.attendance.models import FaceRegistrationRequest, FaceVerificationAttempt
 from apps.attendance.services_face_antispoofing import FaceAntiSpoofingGuard, fingerprint_embedding
 
 logger = logging.getLogger(__name__)
@@ -204,8 +208,8 @@ class FaceVerificationService:
         capture_session_id: str = '', liveness_passed: Optional[bool] = None,
         liveness_score: Optional[float] = None, is_secure: bool = True,
     ) -> FaceVerificationOutcome:
-        if source not in (AttendancePunch.SOURCE_WEB, AttendancePunch.SOURCE_VOICE):
-            return cls._not_required(submitted_embedding)
+        # `source` is recorded on the attempt row only — it never exempts a
+        # punch from verification (see module docstring).
         if not is_face_verification_mandatory():
             # Org-wide toggle is off — the feature is switched off entirely,
             # even for someone who has an approved registration from before.

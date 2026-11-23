@@ -78,7 +78,7 @@ class CatalogueAndPlanTests(SaasFixture):
 
     def test_create_plan_validation_and_audit(self):
         url = reverse('saas-plan-list')
-        bad = self.pa.post(url, {'code': 'x1', 'name': 'X', 'features': ['training']}, format='json')
+        bad = self.pa.post(url, {'code': 'x1', 'name': 'X', 'features': ['performance']}, format='json')  # coming soon
         self.assertEqual(bad.status_code, 400)
         bad = self.pa.post(url, {'code': 'x1', 'name': 'X', 'status': 'draft', 'is_public': True}, format='json')
         self.assertEqual(bad.status_code, 400)                                 # only active plans can be published

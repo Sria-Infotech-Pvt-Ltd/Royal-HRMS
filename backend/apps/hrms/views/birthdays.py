@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from core.permissions import has_perm as _has_perm
+from core.permissions import can_edit_settings, has_perm as _has_perm
 from core.responses import error, success
 
 logger = logging.getLogger(__name__)
@@ -114,7 +114,7 @@ class BirthdaySettingsView(APIView):
         # permission) previously gated this the same as get() above, so
         # anyone with read-only employee visibility could alter the
         # automation config for the whole company.
-        if not _has_perm(request.user, 'settings.edit'):
+        if not can_edit_settings(request.user):
             return error(_DENIED, http_status=403)
 
         from apps.accounts.models import BirthdaySettings

@@ -12,12 +12,13 @@ export type ModuleKey =
   | "assessments"
   | "documents"
   | "assets"
-  | "wfh";
+  | "wfh"
+  | "training";
 
 export const ALL_MODULES: ModuleKey[] = [
   "announcements", "recruitment", "face_attendance", "attendance", "leave",
   "payroll", "expenses", "separation", "voice_commands", "assessments",
-  "documents", "assets", "wfh",
+  "documents", "assets", "wfh", "training",
 ];
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -34,6 +35,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   documents:       "Document Management",
   assets:          "Asset Management",
   wfh:             "Work From Home",
+  training:        "Training & Learning",
 };
 
 // ── SaaS ───────────────────────────────────────────────────────────────────

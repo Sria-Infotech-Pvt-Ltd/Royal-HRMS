@@ -9,6 +9,8 @@ function resolveDashboard(session: {
   can_manage_team?: boolean;
   permissions?:    string[];
 }) {
+  // A Branch Admin holding settings.edit gets this same Admin dashboard; its
+  // cards are limited to the admin's own branch by the API.
   if (session?.is_superuser)     return "admin";
   if (session?.can_manage_team)  return "manager";
   const perms = new Set(session?.permissions ?? []);
