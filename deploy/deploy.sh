@@ -13,6 +13,14 @@ BRANCH="New-AI"
 HEALTH_URL="https://aira.nxsys.in/login"
 DEPLOYED_COMMIT_FILE="$REPO_DIR/.git/last_successful_deploy"
 
+# Only one deploy at a time. Two pushes close together start two deploys, and two `npm ci` runs deleting and re-creating the same
+# node_modules fail with "ENOTEMPTY: directory not empty". The second deploy waits for the first, then finds nothing left to do.
+exec 9>"$REPO_DIR/.git/deploy.lock"
+if ! flock -w 1200 9; then
+    echo "FAIL: another deploy has been running for over 20 minutes; not starting a second one." >&2
+    exit 1
+fi
+
 cd "$REPO_DIR"
 
 OLD_HEAD=$(git rev-parse HEAD)
@@ -82,7 +90,8 @@ echo "==> Recalculating recent attendance days that were saved with an older rul
 if changed "^frontend/(app/|components/|hooks/|lib/|types/|public/|package.*\.json|next\.config\.ts)"; then
     echo "==> Frontend changed - installing deps and rebuilding"
     cd "$FRONTEND_DIR"
-    npm ci
+    # A half-removed node_modules (a killed install, a file still open) makes npm ci stop with ENOTEMPTY; start from a clean folder and retry once.
+    npm ci || { echo "WARN: npm ci failed; removing node_modules and trying once more"; rm -rf node_modules; npm ci; }
     npm run build
     cd "$BACKEND_DIR"
 fi

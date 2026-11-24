@@ -5,6 +5,11 @@ on:
     branches: [New-AI]
   workflow_dispatch: {}
 
+# One deploy at a time: a push right after another waits for the first to finish instead of running beside it.
+concurrency:
+  group: aira-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
