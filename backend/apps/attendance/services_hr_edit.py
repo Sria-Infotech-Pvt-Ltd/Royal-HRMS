@@ -23,6 +23,28 @@ def _is_calculated_note(note: str) -> bool:
     return not note or note.startswith(_CALCULATED_NOTE_PREFIXES)
 
 
+def _follow_a_corrected_clock_in(record: AttendanceRecord, stored_status: str, stored_times: tuple, data: dict) -> None:
+    """HR changed only the clock-in of a Present / Late day: the late flag and the Present / Late status follow the new time.
+
+    The edit screen sends the day's current status back with the new time, so without this a day first stored as Late stayed Late
+    after HR corrected the clock-in to an on-time one (the record showed "09:00" and still "Late"). A status HR picked on purpose is
+    kept, and only a clock-in that actually changed is acted on."""
+    if record.first_punch_in is None or record.first_punch_in == stored_times[0]:
+        return
+    if stored_status not in (AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE):
+        return
+    if 'status' in data and data['status'] != stored_status:
+        return
+    cfg = attendance._get_settings()
+    processor = attendance.AttendanceProcessorService
+    is_late = processor._check_late(record.first_punch_in, cfg)
+    record.is_late = is_late
+    record.status = processor._resolve_status(0, is_late, cfg, has_open_session=True)
+    if _is_calculated_note(record.note):
+        grace = cfg.working_hours.grace_period_minutes if cfg and hasattr(cfg, 'working_hours') else 0
+        record.note = ('Grace exceeded' if grace else 'Late arrival') if is_late else ''
+
+
 def apply_hr_edit(record: AttendanceRecord, data: dict) -> None:
     """Apply an HR edit (`status`, `clock_in`, `clock_out`, `note`) to `record` in memory; the caller saves it."""
     stored_status = record.status
@@ -40,7 +62,10 @@ def apply_hr_edit(record: AttendanceRecord, data: dict) -> None:
         record.total_working_minutes = 0
         return
     if not (record.first_punch_in and record.last_punch_out):
-        return   # only one punch: nothing to calculate hours from
+        # Only a clock-in (the person is still clocked in, or HR gave no clock-out): there are no hours to work out, but a corrected
+        # clock-in still decides whether the person was late.
+        _follow_a_corrected_clock_in(record, stored_status, stored_times, data)
+        return
 
     calculated = attendance.AttendanceProcessorService.evaluate_times(record.first_punch_in, record.last_punch_out, attendance._get_settings())
     if calculated['status'] == AttendanceRecord.STATUS_ABSENT:

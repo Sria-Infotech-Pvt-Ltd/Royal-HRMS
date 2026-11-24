@@ -54,3 +54,32 @@ class HrEditRecalculatesTests(TestCase):
     def test_a_note_typed_by_hr_is_kept(self):
         record = self.edit(self.record(), status='late', clock_in='10:14', clock_out='19:20', note='Approved by manager', reason='fix')
         self.assertEqual(record.note, 'Approved by manager')
+
+
+class HrEditCorrectsOnlyTheClockInTests(HrEditRecalculatesTests):
+    """The day has no clock-out yet and HR corrects the clock-in: the late flag and the Present / Late status follow the new time."""
+
+    def test_correcting_a_late_clock_in_to_an_on_time_one_clears_the_late(self):
+        record = self.edit(self.record(), status='late', clock_in='09:00', reason='punched at nine, system showed late')
+        self.assertEqual(record.status, 'present')
+        self.assertFalse(record.is_late)
+
+    def test_the_time_inside_the_grace_period_is_not_late(self):
+        record = self.edit(self.record(), status='late', clock_in='09:15', reason='fix')
+        self.assertEqual((record.status, record.is_late), ('present', False))
+
+    def test_correcting_to_a_time_after_the_grace_period_is_late(self):
+        record = self.edit(self.record(status='present', is_late=False, first_punch_in=dt.time(9, 0)), status='present', clock_in='09:16', reason='fix')
+        self.assertEqual((record.status, record.is_late), ('late', True))
+
+    def test_a_status_hr_picks_on_purpose_is_kept(self):
+        record = self.edit(self.record(), status='present', clock_in='11:00', reason='manager approved the late start')
+        self.assertEqual(record.status, 'present')
+
+    def test_an_unchanged_clock_in_changes_nothing(self):
+        record = self.edit(self.record(), status='late', clock_in='10:14', note='kept', reason='note only')
+        self.assertEqual((record.status, record.is_late, record.note), ('late', True, 'kept'))
+
+    def test_a_note_typed_by_hr_survives_the_recalculation(self):
+        record = self.edit(self.record(), status='late', clock_in='09:00', note='Approved by manager', reason='fix')
+        self.assertEqual((record.status, record.note), ('present', 'Approved by manager'))
