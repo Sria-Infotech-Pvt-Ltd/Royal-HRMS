@@ -153,11 +153,15 @@ class EmployeeDetailBankEpfReadTests(TestCase):
         )
         self.client.force_authenticate(user=self.hr_user)
 
-    def test_get_returns_uan_esi_and_name_as_per_aadhar(self):
+    def test_get_returns_masked_uan_esi_and_name_as_per_aadhar(self):
         resp = self.client.get(reverse('employee-detail', args=[self.employee.employee_id]))
         self.assertEqual(resp.status_code, 200, resp.data)
         profile = resp.data['data']['profile']
-        self.assertEqual(profile['uan_number'], '100200300400')
+        # The UAN is returned masked (last four digits) and never in full; the full number comes only from the audited reveal
+        # (see tests_uan_statutory.py).
+        self.assertEqual(profile['uan_masked'], '••••••••0400')
+        self.assertNotIn('uan_number', profile)
+        self.assertNotIn('100200300400', str(resp.data))
         self.assertEqual(profile['esi_number'], '1122334455')
         self.assertEqual(profile['name_as_per_aadhar'], 'Bank Epf')
         self.assertEqual(profile['account_type'], 'current')
