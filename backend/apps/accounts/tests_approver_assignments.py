@@ -351,3 +351,24 @@ class LeaveRequestApprovalChainTests(_ApproverFixtures):
         data = _client(self.employee).get(reverse('my-approvals')).json()['data']
         self.assertTrue(data['can_submit'])
         self.assertEqual([stage['user']['full_name'] for stage in data['stages']], [self.manager.full_name, self.hr.full_name])
+
+
+class OwnApproversVisibleTests(_ApproverFixtures):
+    """A team manager's scope is their direct reports, which does not include themselves: opening their own profile used to answer
+    "Employee not found" in the approvers section. Looking at your own approvers is allowed; changing them still is not."""
+
+    def setUp(self):
+        super().setUp()
+        self.viewing_manager = self._person('aa_viewer@test.com', 'AA020', ['employees.view', *APPROVE], 'Product Manager', team=True)
+
+    def _get(self, actor: User, employee: User):
+        return _client(actor).get(reverse('employee-approver-assignments', args=[employee.employee_id]))
+
+    def test_a_team_manager_can_see_their_own_approvers_but_not_edit_them(self):
+        response = self._get(self.viewing_manager, self.viewing_manager)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(response.data['data']['can_edit'])
+
+    def test_someone_outside_their_team_is_still_not_found(self):
+        self.assertEqual(self._get(self.viewing_manager, self.employee).status_code, 404)
+

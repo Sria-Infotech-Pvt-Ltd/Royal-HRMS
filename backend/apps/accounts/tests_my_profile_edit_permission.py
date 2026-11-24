@@ -48,10 +48,11 @@ class MyProfileEditPermissionTests(TestCase):
         resp = self.client.patch(reverse('my-profile'), {'phone': '9876543210'}, format='json')
         self.assertEqual(resp.status_code, 200, resp.data)
 
-    def test_plain_employee_without_the_permission_cannot_self_edit(self):
-        # Product decision: employees can't self-edit their profile/photo
-        # unless HR explicitly turns it back on for the 'employee' role
-        # (migration 0174) — every OTHER role keeps it granted (0172).
+    def test_plain_employee_without_the_permission_cannot_self_edit_details_but_can_manage_their_photo(self):
+        # Product decision: employees can't self-edit their profile DETAILS unless HR explicitly turns it back on for the
+        # 'employee' role (migration 0174) — every OTHER role keeps it granted (0172). The profile PHOTO is different: since
+        # 2026-11-12 every signed-in person may upload or remove their own photo (ProfilePhotoView no longer checks
+        # employees.edit_own_profile; see tests_profile_photo.py).
         make_user('real-employee@test.com')
         _login(self.client, 'real-employee@test.com')
 
@@ -59,4 +60,4 @@ class MyProfileEditPermissionTests(TestCase):
         self.assertEqual(resp.status_code, 403, resp.data)
 
         photo_resp = self.client.delete(reverse('my-profile-photo'))
-        self.assertEqual(photo_resp.status_code, 403, photo_resp.data)
+        self.assertEqual(photo_resp.status_code, 200, photo_resp.data)

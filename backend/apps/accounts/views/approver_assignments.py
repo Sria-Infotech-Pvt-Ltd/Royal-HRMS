@@ -32,7 +32,12 @@ _WORKFLOWS = [choice[0] for choice in ApprovalWorkflowRule.WORKFLOW_CHOICES]
 
 def _employee_for(actor, employee_id: str):
     employee = _get_employee(employee_id)
-    return employee if employee is not None and employee_in_scope(actor, employee) else None
+    if employee is None:
+        return None
+    # A person may always look at their own approvers. Without this a team manager (whose scope is their direct reports only)
+    # opened their own profile and the approvers section answered "Employee not found". Changing your own approvers stays
+    # refused: put() returns 403 for the actor's own record.
+    return employee if employee.pk == actor.pk or employee_in_scope(actor, employee) else None
 
 
 def _rule_payload() -> dict:

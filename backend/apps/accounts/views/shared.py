@@ -329,14 +329,10 @@ def _employee_dict(user: User, page_cache: dict | None = None) -> dict:
         'bank_name':           p.bank_name           if p else '',
         'bank_branch_name':    p.bank_branch_name    if p else '',
         'bank_change_status':       p.bank_change_status       if p else '',
-        # EPF/ESI statutory identifiers — same tier as bank_branch_name/
-        # account_holder_name (identifiers, not secrets like PAN/Aadhaar/
-        # account_number), so shown plainly rather than masked. Captured at
-        # hire by the Statutory & Accounts step (see _PROFILE_FIELDS in
-        # views_hire_complete.py) but were missing from this dict entirely,
-        # so the Profile page's EPF/Statutory card could never show them
-        # regardless of what was actually stored.
-        'uan_number':         p.uan_number         if p else '',
+        # EPF/ESI statutory identifiers. The ESI number is shown plainly (an identifier, not a secret like PAN/Aadhaar). The UAN
+        # is NOT returned in full here: only `uan_masked` below (last four digits); the full number comes back only from the
+        # audited reveal action (EmployeeRevealSensitiveView, employees.view_sensitive). It used to be returned in full on every
+        # employee list row and detail, contradicting that rule (tests_uan_statutory).
         'esi_number':         p.esi_number         if p else '',
         'name_as_per_aadhar': p.name_as_per_aadhar if p else '',
         'bank_change_requested_at': p.bank_change_requested_at if p else None,

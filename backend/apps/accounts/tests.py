@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest import mock
+
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
@@ -131,19 +133,19 @@ class PasswordResetFlowTests(TestCase):
         self.user = make_user('reset@test.com', role=self.role, password='OldPass123!')
 
     def test_forgot_password_does_not_reveal_account_existence(self):
-        """Regression test: validate_email() used to raise a ValidationError
-        for unknown/inactive emails, which fails the field BEFORE the view's
-        own "same response either way" branch can run — so an unknown email
-        got a distinct 400 while a known one got a 200. Both must now pass
-        field validation identically; only serializer.context differs.
-        """
-        known = ForgotPasswordSerializer(data={'email': 'reset@test.com'})
-        unknown = ForgotPasswordSerializer(data={'email': 'nobody-registered@test.com'})
+        """The API must not reveal whether an account exists: a known email and an unknown one are both valid input and get the
+        same status and the same message. (This used to be checked through serializer.context, an internal detail of an older
+        design that no longer exists: the account look-up now happens in the view.)"""
+        self.assertTrue(ForgotPasswordSerializer(data={'email': 'reset@test.com'}).is_valid())
+        self.assertTrue(ForgotPasswordSerializer(data={'email': 'nobody-registered@test.com'}).is_valid())
 
-        self.assertTrue(known.is_valid())
-        self.assertTrue(unknown.is_valid())
-        self.assertIn('user', known.context)
-        self.assertNotIn('user', unknown.context)
+        with mock.patch('apps.accounts.views.auth.send_otp_email'):
+            known = self.client.post(reverse('forgot-password'), {'email': 'reset@test.com'}, format='json')
+            cache.clear()   # the forgot-password throttle counts per client
+            unknown = self.client.post(reverse('forgot-password'), {'email': 'nobody-registered@test.com'}, format='json')
+
+        self.assertEqual(known.status_code, 200)
+        self.assertEqual((known.status_code, known.data['message']), (unknown.status_code, unknown.data['message']))
 
     def test_forgot_password_view_returns_identical_response_for_unknown_email(self):
         # The known-user path additionally tries to send a real OTP email,

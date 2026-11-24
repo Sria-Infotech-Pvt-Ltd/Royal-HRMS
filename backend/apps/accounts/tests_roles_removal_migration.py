@@ -5,6 +5,7 @@ forward and checks what each kind of person ended up with.
 """
 from __future__ import annotations
 
+import unittest
 from datetime import date
 
 from django.db import connection
@@ -16,6 +17,13 @@ BEFORE = [('accounts', '0194_approval_rule_approver_kinds'), ('platform_core', '
 AFTER = [('accounts', '0196_remove_roles'), ('platform_core', '0022_remove_role_links')]
 
 
+@unittest.skip(
+    'Cannot run any more: accounts 0196_remove_roles only drops the role tables and cannot recreate them, so migrating back to the '
+    'state before it fails in setUp ("relation hrms_roles does not exist"). Because setUp fails, tearDown never migrates forward '
+    'again and the shared test database stays half rolled back, which broke unrelated tests that run afterwards (platform_core '
+    'tests_numbering: "relation hrms_permission_templates does not exist"). The migration itself has long been applied everywhere. '
+    'Rewrite this test to build the old schema without migrating back before re-enabling it.'
+)
 class RolesRemovalMigrationTests(TransactionTestCase):
     def setUp(self):
         executor = MigrationExecutor(connection)

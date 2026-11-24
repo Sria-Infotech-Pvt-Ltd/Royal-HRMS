@@ -119,12 +119,14 @@ class BankChangeHRReviewTests(TestCase):
         cache.clear()
         self.client = APIClient()
         emp_role = make_role('bank_test_employee3')
-        self.employee = make_user('bankreview@test.com', role=emp_role, password='TestPass123!', employee_id='EMPBANK01')
+        # Reviewing someone's bank change needs the reviewer to have employee scope, and scope is the same branch (a person with no
+        # branch has none), so both people are in the same branch.
+        self.employee = make_user('bankreview@test.com', role=emp_role, password='TestPass123!', employee_id='EMPBANK01', branch='Bank Review Branch')
         self.profile = EmployeeProfile.objects.create(user=self.employee, **_BANK_PAYLOAD)
         self.profile.submit_bank_change({'account_number': '5555555555', 'ifsc_code': 'SBIN0009999'})
 
         hr_role = make_role('bank_test_hr', permission_codenames=['employees.edit'])
-        self.hr = make_user('bankhr@test.com', role=hr_role, password='TestPass123!')
+        self.hr = make_user('bankhr@test.com', role=hr_role, password='TestPass123!', branch='Bank Review Branch')
         _login(self.client, 'bankhr@test.com')
 
     def _url(self, decision):

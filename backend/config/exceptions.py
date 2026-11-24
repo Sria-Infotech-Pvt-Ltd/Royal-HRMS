@@ -4,7 +4,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.utils import IntegrityError, OperationalError as DBOperationalError
-from django.http import Http404
+from django.http import Http404, JsonResponse
+from django.views.defaults import page_not_found
 
 logger = logging.getLogger(__name__)
 
@@ -107,3 +108,17 @@ def custom_exception_handler(exc, context):
         'message': 'An unexpected error occurred. Please try again later.',
         'data': {},
     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def json_page_not_found(request, exception=None):
+    """HTTP 404 for an address no route matches (config.urls.handler404).
+
+    Under /api/ the usual cause is an id or token that is not the right shape, for example /api/invite/abc/ where a UUID belongs:
+    no route matches, and Django answered with an HTML page, so the screen showed its own raw "Request failed with status code
+    404". Answer in the API's JSON shape with a readable message instead. Every other address keeps Django's normal 404 page."""
+    if request.path.startswith('/api/'):
+        return JsonResponse(
+            {'status': 'error', 'message': 'That item was not found. Check the link and try again.', 'data': {}},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    return page_not_found(request, exception)

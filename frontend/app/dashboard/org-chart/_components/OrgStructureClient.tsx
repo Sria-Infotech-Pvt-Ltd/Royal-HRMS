@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useAnyPermission, usePermission } from "@/hooks/usePermission";
+import { useFetch } from "@/hooks/useFetch";
 import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStructure";
 import OrgTree, { type SeatFilter, type TreeCommand } from "./OrgTree";
 import OrgDetail from "./OrgDetail";
@@ -51,8 +52,15 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
   const [units,     setUnits]     = useState<OrgUnit[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [jobs,       setJobs]       = useState<JobTemplate[]>([]);
-  const [employees,  setEmployees]  = useState<EmployeeOption[]>([]);
-  const [branches,   setBranches]   = useState<BranchOption[]>([]);
+  // Employees and branches only feed the edit pop-ups and the branch filter. Ask for them only when the viewer may read them:
+  // an ordinary employee would be refused (403) on both lists, which is a red console error and a wasted request. The chart
+  // itself must not depend on them, so a viewer without access simply gets empty lists, as before.
+  const canListEmployees = usePermission("employees.view");
+  const canListBranches  = usePermission("branches.view");
+  const { data: employeesPage } = useFetch<{ results: EmployeeOption[] }>(canListEmployees ? `${API.employees.list}?page_size=200&status=active` : null);
+  const { data: branchesPage }  = useFetch<{ results: BranchOption[] }>(canListBranches ? `${API.branches.list}?page_size=200` : null);
+  const employees: EmployeeOption[] = employeesPage?.results ?? [];
+  const branches: BranchOption[]    = branchesPage?.results ?? [];
   const [loading,    setLoading]    = useState(true);
   const [loadError,  setLoadError]  = useState<string | null>(null);
 
@@ -109,17 +117,9 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
         clientApi.get(`${API.orgStructure.positions.list}?page_size=1000`),
         clientApi.get(API.orgStructure.jobTemplates.list),
       ]);
-      // Employees and branches only feed the edit pop-ups and the branch filter, and ordinary employees are refused
-      // (403) on both lists — a refusal there must not blank the whole chart.
-      const [empResult, branchResult] = await Promise.allSettled([
-        clientApi.get(API.employees.list, { params: { page_size: 200, status: "active" } }),
-        clientApi.get(API.branches.list, { params: { page_size: 200 } }),
-      ]);
       setUnits(unitsRes.data?.data?.results ?? []);
       setPositions(posRes.data?.data?.results ?? []);
       setJobs(jobsRes.data?.data ?? []);
-      setEmployees(empResult.status === "fulfilled" ? empResult.value.data?.data?.results ?? [] : []);
-      setBranches(branchResult.status === "fulfilled" ? branchResult.value.data?.data?.results ?? [] : []);
     } catch (err: unknown) {
       setLoadError((err as { message?: string })?.message ?? "Failed to load organisation structure.");
     } finally {

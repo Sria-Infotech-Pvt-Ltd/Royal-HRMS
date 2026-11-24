@@ -96,6 +96,7 @@ interface RevealedFields {
   account_number?:     string;
   ifsc_code?:          string;
   name_as_per_aadhar?: string;
+  uan_number?:         string;
 }
 
 interface EmployeeDetailSensitive {
@@ -123,7 +124,7 @@ interface EmployeeDetailSensitive {
     ifsc_code_masked?:      string;
     account_type?:          string;
     bank_branch_name?:      string;
-    uan_number?:            string;
+    uan_masked?:            string;
     esi_number?:            string;
     name_as_per_aadhar?:    string;
     personal_email?: string;
@@ -203,7 +204,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
     try {
       const { data } = await clientApi.post<{ data: RevealedFields }>(
         API.employees.revealSensitive(employee.id),
-        { fields: ["pan_number", "account_number", "ifsc_code", "name_as_per_aadhar"] },
+        { fields: ["pan_number", "account_number", "ifsc_code", "name_as_per_aadhar", "uan_number"] },
       );
       setRevealed(data.data ?? {});
       // The server logs a sensitive_reveal AuditLog row on every successful
@@ -317,7 +318,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
               <Row mono label="IFSC" value={ifscValue} />
               <Row label="Account type" value={p?.account_type ? titleCase(p.account_type) : undefined} />
               <Row label="Bank branch" value={p?.bank_branch_name} />
-              <Row mono label="UAN" value={p?.uan_number} />
+              <Row mono label="UAN" value={revealed?.uan_number || p?.uan_masked} />
               <Row mono label="ESI number" value={p?.esi_number} />
             </>
           )}

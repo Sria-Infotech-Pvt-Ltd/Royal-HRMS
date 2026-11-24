@@ -18,7 +18,7 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from apps.accounts import services_lifecycle_status as lifecycle
-from apps.accounts.factories import make_user
+from apps.accounts.factories import make_role, make_user
 from apps.accounts.models import AuditLog, User
 from apps.accounts.tests_employee_scope import make_branch
 from apps.hrms.models import SEP_APPROVED, SEP_CANCELLED, SEP_PENDING, SeparationRequest
@@ -259,9 +259,19 @@ class JoiningDateChangeTests(TestCase):
         self.assertFalse(self._joining_audits(self.rehired).exists())
 
     def test_the_existing_lock_after_onboarding_is_unchanged(self):
-        response = self._patch(self.locked, _ago(100))
+        # Once onboarding is complete the joining date is locked for HR. Only a System Admin (settings.edit or a superuser, which is
+        # what self.admin is) may correct it - the message says so - so the lock is tested with an ordinary HR editor.
+        hr_editor = make_user('rj_hr@test.com', role=make_role('rj_hr_editor', permission_codenames=['employees.view', 'employees.edit']),
+                              employee_id='RJ900', branch=self.branch, date_of_joining=_ago(900))
+        client = APIClient()
+        client.force_authenticate(user=hr_editor)
+        response = client.patch(f'/api/employees/{self.locked.employee_id}/', {'date_of_joining': _ago(100).isoformat()}, format='json')
         self.assertEqual(response.status_code, 409, response.content)
+        self.assertIn('System Admin', response.json()['message'])
         self.assertFalse(self._joining_audits(self.locked).exists())
+
+    def test_a_system_admin_can_still_correct_a_locked_joining_date(self):
+        self.assertEqual(self._patch(self.locked, _ago(100)).status_code, 200)
 
     def test_validation_helper(self):
         self.assertIsNotNone(lifecycle.validate_joining_date_change(self.rehired, _ago(601)))

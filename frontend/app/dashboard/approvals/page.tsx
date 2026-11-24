@@ -24,17 +24,18 @@ export default function ApprovalsPage() {
   // employees.approve = HR step, payroll.edit = Payroll Admin step, employees.raise_action =
   // a manager following the requests they raised. The server decides who may act on what.
   const canSeePersonnel = useAnyPermission("employees.approve", "payroll.edit", "employees.raise_action");
-  const hasPayrollView  = usePermission("payroll.view");
+  const hasPayrollEdit  = usePermission("payroll.edit");
   // The HR Help queue: people who answer tickets, and full-access users (superuser / settings.edit) who see everything.
   const holdsHrHelpRespond = usePermission("hr_help.respond");
   const canRespondHrHelp = holdsHrHelpRespond || isUnrestrictedUser(user);
-  // Managers, superusers, and anyone with payroll.view (payroll admins and HR
-  // alike) get this tab — it's the only place attendance-cycle sign-off lives
-  // now that Leave Management no longer has its own "Attendance Approvals" tab.
+  // Managers, superusers, and anyone with payroll.edit (payroll admins) get this tab — it's the only place attendance-cycle
+  // sign-off lives now that Leave Management no longer has its own "Attendance Approvals" tab. It is payroll.edit, not
+  // payroll.view, because that is what the server requires (payroll/views/attendance_approval.py HR_PERMISSION): someone
+  // with payroll.view only used to see the tab and then be told "Access denied".
   const canApproveAttendance =
     user?.can_manage_team === true ||
     user?.is_superuser === true ||
-    hasPayrollView;
+    hasPayrollEdit;
 
   // Timesheets: the assigned approver is usually the reporting manager (a team seat), or HR (leave.approve is what the HR
   // fallback is found by; timesheet.approve is the explicit grant). The server lists only the sheets this person may decide.

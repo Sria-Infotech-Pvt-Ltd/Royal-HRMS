@@ -111,3 +111,15 @@ class InputValidationFixTests(TestCase):
             self.assertNotIn('UUID', message)
             self.assertIn('not found', message.lower())
 
+    # --- an address no route matches ------------------------------------------------------------------------------------------
+    def test_a_malformed_link_under_api_answers_in_json_with_a_readable_message(self):
+        for url in ('/api/invite/not-a-real-token/', '/api/password-reset-link/not-a-real-token/'):
+            response = APIClient().get(url)
+            self.assertEqual(response.status_code, 404, url)
+            self.assertEqual(response['Content-Type'], 'application/json')
+            self.assertEqual(response.json()['message'], 'That item was not found. Check the link and try again.')
+
+    def test_an_address_outside_api_keeps_the_normal_404_page(self):
+        response = APIClient().get('/this-is-not-a-page/')
+        self.assertEqual(response.status_code, 404)
+        self.assertNotEqual(response['Content-Type'], 'application/json')

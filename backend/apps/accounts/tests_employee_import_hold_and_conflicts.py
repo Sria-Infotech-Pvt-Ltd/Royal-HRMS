@@ -22,7 +22,7 @@ from apps.accounts import services_employee_import_invites as invites
 from apps.accounts import services_employee_import_job as job_module
 from apps.accounts import tasks_employee_import as tasks
 from apps.accounts.factories import make_user
-from apps.accounts.models import AuditLog, EmailLog, EmployeeImportInvite, EmployeeImportJobError, PasswordResetToken, User
+from apps.accounts.models import AuditLog, Company, EmailLog, EmployeeImportInvite, EmployeeImportJobError, PasswordResetToken, User
 from apps.accounts.services_employee_import_invite_policy import InviteSendingHeld, invites_enabled
 from apps.accounts.tests_employee_bulk_import import INVITE
 from apps.accounts.tests_employee_import_invites import DELAY, HOUR, _InviteCase
@@ -66,6 +66,8 @@ class InvitationHoldTests(_InviteCase):
 
     def test_other_callers_of_the_sending_function_are_not_held(self):
         # Only the bulk-import pipeline asks for the hold; a deliberate single hire / Resend Invite is a different decision.
+        # The real sender builds the link first, and links are only built from a configured company portal URL.
+        Company.objects.update_or_create(defaults={'portal_url': 'https://hr.example.com'}, company_name='Test Co')
         with _held(), mock.patch(SMTP, side_effect=RuntimeError('reached the mail server')):
             with self.assertRaisesMessage(RuntimeError, 'reached the mail server'):
                 send_activation_invite(self.employee(1))

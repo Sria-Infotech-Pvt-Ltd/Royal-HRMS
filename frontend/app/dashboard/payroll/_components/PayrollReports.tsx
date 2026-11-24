@@ -2,6 +2,7 @@
 
 import { useCallback, useState, type CSSProperties } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import type { PayrollCycle } from "@/types/payroll";
@@ -46,7 +47,9 @@ export default function PayrollReports() {
   const [dlError, setDlError] = useState<string | null>(null);
 
   const { data: cyclesPage } = useFetch<PagedResponse<PayrollCycle>>(API.payroll.cycles);
-  const { data: branchPage  } = useFetch<PagedResponse<Branch>>(API.branches.list);
+  // The branch filter only works for people who may list branches; asking anyone else is a 403 for nothing.
+  const canListBranches = usePermission("branches.view");
+  const { data: branchPage  } = useFetch<PagedResponse<Branch>>(canListBranches ? API.branches.list : null);
 
   const cycles   = cyclesPage?.results ?? [];
   const branches = branchPage?.results ?? [];

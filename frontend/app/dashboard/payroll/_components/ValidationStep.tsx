@@ -78,7 +78,7 @@ export default function ValidationStep({ cycleId, onNext, onBack }: Props) {
   const { data: payslipPage, loading } =
     useFetch<PagedResponse<EmployeePayslip>>(API.payroll.cyclePayslips(cycleId));
 
-  const payslips = payslipPage?.results ?? [];
+  const payslips = useMemo(() => payslipPage?.results ?? [], [payslipPage]);
 
   const baseIssues = useMemo(() => deriveIssues(payslips), [payslips]);
   const issues = baseIssues.map(i => ({ ...i, status: statuses[i.id] ?? i.status }));

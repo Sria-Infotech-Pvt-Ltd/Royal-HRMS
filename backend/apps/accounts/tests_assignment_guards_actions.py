@@ -178,7 +178,12 @@ class EveryAssignmentCallSiteIsGuardedTests(TestCase):
     """A new door that calls assign_position() without a guard fails this test."""
 
     GUARDS = {'assignment_refusal', 'placement_refusal', '_check_position_authority'}
-    EXEMPT = {('accounts/services_actions.py', 'reverse_employment_action'): 'restores the seat the person already held before the action'}
+    EXEMPT = {
+        ('accounts/services_actions.py', 'reverse_employment_action'): 'restores the seat the person already held before the action',
+        ('accounts/services_employee_import_commit.py', '_create_one'): (
+            'the seat was already checked when the row was accepted: services_employee_import_seats allocate() refuses any seat the '
+            'importer may not assign (assignment_refusal) and any full-access seat, and only returns an Allocation for a seat that passed'),
+    }
     SKIPPED_PARTS = {'migrations', 'management', 'tests'}
 
     def _functions_calling(self, name: str):

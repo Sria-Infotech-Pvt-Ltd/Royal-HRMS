@@ -117,9 +117,8 @@ export default function ItemsModal({ assessment, onClose }: Props) {
     setSaving(true); setFormErr("");
     const payload = { title: sectionForm.title.trim(), order: Number(sectionForm.order) || 1, score: Number(sectionForm.score) || 0 };
     try {
-      editSectionId
-        ? await clientApi.put(API.assessments.sectionDetail(assessment.id, editSectionId), payload)
-        : await clientApi.post(API.assessments.sections(assessment.id), payload);
+      if (editSectionId) await clientApi.put(API.assessments.sectionDetail(assessment.id, editSectionId), payload);
+      else await clientApi.post(API.assessments.sections(assessment.id), payload);
       refetchSections(); closePanel();
     } catch (e) { setFormErr(apiErr(e)); }
     finally { setSaving(false); }
@@ -167,9 +166,8 @@ export default function ItemsModal({ assessment, onClose }: Props) {
 
     setSaving(true); setFormErr("");
     try {
-      editItemId
-        ? await clientApi.put(API.assessments.itemDetail(editItemId), payload)
-        : await clientApi.post(API.assessments.items(assessment.id), payload);
+      if (editItemId) await clientApi.put(API.assessments.itemDetail(editItemId), payload);
+      else await clientApi.post(API.assessments.items(assessment.id), payload);
       refetchItems(); closePanel();
     } catch (e) { setFormErr(apiErr(e)); }
     finally { setSaving(false); }

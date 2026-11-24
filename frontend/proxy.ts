@@ -24,7 +24,11 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/email-logs": "email_logs.view",
   "/dashboard/employees": "employees.view",
   "/dashboard/org-chart": "org_chart.view",
-  "/dashboard/branches": "settings.view",
+  // The menu (and the branch list API) use branches.view; settings.view stays accepted so nobody loses access they had.
+  "/dashboard/branches": ["branches.view", "settings.view"],
+  // The menu entry and the picker API both need facial_recognition.approve; without a rule here anyone signed in could open the
+  // page by typing its address and then be refused by every request it makes.
+  "/dashboard/face-id-registrations": "facial_recognition.approve",
   "/dashboard/attendance": "attendance.view",
   "/dashboard/payroll": "payroll.view",
   "/dashboard/leave": "leave.view",

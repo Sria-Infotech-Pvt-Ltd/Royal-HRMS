@@ -13,7 +13,7 @@ interface ViewedEmployee {
 
 export default function ViewAsStrip() {
   // While viewing, this call answers as the viewed employee.
-  const { data: employee } = useFetch<ViewedEmployee>(API.employees.me);
+  const { data: employee, error } = useFetch<ViewedEmployee>(API.employees.me);
 
   return (
     <div
@@ -25,7 +25,10 @@ export default function ViewAsStrip() {
     >
       <span>
         <i className="ti ti-eye" style={{ marginRight: 6 }} />
-        Viewing {employee ? `${employee.full_name}'s` : "this employee's"} workspace — read-only. Nothing you do here is saved.
+        {error
+          // A mistyped or removed employee code: say so, instead of showing "Viewing this employee's workspace" over an empty page.
+          ? `${error} Check the employee ID, then go back to Employees.`
+          : `Viewing ${employee ? `${employee.full_name}'s` : "this employee's"} workspace — read-only. Nothing you do here is saved.`}
       </span>
       <Link href="/dashboard/employees" style={{ color: "inherit", textDecoration: "underline" }}>
         Back to Employees

@@ -5,6 +5,9 @@ from django.urls import path, include
 
 from apps.platform_core.views_health import HealthCheckView
 
+# A malformed id or token under /api/ gets a JSON "not found" message instead of an HTML page (see config/exceptions.py).
+handler404 = 'config.exceptions.json_page_not_found'
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health/', HealthCheckView.as_view(), name='health-check'),
