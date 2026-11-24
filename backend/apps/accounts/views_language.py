@@ -17,7 +17,7 @@ from core.responses import error, first_error, success
 logger = logging.getLogger(__name__)
 
 # Keep in step with LANGUAGES in frontend/lib/i18n/languages.ts.
-LANGUAGE_CODES = ('en', 'hi', 'te')
+LANGUAGE_CODES = ('en', 'hi', 'te', 'bn', 'mr', 'ta', 'gu', 'ur', 'kn', 'or', 'ml', 'pa', 'as')
 
 
 class LanguageSerializer(serializers.Serializer):

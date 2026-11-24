@@ -373,6 +373,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     # The person's own colour theme (see views_theme.py); blank = they never chose, so the browser's choice or the default applies.
     theme_mode              = models.CharField(max_length=10, blank=True, default='')
     theme_accent            = models.CharField(max_length=10, blank=True, default='')
+    # The look (classic / soft / compact / glass / amoled / contrast) and the person's own colours, as {key: '#rrggbb'} (see views_theme.py).
+    theme_style             = models.CharField(max_length=12, blank=True, default='')
+    theme_custom            = models.JSONField(blank=True, default=dict)
     # The language the person chose for the screens (see views_language.py); blank = they never chose.
     language                = models.CharField(max_length=5, blank=True, default='')
     date_joined  = models.DateTimeField(auto_now_add=True)

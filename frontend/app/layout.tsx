@@ -6,6 +6,8 @@ import "./ess-theme.css";
 import "./directory-theme.css";
 import "./new-ui-bridge.css";
 import "./themes.css";
+import "./theme-styles.css";
+import "./language-fonts.css";
 import "./responsive.css";
 // Self-hosted (not an external CDN) so every icon in the app doesn't
 // depend on jsdelivr being reachable — imported (not a manual <link>) so
@@ -17,6 +19,7 @@ import { ToastProvider } from "@/components/ToastProvider";
 import { DialogProvider } from "@/components/DialogProvider";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import I18nProvider from "@/components/I18nProvider";
+import { SCRIPT_FONT_CLASSES } from "@/lib/scriptFonts";
 
 // style: ["normal", "italic"] combined with 5 weights used to be here for a
 // real italic cut on the highlighted title word (em.hl) — combining multiple
@@ -46,7 +49,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" style={{ height: "100%" }} suppressHydrationWarning>
+    <html lang="en" className={SCRIPT_FONT_CLASSES} style={{ height: "100%" }} suppressHydrationWarning>
       <head>
         {/* Applies the saved theme before the first paint so there is no flash of the wrong colours. Kept in sync with lib/theme.ts. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />

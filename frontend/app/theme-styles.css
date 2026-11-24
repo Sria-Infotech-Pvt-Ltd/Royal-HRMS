@@ -1,0 +1,71 @@
+/*
+  Looks (not only colours). One choice stored on <html> as data-style = soft | compact | glass | amoled | contrast
+  (absent = classic, the original look). Each look re-points the shape / spacing / shadow variables that both colour systems use
+  (aira-theme.css: --r-card, --r-field; globals.css: --radius, --radius-lg, --shadow) and restyles the shared building blocks
+  (.panel, .stat, .card, .btn, .modal, .topnav, fields). It never touches status colours (present / late / absent ...).
+  The person's own colours (data-header, inline variables) are applied by lib/theme.ts and win over everything here.
+  Keep this file last in the import order so it wins over the base styles.
+*/
+
+/* ---- own top-bar colour: set by lib/theme.ts when the person picked one ---- */
+:root[data-header="custom"] .topnav{background:var(--header-bg);border-bottom-color:color-mix(in srgb,var(--header-ink) 18%,transparent)}
+:root[data-header="custom"] .topnav .navlink,
+:root[data-header="custom"] .topnav .brandmark,
+:root[data-header="custom"] .topnav .brandcopy small,
+:root[data-header="custom"] .topnav .navsearch,
+:root[data-header="custom"] .topnav .iconbtn{color:var(--header-ink)}
+:root[data-header="custom"] .topnav .navlink.on,
+:root[data-header="custom"] .topnav .navlink:hover{color:var(--header-ink);border-bottom-color:var(--header-ink);background:color-mix(in srgb,var(--header-ink) 16%,transparent)}
+:root[data-header="custom"] .topnav .iconbtn,
+:root[data-header="custom"] .topnav .navsearch{background:color-mix(in srgb,var(--header-ink) 10%,transparent);border-color:color-mix(in srgb,var(--header-ink) 22%,transparent)}
+
+/* ---- soft: big rounded corners, floating cards, pill buttons ---- */
+:root[data-style="soft"]{--r-card:24px;--r-field:16px;--radius:16px;--radius-lg:26px;
+  --shadow:0 6px 22px rgba(30,24,60,.08);--shadow-md:0 14px 36px rgba(30,24,60,.14)}
+:root[data-style="soft"] .panel,:root[data-style="soft"] .stat,:root[data-style="soft"] .card{border-color:transparent;box-shadow:0 8px 28px rgba(30,24,60,.09)}
+:root[data-style="soft"] .btn,:root[data-style="soft"] .chip,:root[data-style="soft"] .seg,:root[data-style="soft"] .navsearch{border-radius:999px}
+:root[data-style="soft"] .iconbtn{border-radius:14px}
+:root[data-style="soft"] .modal,:root[data-style="soft"] [role="dialog"]{border-radius:28px}
+:root[data-style="soft"] .topnav{box-shadow:0 10px 30px rgba(30,24,60,.08);border-bottom-color:transparent}
+:root[data-style="soft"][data-theme="dark"] .panel,:root[data-style="soft"][data-theme="dark"] .stat,:root[data-style="soft"][data-theme="dark"] .card{box-shadow:0 8px 28px rgba(0,0,0,.45)}
+
+/* ---- compact: tighter spacing and type, more on the screen ---- */
+:root[data-style="compact"]{--r-card:8px;--r-field:6px;--radius:6px;--radius-lg:10px;--header-h:48px}
+:root[data-style="compact"] body{font-size:13px}
+:root[data-style="compact"] .topnav{height:50px;min-height:50px;padding:0 14px}
+:root[data-style="compact"] .navlink{height:50px;font-size:11.5px;padding:0 7px}
+:root[data-style="compact"] .stats{gap:8px}
+:root[data-style="compact"] .stat{padding:9px 12px;gap:4px}
+:root[data-style="compact"] .panel-h{padding:10px 14px 0}
+:root[data-style="compact"] .tbl-h,:root[data-style="compact"] .tr{padding-top:5px;padding-bottom:5px}
+:root[data-style="compact"] .card-header,:root[data-style="compact"] .card-body{padding:10px 14px}
+:root[data-style="compact"] .btn{padding-top:5px;padding-bottom:5px}
+:root[data-style="compact"] .modal-head{padding:12px 16px 9px}
+:root[data-style="compact"] .modal-foot{padding:8px 16px}
+
+/* ---- glass: frosted, see-through panels over a soft colour wash ---- */
+:root[data-style="glass"] body{background:
+  radial-gradient(900px 500px at 8% -5%,color-mix(in srgb,var(--brand) 38%,transparent),transparent 62%),
+  radial-gradient(800px 480px at 100% 10%,color-mix(in srgb,var(--brand-2) 30%,transparent),transparent 58%),var(--ground)}
+:root[data-style="glass"]{--r-card:20px;--r-field:12px;--radius:12px;--radius-lg:22px}
+:root[data-style="glass"] .panel,:root[data-style="glass"] .stat,:root[data-style="glass"] .card,
+:root[data-style="glass"] .modal,:root[data-style="glass"] .topnav{
+  background:color-mix(in srgb,var(--surface) 48%,transparent);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);
+  border:1px solid color-mix(in srgb,var(--surface) 55%,var(--line));box-shadow:0 10px 34px rgba(20,16,40,.10)}
+:root[data-style="glass"] .tbl-h,:root[data-style="glass"] .modal-foot{background:color-mix(in srgb,var(--surface-2) 55%,transparent)}
+/* a browser without backdrop-filter gets solid panels, so text never sits on a busy background */
+@supports not (backdrop-filter:blur(1px)){:root[data-style="glass"] .panel,:root[data-style="glass"] .stat,:root[data-style="glass"] .card,:root[data-style="glass"] .modal,:root[data-style="glass"] .topnav{background:var(--surface)}}
+
+/* ---- amoled: true black (the page is always dark with this look) ---- */
+:root[data-style="amoled"][data-theme="dark"]{--ground:#000;--bg:#000;--bg-low:#050507;--bg-mid:#0a0a0d;--sunken:#000;
+  --surface:#0b0b0f;--surface-2:#101015;--bg-high:#15151b;--bg-highest:#1c1c24;--line:#1f1f27;--line-soft:#15151b;--outline-v:#1f1f27}
+:root[data-style="amoled"][data-theme="dark"] .topnav{background:#000}
+
+/* ---- contrast: strong edges, larger text, thick focus ring (for low vision and bright sun) ---- */
+:root[data-style="contrast"]{--line:#6b7183;--line-soft:#9aa1b2;--outline-v:#6b7183;--muted:#2b2f3d;--faint:#3d4152;--on-variant:#2b2f3d;--ink:#000;--on-bg:#000}
+:root[data-style="contrast"][data-theme="dark"]{--line:#a9afc0;--line-soft:#6b7183;--outline-v:#a9afc0;--muted:#e6e8f0;--faint:#d0d4e0;--on-variant:#e6e8f0;--ink:#fff;--on-bg:#fff}
+:root[data-style="contrast"] body{font-size:16px}
+:root[data-style="contrast"] .panel,:root[data-style="contrast"] .stat,:root[data-style="contrast"] .card,:root[data-style="contrast"] .modal{border-width:2px}
+:root[data-style="contrast"] .btn,:root[data-style="contrast"] .iconbtn,:root[data-style="contrast"] .chip{border-width:2px;font-weight:700}
+:root[data-style="contrast"] :focus-visible{outline-width:4px;outline-offset:3px}
+:root[data-style="contrast"] a{text-decoration:underline}

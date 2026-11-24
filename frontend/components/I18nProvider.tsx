@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { I18nContext, type I18n } from "@/hooks/useI18n";
-import { DEFAULT_LANGUAGE, readStoredLanguage, storeLanguage, type LanguageCode } from "@/lib/i18n/languages";
+import { DEFAULT_LANGUAGE, directionOf, readStoredLanguage, storeLanguage, type LanguageCode } from "@/lib/i18n/languages";
 import { setActiveLanguage } from "@/lib/i18n/tr";
 import { translate } from "@/lib/i18n/translate";
 
@@ -14,9 +14,11 @@ export default function I18nProvider({ children }: { children: ReactNode }) {
     setLanguageState(readStoredLanguage());
   }, []);
 
-  // Screen readers and browser translation tools read this.
+  // Screen readers and browser translation tools read the language; the direction flips the page for Urdu; the language also picks the
+  // font (app/language-fonts.css).
   useEffect(() => {
     document.documentElement.lang = language;
+    document.documentElement.dir = directionOf(language);
   }, [language]);
 
   const setLanguage = useCallback((next: LanguageCode) => {

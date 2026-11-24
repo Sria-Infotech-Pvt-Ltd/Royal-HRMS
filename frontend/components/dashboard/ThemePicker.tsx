@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "@/hooks/useTheme";
 import { useT } from "@/hooks/useI18n";
+import ThemeStyleChoices from "@/components/dashboard/ThemeStyleChoices";
+import CustomColourEditor from "@/components/dashboard/CustomColourEditor";
 import { ACCENT_LABELS, MODE_LABELS, THEME_ACCENTS, THEME_MODES } from "@/lib/theme";
 
 const SECTION_LABEL = { fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", margin: "0 0 8px" } as const;
@@ -30,7 +32,7 @@ export default function ThemePicker() {
       </button>
       {isOpen && (
         <div role="dialog" aria-label={t("Choose a theme")} style={{
-          position: "absolute", right: 0, top: "calc(100% + 8px)", width: 264, padding: 14, zIndex: 60, background: "var(--surface)",
+          position: "absolute", right: 0, top: "calc(100% + 8px)", width: 300, maxHeight: "min(78vh, 640px)", overflowY: "auto", padding: 14, zIndex: 60, background: "var(--surface)",
           border: "1px solid var(--line)", borderRadius: 14, boxShadow: "0 14px 40px rgba(20,16,40,.18)",
         }}>
           <p style={SECTION_LABEL}>{t("Appearance")}</p>
@@ -45,6 +47,11 @@ export default function ThemePicker() {
                 }}>{t(MODE_LABELS[mode])}</button>
               );
             })}
+          </div>
+          <p style={SECTION_LABEL}>{t("Look")}</p>
+          <div style={{ marginBottom: 14 }}>
+            {/* The pure-black look only exists in dark, so choosing it also switches the page to dark. */}
+            <ThemeStyleChoices selected={theme.style} onSelect={style => choose(style === "amoled" ? { style, mode: "dark" } : { style })} />
           </div>
           <p style={SECTION_LABEL}>{t("Colour")}</p>
           <div role="group" aria-label={t("Colour")} style={{ display: "grid", gap: 6 }}>
@@ -63,6 +70,8 @@ export default function ThemePicker() {
               );
             })}
           </div>
+          <p style={{ ...SECTION_LABEL, margin: "14px 0 8px" }}>{t("Your own colours")}</p>
+          <CustomColourEditor custom={theme.custom} onChange={custom => choose({ custom })} />
         </div>
       )}
     </div>

@@ -9,7 +9,7 @@ import {
   type ThemeChoice,
 } from "@/lib/theme";
 
-interface SavedTheme { mode: string | null; accent: string | null }
+interface SavedTheme { mode: string | null; accent: string | null; style?: string | null; custom?: Record<string, string> | null }
 
 /** The signed-in person's theme. Applies it to the page, remembers it in the browser, and saves it on their profile. */
 export function useTheme(): { theme: ThemeChoice; choose: (change: Partial<ThemeChoice>) => void } {

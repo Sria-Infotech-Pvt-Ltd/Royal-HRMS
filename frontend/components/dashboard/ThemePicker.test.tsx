@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const choose = vi.fn();
-vi.mock("@/hooks/useTheme", () => ({ useTheme: () => ({ theme: { mode: "light", accent: "royal" }, choose }) }));
+vi.mock("@/hooks/useTheme", () => ({ useTheme: () => ({ theme: { mode: "light", accent: "royal", style: "classic", custom: {} }, choose }) }));
 
 import ThemePicker from "./ThemePicker";
 
@@ -35,5 +35,21 @@ describe("ThemePicker", () => {
     fireEvent.click(screen.getByRole("button", { name: "Theme" }));
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("lets the person pick a look; the pure-black look also switches to dark", () => {
+    render(<ThemePicker />);
+    fireEvent.click(screen.getByRole("button", { name: "Theme" }));
+    fireEvent.click(screen.getByRole("button", { name: /Soft/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Pure black/ }));
+    expect(choose.mock.calls).toEqual([[{ style: "soft" }], [{ style: "amoled", mode: "dark" }]]);
+    expect(screen.getByRole("button", { name: /Classic/ }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("lets the person pick their own colour", () => {
+    render(<ThemePicker />);
+    fireEvent.click(screen.getByRole("button", { name: "Theme" }));
+    fireEvent.change(screen.getByLabelText("Main colour"), { target: { value: "#0a7b5c" } });
+    expect(choose).toHaveBeenCalledWith({ custom: { brand: "#0a7b5c" } });
   });
 });

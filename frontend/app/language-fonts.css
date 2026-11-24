@@ -1,0 +1,23 @@
+/*
+  Each language is written in its own script, which Inter does not contain. The script's font goes first and Inter stays as the fallback for
+  Latin letters and digits inside the text. <html lang> is set by components/I18nProvider.tsx; the --font-* variables come from lib/scriptFonts.ts.
+  Right-to-left (Urdu) is switched by <html dir="rtl">.
+*/
+:root[lang="hi"],:root[lang="mr"]{--sans:var(--font-devanagari),"Inter",system-ui,sans-serif}
+:root[lang="bn"],:root[lang="as"]{--sans:var(--font-bengali),"Inter",system-ui,sans-serif}
+:root[lang="te"]{--sans:var(--font-telugu),"Inter",system-ui,sans-serif}
+:root[lang="ta"]{--sans:var(--font-tamil),"Inter",system-ui,sans-serif}
+:root[lang="gu"]{--sans:var(--font-gujarati),"Inter",system-ui,sans-serif}
+:root[lang="kn"]{--sans:var(--font-kannada),"Inter",system-ui,sans-serif}
+:root[lang="or"]{--sans:var(--font-odia),"Inter",system-ui,sans-serif}
+:root[lang="ml"]{--sans:var(--font-malayalam),"Inter",system-ui,sans-serif}
+:root[lang="pa"]{--sans:var(--font-gurmukhi),"Inter",system-ui,sans-serif}
+:root[lang="ur"]{--sans:var(--font-arabic),"Inter",system-ui,sans-serif}
+/* next/font puts its own class on <body>, which would beat the variable above; this repeats it with a higher priority. */
+:root:not([lang="en"]) body{font-family:var(--sans)}
+/* Indic scripts have tall marks above and below the line: more line height than Latin so they do not collide. */
+:root:not([lang="en"]):not([lang="ur"]) body{line-height:1.6}
+:root[lang="ur"] body{line-height:1.9}
+/* Letter spacing breaks joined scripts (Urdu) and Indic conjuncts, so it is switched off. */
+:root:not([lang="en"]) *{letter-spacing:normal !important}
+:root:not([lang="en"]) .navgrp,:root:not([lang="en"]) .tbl-h{text-transform:none}
