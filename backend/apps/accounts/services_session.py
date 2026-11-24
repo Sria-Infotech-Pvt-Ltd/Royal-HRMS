@@ -15,11 +15,22 @@ ACCESS_COOKIE_MAX_AGE = 900          # 15 minutes
 REFRESH_COOKIE_MAX_AGE = 604800      # 7 days
 
 
+def access_summary(user) -> dict:
+    """What a person may do, in the shape the frontend's navigation and search use. The login payload carries it too."""
+    permissions = effective_permission_codenames(user)
+    return {
+        'permissions':     permissions,
+        'can_manage_team': can_manage_team(user),
+        'can_manage_branch': can_manage_branch(user),
+        'is_superuser':    user.is_superuser or 'settings.edit' in permissions,
+    }
+
+
 def login_user_payload(user) -> dict:
     """The `user` object a successful login (or link exchange) returns."""
     from apps.accounts.views.shared import _login_assessment_status
 
-    permissions = effective_permission_codenames(user)
+    access = access_summary(user)
     return {
         'id':                  str(user.id),
         'email':               user.email,
@@ -32,10 +43,7 @@ def login_user_payload(user) -> dict:
         'onboarding_status':   user.onboarding_status,
         'requires_self_service_onboarding': user.requires_self_service_onboarding,
         'assessment_status':   _login_assessment_status(user),
-        'permissions':         permissions,
-        'can_manage_team':     can_manage_team(user),
-        'can_manage_branch':   can_manage_branch(user),
-        'is_superuser':        user.is_superuser or 'settings.edit' in permissions,
+        **access,
     }
 
 

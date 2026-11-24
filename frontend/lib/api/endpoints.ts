@@ -71,6 +71,7 @@ export const API = {
     me: "/employees/me/",
     myPhoto: "/employees/me/photo/",
     myTheme: "/employees/me/theme/",
+    myAccess: "/employees/me/access/",
     myLanguage: "/employees/me/language/",
     myEmploymentLetterPdf: "/employees/me/employment-letter/",
     detail: (id: string) => `/employees/${id}/`,

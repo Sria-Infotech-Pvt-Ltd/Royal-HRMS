@@ -19,6 +19,7 @@ import { useFetch } from "@/hooks/useFetch";
 import TopNavLinks from "@/components/dashboard/TopNavLinks";
 import ProfileMenu from "@/components/dashboard/ProfileMenu";
 import { useOpenMenu } from "@/hooks/useOpenMenu";
+import { useViewedAccess } from "@/hooks/useViewedAccess";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { canOpenTeamDashboard, hasHrDashboardAccess, resolveDashboard } from "@/lib/dashboardHome";
 import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
@@ -56,20 +57,29 @@ export default function DashboardShell({
     return () => window.removeEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
   }, [refetchMyProfile]);
 
-  const visibleNav = buildNav(session.permissions ?? []);
+  // While looking at an employee's workspace ("View as employee"), the bar and the search offer what THAT employee has, never the
+  // viewer's own pages; until the employee's access has loaded nothing is offered.
+  const { isViewing, access: viewedAccess } = useViewedAccess();
+  const navSession: SessionPayload = isViewing
+    ? {
+      ...session, permissions: viewedAccess?.permissions ?? [], is_superuser: viewedAccess?.is_superuser ?? false,
+      can_manage_team: viewedAccess?.can_manage_team ?? false,
+    }
+    : session;
+  const visibleNav = buildNav(navSession.permissions ?? []);
   // The bar groups the pages into dropdowns by section (groupNav); the flat list still feeds global search and
   // the active-page lookup below.
   const navGroups = groupNav(visibleNav);
   const navItems = visibleNav.filter((entry): entry is NavItem => !isSection(entry));
-  const canSearchEmployees = (session.permissions ?? []).includes("employees.view");
+  const canSearchEmployees = (navSession.permissions ?? []).includes("employees.view");
 
   // Nested paths (e.g. "/dashboard/settings/audit") match more than one nav
   // item's path prefix (both "audit" and its parent "settings"). Only the
   // item with the longest — i.e. most specific — matching path should light up.
   // The role-specific home links are not in the permission-built list above, so they take part in the lookup here.
-  const isSuperuser = session.is_superuser === true;
-  const hasHrDashboard = hasHrDashboardAccess(session);
-  const isTeamManager = canOpenTeamDashboard(session);
+  const isSuperuser = navSession.is_superuser === true;
+  const hasHrDashboard = hasHrDashboardAccess(navSession);
+  const isTeamManager = canOpenTeamDashboard(navSession);
   const activeCandidates = [
     ...(hasHrDashboard && !isSuperuser ? [HR_DASHBOARD_NAV_ITEM] : []),
     ...(isTeamManager ? [TEAM_DASHBOARD_NAV_ITEM] : []),
@@ -99,16 +109,17 @@ export default function DashboardShell({
   const currentUser = useCurrentUser();
   // Team managers land on their workspace like everyone else; their team dashboard is one click away here.
   const profileItems: NavItem[] = profileMenuItems(navGroups.profile, {
-    homeIsWorkspace: resolveDashboard(session) === "employee",
+    homeIsWorkspace: resolveDashboard(navSession) === "employee",
     isTeamManager,
-    hasHrDashboard: hasHrDashboardAccess(session),
+    hasHrDashboard,
   });
   // The workspace has its own tab bar, so its top bar carries only the modules a person's extra permissions add
   // (empty for an ordinary employee). Everywhere else the bar is the full permission-filtered navigation.
-  // The workspace has its own tab bar, so its top bar carries only the modules a person's extra permissions add
-  // (empty for an ordinary employee). Everywhere else the bar is the full permission-filtered navigation.
-  const baseBar = isEssPage ? workspaceNav(session.permissions ?? []).bar : navGroups.bar;
+  const baseBar = isEssPage ? workspaceNav(navSession.permissions ?? []).bar : navGroups.bar;
   const topBar = withTeamLink(withHomeLinks(baseBar, { hasHrDashboard, isSuperuser }), isTeamManager, { keepDashboard: isSuperuser });
+  // On the workspace the search offers exactly the pages the top bar does: the self-service modules (Leave, Documents ...) live in the
+  // workspace's own tabs there, so listing them in the search would bring back what the bar leaves out.
+  const searchItems = isEssPage ? topBar.flatMap(entry => (entry.kind === "link" ? [entry.item] : entry.items)) : navItems;
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -136,7 +147,7 @@ export default function DashboardShell({
         <div className="navright order-2 md:order-none">
           {/* Shown on every page, the employee workspace included: it finds the pages the person may open, and employees only for
               people who hold employees.view. */}
-          <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
+          <GlobalSearch navItems={searchItems} canSearchEmployees={canSearchEmployees} />
           <LanguagePicker />
           <ThemePicker />
           <NotificationBell />

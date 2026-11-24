@@ -169,6 +169,7 @@ from apps.accounts.views.employee_import_job import (
 from apps.accounts.views_lifecycle import EmployeeAsOfView, EmployeeLifecycleTimelineView
 from apps.accounts.views_profile_photo import ProfilePhotoView
 from apps.accounts.views_theme import MyThemeView
+from apps.accounts.views_my_access import MyAccessView
 from apps.accounts.views_language import MyLanguageView
 from apps.accounts.views_employee_photo import EmployeePhotoView
 from apps.accounts.views_pincode import PincodeLookupView, PincodesInDistrictView
@@ -214,6 +215,7 @@ urlpatterns = [
     path('employees/approver-options/',                          ApproverOptionsView.as_view(),          name='approver-options'),
     path('employees/me/photo/',                                  ProfilePhotoView.as_view(),             name='my-profile-photo'),
     path('employees/me/theme/',                                  MyThemeView.as_view(),                  name='my-theme'),
+    path('employees/me/access/',                                 MyAccessView.as_view(),                 name='my-access'),
     path('employees/me/language/',                               MyLanguageView.as_view(),               name='my-language'),
     path('employees/me/employment-letter/',                      MyEmploymentLetterPdfView.as_view(),    name='my-employment-letter-pdf'),
     path('employees/hrs/',                                       HRListView.as_view(),                   name='employee-hr-list'),
